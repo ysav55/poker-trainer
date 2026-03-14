@@ -7,7 +7,7 @@ WORKDIR /app/client
 
 # Install dependencies first (layer cache)
 COPY client/package*.json ./
-RUN npm ci
+RUN npm install
 
 # Copy source and build
 COPY client/ ./
