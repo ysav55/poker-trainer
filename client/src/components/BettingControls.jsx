@@ -80,7 +80,7 @@ export default function BettingControls({
   if (!isMyTurn) return null;
 
   const canCheck = toCall === 0;
-  const canRaise = raiseMax > effectiveRaiseMin || raiseMax >= effectiveRaiseMin;
+  const canRaise = raiseMax > effectiveRaiseMin;
   const isAllIn = raiseAmount >= raiseMax;
   const raiseValid = raiseAmount >= effectiveRaiseMin && raiseAmount <= raiseMax;
 

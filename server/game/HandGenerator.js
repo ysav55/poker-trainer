@@ -99,8 +99,9 @@ function generateHand(config, players, _deck) {
   // ── Step 6: Assign hole cards (null slots → draw) ─────────────────────────
   const playerCards = {};
   for (const player of normPlayers) {
-    const slots = normalised.holeCards[player.id] || [null, null];
-    playerCards[player.id] = [
+    const configKey = player.stableId || player.id;
+    const slots = normalised.holeCards[configKey] ?? normalised.holeCards[player.id] ?? [null, null];
+    playerCards[configKey] = [
       slots[0] !== null ? slots[0] : drawCard(),
       slots[1] !== null ? slots[1] : drawCard(),
     ];
@@ -137,15 +138,17 @@ function _normaliseConfig(config, players) {
   const holeCards = {};
 
   for (const player of players) {
-    const raw = config && config.holeCards && config.holeCards[player.id];
+    // Config keys may be stableId (new) or socket id (legacy fallback)
+    const configKey = player.stableId || player.id;
+    const raw = config && config.holeCards && (config.holeCards[configKey] ?? config.holeCards[player.id]);
     if (Array.isArray(raw) && raw.length === 2) {
       // Treat undefined entries as null
-      holeCards[player.id] = [
+      holeCards[configKey] = [
         raw[0] !== undefined ? raw[0] : null,
         raw[1] !== undefined ? raw[1] : null,
       ];
     } else {
-      holeCards[player.id] = [null, null];
+      holeCards[configKey] = [null, null];
     }
   }
 
@@ -168,8 +171,9 @@ function _collectSpecifiedCards(normalised, players) {
   const cards = [];
 
   for (const player of players) {
-    const slots = normalised.holeCards[player.id];
-    for (const slot of slots) {
+    const configKey = player.stableId || player.id;
+    const slots = normalised.holeCards[configKey] ?? normalised.holeCards[player.id];
+    for (const slot of (slots ?? [])) {
       if (slot !== null) cards.push(slot);
     }
   }
