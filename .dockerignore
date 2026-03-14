@@ -1,0 +1,25 @@
+# Never send node_modules to Docker — they're rebuilt inside the container.
+# This prevents Windows-compiled native binaries (e.g. better-sqlite3) from
+# being copied into the Linux container, causing ERR_DLOPEN_FAILED.
+node_modules/
+server/node_modules/
+client/node_modules/
+
+# Don't send the client dev build — the Dockerfile builds it from source.
+client/dist/
+
+# Git / editor noise
+.git/
+.gitignore
+.vscode/
+*.log
+npm-debug.log*
+
+# SQLite databases (use mounted volume in production)
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+
+# Test coverage
+coverage/
