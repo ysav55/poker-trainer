@@ -53,7 +53,7 @@ function JoinScreen({ joinRoom, connected }) {
     if (!validate()) return;
     setLoading(true);
     const role = asCoach ? 'coach' : 'player';
-    joinRoom(name.trim(), role);
+    joinRoom(name.trim(), role, asCoach ? password : '');
     setLoading(false);
   }
 
@@ -106,7 +106,6 @@ function JoinScreen({ joinRoom, connected }) {
               }}
               placeholder="Enter your name"
               maxLength={32}
-              autoFocus
               className="w-full rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-all duration-150"
               style={{
                 background: 'rgba(255,255,255,0.04)',
@@ -154,29 +153,31 @@ function JoinScreen({ joinRoom, connected }) {
               </span>
             </label>
 
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                setError('');
-              }}
-              placeholder={asCoach ? 'Coach password' : 'Player password'}
-              className="w-full rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-all duration-150"
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                caretColor: '#d4af37',
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = 'rgba(212,175,55,0.45)';
-                e.target.style.boxShadow = '0 0 0 3px rgba(212,175,55,0.08)';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = 'rgba(255,255,255,0.1)';
-                e.target.style.boxShadow = 'none';
-              }}
-            />
+            {asCoach && (
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError('');
+                }}
+                placeholder="Coach password"
+                className="w-full rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-all duration-150"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  caretColor: '#d4af37',
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = 'rgba(212,175,55,0.45)';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(212,175,55,0.08)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+            )}
           </div>
 
           {/* Error message */}
@@ -205,7 +206,7 @@ function JoinScreen({ joinRoom, connected }) {
 
 // ── Top bar ───────────────────────────────────────────────────────────────────
 
-function TopBar({ gameState, isCoach, connected, playerCount }) {
+function TopBar({ gameState, isCoach, connected, playerCount, onLeave }) {
   const tableName = gameState?.table_name ?? gameState?.room ?? 'Training Table';
   const mode      = gameState?.mode ?? 'live';
   const phase     = gameState?.phase ?? 'waiting';
@@ -253,12 +254,19 @@ function TopBar({ gameState, isCoach, connected, playerCount }) {
         </span>
       )}
 
-      {/* Right: player count + connection */}
+      {/* Right: player count + connection + leave */}
       <div className="flex items-center gap-3">
         <span className="text-xs text-gray-500">
           {playerCount} player{playerCount !== 1 ? 's' : ''}
         </span>
         <ConnectionDot connected={connected} />
+        <button
+          onClick={onLeave}
+          className="text-xs text-gray-600 hover:text-gray-400 transition-colors px-1.5 py-0.5 rounded border border-gray-800 hover:border-gray-600"
+          title="Leave table"
+        >
+          Leave
+        </button>
       </div>
     </div>
   );
@@ -310,6 +318,7 @@ export default function App() {
     handTagsSaved,
     myPlayer,
     joinRoom,
+    leaveRoom,
     startGame,
     placeBet,
     manualDealCard,
@@ -428,6 +437,7 @@ export default function App() {
           isCoach={isCoach}
           connected={connected}
           playerCount={playerCount}
+          onLeave={leaveRoom}
         />
 
         {/* Error toasts — top center */}

@@ -36,6 +36,8 @@ export function useSocket() {
   const socketRef = useRef(null)
   const errorTimersRef = useRef({})
   const notifTimersRef = useRef({})
+  // Stores last join params so the socket can auto-rejoin after a disconnect/reconnect
+  const joinParamsRef = useRef(null)
 
   const [connected, setConnected] = useState(false)
   const [gameState, setGameState] = useState(null)
@@ -102,6 +104,11 @@ export function useSocket() {
     socket.on('connect', () => {
       setConnected(true)
       setCoachDisconnected(false) // coach reconnected — clear the overlay
+      // Auto-rejoin if we were already seated (socket reconnected after a drop)
+      if (joinParamsRef.current) {
+        const { name, role, stableId, password } = joinParamsRef.current
+        socket.emit('join_room', { name, isCoach: role === 'coach', stableId, password })
+      }
     })
 
     socket.on('disconnect', () => {
@@ -183,9 +190,24 @@ export function useSocket() {
 
   // ---------- emit helpers ----------
 
-  const joinRoom = useCallback((name, role = 'player') => {
-    const stableId = getOrCreateStableId();
-    socketRef.current?.emit('join_room', { name, isCoach: role === 'coach', stableId })
+  const joinRoom = useCallback((name, role = 'player', password = '') => {
+    const stableId = getOrCreateStableId()
+    joinParamsRef.current = { name, role, stableId, password }
+    socketRef.current?.emit('join_room', { name, isCoach: role === 'coach', stableId, password })
+  }, [])
+
+  const leaveRoom = useCallback(() => {
+    joinParamsRef.current = null  // prevent auto-rejoin
+    setMyId(null)
+    setGameState(null)
+    setIsCoach(false)
+    setIsSpectator(false)
+    setSessionStats(null)
+    setErrors([])
+    setNotifications([])
+    // Reconnect with a fresh socket so the server starts the 30s eviction TTL
+    socketRef.current?.disconnect()
+    socketRef.current?.connect()
   }, [])
 
   const startGame = useCallback((mode) => {
@@ -304,6 +326,7 @@ export function useSocket() {
     myPlayer,
     // actions
     joinRoom,
+    leaveRoom,
     startGame,
     placeBet,
     manualDealCard,

@@ -59,6 +59,10 @@ const SessionManager = require('./game/SessionManager');
 const HandLogger = require('./db/HandLogger');
 const { v4: uuidv4 } = require('uuid');
 
+// Coach password — set COACH_PASSWORD env var to require a password.
+// Leave unset (or empty) to allow any coach join without a password.
+const COACH_PASSWORD = process.env.COACH_PASSWORD || '';
+
 // Per-table active hand tracking
 const activeHands = new Map(); // tableId → { handId, sessionId }
 
@@ -264,9 +268,14 @@ io.on('connection', socket => {
   console.log(`[connect] ${socket.id}`);
 
   // ── join_room ─────────────────────────────
-  socket.on('join_room', ({ name, isCoach = false, tableId = 'main-table', stableId } = {}) => {
+  socket.on('join_room', ({ name, isCoach = false, tableId = 'main-table', stableId, password = '' } = {}) => {
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return sendError(socket, 'Name is required');
+    }
+
+    // Validate coach password if one is configured
+    if (isCoach && COACH_PASSWORD && password !== COACH_PASSWORD) {
+      return sendError(socket, 'Incorrect coach password');
     }
 
     const gm = getOrCreateTable(tableId);
