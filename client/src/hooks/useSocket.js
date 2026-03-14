@@ -106,8 +106,8 @@ export function useSocket() {
       setCoachDisconnected(false) // coach reconnected — clear the overlay
       // Auto-rejoin if we were already seated (socket reconnected after a drop)
       if (joinParamsRef.current) {
-        const { name, role, stableId, password } = joinParamsRef.current
-        socket.emit('join_room', { name, isCoach: role === 'coach', stableId, password })
+        const { name, role, stableId, password, playAtTable } = joinParamsRef.current
+        socket.emit('join_room', { name, isCoach: role === 'coach', stableId, password, playAtTable })
       }
     })
 
@@ -190,10 +190,10 @@ export function useSocket() {
 
   // ---------- emit helpers ----------
 
-  const joinRoom = useCallback((name, role = 'player', password = '') => {
+  const joinRoom = useCallback((name, role = 'player', password = '', playAtTable = false) => {
     const stableId = getOrCreateStableId()
-    joinParamsRef.current = { name, role, stableId, password }
-    socketRef.current?.emit('join_room', { name, isCoach: role === 'coach', stableId, password })
+    joinParamsRef.current = { name, role, stableId, password, playAtTable }
+    socketRef.current?.emit('join_room', { name, isCoach: role === 'coach', stableId, password, playAtTable })
   }, [])
 
   const leaveRoom = useCallback(() => {

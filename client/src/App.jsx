@@ -29,11 +29,12 @@ function ConnectionDot({ connected }) {
 // ── Join / Lobby screen ───────────────────────────────────────────────────────
 
 function JoinScreen({ joinRoom, connected }) {
-  const [name, setName]           = useState('');
-  const [asCoach, setAsCoach]     = useState(false);
-  const [password, setPassword]   = useState('');
-  const [error, setError]         = useState('');
-  const [loading, setLoading]     = useState(false);
+  const [name, setName]             = useState('');
+  const [asCoach, setAsCoach]       = useState(false);
+  const [playAtTable, setPlayAtTable] = useState(false);
+  const [password, setPassword]     = useState('');
+  const [error, setError]           = useState('');
+  const [loading, setLoading]       = useState(false);
 
   function validate() {
     if (!name.trim()) {
@@ -53,7 +54,7 @@ function JoinScreen({ joinRoom, connected }) {
     if (!validate()) return;
     setLoading(true);
     const role = asCoach ? 'coach' : 'player';
-    joinRoom(name.trim(), role, asCoach ? password : '');
+    joinRoom(name.trim(), role, asCoach ? password : '', asCoach && playAtTable);
     setLoading(false);
   }
 
@@ -152,6 +153,35 @@ function JoinScreen({ joinRoom, connected }) {
                 Join as Coach (Admin)
               </span>
             </label>
+
+            {asCoach && (
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={playAtTable}
+                    onChange={(e) => {
+                      setPlayAtTable(e.target.checked);
+                      setError('');
+                    }}
+                    className="sr-only"
+                  />
+                  <div
+                    className={`w-9 h-5 rounded-full transition-all duration-200 ${
+                      playAtTable ? 'bg-blue-600' : 'bg-gray-700'
+                    }`}
+                  />
+                  <div
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 shadow ${
+                      playAtTable ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </div>
+                <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">
+                  Also play at the table
+                </span>
+              </label>
+            )}
 
             {asCoach && (
               <input

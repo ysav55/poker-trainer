@@ -12,6 +12,8 @@ jest.mock('../Database', () => {
     CREATE TABLE IF NOT EXISTS hand_actions (id INTEGER PRIMARY KEY AUTOINCREMENT, hand_id TEXT NOT NULL, player_id TEXT NOT NULL, player_name TEXT NOT NULL, street TEXT NOT NULL, action TEXT NOT NULL, amount INTEGER DEFAULT 0, timestamp INTEGER NOT NULL, is_manual_scenario INTEGER DEFAULT 0, is_reverted INTEGER DEFAULT 0, FOREIGN KEY (hand_id) REFERENCES hands(hand_id));
     CREATE TABLE IF NOT EXISTS playlists (playlist_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, table_id TEXT, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS playlist_hands (playlist_id TEXT NOT NULL, hand_id TEXT NOT NULL, display_order INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL, PRIMARY KEY (playlist_id, hand_id), FOREIGN KEY (playlist_id) REFERENCES playlists(playlist_id) ON DELETE CASCADE, FOREIGN KEY (hand_id) REFERENCES hands(hand_id) ON DELETE CASCADE);
+    CREATE TABLE IF NOT EXISTS player_identities (stable_id TEXT PRIMARY KEY, last_known_name TEXT NOT NULL, last_seen INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_player_identities_name ON player_identities(last_known_name);
   `);
   return { getDb: () => db, closeDb: () => {} };
 });

@@ -530,9 +530,17 @@ describe('rollbackStreet', () => {
 // ─────────────────────────────────────────────
 //  Suite 7 — manualDealCard: duplicate rejection
 // ─────────────────────────────────────────────
+
+// Clear all RNG-dealt cards so manual-deal tests start from a blank slate
+function clearCards(gm) {
+  gm.state.players.forEach(p => { p.hole_cards = []; });
+  gm.state.board = [];
+}
+
 describe('manualDealCard — duplicate rejection', () => {
   test('rejects dealing a card that is already in play', () => {
     const { gm, ids } = buildGame(2);
+    clearCards(gm);
     // Deal Ah to p1 slot 0
     gm.manualDealCard('player', ids[0], 0, 'Ah');
     // Try to deal Ah to p2 slot 0 — should be rejected
@@ -543,6 +551,7 @@ describe('manualDealCard — duplicate rejection', () => {
 
   test('rejects dealing a card already on the board', () => {
     const { gm, ids } = buildGame(2);
+    clearCards(gm);
     gm.manualDealCard('board', null, 0, 'Kd');
     const result = gm.manualDealCard('player', ids[0], 0, 'Kd');
     expect(result).toHaveProperty('error');
@@ -570,6 +579,7 @@ describe('manualDealCard — duplicate rejection', () => {
 describe('manualDealCard — replace card in same slot', () => {
   test('replacing a player hole card with a different card succeeds', () => {
     const { gm, ids } = buildGame(2);
+    clearCards(gm);
     gm.manualDealCard('player', ids[0], 0, 'Ah');
 
     // Replace slot 0 with a different card
@@ -582,6 +592,7 @@ describe('manualDealCard — replace card in same slot', () => {
 
   test('replacing a player hole card with the SAME card succeeds (idempotent)', () => {
     const { gm, ids } = buildGame(2);
+    clearCards(gm);
     gm.manualDealCard('player', ids[0], 0, 'Ah');
     // Replacing with the same card: old card is removed from `used` before checking
     const result = gm.manualDealCard('player', ids[0], 0, 'Ah');
@@ -590,6 +601,7 @@ describe('manualDealCard — replace card in same slot', () => {
 
   test('replacing a board card succeeds', () => {
     const { gm } = buildGame(2);
+    clearCards(gm);
     gm.manualDealCard('board', null, 0, '2c');
     const result = gm.manualDealCard('board', null, 0, '3c');
     expect(result).toEqual({ success: true });
@@ -598,6 +610,7 @@ describe('manualDealCard — replace card in same slot', () => {
 
   test('after replacement the old card is freed (can be used elsewhere)', () => {
     const { gm, ids } = buildGame(2);
+    clearCards(gm);
     gm.manualDealCard('player', ids[0], 0, 'Ah');
     // Replace it
     gm.manualDealCard('player', ids[0], 0, 'Kh');
@@ -608,6 +621,7 @@ describe('manualDealCard — replace card in same slot', () => {
 
   test('successful deal saves an action snapshot (undo becomes available)', () => {
     const { gm, ids } = buildGame(2);
+    clearCards(gm);
     const histBefore = gm.state.history.length;
     gm.manualDealCard('player', ids[0], 0, 'Ts');
     expect(gm.state.history.length).toBeGreaterThan(histBefore);
@@ -768,10 +782,9 @@ describe('placeBet — guard clauses', () => {
 describe('getPublicState — card hiding', () => {
   test('hides opponent hole cards from non-coach requesters', () => {
     const { gm, ids } = buildGame(2);
-    gm.manualDealCard('player', ids[0], 0, 'Ah');
-    gm.manualDealCard('player', ids[0], 1, 'Kh');
-    gm.manualDealCard('player', ids[1], 0, '2c');
-    gm.manualDealCard('player', ids[1], 1, '3c');
+    // Set hole cards directly to avoid duplicate-card conflicts with the RNG-dealt cards
+    gm.state.players.find(p => p.id === ids[0]).hole_cards = ['Ah', 'Kh'];
+    gm.state.players.find(p => p.id === ids[1]).hole_cards = ['2c', '3c'];
 
     // Request as p1 (non-coach)
     const pub = gm.getPublicState(ids[0], false);

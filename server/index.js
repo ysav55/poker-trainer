@@ -268,7 +268,7 @@ io.on('connection', socket => {
   console.log(`[connect] ${socket.id}`);
 
   // ── join_room ─────────────────────────────
-  socket.on('join_room', ({ name, isCoach = false, tableId = 'main-table', stableId, password = '' } = {}) => {
+  socket.on('join_room', ({ name, isCoach = false, tableId = 'main-table', stableId, password = '', playAtTable = false } = {}) => {
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return sendError(socket, 'Name is required');
     }
@@ -341,7 +341,7 @@ io.on('connection', socket => {
       }
     }
 
-    const result = gm.addPlayer(socket.id, trimmedName, isCoach);
+    const result = gm.addPlayer(socket.id, trimmedName, isCoach, playAtTable);
 
     if (result.error) return sendError(socket, result.error);
 

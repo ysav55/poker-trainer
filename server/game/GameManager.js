@@ -152,13 +152,14 @@ class GameManager {
   // ─────────────────────────────────────────────
   //  Player management
   // ─────────────────────────────────────────────
-  addPlayer(socketId, name, isCoach = false) {
+  addPlayer(socketId, name, isCoach = false, playAtTable = false) {
     if (this.state.players.find(p => p.id === socketId)) {
       return { error: 'Already in this table' };
     }
-    // Coaches don't take a seat
-    const seat = isCoach ? -1 : this._nextAvailableSeat();
-    if (!isCoach && seat === null) return { error: 'Table is full (max 9 players)' };
+    // Coaches sit out by default (seat = -1, observer only).
+    // Pass playAtTable=true to give the coach a real seat so they also play.
+    const seat = (isCoach && !playAtTable) ? -1 : this._nextAvailableSeat();
+    if (seat === null) return { error: 'Table is full (max 9 players)' };
 
     const player = {
       id: socketId,
@@ -196,7 +197,7 @@ class GameManager {
   }
 
   _gamePlayers() {
-    return this.state.players.filter(p => !p.is_coach);
+    return this.state.players.filter(p => p.seat >= 0);
   }
 
   // ─────────────────────────────────────────────
