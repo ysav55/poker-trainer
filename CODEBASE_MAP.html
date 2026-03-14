@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>poker-trainer — Codebase Map (jcodemunch)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; }
+  h1 { font-size: 20px; font-weight: 700; color: #f0f6fc; }
+  h2 { font-size: 13px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+  h3 { font-size: 12px; font-weight: 600; color: #8b949e; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 8px; }
+  .page { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; gap: 20px; flex-wrap: wrap; }
+  .header-left h1 { margin-bottom: 4px; }
+  .header-left p { color: #8b949e; font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #1a3a2a; color: #3fb950; border: 1px solid #238636; }
+  .badge-blue  { background: #1a2a3a; color: #58a6ff; border: 1px solid #1f6feb; }
+  .badge-purple{ background: #2a1a3a; color: #d2a8ff; border: 1px solid #8957e5; }
+  .badge-orange{ background: #3a2a1a; color: #ffa657; border: 1px solid #9e6a03; }
+
+  /* Stats row */
+  .stats-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+  .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 18px; flex: 1; min-width: 130px; }
+  .stat-card .val { font-size: 28px; font-weight: 700; color: #f0f6fc; line-height: 1; }
+  .stat-card .lbl { font-size: 11px; color: #8b949e; margin-top: 4px; }
+  .stat-card .sub { font-size: 10px; color: #484f58; margin-top: 2px; }
+  .savings-card { background: #0f2d1a; border: 1px solid #238636; }
+  .savings-card .val { color: #3fb950; }
+
+  /* Architecture */
+  .arch { margin-bottom: 28px; }
+  .layers { display: flex; flex-direction: column; gap: 10px; }
+  .layer { border: 1px solid #30363d; border-radius: 10px; overflow: hidden; }
+  .layer-header { padding: 8px 14px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+  .layer-client  .layer-header { background: #1a2a1a; color: #3fb950; border-bottom: 1px solid #30363d; }
+  .layer-server  .layer-header { background: #1a1a2a; color: #58a6ff; border-bottom: 1px solid #30363d; }
+  .layer-db      .layer-header { background: #2a1a1a; color: #ffa657; border-bottom: 1px solid #30363d; }
+  .layer-py      .layer-header { background: #1a1a1a; color: #d2a8ff; border-bottom: 1px solid #30363d; }
+  .layer-body { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .port-tag { font-size: 10px; color: #484f58; font-weight: 400; }
+
+  /* Module cards */
+  .mod { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 8px 10px; min-width: 140px; cursor: default; transition: border-color .15s; }
+  .mod:hover { border-color: #58a6ff; }
+  .mod-name { font-size: 12px; font-weight: 600; color: #c9d1d9; }
+  .mod-path { font-size: 10px; color: #484f58; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+  .mod-syms { margin-top: 6px; display: flex; align-items: center; gap: 6px; }
+  .sym-bar-wrap { flex: 1; height: 4px; background: #21262d; border-radius: 2px; }
+  .sym-bar { height: 4px; border-radius: 2px; }
+  .sym-count { font-size: 10px; font-weight: 700; white-space: nowrap; }
+  .bar-green  { background: #3fb950; }
+  .bar-blue   { background: #58a6ff; }
+  .bar-orange { background: #ffa657; }
+  .bar-purple { background: #d2a8ff; }
+  .count-green  { color: #3fb950; }
+  .count-blue   { color: #58a6ff; }
+  .count-orange { color: #ffa657; }
+  .count-purple { color: #d2a8ff; }
+
+  /* Arrows between layers */
+  .arrow-row { display: flex; justify-content: center; align-items: center; gap: 8px; margin: -4px 0; position: relative; z-index: 1; }
+  .arrow-line { width: 2px; height: 20px; background: #30363d; margin: 0 auto; }
+  .arrow-label { font-size: 10px; color: #484f58; background: #0d1117; padding: 0 6px; }
+
+  /* Bottom two-col */
+  .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+  @media(max-width:700px){ .bottom-grid { grid-template-columns: 1fr; } }
+
+  /* Symbol breakdown */
+  .symbol-panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; }
+  .sym-type-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .sym-type-name { width: 70px; font-size: 12px; color: #c9d1d9; }
+  .sym-type-bar-wrap { flex: 1; height: 6px; background: #21262d; border-radius: 3px; }
+  .sym-type-bar { height: 6px; border-radius: 3px; }
+  .sym-type-count { font-size: 11px; font-weight: 700; width: 32px; text-align: right; }
+
+  /* Top files by symbols */
+  .topfiles-panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; }
+  .topfile-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .topfile-name { font-size: 11px; color: #c9d1d9; width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topfile-bar-wrap { flex: 1; height: 6px; background: #21262d; border-radius: 3px; }
+  .topfile-bar { height: 6px; border-radius: 3px; }
+  .topfile-count { font-size: 11px; font-weight: 700; width: 28px; text-align: right; }
+
+  /* Socket events panel */
+  .events-panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .events-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .event-col h3 { margin-bottom: 8px; }
+  .event-tag { display: inline-block; margin: 2px 3px 2px 0; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-family: 'Cascadia Code', 'Consolas', monospace; }
+  .event-c2s { background: #1a2a1a; color: #3fb950; border: 1px solid #238636; }
+  .event-s2c { background: #1a1a2a; color: #58a6ff; border: 1px solid #1f6feb; }
+
+  /* Footer */
+  .footer { text-align: center; font-size: 11px; color: #484f58; padding-top: 16px; border-top: 1px solid #21262d; }
+  .footer a { color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <h1>poker-trainer</h1>
+      <p>Codebase map generated by <strong>jcodemunch-mcp</strong> &nbsp;·&nbsp; 2026-03-14</p>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+        <span class="badge badge-green">30 files</span>
+        <span class="badge badge-blue">206 symbols</span>
+        <span class="badge badge-orange">26 JS &nbsp;·&nbsp; 3 Python &nbsp;·&nbsp; 1 CSS</span>
+        <span class="badge badge-purple">Epic 0–6 complete</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS ROW -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="val">30</div>
+      <div class="lbl">Source Files</div>
+      <div class="sub">26 JS · 3 Py · 1 CSS</div>
+    </div>
+    <div class="stat-card">
+      <div class="val">206</div>
+      <div class="lbl">Symbols Indexed</div>
+      <div class="sub">functions + methods + classes</div>
+    </div>
+    <div class="stat-card">
+      <div class="val">3</div>
+      <div class="lbl">Classes</div>
+      <div class="sub">GameManager · SessionManager · GameEngine</div>
+    </div>
+    <div class="stat-card savings-card">
+      <div class="val">188k</div>
+      <div class="lbl">Tokens Saved</div>
+      <div class="sub">via smart indexing</div>
+    </div>
+    <div class="stat-card savings-card">
+      <div class="val">$0.57</div>
+      <div class="lbl">Cost Avoided</div>
+      <div class="sub">Sonnet 4.6 equivalent</div>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <div class="arch">
+    <h2>Architecture</h2>
+    <div class="layers">
+
+      <!-- CLIENT -->
+      <div class="layer layer-client">
+        <div class="layer-header">
+          ▸ CLIENT — React + Vite + Tailwind
+          <span class="port-tag">:5173</span>
+        </div>
+        <div class="layer-body">
+          <div class="mod">
+            <div class="mod-name">App.jsx</div>
+            <div class="mod-path">client/src/App.jsx</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:22%"></div></div>
+              <span class="sym-count count-green">7</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">PokerTable</div>
+            <div class="mod-path">components/PokerTable.jsx</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:25%"></div></div>
+              <span class="sym-count count-green">8</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">CoachSidebar</div>
+            <div class="mod-path">components/CoachSidebar.jsx</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:38%"></div></div>
+              <span class="sym-count count-green">12</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">BettingControls</div>
+            <div class="mod-path">components/BettingControls.jsx</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:19%"></div></div>
+              <span class="sym-count count-green">6</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">HandConfigPanel</div>
+            <div class="mod-path">components/HandConfigPanel.jsx</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:16%"></div></div>
+              <span class="sym-count count-green">5</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">PlayerSeat</div>
+            <div class="mod-path">components/PlayerSeat.jsx</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:16%"></div></div>
+              <span class="sym-count count-green">5</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">BoardCards</div>
+            <div class="mod-path">components/BoardCards.jsx</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:16%"></div></div>
+              <span class="sym-count count-green">5</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">Card / CardPicker</div>
+            <div class="mod-path">components/Card.jsx · CardPicker.jsx</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:13%"></div></div>
+              <span class="sym-count count-green">2+2</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">useSocket</div>
+            <div class="mod-path">hooks/useSocket.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:3%"></div></div>
+              <span class="sym-count count-green">1</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">useHistory</div>
+            <div class="mod-path">hooks/useHistory.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-green" style="width:3%"></div></div>
+              <span class="sym-count count-green">1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-row">
+        <div style="text-align:center">
+          <div style="font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;">
+            <div style="flex:1;height:1px;background:#30363d;width:40px"></div>
+            <span style="background:#0d1117;padding:0 8px;">Socket.io &amp; REST</span>
+            <div style="flex:1;height:1px;background:#30363d;width:40px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SERVER -->
+      <div class="layer layer-server">
+        <div class="layer-header">
+          ▸ SERVER — Node.js + Express + Socket.io
+          <span class="port-tag">:3001</span>
+        </div>
+        <div class="layer-body">
+          <div class="mod">
+            <div class="mod-name">index.js</div>
+            <div class="mod-path">server/index.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-blue" style="width:22%"></div></div>
+              <span class="sym-count count-blue">7</span>
+            </div>
+          </div>
+          <div class="mod" style="border-color:#1f6feb;">
+            <div class="mod-name" style="color:#58a6ff;">GameManager ★</div>
+            <div class="mod-path">game/GameManager.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-blue" style="width:100%"></div></div>
+              <span class="sym-count count-blue">32</span>
+            </div>
+          </div>
+          <div class="mod" style="border-color:#1f6feb;">
+            <div class="mod-name" style="color:#58a6ff;">SessionManager ★</div>
+            <div class="mod-path">game/SessionManager.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-blue" style="width:75%"></div></div>
+              <span class="sym-count count-blue">24</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">HandEvaluator</div>
+            <div class="mod-path">game/HandEvaluator.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-blue" style="width:56%"></div></div>
+              <span class="sym-count count-blue">18</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">HandGenerator</div>
+            <div class="mod-path">game/HandGenerator.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-blue" style="width:13%"></div></div>
+              <span class="sym-count count-blue">4</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">Deck</div>
+            <div class="mod-path">game/Deck.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-blue" style="width:13%"></div></div>
+              <span class="sym-count count-blue">4</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">SidePotCalculator</div>
+            <div class="mod-path">game/SidePotCalculator.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-blue" style="width:3%"></div></div>
+              <span class="sym-count count-blue">1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARROW -->
+      <div class="arrow-row">
+        <div style="text-align:center">
+          <div style="font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;">
+            <div style="flex:1;height:1px;background:#30363d;width:40px"></div>
+            <span style="background:#0d1117;padding:0 8px;">better-sqlite3</span>
+            <div style="flex:1;height:1px;background:#30363d;width:40px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DB -->
+      <div class="layer layer-db">
+        <div class="layer-header">
+          ▸ DATABASE — SQLite (WAL, FK) via better-sqlite3
+        </div>
+        <div class="layer-body">
+          <div class="mod">
+            <div class="mod-name">Database</div>
+            <div class="mod-path">db/Database.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-orange" style="width:6%"></div></div>
+              <span class="sym-count count-orange">2</span>
+            </div>
+          </div>
+          <div class="mod" style="border-color:#9e6a03;">
+            <div class="mod-name" style="color:#ffa657;">HandLogger ★</div>
+            <div class="mod-path">db/HandLogger.js</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-orange" style="width:56%"></div></div>
+              <span class="sym-count count-orange">18</span>
+            </div>
+          </div>
+          <div class="mod" style="opacity:0.6;">
+            <div class="mod-name">sessions</div>
+            <div class="mod-path">table: sessions</div>
+          </div>
+          <div class="mod" style="opacity:0.6;">
+            <div class="mod-name">hands</div>
+            <div class="mod-path">table: hands</div>
+          </div>
+          <div class="mod" style="opacity:0.6;">
+            <div class="mod-name">hand_players</div>
+            <div class="mod-path">table: hand_players</div>
+          </div>
+          <div class="mod" style="opacity:0.6;">
+            <div class="mod-name">hand_actions</div>
+            <div class="mod-path">table: hand_actions</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PY BACKEND -->
+      <div class="layer layer-py" style="opacity:0.7;">
+        <div class="layer-header">
+          ▸ PY BACKEND — experimental (not active)
+          <span class="badge badge-purple" style="font-size:9px;margin-left:8px;">legacy</span>
+        </div>
+        <div class="layer-body">
+          <div class="mod">
+            <div class="mod-name">app.py</div>
+            <div class="mod-path">py-backend/app.py</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-purple" style="width:53%"></div></div>
+              <span class="sym-count count-purple">17</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">GameEngine</div>
+            <div class="mod-path">py-backend/game/engine.py</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-purple" style="width:53%"></div></div>
+              <span class="sym-count count-purple">17</span>
+            </div>
+          </div>
+          <div class="mod">
+            <div class="mod-name">deck.py</div>
+            <div class="mod-path">py-backend/game/deck.py</div>
+            <div class="mod-syms">
+              <div class="sym-bar-wrap"><div class="sym-bar bar-purple" style="width:19%"></div></div>
+              <span class="sym-count count-purple">6</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- SOCKET EVENTS -->
+  <div class="events-panel">
+    <h2>Socket Event Contract</h2>
+    <div class="events-grid">
+      <div class="event-col">
+        <h3>Client → Server (15 events)</h3>
+        <span class="event-tag event-c2s">join_room</span>
+        <span class="event-tag event-c2s">start_game</span>
+        <span class="event-tag event-c2s">place_bet</span>
+        <span class="event-tag event-c2s">manual_deal_card</span>
+        <span class="event-tag event-c2s">undo_action</span>
+        <span class="event-tag event-c2s">rollback_street</span>
+        <span class="event-tag event-c2s">toggle_pause</span>
+        <span class="event-tag event-c2s">set_mode</span>
+        <span class="event-tag event-c2s">force_next_street</span>
+        <span class="event-tag event-c2s">award_pot</span>
+        <span class="event-tag event-c2s">reset_hand</span>
+        <span class="event-tag event-c2s">adjust_stack</span>
+        <span class="event-tag event-c2s">open_config_phase</span>
+        <span class="event-tag event-c2s">update_hand_config</span>
+        <span class="event-tag event-c2s">start_configured_hand</span>
+      </div>
+      <div class="event-col">
+        <h3>Server → Client (7 events)</h3>
+        <span class="event-tag event-s2c">room_joined</span>
+        <span class="event-tag event-s2c">game_state</span>
+        <span class="event-tag event-s2c">notification</span>
+        <span class="event-tag event-s2c">error</span>
+        <span class="event-tag event-s2c">showdown_result</span>
+        <span class="event-tag event-s2c">session_stats</span>
+        <span class="event-tag event-s2c">timer_update</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM GRID -->
+  <div class="bottom-grid">
+    <!-- TOP FILES -->
+    <div class="topfiles-panel">
+      <h2>Top Files by Symbol Count</h2>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#58a6ff;">GameManager.js</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:100%;background:#58a6ff;"></div></div>
+        <span class="topfile-count" style="color:#58a6ff;">32</span>
+      </div>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#58a6ff;">SessionManager.js</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:75%;background:#58a6ff;"></div></div>
+        <span class="topfile-count" style="color:#58a6ff;">24</span>
+      </div>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#ffa657;">HandLogger.js</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:56%;background:#ffa657;"></div></div>
+        <span class="topfile-count" style="color:#ffa657;">18</span>
+      </div>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#58a6ff;">HandEvaluator.js</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:56%;background:#58a6ff;"></div></div>
+        <span class="topfile-count" style="color:#58a6ff;">18</span>
+      </div>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#d2a8ff;">app.py</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:53%;background:#d2a8ff;"></div></div>
+        <span class="topfile-count" style="color:#d2a8ff;">17</span>
+      </div>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#d2a8ff;">engine.py</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:53%;background:#d2a8ff;"></div></div>
+        <span class="topfile-count" style="color:#d2a8ff;">17</span>
+      </div>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#3fb950;">CoachSidebar.jsx</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:38%;background:#3fb950;"></div></div>
+        <span class="topfile-count" style="color:#3fb950;">12</span>
+      </div>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#58a6ff;">index.js</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:25%;background:#58a6ff;"></div></div>
+        <span class="topfile-count" style="color:#58a6ff;">7</span>
+      </div>
+      <div class="topfile-row">
+        <span class="topfile-name" style="color:#3fb950;">App.jsx</span>
+        <div class="topfile-bar-wrap"><div class="topfile-bar" style="width:22%;background:#3fb950;"></div></div>
+        <span class="topfile-count" style="color:#3fb950;">7</span>
+      </div>
+    </div>
+
+    <!-- SYMBOL BREAKDOWN -->
+    <div class="symbol-panel">
+      <h2>Symbol Breakdown</h2>
+      <div class="sym-type-row">
+        <span class="sym-type-name">function</span>
+        <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:100%;background:#58a6ff;"></div></div>
+        <span class="sym-type-count" style="color:#58a6ff;">106</span>
+      </div>
+      <div class="sym-type-row">
+        <span class="sym-type-name">method</span>
+        <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:86%;background:#3fb950;"></div></div>
+        <span class="sym-type-count" style="color:#3fb950;">91</span>
+      </div>
+      <div class="sym-type-row">
+        <span class="sym-type-name">constant</span>
+        <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:6%;background:#ffa657;"></div></div>
+        <span class="sym-type-count" style="color:#ffa657;">6</span>
+      </div>
+      <div class="sym-type-row">
+        <span class="sym-type-name">class</span>
+        <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:3%;background:#d2a8ff;"></div></div>
+        <span class="sym-type-count" style="color:#d2a8ff;">3</span>
+      </div>
+
+      <div style="margin-top:20px;">
+        <h2>Layer Breakdown</h2>
+        <div class="sym-type-row">
+          <span class="sym-type-name" style="width:80px;">client/</span>
+          <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:55%;background:#3fb950;"></div></div>
+          <span class="sym-type-count" style="color:#3fb950;">54</span>
+        </div>
+        <div class="sym-type-row">
+          <span class="sym-type-name" style="width:80px;">server/game</span>
+          <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:79%;background:#58a6ff;"></div></div>
+          <span class="sym-type-count" style="color:#58a6ff;">83</span>
+        </div>
+        <div class="sym-type-row">
+          <span class="sym-type-name" style="width:80px;">server/db</span>
+          <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:19%;background:#ffa657;"></div></div>
+          <span class="sym-type-count" style="color:#ffa657;">20</span>
+        </div>
+        <div class="sym-type-row">
+          <span class="sym-type-name" style="width:80px;">server/</span>
+          <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:7%;background:#58a6ff;"></div></div>
+          <span class="sym-type-count" style="color:#58a6ff;">7</span>
+        </div>
+        <div class="sym-type-row">
+          <span class="sym-type-name" style="width:80px;">py-backend</span>
+          <div class="sym-type-bar-wrap"><div class="sym-type-bar" style="width:38%;background:#d2a8ff;"></div></div>
+          <span class="sym-type-count" style="color:#d2a8ff;">40</span>
+        </div>
+      </div>
+
+      <div style="margin-top:20px;">
+        <h2>jcodemunch Efficiency</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+          <div style="background:#0f2d1a;border:1px solid #238636;border-radius:6px;padding:10px 14px;flex:1;min-width:90px;">
+            <div style="font-size:18px;font-weight:700;color:#3fb950;">188k</div>
+            <div style="font-size:10px;color:#484f58;">tokens saved</div>
+          </div>
+          <div style="background:#0f2d1a;border:1px solid #238636;border-radius:6px;padding:10px 14px;flex:1;min-width:90px;">
+            <div style="font-size:18px;font-weight:700;color:#3fb950;">$0.57</div>
+            <div style="font-size:10px;color:#484f58;">cost avoided</div>
+          </div>
+          <div style="background:#0f2d1a;border:1px solid #238636;border-radius:6px;padding:10px 14px;flex:1;min-width:90px;">
+            <div style="font-size:18px;font-weight:700;color:#3fb950;">1.1s</div>
+            <div style="font-size:10px;color:#484f58;">index time</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Generated by <a href="https://github.com/jgravelle/jcodemunch-mcp" target="_blank">jcodemunch-mcp</a>
+    &nbsp;·&nbsp; poker-trainer &nbsp;·&nbsp; 2026-03-14
+  </div>
+</div>
+</body>
+</html>

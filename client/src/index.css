@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    background-color: #060a0f;
+    color: #f0ece3;
+    font-family: 'Inter', system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+  #root { width: 100%; height: 100%; }
+}
+
+@layer components {
+  .btn-gold {
+    @apply px-4 py-2 bg-gold-500 hover:bg-gold-400 text-black font-semibold rounded
+           transition-all duration-150 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed
+           shadow-glow-gold text-sm tracking-wide;
+  }
+  .btn-ghost {
+    @apply px-3 py-1.5 border border-sidebar-border text-gray-400 hover:text-white
+           hover:border-gray-500 rounded transition-all duration-150 text-sm;
+  }
+  .btn-danger {
+    @apply px-3 py-1.5 bg-red-900/60 hover:bg-red-800 text-red-300 hover:text-red-200
+           border border-red-800/50 rounded transition-all duration-150 text-sm;
+  }
+  .btn-primary {
+    @apply px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded
+           transition-all duration-150 active:scale-95 text-sm;
+  }
+  .coach-panel {
+    @apply bg-sidebar-800 border border-sidebar-border rounded-lg p-3;
+  }
+  .label-sm {
+    @apply text-xs font-medium text-gray-500 uppercase tracking-widest;
+  }
+}
+
+/* Felt table gradient */
+.table-felt {
+  background: radial-gradient(ellipse 80% 70% at 50% 50%, #1e5235 0%, #163d28 50%, #0f2318 100%);
+  border: 3px solid #8a6b1a;
+  box-shadow: 0 0 0 6px #6b5213, 0 0 60px rgba(0,0,0,0.9), inset 0 0 100px rgba(0,0,0,0.3);
+}
+
+/* Card flip animation */
+@keyframes cardReveal {
+  from { transform: rotateY(90deg) scale(0.8); opacity: 0; }
+  to   { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+.card-reveal {
+  animation: cardReveal 0.25s ease-out forwards;
+}
+
+/* Pulse for current turn */
+@keyframes turnPulse {
+  0%, 100% { box-shadow: 0 0 0 2px #d4af37; }
+  50%       { box-shadow: 0 0 0 4px #d4af37, 0 0 12px rgba(212,175,55,0.5); }
+}
+.turn-indicator {
+  animation: turnPulse 1.4s ease-in-out infinite;
+}
+
+/* Notification toast */
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+.toast-enter { animation: slideIn 0.25s ease-out forwards; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #0d1117; }
+::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }

@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+server/node_modules/
+client/node_modules/
+
+# Production build
+client/dist/
+
+# SQLite database files
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/settings.json
+.idea/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+client/coverage/
+server/coverage/
+
+# Vite
+client/.vite/

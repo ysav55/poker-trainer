@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx jest:*)",
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\(''uuid''\\); console.log\\(''uuid ok''\\)\")",
+      "Bash(node -e \":*)",
+      "Bash(ls c:/Users/user/poker-trainer/*.md)",
+      "Bash(grep -n \"nextPhase === ''''showdown''''\\\\|_saveSnapshot\\\\|_resolveShowdown\\\\|forceNextStreet\\\\|undoAction\" game/GameManager.js)",
+      "Bash(node -e \"require\\(''''./index.js''''\\)\")",
+      "Bash(node --check index.js)",
+      "Bash(npx vitest:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:3001/health)",
+      "Bash(cat:*)",
+      "Bash(npm info:*)",
+      "Bash(pip index:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m uvx --version)",
+      "Bash(echo $PATH)",
+      "mcp__jcodemunch__get_repo_outline",
+      "mcp__jcodemunch__get_file_tree",
+      "mcp__jcodemunch__get_file_outline"
+    ]
+  }
+}

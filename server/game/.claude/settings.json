@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node_modules/.bin/jest --testPathPattern=\"HandGenerator.test.js|GameManager.config.test.js\" --no-coverage)",
+      "Read(//usr/local/**)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/user/AppData/Roaming/**)",
+      "Read(//c/Users/user/**)",
+      "Bash(cmd /c \"where node\")",
+      "Bash(cmd /c \"where jest\")",
+      "Bash(cmd /c \"node --version\")",
+      "Bash(cmd /c \"node --version && npm --version\")",
+      "Bash(cmd /c \"cd c:\\\\Users\\\\user\\\\poker-trainer\\\\server && npm install 2>&1\")",
+      "Read(//d//**)",
+      "Read(//e//**)",
+      "Read(//d/projects//**)",
+      "Read(//mingw64/**)",
+      "Bash(node -e \":*)",
+      "Bash(cmd /c \"where node 2>&1\")",
+      "Bash(cmd //c \"node --version 2>&1\")",
+      "Bash(cmd //c \"\"\"C:\\\\Program Files\\\\nodejs\\\\node.exe\"\" --version 2>&1\")",
+      "Bash(node node_modules/.bin/jest server/game/__tests__/GameManager.sidepots.test.js --no-coverage)"
+    ]
+  }
+}
