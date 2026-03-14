@@ -476,6 +476,7 @@ export default function CoachSidebar({
   actionTimer = null,
   activeHandId = null,
   handTagsSaved = null,
+  onOpenStats,
 }) {
   // Local state
   const [mode, setMode] = useState('rng'); // 'rng' | 'manual'
@@ -782,15 +783,29 @@ export default function CoachSidebar({
             </span>
             <PhaseBadge phase={phase} />
           </div>
-          <div
-            className="text-xs font-mono"
-            style={{ color: '#444' }}
-          >
-            {is_paused ? (
-              <span style={{ color: '#e3b341' }}>⏸ PAUSED</span>
-            ) : phase !== 'WAITING' ? (
-              <span style={{ color: '#3fb950' }}>● LIVE</span>
-            ) : null}
+          <div className="flex items-center gap-2">
+            <div
+              className="text-xs font-mono"
+              style={{ color: '#444' }}
+            >
+              {is_paused ? (
+                <span style={{ color: '#e3b341' }}>⏸ PAUSED</span>
+              ) : phase !== 'WAITING' ? (
+                <span style={{ color: '#3fb950' }}>● LIVE</span>
+              ) : null}
+            </div>
+            {onOpenStats && (
+              <button
+                onClick={onOpenStats}
+                className="text-xs px-2 py-0.5 rounded transition-colors"
+                style={{ color: '#6e7681', border: '1px solid #30363d' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#d4af37'; e.currentTarget.style.borderColor = '#d4af37'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; e.currentTarget.style.borderColor = '#30363d'; }}
+                title="View player stats"
+              >
+                Stats
+              </button>
+            )}
           </div>
         </div>
 
@@ -1231,6 +1246,24 @@ export default function CoachSidebar({
                             >
                               D
                             </span>
+                          )}
+                          {/* in-hand toggle (waiting phase only) */}
+                          {phase === 'WAITING' && (
+                            <button
+                              onClick={() => emit.setPlayerInHand?.(player.id, player.in_hand === false)}
+                              title={player.in_hand === false ? 'Click to include in next hand' : 'Click to exclude from next hand'}
+                              className="inline-flex items-center justify-center rounded transition-colors"
+                              style={{
+                                width: '16px',
+                                height: '16px',
+                                fontSize: '10px',
+                                background: player.in_hand === false ? 'rgba(239,68,68,0.15)' : 'transparent',
+                                color: player.in_hand === false ? '#f85149' : '#3fb950',
+                                border: `1px solid ${player.in_hand === false ? '#f8514966' : '#3fb95066'}`,
+                              }}
+                            >
+                              {player.in_hand === false ? '✕' : '✓'}
+                            </button>
                           )}
                         </div>
                       </div>

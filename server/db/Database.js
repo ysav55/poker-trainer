@@ -119,6 +119,12 @@ function getDb() {
   try { _db.exec(`ALTER TABLE hands ADD COLUMN dealer_seat INTEGER DEFAULT 0`); } catch {}
   try { _db.exec(`ALTER TABLE hands ADD COLUMN is_scenario_hand INTEGER DEFAULT 0`); } catch {}
 
+  // Migrations for Epic 15 (Auth rebuild)
+  try { _db.exec(`ALTER TABLE player_identities ADD COLUMN email TEXT`); } catch {}
+  try { _db.exec(`ALTER TABLE player_identities ADD COLUMN password_hash TEXT`); } catch {}
+  try { _db.exec(`ALTER TABLE player_identities ADD COLUMN display_name TEXT`); } catch {}
+  try { _db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_player_identities_email ON player_identities(email)`); } catch {}
+
   return _db;
 }
 

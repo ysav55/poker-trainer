@@ -148,7 +148,7 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
 
   // Non-coach seated players only
   const seatedPlayers = useMemo(
-    () => players.filter((p) => p && !p.is_coach && p.seat !== undefined && p.seat !== null),
+    () => players.filter((p) => p && p.seat !== undefined && p.seat !== null),
     [players]
   );
 
@@ -208,8 +208,8 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
     setPickerTarget({ type: 'board', position });
   }, []);
 
-  const handlePlayerSlotClick = useCallback((playerId, position) => {
-    setPickerTarget({ type: 'player', playerId, position });
+  const handlePlayerSlotClick = useCallback((stableId, position) => {
+    setPickerTarget({ type: 'player', playerId: stableId, position });
   }, []);
 
   // ── CardPicker callbacks ──────────────────────────────────────────────────────
@@ -320,7 +320,8 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
           ) : (
             <div className="flex flex-col gap-2">
               {seatedPlayers.map((player) => {
-                const pair = config.hole_cards[player.id] ?? [null, null];
+                const configKey = player.stableId || player.id;
+                const pair = config.hole_cards[configKey] ?? [null, null];
                 return (
                   <div
                     key={player.id}
@@ -348,6 +349,9 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
                         style={{ color: '#f0ece3' }}
                       >
                         {player.name || `Seat ${player.seat}`}
+                        {player.is_coach && (
+                          <span className="ml-1 text-[9px] text-amber-500">(coach)</span>
+                        )}
                       </div>
                       <div
                         className="text-xs font-mono"
@@ -362,12 +366,12 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
                       <ConfigCardSlot
                         card={pair[0]}
                         label={`${player.name || `Seat ${player.seat}`} — Card 1`}
-                        onClick={() => handlePlayerSlotClick(player.id, 0)}
+                        onClick={() => handlePlayerSlotClick(configKey, 0)}
                       />
                       <ConfigCardSlot
                         card={pair[1]}
                         label={`${player.name || `Seat ${player.seat}`} — Card 2`}
-                        onClick={() => handlePlayerSlotClick(player.id, 1)}
+                        onClick={() => handlePlayerSlotClick(configKey, 1)}
                       />
                     </div>
                   </div>

@@ -152,17 +152,17 @@ class GameManager {
   // ─────────────────────────────────────────────
   //  Player management
   // ─────────────────────────────────────────────
-  addPlayer(socketId, name, isCoach = false, playAtTable = false) {
+  addPlayer(socketId, name, isCoach = false, stableId = null) {
     if (this.state.players.find(p => p.id === socketId)) {
       return { error: 'Already in this table' };
     }
-    // Coaches sit out by default (seat = -1, observer only).
-    // Pass playAtTable=true to give the coach a real seat so they also play.
-    const seat = (isCoach && !playAtTable) ? -1 : this._nextAvailableSeat();
+    // Coach always gets a real seat (same as any player).
+    const seat = this._nextAvailableSeat();
     if (seat === null) return { error: 'Table is full (max 9 players)' };
 
     const player = {
       id: socketId,
+      stableId: stableId || socketId,
       name,
       seat,
       stack: 1000,
@@ -177,11 +177,29 @@ class GameManager {
       is_big_blind: false,
       is_all_in: false,
       is_coach: isCoach,
-      acted_this_street: false
+      acted_this_street: false,
+      in_hand: true,
+      disconnected: false,
     };
 
     this.state.players.push(player);
     return { success: true, player };
+  }
+
+  /** Coach-only: exclude or re-include a player from the next hand's hole card deal. */
+  setPlayerInHand(playerId, inHand) {
+    const player = this.state.players.find(p => p.id === playerId);
+    if (!player) return { error: 'Player not found' };
+    player.in_hand = inHand;
+    return { success: true };
+  }
+
+  /** Mark a player as disconnected/reconnected; triggers visual indicator on clients. */
+  setPlayerDisconnected(socketId, disconnected) {
+    const player = this.state.players.find(p => p.id === socketId);
+    if (!player) return { error: 'Player not found' };
+    player.disconnected = disconnected;
+    return { success: true };
   }
 
   removePlayer(socketId) {
@@ -414,8 +432,12 @@ class GameManager {
     if (handResult) {
       // Config mode (manual or hybrid): handResult already validated above.
       players.forEach(p => {
-        const cards = handResult.playerCards[p.id];
-        p.hole_cards = cards || [handResult.deck.pop(), handResult.deck.pop()];
+        if (p.in_hand === false) {
+          p.hole_cards = [];
+        } else {
+          const cards = handResult.playerCards[p.stableId] || handResult.playerCards[p.id];
+          p.hole_cards = cards || [handResult.deck.pop(), handResult.deck.pop()];
+        }
       });
       this.state._full_board = handResult.board;
       this.state.board = [];
@@ -427,7 +449,11 @@ class GameManager {
       // RNG mode (or config with mode='rng'): deal randomly.
       this.state.deck = shuffleDeck(createDeck());
       players.forEach(p => {
-        p.hole_cards = [this.state.deck.pop(), this.state.deck.pop()];
+        if (p.in_hand === false) {
+          p.hole_cards = [];
+        } else {
+          p.hole_cards = [this.state.deck.pop(), this.state.deck.pop()];
+        }
       });
       if (hasConfig) {
         this.state.is_scenario = (this.state.config !== null);
@@ -437,6 +463,9 @@ class GameManager {
         this.state.is_scenario = false;
       }
     }
+
+    // Reset in_hand flag for all players after dealing (each hand is a fresh choice)
+    players.forEach(p => { p.in_hand = true; });
 
     return { success: true };
   }
@@ -467,22 +496,23 @@ class GameManager {
     const player = this.state.players.find(p => p.id === playerId);
     if (!player || !player.is_active) return { error: 'Invalid player state' };
 
-    this._saveSnapshot('action');
-
     const toCall = this.state.current_bet - player.total_bet_this_round;
 
     switch (action) {
       case 'fold':
+        this._saveSnapshot('action'); // before mutations — undo restores pre-fold state
         player.action = 'folded';
         player.is_active = false;
         break;
 
       case 'check':
         if (toCall > 0) return { error: `Must call ${toCall} or raise (cannot check)` };
+        this._saveSnapshot('action'); // after validation, before mutation
         player.action = 'checked';
         break;
 
       case 'call': {
+        this._saveSnapshot('action'); // before mutations
         const callAmt = Math.min(toCall, player.stack);
         player.stack -= callAmt;
         player.total_bet_this_round += callAmt;
@@ -495,7 +525,7 @@ class GameManager {
       }
 
       case 'raise': {
-        // Block re-raise if last aggression was an incomplete all-in
+        // Validate all raise conditions before touching state
         if (!this.state.last_raise_was_full && player.acted_this_street && player.id !== this.state.last_aggressor) {
           return { error: 'Raise not allowed: last aggression was an incomplete all-in. You may call or fold.' };
         }
@@ -505,6 +535,7 @@ class GameManager {
         }
         const totalToPay = amount - player.total_bet_this_round;
         if (totalToPay > player.stack) return { error: 'Not enough chips' };
+        this._saveSnapshot('action'); // all validation passed — snapshot before mutations
         const raiseIncrement = amount - this.state.current_bet;
         const minRaiseIncrement = this.state.min_raise || this.state.big_blind;
         // Only advance min_raise on a full raise — incomplete all-in must not shrink it
@@ -610,7 +641,7 @@ class GameManager {
       let totalAwarded = 0;
 
       for (const pot of sidePots) {
-        const eligible = activePlayers.filter(p => pot.eligiblePlayerIds.includes(p.id));
+        const eligible = activePlayers.filter(p => pot.eligiblePlayerIds.includes(p.id) && handMap[p.id]);
         if (eligible.length === 0) continue;
 
         const ranked = eligible
@@ -778,6 +809,8 @@ class GameManager {
       } else if (nextPhase === 'turn' || nextPhase === 'river') {
         this.state.board.push(this.state.deck.pop());
       }
+    } else {
+      // Manual mode: coach injects cards via manualDealCard; board stays as-is.
     }
 
     // First to act: first active player left of dealer
@@ -797,7 +830,6 @@ class GameManager {
     if (!['preflop', 'flop', 'turn', 'river'].includes(this.state.phase)) {
       return { error: 'Not in a betting phase' };
     }
-    this._saveSnapshot('street');
     this._advanceStreet();
     return { success: true };
   }
@@ -855,7 +887,7 @@ class GameManager {
   }
 
   setBlindLevels(sb, bb) {
-    if (sb <= 0 || bb <= 0 || bb < sb * 2) return { error: 'Invalid blind levels' };
+    if (sb <= 0 || bb <= 0 || bb <= sb) return { error: 'Invalid blind levels' };
     this.state.small_blind = sb;
     this.state.big_blind = bb;
     return { success: true };

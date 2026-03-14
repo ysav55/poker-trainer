@@ -108,8 +108,8 @@ export default function PokerTable({
     (showdownResult?.winners ?? []).map((w) => w.playerId)
   );
 
-  // Filter out coach-spectator seats
-  const visiblePlayers = players.filter((p) => p.is_coach !== true);
+  // All seated players are visible (coach now has a real seat)
+  const visiblePlayers = players;
 
   // Current turn player id
   const currentTurnId = gameState?.current_player ?? gameState?.current_turn ?? null;
@@ -149,7 +149,6 @@ export default function PokerTable({
 
   // ── Pot display ────────────────────────────────────────────────────────────
   const totalSidePots = sidePots.reduce((acc, sp) => acc + (sp.amount ?? 0), 0);
-  const mainPot = pot - totalSidePots;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (

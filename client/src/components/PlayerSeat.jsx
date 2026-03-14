@@ -59,8 +59,9 @@ export default function PlayerSeat({
 
   const isFolded =
     player.action === 'fold' ||
-    player.action === 'folded' ||
-    player.is_folded === true;
+    player.action === 'folded';
+
+  const isDisconnected = player.disconnected === true;
 
   // Find this player's hand entry in allHands (only present at showdown)
   const isShowdown = showdownResult != null;
@@ -133,7 +134,7 @@ export default function PlayerSeat({
       className={`
         absolute flex flex-col items-center gap-1 select-none
         ${isCurrentTurn ? 'turn-indicator rounded-xl' : ''}
-        ${isFolded ? 'opacity-40' : 'opacity-100'}
+        ${isFolded ? 'opacity-40' : isDisconnected ? 'opacity-50' : 'opacity-100'}
         transition-opacity duration-300
       `}
       style={{
@@ -199,11 +200,18 @@ export default function PlayerSeat({
           >
             {player.name}
           </span>
-          {isMe && (
+          {isDisconnected ? (
+            <span
+              className="text-[8px] font-bold uppercase tracking-widest shrink-0 leading-none px-1 py-0.5 rounded"
+              style={{ background: 'rgba(245,158,11,0.2)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.4)' }}
+            >
+              OFFLINE
+            </span>
+          ) : isMe ? (
             <span className="text-[9px] font-bold text-gold-400 uppercase tracking-widest shrink-0 leading-none">
               You
             </span>
-          )}
+          ) : null}
         </div>
 
         {/* Stack */}

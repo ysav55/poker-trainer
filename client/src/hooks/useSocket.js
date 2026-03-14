@@ -103,11 +103,12 @@ export function useSocket() {
 
     socket.on('connect', () => {
       setConnected(true)
-      setCoachDisconnected(false) // coach reconnected — clear the overlay
       // Auto-rejoin if we were already seated (socket reconnected after a drop)
       if (joinParamsRef.current) {
-        const { name, role, stableId, password, playAtTable } = joinParamsRef.current
-        socket.emit('join_room', { name, isCoach: role === 'coach', stableId, password, playAtTable })
+        const { name, role, stableId, password } = joinParamsRef.current
+        const isCoach = role === 'coach'
+        const isSpectator = role === 'spectator'
+        socket.emit('join_room', { name, isCoach, isSpectator, stableId, password })
       }
     })
 
@@ -125,6 +126,9 @@ export function useSocket() {
       setGameState(state)
       setSyncError(null)
       if (state.phase === 'waiting') setActiveHandId(null) // hand ended — clear tag target
+      // ISS-62: clear coach-disconnected overlay only when confirmed coach is back in game_state
+      const coachPresent = state.players?.some(p => p.is_coach)
+      if (coachPresent) setCoachDisconnected(false)
     })
 
     socket.on('error', (payload) => {
@@ -190,10 +194,12 @@ export function useSocket() {
 
   // ---------- emit helpers ----------
 
-  const joinRoom = useCallback((name, role = 'player', password = '', playAtTable = false) => {
+  const joinRoom = useCallback((name, role = 'player', password = '') => {
     const stableId = getOrCreateStableId()
-    joinParamsRef.current = { name, role, stableId, password, playAtTable }
-    socketRef.current?.emit('join_room', { name, isCoach: role === 'coach', stableId, password, playAtTable })
+    const isCoach = role === 'coach'
+    const isSpectator = role === 'spectator'
+    joinParamsRef.current = { name, role, stableId, password }
+    socketRef.current?.emit('join_room', { name, isCoach, isSpectator, stableId, password })
   }, [])
 
   const leaveRoom = useCallback(() => {
@@ -302,6 +308,10 @@ export function useSocket() {
     socketRef.current?.emit('update_hand_tags', { handId, tags })
   }, [])
 
+  const setPlayerInHand = useCallback((playerId, inHand) => {
+    socketRef.current?.emit('set_player_in_hand', { playerId, inHand })
+  }, [])
+
   // ---------- derived values ----------
 
   const myPlayer = gameState?.players?.find((p) => p.id === myId) ?? null
@@ -350,5 +360,6 @@ export function useSocket() {
     activatePlaylist,
     deactivatePlaylist,
     updateHandTags,
+    setPlayerInHand,
   }
 }

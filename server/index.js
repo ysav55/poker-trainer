@@ -268,7 +268,7 @@ io.on('connection', socket => {
   console.log(`[connect] ${socket.id}`);
 
   // ── join_room ─────────────────────────────
-  socket.on('join_room', ({ name, isCoach = false, tableId = 'main-table', stableId, password = '', playAtTable = false } = {}) => {
+  socket.on('join_room', ({ name, isCoach = false, isSpectator: payloadSpectator = false, tableId = 'main-table', stableId, password = '' } = {}) => {
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return sendError(socket, 'Name is required');
     }
@@ -276,6 +276,14 @@ io.on('connection', socket => {
     // Validate coach password if one is configured
     if (isCoach && COACH_PASSWORD && password !== COACH_PASSWORD) {
       return sendError(socket, 'Incorrect coach password');
+    }
+
+    // Registered player check — skip for coaches and explicit spectators
+    if (!isCoach && !payloadSpectator) {
+      const resolvedId = (stableId && typeof stableId === 'string' && stableId.length > 0) ? stableId : null;
+      if (!resolvedId || !HandLogger.isRegisteredPlayer(resolvedId)) {
+        return sendError(socket, 'Please register or log in before joining');
+      }
     }
 
     const gm = getOrCreateTable(tableId);
@@ -309,39 +317,46 @@ io.on('connection', socket => {
       }
     }
 
-    // ── Single Coach Enforcement ──────────────────────────────────────────────
-    // If a second user tries to join as coach while an active coach is already seated,
-    // downgrade them to spectator (view-only, no controls).
+    // ── Spectator handling ────────────────────────────────────────────────────
+    // Case 1: explicit spectator join (payloadSpectator = true)
+    // Case 2: second coach attempt while a coach is already seated (downgrade)
     let isSpectator = false;
+
+    const joinAsSpectator = (reason) => {
+      socket.data.tableId = tableId;
+      socket.data.isCoach = false;
+      socket.data.isSpectator = true;
+      socket.data.name = trimmedName;
+      socket.join(tableId);
+      socket.emit('room_joined', {
+        playerId: socket.id,
+        isCoach: false,
+        isSpectator: true,
+        name: trimmedName,
+        tableId
+      });
+      if (reason) {
+        socket.emit('notification', { type: 'spectator', message: reason });
+      }
+      const publicState = gm.getPublicState(socket.id, false);
+      socket.emit('game_state', publicState);
+      console.log(`[spectator] ${trimmedName} joined ${tableId} as spectator (${reason || 'explicit'})`);
+    };
+
+    if (payloadSpectator && !isCoach) {
+      joinAsSpectator('');
+      return;
+    }
+
     if (isCoach && !isReconnect) {
       const existingCoach = gm.state.players.find(p => p.is_coach);
       if (existingCoach) {
-        isSpectator = true;
-        socket.data.tableId = tableId;
-        socket.data.isCoach = false;
-        socket.data.isSpectator = true;
-        socket.data.name = trimmedName;
-        socket.join(tableId);
-        socket.emit('room_joined', {
-          playerId: socket.id,
-          isCoach: false,
-          isSpectator: true,
-          name: trimmedName,
-          tableId
-        });
-        socket.emit('notification', {
-          type: 'spectator',
-          message: `Session is managed by ${existingCoach.name} — you are watching as a spectator`
-        });
-        // Send current game state to the new spectator
-        const publicState = gm.getPublicState(socket.id, false);
-        socket.emit('game_state', publicState);
-        console.log(`[spectator] ${trimmedName} joined ${tableId} as spectator (coach already present)`);
+        joinAsSpectator(`Session is managed by ${existingCoach.name} — you are watching as a spectator`);
         return;
       }
     }
 
-    const result = gm.addPlayer(socket.id, trimmedName, isCoach, playAtTable);
+    const result = gm.addPlayer(socket.id, trimmedName, isCoach, resolvedStableId);
 
     if (result.error) return sendError(socket, result.error);
 
@@ -520,6 +535,17 @@ io.on('connection', socket => {
     });
   });
 
+  // ── set_player_in_hand ────────────────────
+  socket.on('set_player_in_hand', ({ playerId, inHand } = {}) => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can change in-hand status');
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const result = gm.setPlayerInHand(playerId, inHand);
+    if (result.error) return sendError(socket, result.error);
+    broadcastState(tableId);
+  });
+
   // ── toggle_pause ──────────────────────────
   socket.on('toggle_pause', () => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can pause');
@@ -647,6 +673,12 @@ io.on('connection', socket => {
             type: 'playlist_advance',
             message: `Playlist: loaded hand ${advance.currentIndex + 1} of ${playlistGm.state.playlist_mode.totalHands}`
           });
+        } else {
+          io.to(tableId).emit('notification', {
+            type: 'warning',
+            message: `Playlist: hand ${nextHandId} not found (deleted?) — skipped`
+          });
+          broadcastState(tableId);
         }
       }
     }
@@ -670,7 +702,8 @@ io.on('connection', socket => {
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
-    gm.openConfigPhase();
+    const ocResult = gm.openConfigPhase();
+    if (ocResult.error) return sendError(socket, ocResult.error);
     broadcastState(socket.data.tableId, {
       type: 'config_phase',
       message: 'Coach opened hand configuration'
@@ -884,7 +917,7 @@ io.on('connection', socket => {
         gm.state.paused = true; // direct mutation — togglePause would emit twice
         clearActionTimer(tableId, { saving: true }); // preserve remaining time
         io.to(tableId).emit('coach_disconnected', {
-          message: `${name} (Coach) disconnected — game paused. Reconnect window: 30s`
+          message: `${name} (Coach) disconnected — game paused. Reconnect window: 60s`
         });
         io.to(tableId).emit('notification', {
           type: 'coach_disconnect',
@@ -895,24 +928,25 @@ io.on('connection', socket => {
         clearActionTimer(tableId, { saving: true });
         io.to(tableId).emit('notification', {
           type: 'disconnect',
-          message: `${name} (Coach) disconnected — reconnect window: 30s`
+          message: `${name} (Coach) disconnected — reconnect window: 60s`
         });
       }
     } else {
-      // Regular player disconnect: clear timer only if it was their turn
+      // Regular player disconnect: pause timer if it was their turn, mark as disconnected
       if (gm.state.current_turn === socket.id) {
-        clearActionTimer(tableId, { saving: false });
+        clearActionTimer(tableId, { saving: true });
       }
+      gm.setPlayerDisconnected(socket.id, true);
       io.to(tableId).emit('notification', {
         type: 'disconnect',
-        message: `${name} disconnected — reconnect window: 30s`
+        message: `${name} disconnected — reconnect window: 60s`
       });
     }
 
     broadcastState(tableId); // keep state visible without that player's private data
-    console.log(`[disconnect] ${name} (coach=${isCoach}) — starting 30s TTL`);
+    console.log(`[disconnect] ${name} (coach=${isCoach}) — starting 60s TTL`);
 
-    // Delay removal — give player 30s to reconnect
+    // Delay removal — give player 60s to reconnect
     const timer = setTimeout(() => {
       reconnectTimers.delete(socket.id);
       const currentGm = tables.get(tableId);
@@ -922,7 +956,7 @@ io.on('connection', socket => {
       // when a new coach joins (they will have to manually unpause)
       broadcastState(tableId, { type: 'leave', message: `${name} left the table (timeout)` });
       console.log(`[TTL expired] ${name} removed from ${tableId}`);
-    }, 30_000);
+    }, 60_000);
 
     // Persist config_phase state so it's available when coach reconnects within 30s
     const configSnapshot = (() => {
@@ -968,6 +1002,28 @@ app.get('/api/players/:stableId/stats', (req, res) => {
     const stats = HandLogger.getPlayerStats(req.params.stableId);
     if (!stats) return res.status(404).json({ error: 'Player not found' });
     res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/players — all registered players with aggregate stats
+app.get('/api/players', (req, res) => {
+  try {
+    const players = HandLogger.getAllPlayersWithStats();
+    res.json({ players });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/players/:stableId/hands — paginated hand history for a specific player
+app.get('/api/players/:stableId/hands', (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const offset = parseInt(req.query.offset) || 0;
+    const hands = HandLogger.getPlayerHands(req.params.stableId, { limit, offset });
+    res.json({ hands, limit, offset });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1064,6 +1120,47 @@ app.delete('/api/playlists/:playlistId', (req, res) => {
 });
 
 // ─────────────────────────────────────────────
+//  Auth endpoints (Epic 15)
+// ─────────────────────────────────────────────
+
+// POST /api/auth/register
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password } = req.body || {};
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'invalid_input', message: 'name, email, and password are required' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'invalid_input', message: 'Password must be at least 6 characters' });
+  }
+  try {
+    const result = await HandLogger.registerPlayerAccount(name, email, password);
+    if (result.error) {
+      return res.status(409).json(result);
+    }
+    res.json({ stableId: result.stableId });
+  } catch (err) {
+    res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// POST /api/auth/login
+app.post('/api/auth/login', async (req, res) => {
+  const { name, password } = req.body || {};
+  if (!name || !password) {
+    return res.status(400).json({ error: 'invalid_input', message: 'name and password are required' });
+  }
+  try {
+    const result = await HandLogger.loginPlayerAccount(name, password);
+    if (result.error) {
+      return res.status(401).json(result);
+    }
+    res.json({ stableId: result.stableId, name: result.name });
+  } catch (err) {
+    res.status(500).json({ error: 'server_error', message: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
 //  Health check
 // ─────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({ status: 'ok', tables: tables.size }));
@@ -1092,6 +1189,9 @@ if (fs.existsSync(CLIENT_DIST)) {
   // Catch-all: serve index.html for any unknown route (client-side routing)
   // This must come AFTER all /api routes so API calls are not intercepted.
   app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
     res.sendFile(path.join(CLIENT_DIST, 'index.html'));
   });
 

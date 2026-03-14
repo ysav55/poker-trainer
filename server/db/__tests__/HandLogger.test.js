@@ -12,7 +12,7 @@ jest.mock('../Database', () => {
     CREATE TABLE IF NOT EXISTS hand_actions (id INTEGER PRIMARY KEY AUTOINCREMENT, hand_id TEXT NOT NULL, player_id TEXT NOT NULL, player_name TEXT NOT NULL, street TEXT NOT NULL, action TEXT NOT NULL, amount INTEGER DEFAULT 0, timestamp INTEGER NOT NULL, is_manual_scenario INTEGER DEFAULT 0, is_reverted INTEGER DEFAULT 0, FOREIGN KEY (hand_id) REFERENCES hands(hand_id));
     CREATE TABLE IF NOT EXISTS playlists (playlist_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, table_id TEXT, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS playlist_hands (playlist_id TEXT NOT NULL, hand_id TEXT NOT NULL, display_order INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL, PRIMARY KEY (playlist_id, hand_id), FOREIGN KEY (playlist_id) REFERENCES playlists(playlist_id) ON DELETE CASCADE, FOREIGN KEY (hand_id) REFERENCES hands(hand_id) ON DELETE CASCADE);
-    CREATE TABLE IF NOT EXISTS player_identities (stable_id TEXT PRIMARY KEY, last_known_name TEXT NOT NULL, last_seen INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS player_identities (stable_id TEXT PRIMARY KEY, last_known_name TEXT NOT NULL, display_name TEXT, email TEXT UNIQUE, password_hash TEXT, last_seen INTEGER NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_player_identities_name ON player_identities(last_known_name);
   `);
   return { getDb: () => db, closeDb: () => {} };
@@ -960,5 +960,77 @@ describe('Playlist CRUD', () => {
     expect(() => HandLogger.addHandToPlaylist(pl.playlist_id, handId)).not.toThrow();
     const hands = HandLogger.getPlaylistHands(pl.playlist_id);
     expect(hands).toHaveLength(1);
+  });
+});
+
+// ─── Suite 13: Auth functions ─────────────────────────────────────────────────
+
+describe('Auth functions', () => {
+  // registerPlayerAccount
+  test('registerPlayerAccount: creates new player, returns stableId', async () => {
+    const result = await HandLogger.registerPlayerAccount('Alice', 'alice@test.com', 'password123');
+    expect(result.success).toBe(true);
+    expect(typeof result.stableId).toBe('string');
+    expect(result.stableId.length).toBeGreaterThan(8);
+  });
+
+  test('registerPlayerAccount: duplicate name is rejected', async () => {
+    await HandLogger.registerPlayerAccount('Bob', 'bob@test.com', 'pass1234');
+    const result = await HandLogger.registerPlayerAccount('Bob', 'bob2@test.com', 'pass5678');
+    expect(result.error).toBe('name_taken');
+  });
+
+  test('registerPlayerAccount: duplicate email is rejected', async () => {
+    await HandLogger.registerPlayerAccount('Carol', 'carol@test.com', 'pass1234');
+    const result = await HandLogger.registerPlayerAccount('Dave', 'carol@test.com', 'pass5678');
+    expect(result.error).toBe('email_taken');
+  });
+
+  test('registerPlayerAccount: short password is handled by caller (endpoint validates, not function)', async () => {
+    // The function itself does not validate password length — that's the REST layer
+    const result = await HandLogger.registerPlayerAccount('Eve', 'eve@test.com', 'ab');
+    expect(result.success).toBe(true); // function accepts it; REST layer would reject
+  });
+
+  // loginPlayerAccount
+  test('loginPlayerAccount: valid credentials return stableId', async () => {
+    await HandLogger.registerPlayerAccount('Frank', 'frank@test.com', 'mypassword');
+    const login = await HandLogger.loginPlayerAccount('Frank', 'mypassword');
+    expect(login.success).toBe(true);
+    expect(typeof login.stableId).toBe('string');
+    expect(login.name).toBe('Frank');
+  });
+
+  test('loginPlayerAccount: wrong password returns invalid_credentials', async () => {
+    await HandLogger.registerPlayerAccount('Grace', 'grace@test.com', 'correct');
+    const result = await HandLogger.loginPlayerAccount('Grace', 'wrong');
+    expect(result.error).toBe('invalid_credentials');
+  });
+
+  test('loginPlayerAccount: unknown name returns invalid_credentials', async () => {
+    const result = await HandLogger.loginPlayerAccount('Nobody', 'anypass');
+    expect(result.error).toBe('invalid_credentials');
+  });
+
+  test('loginPlayerAccount: stableId is consistent across logins', async () => {
+    await HandLogger.registerPlayerAccount('Heidi', 'heidi@test.com', 'pass');
+    const login1 = await HandLogger.loginPlayerAccount('Heidi', 'pass');
+    const login2 = await HandLogger.loginPlayerAccount('Heidi', 'pass');
+    expect(login1.stableId).toBe(login2.stableId);
+  });
+
+  // isRegisteredPlayer
+  test('isRegisteredPlayer: returns true for registered player', async () => {
+    const { stableId } = await HandLogger.registerPlayerAccount('Ivan', 'ivan@test.com', 'pass1234');
+    expect(HandLogger.isRegisteredPlayer(stableId)).toBe(true);
+  });
+
+  test('isRegisteredPlayer: returns false for unknown stableId', () => {
+    expect(HandLogger.isRegisteredPlayer('nonexistent-id')).toBe(false);
+  });
+
+  test('isRegisteredPlayer: returns false for null/undefined', () => {
+    expect(HandLogger.isRegisteredPlayer(null)).toBe(false);
+    expect(HandLogger.isRegisteredPlayer(undefined)).toBe(false);
   });
 });

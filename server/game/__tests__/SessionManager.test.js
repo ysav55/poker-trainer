@@ -603,17 +603,17 @@ describe('SessionManager — multi-hand accumulation', () => {
 // ─────────────────────────────────────────────
 
 describe('SessionManager — player not dealt in is skipped', () => {
-  it('coach (isCoach=true) is not in _gamePlayers and not tracked in stats after a hand', () => {
+  it('coach (isCoach=true) is now in _gamePlayers and IS tracked in stats after a hand (Epic 12)', () => {
     const sm = new SessionManager('coach-table');
-    sm.addPlayer('coach1', 'Coach 1', true);  // coach
+    sm.addPlayer('coach1', 'Coach 1', true);  // coach now gets a real seat
     sm.addPlayer('p1', 'Player 1');
     sm.addPlayer('p2', 'Player 2');
 
     sm.startGame('rng');
     sm.resetForNextHand();
 
-    // Coach should not appear in stats (they're excluded from _gamePlayers)
-    expect(sm._stats.has('coach1')).toBe(false);
+    // Coach has a real seat → appears in _gamePlayers → tracked in stats
+    expect(sm._stats.has('coach1')).toBe(true);
   });
 
   it('player with empty hole_cards (not dealt in) has handsPlayed not incremented', () => {
@@ -735,13 +735,13 @@ describe('SessionManager — proxy methods delegate to GameManager', () => {
     expect(sm.state.phase).toBe('flop');
   });
 
-  it('addPlayer with isCoach=true creates a coach in gm', () => {
+  it('addPlayer with isCoach=true creates a coach in gm with a real seat', () => {
     const sm = new SessionManager('t1');
     sm.addPlayer('coach1', 'Coach', true);
     const player = sm.gm.state.players.find(p => p.id === 'coach1');
     expect(player).toBeDefined();
     expect(player.is_coach).toBe(true);
-    expect(player.seat).toBe(-1);
+    expect(player.seat).toBeGreaterThanOrEqual(0);
   });
 
   it('placeBet error propagates up from gm', () => {

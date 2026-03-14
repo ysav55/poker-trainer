@@ -3,6 +3,7 @@ import { useSocket } from './hooks/useSocket';
 import PokerTable from './components/PokerTable';
 import CoachSidebar from './components/CoachSidebar';
 import CardPicker from './components/CardPicker';
+import StatsPanel from './components/StatsPanel';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -28,35 +29,103 @@ function ConnectionDot({ connected }) {
 
 // ── Join / Lobby screen ───────────────────────────────────────────────────────
 
+const INPUT_STYLE = {
+  background: 'rgba(255,255,255,0.04)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  caretColor: '#d4af37',
+};
+
+function AuthInput({ type = 'text', value, onChange, placeholder, maxLength }) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      maxLength={maxLength}
+      className="w-full rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-all duration-150"
+      style={INPUT_STYLE}
+      onFocus={(e) => {
+        e.target.style.borderColor = 'rgba(212,175,55,0.45)';
+        e.target.style.boxShadow = '0 0 0 3px rgba(212,175,55,0.08)';
+      }}
+      onBlur={(e) => {
+        e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+        e.target.style.boxShadow = 'none';
+      }}
+    />
+  );
+}
+
 function JoinScreen({ joinRoom, connected }) {
-  const [name, setName]             = useState('');
-  const [asCoach, setAsCoach]       = useState(false);
-  const [playAtTable, setPlayAtTable] = useState(false);
-  const [password, setPassword]     = useState('');
-  const [error, setError]           = useState('');
-  const [loading, setLoading]       = useState(false);
+  const [mode, setMode]         = useState('login');
+  const [name, setName]         = useState('');
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
 
-  function validate() {
-    if (!name.trim()) {
-      setError('Please enter your name.');
-      return false;
-    }
-    if (name.trim().length < 2) {
-      setError('Name must be at least 2 characters.');
-      return false;
-    }
-    return true;
-  }
+  const clearFields = (newMode) => {
+    setMode(newMode);
+    setError('');
+    setPassword('');
+  };
 
-  function handleSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!validate()) return;
+    if (!name.trim() || name.trim().length < 2) {
+      setError('Name must be at least 2 characters.');
+      return;
+    }
     setLoading(true);
-    const role = asCoach ? 'coach' : 'player';
-    joinRoom(name.trim(), role, asCoach ? password : '', asCoach && playAtTable);
+    try {
+      if (mode === 'login') {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), password }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setError(data.message || 'Login failed'); setLoading(false); return; }
+        localStorage.setItem('poker_trainer_player_id', data.stableId);
+        joinRoom(name.trim(), 'player');
+      } else if (mode === 'register') {
+        if (!email.trim()) { setError('Email is required.'); setLoading(false); return; }
+        if (password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return; }
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setError(data.message || 'Registration failed'); setLoading(false); return; }
+        localStorage.setItem('poker_trainer_player_id', data.stableId);
+        joinRoom(name.trim(), 'player');
+      } else if (mode === 'spectate') {
+        joinRoom(name.trim(), 'spectator');
+      } else if (mode === 'coach') {
+        joinRoom(name.trim(), 'coach', password);
+      }
+    } catch {
+      setError('Network error — is the server running?');
+    }
     setLoading(false);
-  }
+  };
+
+  const TABS = [
+    { key: 'login',    label: 'Log In' },
+    { key: 'register', label: 'Register' },
+    { key: 'spectate', label: 'Spectate' },
+    { key: 'coach',    label: 'Coach' },
+  ];
+
+  const submitLabel = {
+    login:    loading ? 'Logging in…'    : 'Log In',
+    register: loading ? 'Registering…'   : 'Create Account',
+    spectate: loading ? 'Joining…'       : 'Watch as Spectator',
+    coach:    loading ? 'Joining…'       : 'Join as Coach',
+  }[mode];
 
   return (
     <div
@@ -93,122 +162,66 @@ function JoinScreen({ joinRoom, connected }) {
           </p>
         </div>
 
+        {/* Mode tabs */}
+        <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => clearFields(tab.key)}
+              className="flex-1 py-2 text-xs font-semibold uppercase tracking-widest transition-all duration-150"
+              style={{
+                background: mode === tab.key ? 'rgba(212,175,55,0.15)' : 'transparent',
+                color: mode === tab.key ? '#d4af37' : 'rgba(156,163,175,0.7)',
+                borderRight: tab.key !== 'coach' ? '1px solid rgba(255,255,255,0.08)' : 'none',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          {/* Name input */}
+          {/* Name — shown on all tabs */}
           <div className="flex flex-col gap-1.5">
-            <label className="label-sm">Your Name</label>
-            <input
-              type="text"
+            <label className="label-sm">Display Name</label>
+            <AuthInput
               value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setError('');
-              }}
+              onChange={(e) => { setName(e.target.value); setError(''); }}
               placeholder="Enter your name"
               maxLength={32}
-              className="w-full rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-all duration-150"
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                caretColor: '#d4af37',
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = 'rgba(212,175,55,0.45)';
-                e.target.style.boxShadow = '0 0 0 3px rgba(212,175,55,0.08)';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = 'rgba(255,255,255,0.1)';
-                e.target.style.boxShadow = 'none';
-              }}
             />
           </div>
 
-          {/* Coach toggle */}
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  checked={asCoach}
-                  onChange={(e) => {
-                    setAsCoach(e.target.checked);
-                    setError('');
-                  }}
-                  className="sr-only"
-                />
-                <div
-                  className={`w-9 h-5 rounded-full transition-all duration-200 ${
-                    asCoach ? 'bg-gold-500' : 'bg-gray-700'
-                  }`}
-                  style={{ boxShadow: asCoach ? '0 0 8px rgba(212,175,55,0.4)' : 'none' }}
-                />
-                <div
-                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 shadow ${
-                    asCoach ? 'translate-x-4' : 'translate-x-0'
-                  }`}
-                />
-              </div>
-              <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">
-                Join as Coach (Admin)
-              </span>
-            </label>
+          {/* Email — register only */}
+          {mode === 'register' && (
+            <div className="flex flex-col gap-1.5">
+              <label className="label-sm">Email</label>
+              <AuthInput
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                placeholder="you@example.com"
+                maxLength={128}
+              />
+            </div>
+          )}
 
-            {asCoach && (
-              <label className="flex items-center gap-3 cursor-pointer group">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={playAtTable}
-                    onChange={(e) => {
-                      setPlayAtTable(e.target.checked);
-                      setError('');
-                    }}
-                    className="sr-only"
-                  />
-                  <div
-                    className={`w-9 h-5 rounded-full transition-all duration-200 ${
-                      playAtTable ? 'bg-blue-600' : 'bg-gray-700'
-                    }`}
-                  />
-                  <div
-                    className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 shadow ${
-                      playAtTable ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
-                </div>
-                <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">
-                  Also play at the table
-                </span>
+          {/* Password — login, register, coach */}
+          {(mode === 'login' || mode === 'register' || mode === 'coach') && (
+            <div className="flex flex-col gap-1.5">
+              <label className="label-sm">
+                {mode === 'coach' ? 'Coach Password' : 'Password'}
               </label>
-            )}
-
-            {asCoach && (
-              <input
+              <AuthInput
                 type="password"
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setError('');
-                }}
-                placeholder="Coach password"
-                className="w-full rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-all duration-150"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  caretColor: '#d4af37',
-                }}
-                onFocus={(e) => {
-                  e.target.style.borderColor = 'rgba(212,175,55,0.45)';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(212,175,55,0.08)';
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(255,255,255,0.1)';
-                  e.target.style.boxShadow = 'none';
-                }}
+                onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                placeholder={mode === 'coach' ? 'Coach password' : 'Password'}
               />
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Error message */}
           {error && (
@@ -221,7 +234,7 @@ function JoinScreen({ joinRoom, connected }) {
             disabled={loading || !connected}
             className="btn-gold w-full py-3 text-sm tracking-widest uppercase"
           >
-            {loading ? 'Joining…' : 'Join Table'}
+            {submitLabel}
           </button>
         </form>
 
@@ -236,7 +249,7 @@ function JoinScreen({ joinRoom, connected }) {
 
 // ── Top bar ───────────────────────────────────────────────────────────────────
 
-function TopBar({ gameState, isCoach, connected, playerCount, onLeave }) {
+function TopBar({ gameState, isCoach, connected, playerCount, onLeave, onOpenStats }) {
   const tableName = gameState?.table_name ?? gameState?.room ?? 'Training Table';
   const mode      = gameState?.mode ?? 'live';
   const phase     = gameState?.phase ?? 'waiting';
@@ -290,6 +303,15 @@ function TopBar({ gameState, isCoach, connected, playerCount, onLeave }) {
           {playerCount} player{playerCount !== 1 ? 's' : ''}
         </span>
         <ConnectionDot connected={connected} />
+        {onOpenStats && (
+          <button
+            onClick={onOpenStats}
+            className="text-xs text-gray-500 hover:text-amber-400 transition-colors px-1.5 py-0.5 rounded border border-gray-800 hover:border-amber-700"
+            title="View stats"
+          >
+            Stats
+          </button>
+        )}
         <button
           onClick={onLeave}
           className="text-xs text-gray-600 hover:text-gray-400 transition-colors px-1.5 py-0.5 rounded border border-gray-800 hover:border-gray-600"
@@ -372,12 +394,14 @@ export default function App() {
     activatePlaylist,
     deactivatePlaylist,
     updateHandTags,
+    setPlayerInHand,
   } = useSocket();
 
   // ── Local state ────────────────────────────────────────────────────────────
   const [cardPickerTarget, setCardPickerTarget] = useState(null);
   const [dismissedErrorIds, setDismissedErrorIds] = useState(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarOpen((v) => !v);
@@ -408,6 +432,7 @@ export default function App() {
     activatePlaylist,
     deactivatePlaylist,
     updateHandTags,
+    setPlayerInHand,
   };
 
   // ── CardPicker handlers ───────────────────────────────────────────────────
@@ -468,6 +493,7 @@ export default function App() {
           connected={connected}
           playerCount={playerCount}
           onLeave={leaveRoom}
+          onOpenStats={() => setStatsOpen(true)}
         />
 
         {/* Error toasts — top center */}
@@ -509,8 +535,16 @@ export default function App() {
           onToggle={handleToggleSidebar}
           activeHandId={activeHandId}
           handTagsSaved={handTagsSaved}
+          onOpenStats={() => setStatsOpen(true)}
         />
       )}
+
+      {/* ── Stats panel ──────────────────────────────────────────────────── */}
+      <StatsPanel
+        isOpen={statsOpen}
+        onClose={() => setStatsOpen(false)}
+        isCoach={isCoach}
+      />
 
       {/* ── CardPicker modal ─────────────────────────────────────────────── */}
       {cardPickerTarget && (() => {

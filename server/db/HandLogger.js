@@ -1,5 +1,8 @@
 'use strict';
 
+const bcrypt = require('bcrypt');
+const { v4: uuidv4 } = require('uuid');
+
 /**
  * HandLogger — records hand history to SQLite.
  *
@@ -164,6 +167,46 @@ function stmts() {
       FROM hand_players hp
       WHERE hp.player_id = ?
       GROUP BY hp.player_id
+    `),
+    // Auth statements (Epic 15)
+    getPlayerByName: db.prepare(`SELECT * FROM player_identities WHERE last_known_name = ? COLLATE NOCASE`),
+    getPlayerByEmail: db.prepare(`SELECT * FROM player_identities WHERE email = ? COLLATE NOCASE`),
+    getPlayerById: db.prepare(`SELECT * FROM player_identities WHERE stable_id = ?`),
+    registerPlayer: db.prepare(`
+      INSERT INTO player_identities (stable_id, last_known_name, display_name, email, password_hash, last_seen)
+      VALUES (@stable_id, @name, @name, @email, @password_hash, @last_seen)
+    `),
+    // Stats dashboard statements
+    getAllRegisteredPlayers: db.prepare(`
+      SELECT stable_id, last_known_name, last_seen, email
+      FROM player_identities
+      ORDER BY last_seen DESC
+    `),
+    getPlayerHandHistory: db.prepare(`
+      SELECT
+        h.hand_id, h.started_at, h.ended_at, h.final_pot, h.winner_id, h.winner_name,
+        h.phase_ended, h.board, h.auto_tags, h.coach_tags, h.table_id,
+        hp.hole_cards, hp.stack_start, hp.stack_end, hp.is_winner, hp.vpip, hp.pfr, hp.seat
+      FROM hand_players hp
+      JOIN hands h ON hp.hand_id = h.hand_id
+      WHERE hp.player_id = ?
+      ORDER BY h.started_at DESC
+      LIMIT ? OFFSET ?
+    `),
+    getPlayerAggStats: db.prepare(`
+      SELECT
+        hp.player_id,
+        MAX(hp.player_name) AS latest_name,
+        COUNT(hp.hand_id)   AS total_hands,
+        SUM(hp.is_winner)   AS total_wins,
+        SUM(hp.stack_end - hp.stack_start) AS total_net_chips,
+        ROUND(CAST(SUM(hp.vpip) AS REAL) / COUNT(*) * 100, 1) AS vpip_percent,
+        ROUND(CAST(SUM(hp.pfr)  AS REAL) / COUNT(*) * 100, 1) AS pfr_percent,
+        MAX(h.started_at) AS last_hand_at
+      FROM hand_players hp
+      JOIN hands h ON hp.hand_id = h.hand_id
+      WHERE hp.player_id = ?
+      GROUP BY hp.player_id
     `)
   };
   return _stmts;
@@ -290,7 +333,6 @@ function getSessionStats(sessionId) {
 // ─── Playlist API ─────────────────────────────────────────────────────────────
 
 function createPlaylist({ name, description = '', tableId = null }) {
-  const { v4: uuidv4 } = require('uuid');
   const playlist_id = uuidv4();
   stmts().insertPlaylist.run({
     playlist_id, name, description,
@@ -396,12 +438,13 @@ function analyzeAndTagHand(handId) {
   const flopActions = byStreet['flop'] || [];
   const riverActions = byStreet['river'] || [];
 
-  // WALK: only folds on preflop, no raises
+  // WALK: everyone folded to BB preflop, no raise — BB wins uncontested
+  // Requires at least 1 fold to avoid tagging a single free-check as a walk
   if (preflopActions.length > 0) {
     const preflopRaises = preflopActions.filter(a => a.action === 'raised' || a.action === 'raise');
     const preflopFolds = preflopActions.filter(a => a.action === 'folded' || a.action === 'fold');
-    if (preflopRaises.length === 0 && preflopFolds.length >= preflopActions.length - 1) {
-      // Everyone except BB folded, no raise — Walk
+    if (preflopRaises.length === 0 && preflopFolds.length > 0 && preflopFolds.length >= preflopActions.length - 1) {
+      // At least one fold, no raises, at most one non-fold action (BB's option) — Walk
       autoTags.add('WALK');
     }
   }
@@ -482,12 +525,86 @@ function getPlayerStats(stableId) {
   return stmts().getPlayerStats.get(stableId) ?? null;
 }
 
+// ─── Auth API (Epic 15) ───────────────────────────────────────────────────────
+
+async function registerPlayerAccount(name, email, password) {
+  // Check for duplicate name (only block if the existing record has a password — i.e. is a registered account)
+  const existingName = stmts().getPlayerByName.get(name.trim());
+  if (existingName && existingName.password_hash) {
+    return { error: 'name_taken', message: 'This display name is already taken' };
+  }
+  // Check for duplicate email
+  const existingEmail = stmts().getPlayerByEmail.get(email.trim().toLowerCase());
+  if (existingEmail) {
+    return { error: 'email_taken', message: 'An account with this email already exists' };
+  }
+  const stableId = uuidv4();
+  const passwordHash = await bcrypt.hash(password, 10);
+  stmts().registerPlayer.run({
+    stable_id: stableId,
+    name: name.trim(),
+    email: email.trim().toLowerCase(),
+    password_hash: passwordHash,
+    last_seen: Date.now()
+  });
+  return { success: true, stableId };
+}
+
+async function loginPlayerAccount(name, password) {
+  const player = stmts().getPlayerByName.get(name.trim());
+  if (!player || !player.password_hash) {
+    return { error: 'invalid_credentials', message: 'Invalid name or password' };
+  }
+  const match = await bcrypt.compare(password, player.password_hash);
+  if (!match) {
+    return { error: 'invalid_credentials', message: 'Invalid name or password' };
+  }
+  // Update last_seen
+  stmts().upsertPlayerIdentity.run({ stable_id: player.stable_id, last_known_name: player.last_known_name, last_seen: Date.now() });
+  return { success: true, stableId: player.stable_id, name: player.last_known_name };
+}
+
+function isRegisteredPlayer(stableId) {
+  if (!stableId) return false;
+  const player = stmts().getPlayerById.get(stableId);
+  return !!(player && player.password_hash);
+}
+
+function getAllPlayersWithStats() {
+  const players = stmts().getAllRegisteredPlayers.all();
+  return players.map(p => {
+    const stats = stmts().getPlayerAggStats.get(p.stable_id) ?? {
+      total_hands: 0, total_wins: 0, total_net_chips: 0,
+      vpip_percent: 0, pfr_percent: 0, last_hand_at: null
+    };
+    return {
+      stableId: p.stable_id,
+      name: p.last_known_name,
+      email: p.email,
+      lastSeen: p.last_seen,
+      ...stats
+    };
+  });
+}
+
+function getPlayerHands(stableId, { limit = 20, offset = 0 } = {}) {
+  return stmts().getPlayerHandHistory.all(stableId, limit, offset).map(h => ({
+    ...h,
+    auto_tags: h.auto_tags ? JSON.parse(h.auto_tags) : [],
+    coach_tags: h.coach_tags ? JSON.parse(h.coach_tags) : [],
+    board: h.board ? JSON.parse(h.board) : [],
+    hole_cards: h.hole_cards ? JSON.parse(h.hole_cards) : []
+  }));
+}
+
 module.exports = {
   ensureSession, startHand, recordAction, endHand, markIncomplete, updateCoachTags,
   getHands, getHandDetail, getSessionStats,
-  upsertPlayerIdentity, getPlayerStats,
+  upsertPlayerIdentity, getPlayerStats, getAllPlayersWithStats, getPlayerHands,
   // New Epic 8
   analyzeAndTagHand, markLastActionReverted,
   createPlaylist, getPlaylists, getPlaylistHands,
-  addHandToPlaylist, removeHandFromPlaylist, deletePlaylist
+  addHandToPlaylist, removeHandFromPlaylist, deletePlaylist,
+  // Epic 15 Auth
+  registerPlayerAccount, loginPlayerAccount, isRegisteredPlayer
 };
