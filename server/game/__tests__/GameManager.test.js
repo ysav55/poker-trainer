@@ -824,3 +824,104 @@ describe('getPublicState — card hiding', () => {
     });
   });
 });
+
+// ─────────────────────────────────────────────
+//  Suite — GAP FIXES
+// ─────────────────────────────────────────────
+
+describe('GAP 1 — setBlindLevels phase guard', () => {
+  test('setBlindLevels succeeds when phase is waiting', () => {
+    const gm = new GameManager('t-blinds');
+    const result = gm.setBlindLevels(25, 50);
+    expect(result).toEqual({ success: true });
+    expect(gm.state.small_blind).toBe(25);
+    expect(gm.state.big_blind).toBe(50);
+  });
+
+  test('setBlindLevels returns error when a hand is active', () => {
+    const { gm } = buildGame(2);
+    expect(gm.state.phase).toBe('preflop');
+    const result = gm.setBlindLevels(25, 50);
+    expect(result).toHaveProperty('error');
+    expect(result.error).toMatch(/active hand/i);
+  });
+
+  test('blind levels unchanged after mid-hand rejection', () => {
+    const { gm } = buildGame(2);
+    const origSb = gm.state.small_blind;
+    const origBb = gm.state.big_blind;
+    gm.setBlindLevels(25, 50);
+    expect(gm.state.small_blind).toBe(origSb);
+    expect(gm.state.big_blind).toBe(origBb);
+  });
+});
+
+describe('GAP 2 — dealer rotation skips disconnected players', () => {
+  test('dealer rotates to next connected player when one is disconnected', () => {
+    const gm = new GameManager('t-dealer');
+    gm.addPlayer('p1', 'P1');
+    gm.addPlayer('p2', 'P2');
+    gm.addPlayer('p3', 'P3');
+    gm.startGame('rng');
+
+    const p2 = gm.state.players.find(p => p.id === 'p2');
+    p2.disconnected = true;
+
+    gm.resetForNextHand();
+    const newDealerPlayer = gm._gamePlayers()[gm.state.dealer_seat];
+    expect(newDealerPlayer.disconnected).not.toBe(true);
+  });
+
+  test('dealer rotation does not throw when all players are disconnected', () => {
+    const gm = new GameManager('t-dealer-alldc');
+    gm.addPlayer('p1', 'P1');
+    gm.addPlayer('p2', 'P2');
+    gm.startGame('rng');
+    gm._gamePlayers().forEach(p => { p.disconnected = true; });
+    expect(() => gm.resetForNextHand()).not.toThrow();
+    expect(gm.state.dealer_seat).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('GAP 3 — manualDealCard mode guard', () => {
+  test('manualDealCard in rng mode returns error', () => {
+    const gm = new GameManager('t-rng');
+    gm.addPlayer('p1', 'P1');
+    gm.addPlayer('p2', 'P2');
+    gm.startGame('rng');
+    const result = gm.manualDealCard('player', 'p1', 0, 'Ah');
+    expect(result).toHaveProperty('error');
+    expect(result.error).toMatch(/manual or hybrid/i);
+  });
+
+  test('manualDealCard in manual mode is allowed', () => {
+    const { gm, ids } = buildGame(2);
+    expect(gm.state.mode).toBe('manual');
+    gm.state.players.forEach(p => { p.hole_cards = []; });
+    const result = gm.manualDealCard('player', ids[0], 0, 'Ah');
+    expect(result).toEqual({ success: true });
+  });
+});
+
+describe('GAP 6 — addPlayer custom starting stack', () => {
+  test('addPlayer uses default stack of 1000 when not specified', () => {
+    const gm = new GameManager('t-stack');
+    gm.addPlayer('p1', 'Player 1');
+    const p = gm.state.players.find(pl => pl.id === 'p1');
+    expect(p.stack).toBe(1000);
+  });
+
+  test('addPlayer uses provided stack value', () => {
+    const gm = new GameManager('t-stack');
+    gm.addPlayer('p1', 'Player 1', false, null, 500);
+    const p = gm.state.players.find(pl => pl.id === 'p1');
+    expect(p.stack).toBe(500);
+  });
+
+  test('addPlayer with custom stack 2500', () => {
+    const gm = new GameManager('t-stack');
+    gm.addPlayer('rich', 'Rich Player', false, null, 2500);
+    const p = gm.state.players.find(pl => pl.id === 'rich');
+    expect(p.stack).toBe(2500);
+  });
+});

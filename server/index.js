@@ -87,6 +87,9 @@ const tables = new Map();
 // Map<socketId, { timer, tableId, name, isCoach }> — pending reconnect TTLs
 const reconnectTimers = new Map();
 
+// Map<stableId, stack> — chip count saved when a player's TTL expires so it can be restored on reconnect
+const ghostStacks = new Map();
+
 // Per-table action timers
 const actionTimers = new Map(); // tableId → { timeout, startedAt, duration, playerId }
 
@@ -359,6 +362,12 @@ io.on('connection', socket => {
     const result = gm.addPlayer(socket.id, trimmedName, isCoach, resolvedStableId);
 
     if (result.error) return sendError(socket, result.error);
+
+    // Restore stack if this player had a saved stack from a previous TTL expiry
+    if (ghostStacks.has(resolvedStableId)) {
+      gm.adjustStack(socket.id, ghostStacks.get(resolvedStableId));
+      ghostStacks.delete(resolvedStableId);
+    }
 
     // If reconnecting coach had an active config phase, restore it
     if (isReconnect && savedReconnectEntry?.configSnapshot) {
@@ -951,6 +960,11 @@ io.on('connection', socket => {
       reconnectTimers.delete(socket.id);
       const currentGm = tables.get(tableId);
       if (!currentGm) return;
+      // Save stack before removing so it can be restored if the player rejoins later
+      const ghostPlayer = currentGm.state.players.find(p => p.id === socket.id);
+      if (ghostPlayer && socket.data.stableId) {
+        ghostStacks.set(socket.data.stableId, ghostPlayer.stack);
+      }
       currentGm.removePlayer(socket.id);
       // If the coach never came back, clear the paused state so play can eventually resume
       // when a new coach joins (they will have to manually unpause)

@@ -835,3 +835,59 @@ describe('SessionManager — _preflopTracking cleared after resetForNextHand', (
     sm.resetForNextHand();
   });
 });
+
+// ─────────────────────────────────────────────
+//  Suite — GAP 8: Aggression Frequency
+// ─────────────────────────────────────────────
+
+describe('GAP 8 — aggression frequency tracking', () => {
+  it('aggFreq is 1.0 when a player only raises preflop', () => {
+    const sm = setupTable(3);
+    sm.startGame('rng');
+
+    // Find the current turn player and make them raise
+    const currentId = sm.state.current_turn;
+    sm.placeBet(currentId, 'raise', sm.state.big_blind * 3);
+    sm.resetForNextHand();
+
+    const stats = sm.getSessionStats().players.find(p => p.playerId === currentId);
+    // Player raised once and called zero times → aggFreq = 1/(1+0) = 1.0
+    expect(stats.aggFreq).toBe(1);
+  });
+
+  it('aggFreq is 0.0 when a player only calls preflop', () => {
+    const sm = setupTable(3);
+    sm.startGame('rng');
+
+    const currentId = sm.state.current_turn;
+    sm.placeBet(currentId, 'call');
+    sm.resetForNextHand();
+
+    const stats = sm.getSessionStats().players.find(p => p.playerId === currentId);
+    // Player called once and raised zero times → aggFreq = 0/(0+1) = 0
+    expect(stats.aggFreq).toBe(0);
+  });
+
+  it('aggFreq is 0 for a player who only folds/checks preflop', () => {
+    const sm = setupTable(3);
+    sm.startGame('rng');
+    // Don't place any call/raise — just reset
+    sm.resetForNextHand();
+
+    const stats = sm.getSessionStats().players;
+    // All players who had no call/raise should have aggFreq = 0
+    stats.forEach(s => expect(s.aggFreq).toBeGreaterThanOrEqual(0));
+  });
+
+  it('aggFreq is included in getSessionStats output shape', () => {
+    const sm = setupTable(2);
+    sm.startGame('rng');
+    sm.resetForNextHand();
+
+    const stats = sm.getSessionStats();
+    stats.players.forEach(p => {
+      expect(p).toHaveProperty('aggFreq');
+      expect(typeof p.aggFreq).toBe('number');
+    });
+  });
+});

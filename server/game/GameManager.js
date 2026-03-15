@@ -49,7 +49,6 @@ class GameManager {
       deck: [],
       winner: null,
       winner_name: null,
-      notifications: [],
       history: [],         // action-level snapshots (for general undo)
       street_snapshots: [], // street-level snapshots (for rollback-street)
       config_phase: false,
@@ -152,7 +151,7 @@ class GameManager {
   // ─────────────────────────────────────────────
   //  Player management
   // ─────────────────────────────────────────────
-  addPlayer(socketId, name, isCoach = false, stableId = null) {
+  addPlayer(socketId, name, isCoach = false, stableId = null, stack = 1000) {
     if (this.state.players.find(p => p.id === socketId)) {
       return { error: 'Already in this table' };
     }
@@ -165,7 +164,7 @@ class GameManager {
       stableId: stableId || socketId,
       name,
       seat,
-      stack: 1000,
+      stack,
       hole_cards: [],
       current_bet: 0,
       total_bet_this_round: 0,
@@ -838,6 +837,9 @@ class GameManager {
   //  Manual card injection (Coach)
   // ─────────────────────────────────────────────
   manualDealCard(targetType, targetId, position, card) {
+    if (this.state.mode === 'rng') {
+      return { error: 'Manual card injection is only allowed in manual or hybrid mode' };
+    }
     if (!isValidCard(card)) return { error: `"${card}" is not a valid card (e.g. Ah, Kd, Ts)` };
 
     const used = getUsedCards(this.state);
@@ -887,6 +889,9 @@ class GameManager {
   }
 
   setBlindLevels(sb, bb) {
+    if (this.state.phase !== 'waiting') {
+      return { error: 'Cannot change blind levels during an active hand' };
+    }
     if (sb <= 0 || bb <= 0 || bb <= sb) return { error: 'Invalid blind levels' };
     this.state.small_blind = sb;
     this.state.big_blind = bb;
@@ -908,8 +913,18 @@ class GameManager {
 
   resetForNextHand() {
     this._saveSnapshot('action');
-    this.state.dealer_seat =
-      (this.state.dealer_seat + 1) % Math.max(1, this._gamePlayers().length);
+    const gamePlayers = this._gamePlayers();
+    const numPlayers = Math.max(1, gamePlayers.length);
+    let nextSeat = (this.state.dealer_seat + 1) % numPlayers;
+    // Skip disconnected players when rotating the dealer button
+    if (gamePlayers.length > 0) {
+      let steps = 0;
+      while (gamePlayers[nextSeat] && gamePlayers[nextSeat].disconnected === true && steps < numPlayers) {
+        nextSeat = (nextSeat + 1) % numPlayers;
+        steps++;
+      }
+    }
+    this.state.dealer_seat = nextSeat;
     const players = this._gamePlayers();
     players.forEach(p => {
       p.hole_cards = [];

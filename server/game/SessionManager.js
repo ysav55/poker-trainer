@@ -52,11 +52,14 @@ class SessionManager {
         pfr: 0,
         wtsd: 0,
         wsd: 0,
+        aggFreq: 0,
         // Internal counters — not exposed in getSessionStats
         _vpipCount: 0,
         _pfrCount: 0,
         _wtsdCount: 0,
-        _wsdCount: 0
+        _wsdCount: 0,
+        _aggFreqSum: 0,
+        _aggFreqHands: 0
       });
       this._startingStacks.set(player.id, player.stack);
     }
@@ -75,7 +78,7 @@ class SessionManager {
 
     this.gm._gamePlayers().forEach(p => {
       this._ensurePlayerStats(p);
-      this._preflopTracking.set(p.id, { vpipThisHand: false, pfrThisHand: false });
+      this._preflopTracking.set(p.id, { vpipThisHand: false, pfrThisHand: false, raiseCount: 0, callCount: 0 });
     });
 
     return result;
@@ -90,7 +93,11 @@ class SessionManager {
     const tracking = this._preflopTracking.get(playerId);
     if (!tracking) return;
     if (action === 'call' || action === 'raise') tracking.vpipThisHand = true;
-    if (action === 'raise') tracking.pfrThisHand = true;
+    if (action === 'raise') {
+      tracking.pfrThisHand = true;
+      tracking.raiseCount++;
+    }
+    if (action === 'call') tracking.callCount++;
   }
 
   /**
@@ -114,11 +121,17 @@ class SessionManager {
 
       stats.handsPlayed++;
 
-      // VPIP / PFR
+      // VPIP / PFR / Aggression Frequency
       const preflopInfo = this._preflopTracking.get(p.id);
       if (preflopInfo) {
         if (preflopInfo.vpipThisHand) stats._vpipCount++;
         if (preflopInfo.pfrThisHand) stats._pfrCount++;
+        const raises = preflopInfo.raiseCount || 0;
+        const calls = preflopInfo.callCount || 0;
+        if (raises > 0 || calls > 0) {
+          stats._aggFreqSum += raises / (raises + calls);
+          stats._aggFreqHands++;
+        }
       }
 
       if (showdownResult) {
@@ -144,10 +157,11 @@ class SessionManager {
       }
 
       // Recompute ratios
-      stats.vpip = stats.handsPlayed > 0 ? stats._vpipCount / stats.handsPlayed : 0;
-      stats.pfr  = stats.handsPlayed > 0 ? stats._pfrCount  / stats.handsPlayed : 0;
-      stats.wtsd = stats.handsPlayed > 0 ? stats._wtsdCount / stats.handsPlayed : 0;
-      stats.wsd  = stats._wtsdCount  > 0 ? stats._wsdCount  / stats._wtsdCount  : 0;
+      stats.vpip    = stats.handsPlayed > 0 ? stats._vpipCount / stats.handsPlayed : 0;
+      stats.pfr     = stats.handsPlayed > 0 ? stats._pfrCount  / stats.handsPlayed : 0;
+      stats.wtsd    = stats.handsPlayed > 0 ? stats._wtsdCount / stats.handsPlayed : 0;
+      stats.wsd     = stats._wtsdCount  > 0 ? stats._wsdCount  / stats._wtsdCount  : 0;
+      stats.aggFreq = stats._aggFreqHands > 0 ? stats._aggFreqSum / stats._aggFreqHands : 0;
 
       // netChips = current stack − starting stack (session-anchored)
       const startStack = this._startingStacks.get(p.id) ?? 1000;
@@ -180,10 +194,11 @@ class SessionManager {
       handsPlayed: s.handsPlayed,
       handsWon: s.handsWon,
       netChips: s.netChips,
-      vpip: Math.round(s.vpip * 1000) / 1000,
-      pfr:  Math.round(s.pfr  * 1000) / 1000,
-      wtsd: Math.round(s.wtsd * 1000) / 1000,
-      wsd:  Math.round(s.wsd  * 1000) / 1000
+      vpip:    Math.round(s.vpip    * 1000) / 1000,
+      pfr:     Math.round(s.pfr     * 1000) / 1000,
+      wtsd:    Math.round(s.wtsd    * 1000) / 1000,
+      wsd:     Math.round(s.wsd     * 1000) / 1000,
+      aggFreq: Math.round((s.aggFreq ?? 0) * 1000) / 1000
     }));
 
     return {
