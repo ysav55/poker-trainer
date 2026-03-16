@@ -53,6 +53,7 @@ export function useSocket() {
   const [playlists, setPlaylists] = useState([])
   const [activeHandId, setActiveHandId]   = useState(null)  // handId of currently running hand (for tag saving)
   const [handTagsSaved, setHandTagsSaved] = useState(null)  // { handId, coach_tags } | null
+  const [bbView, setBBView] = useState(() => localStorage.getItem('poker_trainer_bb_view') === '1')
 
   // ---------- helpers ----------
 
@@ -178,6 +179,10 @@ export function useSocket() {
     socket.on('hand_tags_saved', (payload) => {
       setHandTagsSaved(payload)
       setTimeout(() => setHandTagsSaved(null), 2000)
+    })
+
+    socket.on('replay_loaded', ({ handId, actionCount }) => {
+      addNotification(`Replay loaded — hand #${handId} (${actionCount} actions)`)
     })
 
     return () => {
@@ -312,6 +317,46 @@ export function useSocket() {
     socketRef.current?.emit('set_player_in_hand', { playerId, inHand })
   }, [])
 
+  const loadReplay = useCallback((handId) => {
+    socketRef.current?.emit('load_replay', { handId })
+  }, [])
+
+  const replayStepFwd = useCallback(() => {
+    socketRef.current?.emit('replay_step_forward')
+  }, [])
+
+  const replayStepBack = useCallback(() => {
+    socketRef.current?.emit('replay_step_back')
+  }, [])
+
+  const replayJumpTo = useCallback((cursor) => {
+    socketRef.current?.emit('replay_jump_to', { cursor })
+  }, [])
+
+  const replayBranch = useCallback(() => {
+    socketRef.current?.emit('replay_branch')
+  }, [])
+
+  const replayUnbranch = useCallback(() => {
+    socketRef.current?.emit('replay_unbranch')
+  }, [])
+
+  const replayExit = useCallback(() => {
+    socketRef.current?.emit('replay_exit')
+  }, [])
+
+  const toggleBBView = useCallback(() => {
+    setBBView(prev => {
+      const next = !prev
+      localStorage.setItem('poker_trainer_bb_view', next ? '1' : '0')
+      return next
+    })
+  }, [])
+
+  const setBlindLevels = useCallback((sb, bb) => {
+    socketRef.current?.emit('set_blind_levels', { sb, bb })
+  }, [])
+
   // ---------- derived values ----------
 
   const myPlayer = gameState?.players?.find((p) => p.id === myId) ?? null
@@ -332,6 +377,7 @@ export function useSocket() {
     playlists,
     activeHandId,
     handTagsSaved,
+    bbView,
     // derived
     myPlayer,
     // actions
@@ -361,5 +407,14 @@ export function useSocket() {
     deactivatePlaylist,
     updateHandTags,
     setPlayerInHand,
+    loadReplay,
+    replayStepFwd,
+    replayStepBack,
+    replayJumpTo,
+    replayBranch,
+    replayUnbranch,
+    replayExit,
+    toggleBBView,
+    setBlindLevels,
   }
 }

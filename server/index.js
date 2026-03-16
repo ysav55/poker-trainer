@@ -10,6 +10,7 @@
  *   rollback_street    {}
  *   toggle_pause       {}
  *   set_mode           { mode }
+ *   set_blind_levels   { sb, bb }
  *   force_next_street  {}
  *   award_pot          { winnerId }
  *   reset_hand         {}
@@ -26,6 +27,13 @@
  *   delete_playlist       { playlistId }
  *   activate_playlist     { playlistId }
  *   deactivate_playlist   {}
+ *   load_replay           { handId }
+ *   replay_step_forward   {}
+ *   replay_step_back      {}
+ *   replay_jump_to        { cursor }
+ *   replay_branch         {}
+ *   replay_unbranch       {}
+ *   replay_exit           {}
  *
  * Events (Server → Client):
  *   room_joined        { playerId, isCoach, isSpectator, name }
@@ -40,12 +48,14 @@
  *   hand_tagged     { handId, auto_tags, mistake_tags }
  *   hand_started       { handId }  — emitted to coach only when a hand begins (for tagging)
  *   hand_tags_saved    { handId, coach_tags }  — confirms tag persistence to coach
+ *   replay_loaded      { handId, actionCount }  — confirms replay loaded successfully
  *
  * REST API:
  *   GET /              — React app (production only; in dev, Vite dev server handles this)
  *   GET /api/hands                       — paginated hand history
  *   GET /api/hands/:handId               — full hand detail with actions
  *   GET /api/sessions/:sessionId/stats   — DB-backed session stats
+ *   GET /api/sessions/:sessionId/report  — self-contained HTML report
  *   GET /api/sessions/current            — live in-memory session stats
  */
 
@@ -57,6 +67,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const SessionManager = require('./game/SessionManager');
 const HandLogger = require('./db/HandLogger');
+const { generateHTMLReport } = require('./reports/SessionReport');
 const { v4: uuidv4 } = require('uuid');
 
 // Coach password — set COACH_PASSWORD env var to require a password.
@@ -133,6 +144,15 @@ function sendError(socket, message) {
 }
 
 /**
+ * Send a sync_error (non-fatal game-state rejection) to the originating socket.
+ * Use this instead of sendError for game-logic rejections so clients don't treat
+ * them as fatal connection errors.
+ */
+function sendSyncError(socket, message) {
+  socket.emit('sync_error', { message });
+}
+
+/**
  * Start a 30-second action timer for the current turn player.
  * Clears any existing timer first. Auto-folds on expiry if game is not paused.
  */
@@ -168,7 +188,19 @@ function startActionTimer(tableId, { resumeRemaining = false } = {}) {
   const timeout = setTimeout(() => {
     actionTimers.delete(tableId);
     const currentGm = tables.get(tableId);
+    // ISS-40: timer/pause race — if the coach pauses at the exact millisecond this
+    // fires, `state.paused` is checked first. The toggle_pause handler clears the
+    // timer (clearActionTimer) before setting state.paused, so if we reach here the
+    // timer was NOT cancelled, meaning the pause event hadn't arrived yet — the paused
+    // guard below catches that case correctly. Node.js is single-threaded so there
+    // is no true concurrency, but the order of setTimeouts vs incoming socket events
+    // is not strictly defined. The phase + current_turn guards below are the final
+    // safety net; if phase changed or turn moved, we do nothing.
     if (!currentGm || currentGm.state.paused) return;
+    // Guard: only auto-fold during active betting phases (phase may have changed since timer started)
+    const activeBetting = ['preflop', 'flop', 'turn', 'river'];
+    if (!activeBetting.includes(currentGm.state.phase)) return;
+    if (currentGm.state.current_turn !== playerId) return; // turn moved on (e.g. action already taken)
     // Auto-fold the timed-out player
     const result = currentGm.placeBet(playerId, 'fold');
     if (!result.error) {
@@ -203,6 +235,36 @@ function clearActionTimer(tableId, { saving = false } = {}) {
     actionTimers.delete(tableId);
     io.to(tableId).emit('action_timer', null);
   }
+}
+
+/**
+ * Count active, seated, non-coach, non-disconnected players at the table.
+ * This is the count that matters for matching playlist hands to the live table.
+ */
+function _activeNonCoachCount(gm) {
+  return gm.state.players.filter(p => !p.is_coach && p.seat >= 0 && !p.disconnected).length;
+}
+
+/**
+ * Search the active playlist for the next hand whose recorded player count matches
+ * `activeCount`. Searches forward from currentIndex+1 and wraps around once through
+ * the entire list. Returns the target index, or -1 if no match exists anywhere.
+ *
+ * Does NOT mutate playlist state.
+ */
+function _findMatchingPlaylistIndex(gm, activeCount) {
+  const pm = gm.state.playlist_mode;
+  if (!pm.active || !pm.hands.length) return -1;
+  const total = pm.hands.length;
+  for (let i = 1; i <= total; i++) {
+    const idx = (pm.currentIndex + i) % total;
+    const h = pm.hands[idx];
+    const detail = HandLogger.getHandDetail(h.hand_id);
+    if (!detail) continue; // deleted hand — skip
+    const handCount = (detail.players || []).filter(p => (p.seat ?? -1) >= 0).length;
+    if (handCount === activeCount) return idx;
+  }
+  return -1; // no matching hand anywhere in the playlist
 }
 
 /**
@@ -251,6 +313,10 @@ function _loadScenarioIntoConfig(tableId, gm, handDetail, stackMode = 'keep') {
     : [null, null, null, null, null];
 
   if (stackMode === 'historical') {
+    // ISS-58: adjustStack validates against total_bet_this_round; between hands this
+    // is always 0, so the call always succeeds. If called mid-hand this could fail —
+    // the load_hand_scenario handler rejects mid-hand calls (phase !== 'waiting') so
+    // this code path is only reached between hands.
     activePlayers.forEach((player, i) => {
       const rel  = (i - liveDealerIdx + activeCount) % activeCount;
       const hist = histRelMap.get(rel % Math.max(histCount, 1));
@@ -258,8 +324,10 @@ function _loadScenarioIntoConfig(tableId, gm, handDetail, stackMode = 'keep') {
     });
   }
 
-  gm.openConfigPhase();
-  gm.updateHandConfig({ mode: 'hybrid', hole_cards: holeCards, board });
+  const openResult = gm.openConfigPhase();
+  if (openResult && openResult.error) return { error: openResult.error };
+  const updateResult = gm.updateHandConfig({ mode: 'hybrid', hole_cards: holeCards, board });
+  if (updateResult && updateResult.error) return { error: updateResult.error };
 
   return { countMismatch: activeCount !== histCount, activeCount, histCount };
 }
@@ -292,10 +360,15 @@ io.on('connection', socket => {
     const gm = getOrCreateTable(tableId);
     const trimmedName = name.trim();
 
-    // Resolve stable identity: use client-provided UUID if valid, else fall back to socket.id
-    const resolvedStableId = (stableId && typeof stableId === 'string' && stableId.length > 0)
-      ? stableId
-      : socket.id;
+    // Resolve stable identity:
+    // - coaches get a deterministic per-table key so it survives reconnects (DB-09)
+    // - registered players use their client-provided UUID
+    // - fallback is socket.id (should not occur for registered players)
+    const resolvedStableId = isCoach
+      ? `coach_${tableId}`
+      : (stableId && typeof stableId === 'string' && stableId.length > 0)
+        ? stableId
+        : socket.id;
     stableIdMap.set(socket.id, resolvedStableId);
     HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName);
 
@@ -307,6 +380,9 @@ io.on('connection', socket => {
         // On reconnect: coach flag must match the original seat to prevent impersonation
         if (entry.isCoach && !isCoach) {
           return sendError(socket, 'This seat belongs to the coach — rejoin as Coach');
+        }
+        if (!entry.isCoach && isCoach) {
+          return sendError(socket, 'This seat belongs to a player — rejoin without coach flag');
         }
         // Cancel the eviction timer
         savedReconnectEntry = entry;
@@ -420,6 +496,8 @@ io.on('connection', socket => {
       tableId,
       players: nonCoachPlayers,
       dealerSeat: gm.state.dealer_seat,
+      smallBlind: gm.state.small_blind,
+      bigBlind: gm.state.big_blind,
       isScenario: false
     });
     activeHands.set(tableId, { handId, sessionId: gm.sessionId });
@@ -516,9 +594,10 @@ io.on('connection', socket => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can undo');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
+    if (gm.state.phase === 'waiting') return sendSyncError(socket, 'Nothing to undo between hands');
 
     const result = gm.undoAction();
-    if (result.error) return sendError(socket, result.error);
+    if (result.error) return sendSyncError(socket, result.error);
 
     broadcastState(socket.data.tableId, { type: 'undo', message: 'Coach undid the last action' });
 
@@ -536,7 +615,11 @@ io.on('connection', socket => {
     if (!gm) return sendError(socket, 'Not in a room');
 
     const result = gm.rollbackStreet();
-    if (result.error) return sendError(socket, result.error);
+    if (result.error) {
+      sendSyncError(socket, result.error);
+      broadcastState(socket.data.tableId); // WF-11: unblock client even on failure
+      return;
+    }
 
     broadcastState(socket.data.tableId, {
       type: 'rollback',
@@ -574,14 +657,29 @@ io.on('connection', socket => {
     });
   });
 
+  // ── set_blind_levels ──────────────────────
+  socket.on('set_blind_levels', ({ sb, bb } = {}) => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can change blind levels');
+    const gm = tables.get(socket.data.tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const result = gm.setBlindLevels(Number(sb), Number(bb));
+    if (result.error) return sendSyncError(socket, result.error);
+    broadcastState(socket.data.tableId, {
+      type: 'blind_change',
+      message: `Blinds set to ${sb}/${bb}`
+    });
+  });
+
   // ── set_mode ──────────────────────────────
   socket.on('set_mode', ({ mode } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can set mode');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
+    const ACTIVE_PHASES = new Set(['preflop', 'flop', 'turn', 'river', 'showdown', 'replay']);
+    if (ACTIVE_PHASES.has(gm.state.phase)) return sendSyncError(socket, 'Cannot change mode during an active hand');
 
     const result = gm.setMode(mode);
-    if (result.error) return sendError(socket, result.error);
+    if (result.error) return sendSyncError(socket, result.error);
 
     broadcastState(socket.data.tableId, {
       type: 'mode_change',
@@ -617,7 +715,7 @@ io.on('connection', socket => {
     if (!gm) return sendError(socket, 'Not in a room');
 
     const result = gm.awardPot(winnerId);
-    if (result.error) return sendError(socket, result.error);
+    if (result.error) return sendSyncError(socket, result.error);
 
     const winner = gm.state.players.find(p => p.id === winnerId);
     const tableId = socket.data.tableId;
@@ -640,6 +738,7 @@ io.on('connection', socket => {
 
     const tableId = socket.data.tableId;
     clearActionTimer(tableId);
+    pausedTimerRemainders.delete(tableId); // discard any paused remainder from the old hand
 
     // Capture state BEFORE reset for DB logging
     const handInfo = activeHands.get(tableId);
@@ -651,7 +750,7 @@ io.on('connection', socket => {
     if (handInfo && stateCopy) {
       HandLogger.endHand({ handId: handInfo.handId, state: stateCopy });
       // Auto-tag the completed hand with pedagogical patterns
-      try { HandLogger.analyzeAndTagHand(handInfo.handId); } catch {}
+      try { HandLogger.analyzeAndTagHand(handInfo.handId); } catch (tagErr) { console.error('[analyzeAndTagHand] failed for hand', handInfo.handId, tagErr); }
       activeHands.delete(tableId);
     }
 
@@ -661,31 +760,40 @@ io.on('connection', socket => {
     const stats = gm.getSessionStats();
     io.to(tableId).emit('session_stats', stats);
 
-    // Playlist mode: auto-load next hand into config_phase
+    // Playlist mode: find the next hand whose player count matches the live table,
+    // skipping hands with different player counts (they would produce mismatched scenarios).
     const playlistGm = tables.get(tableId);
     if (playlistGm && playlistGm.state.playlist_mode?.active) {
-      const advance = playlistGm.advancePlaylist();
-      if (advance.done) {
-        // Playlist exhausted — notify coach and revert to RNG
+      const activeCount = _activeNonCoachCount(playlistGm);
+      const matchIdx = _findMatchingPlaylistIndex(playlistGm, activeCount);
+
+      if (matchIdx === -1) {
+        // No hand in the playlist matches this table's player count — playlist exhausted
+        playlistGm.deactivatePlaylistMode();
         playlistGm.setMode('rng');
         io.to(tableId).emit('notification', {
           type: 'playlist_complete',
-          message: 'Playlist complete — switching to RNG mode'
+          message: `Playlist complete — no more hands match the ${activeCount}-player table. Switching to RNG mode.`
         });
       } else {
-        // Load next hand into config phase automatically
-        const nextHandId = advance.hand.hand_id;
-        const nextDetail = HandLogger.getHandDetail(nextHandId);
+        // Jump directly to the matching hand (may skip several mismatched hands)
+        const skipped = ((matchIdx - playlistGm.state.playlist_mode.currentIndex - 1) + playlistGm.state.playlist_mode.hands.length) % playlistGm.state.playlist_mode.hands.length;
+        const advance = playlistGm.seekPlaylist(matchIdx);
+        const nextDetail = HandLogger.getHandDetail(advance.hand.hand_id);
         if (nextDetail) {
-          _loadScenarioIntoConfig(tableId, playlistGm, nextDetail, 'keep');
+          const loadResult = _loadScenarioIntoConfig(tableId, playlistGm, nextDetail, 'keep');
+          if (loadResult.error) {
+            io.to(tableId).emit('notification', { type: 'warning', message: `Playlist load failed: ${loadResult.error}` });
+          }
+          const skipNote = skipped > 0 ? ` (skipped ${skipped} mismatched)` : '';
           broadcastState(tableId, {
             type: 'playlist_advance',
-            message: `Playlist: loaded hand ${advance.currentIndex + 1} of ${playlistGm.state.playlist_mode.totalHands}`
+            message: `Playlist: hand ${advance.currentIndex + 1} of ${playlistGm.state.playlist_mode.hands.length}${skipNote}`
           });
         } else {
           io.to(tableId).emit('notification', {
             type: 'warning',
-            message: `Playlist: hand ${nextHandId} not found (deleted?) — skipped`
+            message: `Playlist: hand ${advance.hand.hand_id} not found (deleted?)`
           });
           broadcastState(tableId);
         }
@@ -710,9 +818,10 @@ io.on('connection', socket => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can open the config phase');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
+    if (gm.state.phase === 'replay') return sendSyncError(socket, 'Cannot open config phase during replay — exit replay first');
 
     const ocResult = gm.openConfigPhase();
-    if (ocResult.error) return sendError(socket, ocResult.error);
+    if (ocResult.error) return sendSyncError(socket, ocResult.error);
     broadcastState(socket.data.tableId, {
       type: 'config_phase',
       message: 'Coach opened hand configuration'
@@ -739,9 +848,10 @@ io.on('connection', socket => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can start a configured hand');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
+    if (!gm.state.config_phase) return sendSyncError(socket, 'No active config phase — call open_config_phase first');
 
     const result = gm.startGame();
-    if (result.error) return sendError(socket, result.error);
+    if (result.error) return sendSyncError(socket, result.error);
 
     const tableId = socket.data.tableId;
 
@@ -756,6 +866,8 @@ io.on('connection', socket => {
       tableId,
       players: nonCoachPlayers,
       dealerSeat: gm.state.dealer_seat,
+      smallBlind: gm.state.small_blind,
+      bigBlind: gm.state.big_blind,
       isScenario: true
     });
     activeHands.set(tableId, { handId, sessionId: gm.sessionId, isManualScenario: true });
@@ -781,6 +893,7 @@ io.on('connection', socket => {
     if (!handDetail) return sendError(socket, `Hand ${handId} not found`);
 
     const result = _loadScenarioIntoConfig(tableId, gm, handDetail, stackMode);
+    if (result.error) return sendError(socket, result.error);
 
     if (result.countMismatch) {
       socket.emit('notification', {
@@ -869,6 +982,8 @@ io.on('connection', socket => {
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
+    // ISS-57: config_phase=true still has phase='waiting', so this guard already
+    // allows playlist activation during the config phase — no extra check needed.
     if (gm.state.phase !== 'waiting') return sendError(socket, 'Can only activate playlist between hands');
 
     const hands = HandLogger.getPlaylistHands(playlistId);
@@ -877,10 +992,32 @@ io.on('connection', socket => {
     const result = gm.activatePlaylistMode({ playlistId, hands });
     if (result.error) return sendError(socket, result.error);
 
-    // Auto-load the first hand into config phase
-    const firstDetail = HandLogger.getHandDetail(hands[0].hand_id);
+    // Find the first hand whose player count matches the live table
+    // (currentIndex starts at 0, so seekPlaylist(-1) trick: we use _findMatchingPlaylistIndex
+    // which searches from currentIndex+1 wrapping around — set currentIndex=-1 first so
+    // search starts from index 0)
+    gm.state.playlist_mode.currentIndex = -1;
+    const activeCount = _activeNonCoachCount(gm);
+    const matchIdx = _findMatchingPlaylistIndex(gm, activeCount);
+
+    let firstDetail = null;
+    if (matchIdx !== -1) {
+      gm.seekPlaylist(matchIdx);
+      firstDetail = HandLogger.getHandDetail(hands[matchIdx].hand_id);
+    } else {
+      // No count match anywhere — fall back to first hand with a notification
+      gm.seekPlaylist(0);
+      firstDetail = HandLogger.getHandDetail(hands[0].hand_id);
+      io.to(tableId).emit('notification', {
+        type: 'warning',
+        message: `Playlist: no hands match the current ${activeCount}-player table — loaded hand[0] anyway`
+      });
+    }
     if (firstDetail) {
-      _loadScenarioIntoConfig(tableId, gm, firstDetail, 'keep');
+      const loadResult = _loadScenarioIntoConfig(tableId, gm, firstDetail, 'keep');
+      if (loadResult.error) {
+        io.to(tableId).emit('notification', { type: 'warning', message: `Playlist load failed: ${loadResult.error}` });
+      }
     }
 
     broadcastState(tableId, {
@@ -898,6 +1035,90 @@ io.on('connection', socket => {
     if (!gm) return sendError(socket, 'Not in a room');
     gm.deactivatePlaylistMode();
     broadcastState(tableId, { type: 'playlist_deactivated', message: 'Playlist mode deactivated' });
+  });
+
+  // ── load_replay ────────────────────────────────────────────────────────────
+  socket.on('load_replay', ({ handId } = {}) => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can load replays');
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    if (gm.state.phase !== 'waiting') return sendSyncError(socket, 'Can only load replay between hands');
+    if (gm.state.playlist_mode?.active) return sendSyncError(socket, 'Cannot load replay while a playlist is active — deactivate the playlist first');
+    const handDetail = HandLogger.getHandDetail(handId);
+    if (!handDetail) return sendSyncError(socket, `Hand ${handId} not found`);
+    const result = gm.loadReplay(handDetail);
+    if (result.error) return sendSyncError(socket, result.error);
+    const actionCount = (handDetail.actions || []).filter(a => !a.is_reverted).length;
+    broadcastState(tableId);
+    socket.emit('replay_loaded', { handId, actionCount });
+  });
+
+  // ── replay_step_forward ────────────────────────────────────────────────────
+  socket.on('replay_step_forward', () => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can control replay');
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const result = gm.replayStepForward();
+    if (result.error) return sendSyncError(socket, result.error);
+    broadcastState(tableId);
+  });
+
+  // ── replay_step_back ───────────────────────────────────────────────────────
+  socket.on('replay_step_back', () => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can control replay');
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const result = gm.replayStepBack();
+    if (result.error) return sendSyncError(socket, result.error);
+    broadcastState(tableId);
+  });
+
+  // ── replay_jump_to ─────────────────────────────────────────────────────────
+  socket.on('replay_jump_to', ({ cursor } = {}) => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can control replay');
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    if (cursor === undefined || cursor === null) return sendSyncError(socket, 'cursor is required');
+    const result = gm.replayJumpTo(parseInt(cursor));
+    if (result.error) return sendSyncError(socket, result.error);
+    broadcastState(tableId);
+  });
+
+  // ── replay_branch ──────────────────────────────────────────────────────────
+  socket.on('replay_branch', () => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can branch replay');
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const result = gm.branchFromReplay();
+    if (result.error) return sendSyncError(socket, result.error);
+    broadcastState(tableId, { type: 'replay_branched', message: 'Branched to live play from replay state' });
+  });
+
+  // ── replay_unbranch ────────────────────────────────────────────────────────
+  socket.on('replay_unbranch', () => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can unbranch replay');
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const result = gm.unBranchToReplay();
+    if (result.error) return sendSyncError(socket, result.error);
+    broadcastState(tableId, { type: 'replay_unbranced', message: 'Returned to replay mode' });
+  });
+
+  // ── replay_exit ────────────────────────────────────────────────────────────
+  socket.on('replay_exit', () => {
+    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can exit replay');
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const result = gm.exitReplay();
+    if (result.error) return sendSyncError(socket, result.error);
+    broadcastState(tableId, { type: 'replay_exited', message: 'Replay mode ended' });
   });
 
   // ── disconnect ────────────────────────────
@@ -970,6 +1191,12 @@ io.on('connection', socket => {
       // when a new coach joins (they will have to manually unpause)
       broadcastState(tableId, { type: 'leave', message: `${name} left the table (timeout)` });
       console.log(`[TTL expired] ${name} removed from ${tableId}`);
+      // Prune table entry if no sockets remain in the room (EC-03: prevent unbounded growth)
+      const socketsInRoom = io.sockets.adapter.rooms.get(tableId);
+      if (!socketsInRoom || socketsInRoom.size === 0) {
+        tables.delete(tableId);
+        console.log(`[prune] table ${tableId} removed — no sockets remain`);
+      }
     }, 60_000);
 
     // Persist config_phase state so it's available when coach reconnects within 30s
@@ -1050,6 +1277,20 @@ app.get('/api/sessions/:sessionId/stats', (req, res) => {
     res.json({ sessionId: req.params.sessionId, players: stats });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/sessions/:sessionId/report — self-contained HTML report
+app.get('/api/sessions/:sessionId/report', (req, res) => {
+  try {
+    const reportData = HandLogger.getSessionReport(req.params.sessionId);
+    if (!reportData) return res.status(404).send('Session not found');
+    const html = generateHTMLReport(reportData);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; script-src 'none'");
+    res.send(html);
+  } catch (err) {
+    res.status(500).send(`<pre>Report error: ${err.message}</pre>`);
   }
 });
 
@@ -1213,6 +1454,10 @@ if (fs.existsSync(CLIENT_DIST)) {
 }
 
 const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, () => {
-  console.log(`Poker Training Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  httpServer.listen(PORT, () => {
+    console.log(`Poker Training Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = { app, httpServer, io, tables };

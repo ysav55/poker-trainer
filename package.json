@@ -13,6 +13,11 @@
     "dev:server": "node server/index.js",
     "dev:client": "npm run dev --prefix client",
     "test:server": "npm test --prefix server",
-    "test:client": "npm test --prefix client"
+    "test:client": "npm test --prefix client",
+    "simulate": "node simulate_game.js",
+    "batches": "node simulate_batches.js"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0"
   }
 }

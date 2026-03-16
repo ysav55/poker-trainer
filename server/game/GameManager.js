@@ -41,11 +41,11 @@ class GameManager {
       board: [],
       pot: 0,
       current_bet: 0,
-      min_raise: 20,
+      min_raise: 10,
       current_turn: null,
       dealer_seat: 0,
-      small_blind: 10,
-      big_blind: 20,
+      small_blind: 5,
+      big_blind: 10,
       deck: [],
       winner: null,
       winner_name: null,
@@ -65,6 +65,19 @@ class GameManager {
         hands: []   // array of { hand_id, display_order } loaded when playlist activated
       },
       is_scenario: false,
+      replay_mode: {
+        active: false,
+        source_hand_id: null,
+        actions: [],
+        cursor: -1,
+        original_hole_cards: {},
+        original_board: [],
+        original_stacks: {},
+        player_meta: {},
+        dealer_seat: 0,
+        branched: false,
+        pre_branch_snapshot: null,
+      },
     };
   }
 
@@ -83,6 +96,14 @@ class GameManager {
         hole_cards: p.hole_cards.map(() => 'HIDDEN')
       };
     });
+
+    // In replay mode all hole cards are visible for coaching
+    if (s.replay_mode.active) {
+      players.forEach(p => {
+        const cards = s.replay_mode.original_hole_cards[p.stableId];
+        if (cards && cards.length > 0) p.hole_cards = [...cards];
+      });
+    }
 
     // Determine how many board cards to expose based on phase (simpler alternative)
     const visibleCountMap = {
@@ -145,18 +166,29 @@ class GameManager {
         totalHands: s.playlist_mode.hands.length
       },
       is_scenario: s.is_scenario,
+      replay_mode: {
+        active: s.replay_mode.active,
+        cursor: s.replay_mode.cursor,
+        total_actions: s.replay_mode.actions.length,
+        branched: s.replay_mode.branched,
+        source_hand_id: s.replay_mode.source_hand_id,
+        current_action: s.replay_mode.actions[s.replay_mode.cursor] ?? null,
+      },
     };
   }
 
   // ─────────────────────────────────────────────
   //  Player management
   // ─────────────────────────────────────────────
-  addPlayer(socketId, name, isCoach = false, stableId = null, stack = 1000) {
+  addPlayer(socketId, name, isCoach = false, stableId = null, stack = null) {
     if (this.state.players.find(p => p.id === socketId)) {
       return { error: 'Already in this table' };
     }
-    // Coach always gets a real seat (same as any player).
-    const seat = this._nextAvailableSeat();
+    // Default stack = 100 big blinds (scales with whatever blinds the coach has set)
+    const actualStack = stack ?? (this.state.big_blind * 100);
+    // Coach always gets a real seat; coach sits at the highest available seat so
+    // they appear last and don't occupy the primary player positions.
+    const seat = isCoach ? this._nextAvailableSeatForCoach() : this._nextAvailableSeat();
     if (seat === null) return { error: 'Table is full (max 9 players)' };
 
     const player = {
@@ -164,7 +196,7 @@ class GameManager {
       stableId: stableId || socketId,
       name,
       seat,
-      stack,
+      stack: actualStack,
       hole_cards: [],
       current_bet: 0,
       total_bet_this_round: 0,
@@ -213,8 +245,70 @@ class GameManager {
     return null;
   }
 
+  _nextAvailableSeatForCoach() {
+    const taken = new Set(this.state.players.filter(p => p.seat >= 0).map(p => p.seat));
+    for (let i = 8; i >= 0; i--) {
+      if (!taken.has(i)) return i;
+    }
+    return null;
+  }
+
   _gamePlayers() {
     return this.state.players.filter(p => p.seat >= 0);
+  }
+
+  // ─────────────────────────────────────────────
+  //  Replay helpers
+  // ─────────────────────────────────────────────
+  _applyReplayAction(action) {
+    const player = this.state.players.find(p => p.stableId === action.player_id);
+    if (!player) return; // silently skip unknown players
+
+    if (/fold/i.test(action.action)) {
+      player.is_active = false;
+      player.action = 'folded';
+    } else if (/call|raise|bet|all.?in/i.test(action.action)) {
+      player.stack -= (action.amount || 0);
+      this.state.pot += (action.amount || 0);
+      player.action = action.action;
+    } else if (/check/i.test(action.action)) {
+      player.action = 'checked';
+    }
+
+    // Board reveal by street
+    const rm = this.state.replay_mode;
+    if (action.street === 'flop' && this.state.board.length < 3) {
+      this.state.board = rm.original_board.slice(0, 3);
+    } else if (action.street === 'turn' && this.state.board.length < 4) {
+      this.state.board = rm.original_board.slice(0, 4);
+    } else if (action.street === 'river' && this.state.board.length < 5) {
+      this.state.board = rm.original_board.slice(0, 5);
+    }
+
+    this.state.current_turn = action.player_id;
+  }
+
+  _buildReplayStateAtCursor(cursor) {
+    const rm = this.state.replay_mode;
+    // Reset each player to original state
+    this.state.players.forEach(p => {
+      if (rm.original_stacks[p.stableId] !== undefined) {
+        p.stack = rm.original_stacks[p.stableId];
+      }
+      p.is_active = true;
+      p.hole_cards = rm.original_hole_cards[p.stableId] ? [...rm.original_hole_cards[p.stableId]] : [];
+      p.action = 'waiting';
+      p.current_bet = 0;
+    });
+    this.state.board = [];
+    this.state.pot = 0;
+    this.state.current_bet = 0;
+    this.state.dealer_seat = rm.dealer_seat;
+    this.state.current_turn = null;
+    // Replay actions up to cursor
+    for (let i = 0; i <= cursor; i++) {
+      this._applyReplayAction(rm.actions[i]);
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -227,6 +321,8 @@ class GameManager {
     snap.street_snapshots = [];
     // Don't embed the hands array in snapshots (it can be large)
     if (snap.playlist_mode) snap.playlist_mode = { ...snap.playlist_mode, hands: [] };
+    // Don't nest the pre_branch_snapshot inside history snapshots (prevents exponential memory growth)
+    if (snap.replay_mode) snap.replay_mode = { ...snap.replay_mode, pre_branch_snapshot: null };
 
     if (type === 'street') {
       this.state.street_snapshots.push(snap);
@@ -276,6 +372,10 @@ class GameManager {
    * Initialises a default hybrid HandConfiguration.
    */
   openConfigPhase() {
+    const activePhases = ['preflop', 'flop', 'turn', 'river', 'showdown'];
+    if (activePhases.includes(this.state.phase)) {
+      return { error: 'Cannot open config phase during an active hand' };
+    }
     this.state.config_phase = true;
     this.state.config = {
       mode: 'hybrid',
@@ -342,10 +442,34 @@ class GameManager {
     return { done: false, currentIndex: nextIndex, hand: pm.hands[nextIndex] };
   }
 
+  /**
+   * seekPlaylist(targetIdx)
+   * Jump directly to a specific playlist index without iterating through intermediate entries.
+   * Used by the server to skip hands with mismatched player counts.
+   */
+  seekPlaylist(targetIdx) {
+    const pm = this.state.playlist_mode;
+    if (!pm.active) return { error: 'Playlist mode is not active' };
+    const idx = Math.max(0, Math.min(targetIdx, pm.hands.length - 1));
+    pm.currentIndex = idx;
+    return { done: false, currentIndex: idx, hand: pm.hands[idx] };
+  }
+
   // ─────────────────────────────────────────────
   //  Game lifecycle
   // ─────────────────────────────────────────────
   startGame(mode = 'rng') {
+    if (this.state.phase !== 'waiting') {
+      return { error: 'Can only start a new hand when waiting between hands' };
+    }
+    // Clear any stale replay state before starting a fresh hand
+    if (this.state.replay_mode.active || this.state.replay_mode.branched) {
+      this.state.replay_mode = {
+        active: false, source_hand_id: null, actions: [], cursor: -1,
+        original_hole_cards: {}, original_board: [], original_stacks: {},
+        player_meta: {}, dealer_seat: 0, branched: false, pre_branch_snapshot: null,
+      };
+    }
     const players = this._gamePlayers();
     if (players.length < 2) return { error: 'Need at least 2 seated players to start' };
 
@@ -358,11 +482,14 @@ class GameManager {
     if (hasConfig && configMode !== 'rng') {
       const config = this.state.config;
       const generatorConfig = {
-        mode: config.mode,
-        holeCards: config.hole_cards || {},
+        mode:             config.mode,
+        holeCards:        config.hole_cards        || {},
+        holeCardsRange:   config.hole_cards_range  || {},
+        holeCardsCombos:  config.hole_cards_combos || {},
+        boardTexture:     config.board_texture      || [],
         board: Array.isArray(config.board) && config.board.length === 5
           ? config.board
-          : [null, null, null, null, null]
+          : [null, null, null, null, null],
       };
       // generateHand now returns { hand: {...} } on success or { error } on failure
       let genResult;
@@ -406,6 +533,14 @@ class GameManager {
       p.acted_this_street = false;
     });
 
+    // Mark sitting-out players as inactive for this hand
+    players.forEach(p => {
+      if (p.in_hand === false) {
+        p.is_active = false;
+        p.action = 'sitting-out';
+      }
+    });
+
     this.state.last_raise_was_full = true;
     this.state.last_aggressor = null;
 
@@ -424,9 +559,13 @@ class GameManager {
     this.state.current_bet = this.state.big_blind;
     this.state.min_raise = this.state.big_blind;
 
-    // UTG acts first preflop
-    const utgIdx = (bbIdx + 1) % players.length;
-    this.state.current_turn = players[utgIdx].id;
+    // UTG acts first preflop — skip any sitting-out players
+    let current_turn = null;
+    for (let i = 1; i <= players.length; i++) {
+      const p = players[(bbIdx + i) % players.length];
+      if (p.is_active && !p.is_all_in) { current_turn = p.id; break; }
+    }
+    this.state.current_turn = current_turn;
 
     if (handResult) {
       // Config mode (manual or hybrid): handResult already validated above.
@@ -736,9 +875,16 @@ class GameManager {
 
     const activePlayers = this._gamePlayers().filter(p => p.is_active);
     if (activePlayers.length === 1) {
-      this.state.winner = activePlayers[0].id;
-      this.state.winner_name = activePlayers[0].name;
-      activePlayers[0].stack += this.state.pot;
+      const foldWinner = activePlayers[0];
+      this.state.winner = foldWinner.id;
+      this.state.winner_name = foldWinner.name;
+      this.state.showdown_result = {
+        winners: [{ playerId: foldWinner.id, playerName: foldWinner.name, handResult: null }],
+        potAwarded: this.state.pot,
+        splitPot: false,
+        foldWin: true,
+      };
+      foldWinner.stack += this.state.pot;
       this.state.pot = 0;
       this.state.phase = 'showdown';
       this.state.current_turn = null;
@@ -822,6 +968,8 @@ class GameManager {
         return;
       }
     }
+    // All remaining active players are all-in — no action needed, clear the turn
+    this.state.current_turn = null;
   }
 
   // Coach: force advance to next street without completing betting
@@ -953,6 +1101,12 @@ class GameManager {
     this.state.config_phase = false;
     this.state.config = null;
     this.state.is_scenario = false;
+    // Always reset replay state on hand reset so stale replay metadata cannot persist
+    this.state.replay_mode = {
+      active: false, source_hand_id: null, actions: [], cursor: -1,
+      original_hole_cards: {}, original_board: [], original_stacks: {},
+      player_meta: {}, dealer_seat: 0, branched: false, pre_branch_snapshot: null,
+    };
     return { success: true };
   }
 
@@ -973,6 +1127,132 @@ class GameManager {
     }
     this._saveSnapshot('action');
     player.stack = Math.floor(amount); // Ensure integer chips
+    return { success: true };
+  }
+
+  // ─────────────────────────────────────────────
+  //  Replay mode public API
+  // ─────────────────────────────────────────────
+  loadReplay(handDetail) {
+    if (this.state.phase !== 'waiting') {
+      return { error: 'Can only load replay between hands' };
+    }
+    if (!handDetail) return { error: 'Hand not found' };
+
+    const rm = this.state.replay_mode;
+    rm.source_hand_id = handDetail.hand_id;
+    rm.actions = (handDetail.actions || []).filter(a => !a.is_reverted);
+    rm.cursor = -1;
+    rm.branched = false;
+    rm.pre_branch_snapshot = null;
+
+    // Build lookup maps from handDetail.players
+    rm.original_hole_cards = {};
+    rm.original_stacks = {};
+    rm.player_meta = {};
+    (handDetail.players || []).forEach(p => {
+      const key = p.player_id;
+      rm.original_hole_cards[key] = p.hole_cards || [];
+      rm.original_stacks[key] = p.stack_start;
+      rm.player_meta[key] = { name: p.player_name, seat: p.seat };
+    });
+
+    rm.original_board = handDetail.board || [];
+    rm.dealer_seat = handDetail.dealer_seat || 0;
+    rm.active = true;
+
+    this.state.phase = 'replay';
+    this._buildReplayStateAtCursor(-1);
+    return { success: true };
+  }
+
+  replayStepForward() {
+    if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
+    const rm = this.state.replay_mode;
+    if (rm.cursor >= rm.actions.length - 1) return { error: 'already_at_end' };
+    rm.cursor++;
+    this._applyReplayAction(rm.actions[rm.cursor]);
+    return { success: true };
+  }
+
+  replayStepBack() {
+    if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
+    const rm = this.state.replay_mode;
+    if (rm.cursor <= -1) return { error: 'already_at_start' };
+    rm.cursor--;
+    this._buildReplayStateAtCursor(rm.cursor);
+    return { success: true };
+  }
+
+  replayJumpTo(target) {
+    if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
+    const rm = this.state.replay_mode;
+    if (target < -1 || target >= rm.actions.length) return { error: 'Cursor out of range' };
+    rm.cursor = target;
+    this._buildReplayStateAtCursor(rm.cursor);
+    return { success: true };
+  }
+
+  branchFromReplay() {
+    if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
+    const rm = this.state.replay_mode;
+    if (rm.branched) return { error: 'Already branched' };
+    rm.pre_branch_snapshot = JSON.parse(JSON.stringify(this.state));
+    rm.branched = true;
+    this.state.phase = 'waiting';
+    this.state.history = [];
+    this.state.street_snapshots = [];
+    this.state.current_turn = null; // stableId from replay is not a socketId; clear to avoid timer confusion
+    return { success: true };
+  }
+
+  unBranchToReplay() {
+    const rm = this.state.replay_mode;
+    if (!rm.branched) return { error: 'Not branched' };
+    const snap = rm.pre_branch_snapshot;
+    const playlistHands = this.state.replay_mode.pre_branch_snapshot?.playlist_mode?.hands ?? [];
+    this.state = JSON.parse(JSON.stringify(snap));
+    // Restore hands array (stripped during snapshot to save space)
+    if (this.state.playlist_mode && playlistHands.length) {
+      this.state.playlist_mode.hands = playlistHands;
+    }
+    return { success: true };
+  }
+
+  exitReplay() {
+    const rm = this.state.replay_mode;
+    if (this.state.phase !== 'replay' && !rm.branched) {
+      return { error: 'Not in replay mode' };
+    }
+    // Restore stacks to pre-replay values
+    this.state.players.forEach(p => {
+      if (rm.original_stacks[p.stableId] !== undefined) {
+        p.stack = rm.original_stacks[p.stableId];
+      }
+      p.hole_cards = [];
+      p.action = 'waiting';
+      p.is_active = true;
+      p.current_bet = 0;
+    });
+    this.state.board = [];
+    this.state.pot = 0;
+    this.state.current_bet = 0;
+    this.state.current_turn = null;
+    this.state.phase = 'waiting';
+    // Reset replay_mode
+    this.state.replay_mode = {
+      active: false,
+      source_hand_id: null,
+      actions: [],
+      cursor: -1,
+      original_hole_cards: {},
+      original_board: [],
+      original_stacks: {},
+      player_meta: {},
+      dealer_seat: 0,
+      branched: false,
+      pre_branch_snapshot: null,
+    };
     return { success: true };
   }
 

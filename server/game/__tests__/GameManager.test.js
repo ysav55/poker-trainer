@@ -95,29 +95,29 @@ describe('startGame', () => {
     const { gm } = buildGame(2);
     const sb = gm.state.players.find(p => p.is_small_blind);
     expect(sb).toBeDefined();
-    expect(sb.current_bet).toBe(10);   // small_blind = 10
-    expect(sb.total_bet_this_round).toBe(10);
-    expect(sb.stack).toBe(990);        // started at 1000
+    expect(sb.current_bet).toBe(5);    // small_blind = 5
+    expect(sb.total_bet_this_round).toBe(5);
+    expect(sb.stack).toBe(995);        // started at 1000 (100×BB=10)
   });
 
   test('big blind posted correctly', () => {
     const { gm } = buildGame(2);
     const bb = gm.state.players.find(p => p.is_big_blind);
     expect(bb).toBeDefined();
-    expect(bb.current_bet).toBe(20);   // big_blind = 20
-    expect(bb.total_bet_this_round).toBe(20);
-    expect(bb.stack).toBe(980);
+    expect(bb.current_bet).toBe(10);   // big_blind = 10
+    expect(bb.total_bet_this_round).toBe(10);
+    expect(bb.stack).toBe(990);
   });
 
   test('pot equals SB + BB after start', () => {
     const { gm } = buildGame(2);
-    // SB = 10, BB = 20 → pot = 30
-    expect(gm.state.pot).toBe(30);
+    // SB = 5, BB = 10 → pot = 15
+    expect(gm.state.pot).toBe(15);
   });
 
   test('current_bet equals big_blind after start', () => {
     const { gm } = buildGame(2);
-    expect(gm.state.current_bet).toBe(20);
+    expect(gm.state.current_bet).toBe(10);
   });
 
   test('current_turn is set to a valid player id', () => {
@@ -331,7 +331,7 @@ describe('placeBet — raise re-opens action', () => {
     // With 3 players: dealer=p1, SB=p2, BB=p3, UTG=p1 acts first preflop
     const utgId = gm.state.current_turn;
 
-    // UTG raises to 60 (min raise from BB of 20: current_bet=20, min_raise=20 → minTotal=40; raise to 60)
+    // UTG raises to 60 (min raise from BB of 10: current_bet=10, min_raise=10 → minTotal=20; raise to 60)
     gm.placeBet(utgId, 'raise', 60);
 
     // All other active players who haven't matched should be 'waiting'
@@ -346,14 +346,14 @@ describe('placeBet — raise re-opens action', () => {
     const actor = gm.state.current_turn;
     gm.placeBet(actor, 'raise', 60);
     expect(gm.state.current_bet).toBe(60);
-    expect(gm.state.min_raise).toBe(40); // 60 - 20 (previous current_bet)
+    expect(gm.state.min_raise).toBe(50); // 60 - 10 (previous current_bet)
   });
 
   test('raise below minimum is rejected', () => {
     const { gm } = buildGame(2);
     const actor = gm.state.current_turn;
-    // current_bet=20, min_raise=20 → minTotal=40; raising to 30 should fail
-    const result = gm.placeBet(actor, 'raise', 30);
+    // current_bet=10, min_raise=10 → minTotal=20; raising to 15 should fail
+    const result = gm.placeBet(actor, 'raise', 15);
     expect(result).toHaveProperty('error');
     expect(result.error).toMatch(/[Mm]inimum raise/);
   });
@@ -633,41 +633,41 @@ describe('manualDealCard — replace card in same slot', () => {
 // ─────────────────────────────────────────────
 describe('blind posting — all-in on blind', () => {
   test('player with stack < small_blind goes all-in and posts what they have', () => {
-    // Give p2 (who will be SB in a 2-player game) only 5 chips
+    // Give p2 (who will be SB in a 2-player game) only 3 chips (< SB=5)
     // dealer_seat=0 → p1=dealer+BB, p2=SB, so override p2's stack
-    const { gm } = buildGame(2, { p2: 5 });
+    const { gm } = buildGame(2, { p2: 3 });
 
     const sb = gm.state.players.find(p => p.is_small_blind);
     expect(sb.id).toBe('p2');
     expect(sb.stack).toBe(0);           // all chips posted
-    expect(sb.current_bet).toBe(5);     // paid what they had
+    expect(sb.current_bet).toBe(3);     // paid what they had
     expect(sb.is_all_in).toBe(true);
     expect(sb.action).toBe('all-in');
   });
 
-  test('player with stack exactly equal to big_blind posts full BB and is NOT all-in', () => {
-    // p1 is BB in 2-player with dealer_seat=0; give them exactly 20
-    const { gm } = buildGame(2, { p1: 20 });
+  test('player with stack exactly equal to big_blind posts full BB and is all-in', () => {
+    // p1 is BB in 2-player with dealer_seat=0; give them exactly 10 (= BB)
+    const { gm } = buildGame(2, { p1: 10 });
     const bb = gm.state.players.find(p => p.is_big_blind);
     expect(bb.stack).toBe(0);
-    expect(bb.current_bet).toBe(20);
+    expect(bb.current_bet).toBe(10);
     // They posted exactly the blind amount — they ARE all-in (stack hits 0)
     expect(bb.is_all_in).toBe(true);
   });
 
   test('player with stack < big_blind posts partial blind and goes all-in', () => {
-    // p1 is BB; give them only 15 chips (less than BB=20)
-    const { gm } = buildGame(2, { p1: 15 });
+    // p1 is BB; give them only 7 chips (less than BB=10)
+    const { gm } = buildGame(2, { p1: 7 });
     const bb = gm.state.players.find(p => p.is_big_blind);
-    expect(bb.current_bet).toBe(15);
+    expect(bb.current_bet).toBe(7);
     expect(bb.stack).toBe(0);
     expect(bb.is_all_in).toBe(true);
   });
 
   test('pot equals sum of actual chips posted when a player is all-in on blind', () => {
-    const { gm } = buildGame(2, { p2: 5 });
-    // p2 posts 5 (all-in), p1 posts 20 (BB)
-    expect(gm.state.pot).toBe(25);
+    const { gm } = buildGame(2, { p2: 3 });
+    // p2 posts 3 (all-in), p1 posts 10 (BB)
+    expect(gm.state.pot).toBe(13);
   });
 });
 
@@ -764,7 +764,7 @@ describe('placeBet — guard clauses', () => {
 
   test('rejects check when there is a bet to call', () => {
     const { gm } = buildGame(2);
-    // Preflop: current_bet = 20, actor has total_bet_this_round < 20, so toCall > 0
+    // Preflop: current_bet = 10, actor has total_bet_this_round < 10, so toCall > 0
     const actor = gm.state.current_turn;
     const actorObj = gm.state.players.find(p => p.id === actor);
     // Ensure they haven't matched the BB
@@ -904,11 +904,11 @@ describe('GAP 3 — manualDealCard mode guard', () => {
 });
 
 describe('GAP 6 — addPlayer custom starting stack', () => {
-  test('addPlayer uses default stack of 1000 when not specified', () => {
+  test('addPlayer uses default stack of 1000 when not specified (100×BB=10)', () => {
     const gm = new GameManager('t-stack');
     gm.addPlayer('p1', 'Player 1');
     const p = gm.state.players.find(pl => pl.id === 'p1');
-    expect(p.stack).toBe(1000);
+    expect(p.stack).toBe(1000); // 100 × default BB (10)
   });
 
   test('addPlayer uses provided stack value', () => {
@@ -923,5 +923,188 @@ describe('GAP 6 — addPlayer custom starting stack', () => {
     gm.addPlayer('rich', 'Rich Player', false, null, 2500);
     const p = gm.state.players.find(pl => pl.id === 'rich');
     expect(p.stack).toBe(2500);
+  });
+});
+
+describe('Dynamic default stack (100×BB)', () => {
+  test('setBlindLevels(10, 20) then addPlayer → stack = 2000', () => {
+    const gm = new GameManager('t-dyn');
+    gm.setBlindLevels(10, 20);
+    gm.addPlayer('p1', 'Player 1');
+    const p = gm.state.players.find(pl => pl.id === 'p1');
+    expect(p.stack).toBe(2000); // 100 × BB(20)
+  });
+
+  test('setBlindLevels(25, 50) then addPlayer → stack = 5000', () => {
+    const gm = new GameManager('t-dyn2');
+    gm.setBlindLevels(25, 50);
+    gm.addPlayer('p1', 'Player 1');
+    const p = gm.state.players.find(pl => pl.id === 'p1');
+    expect(p.stack).toBe(5000); // 100 × BB(50)
+  });
+
+  test('explicit stack override still respected after setBlindLevels', () => {
+    const gm = new GameManager('t-dyn3');
+    gm.setBlindLevels(10, 20);
+    gm.addPlayer('p1', 'Player 1', false, null, 500);
+    const p = gm.state.players.find(pl => pl.id === 'p1');
+    expect(p.stack).toBe(500); // override wins over 100×BB
+  });
+});
+
+// ─────────────────────────────────────────────
+//  setBlindLevels — phase guard
+// ─────────────────────────────────────────────
+
+describe('setBlindLevels — phase guard and post-change hand', () => {
+  test('setBlindLevels returns error during active hand (phase=preflop)', () => {
+    const { gm } = buildGame(2);
+    expect(gm.state.phase).toBe('preflop');
+    const result = gm.setBlindLevels(10, 20);
+    expect(result).toHaveProperty('error');
+    expect(result.error).toMatch(/active hand|waiting/i);
+  });
+
+  test('setBlindLevels returns error during flop', () => {
+    const { gm } = buildGame(2);
+    gm.forceNextStreet();
+    expect(gm.state.phase).toBe('flop');
+    expect(gm.setBlindLevels(10, 20)).toHaveProperty('error');
+  });
+
+  test('setBlindLevels returns error during showdown', () => {
+    const { gm } = buildGame(2);
+    // Fold to showdown
+    const folder = gm.state.current_turn;
+    gm.placeBet(folder, 'fold');
+    expect(gm.state.phase).toBe('showdown');
+    expect(gm.setBlindLevels(10, 20)).toHaveProperty('error');
+  });
+
+  test('new blinds are posted in the very next hand after setBlindLevels', () => {
+    const gm = new GameManager('sb-next');
+    gm.addPlayer('p1', 'P1');
+    gm.addPlayer('p2', 'P2');
+    gm.setBlindLevels(10, 20); // change while still waiting (before first hand)
+    gm.startGame('manual');
+    expect(gm.state.current_bet).toBe(20);
+    const sb = gm.state.players.find(p => p.is_small_blind);
+    const bb = gm.state.players.find(p => p.is_big_blind);
+    expect(sb.current_bet).toBe(10);
+    expect(bb.current_bet).toBe(20);
+    expect(gm.state.pot).toBe(30);
+  });
+
+  test('blind levels persist through resetForNextHand', () => {
+    const gm = new GameManager('sb-persist');
+    gm.addPlayer('p1', 'P1');
+    gm.addPlayer('p2', 'P2');
+    gm.setBlindLevels(25, 50);
+    gm.startGame('manual');
+    gm.resetForNextHand();
+    // After reset, blinds should still be 25/50
+    expect(gm.state.small_blind).toBe(25);
+    expect(gm.state.big_blind).toBe(50);
+  });
+});
+
+// ─────────────────────────────────────────────
+//  adjustStack — unit tests
+// ─────────────────────────────────────────────
+
+describe('adjustStack', () => {
+  test('sets player stack to given amount between hands', () => {
+    const gm = new GameManager('adj-1');
+    gm.addPlayer('p1', 'Alice');
+    const result = gm.adjustStack('p1', 2500);
+    expect(result).toEqual({ success: true });
+    const p = gm.state.players.find(p => p.id === 'p1');
+    expect(p.stack).toBe(2500);
+  });
+
+  test('floors decimal amount to integer chips', () => {
+    const gm = new GameManager('adj-2');
+    gm.addPlayer('p1', 'Alice');
+    gm.adjustStack('p1', 999.9);
+    expect(gm.state.players[0].stack).toBe(999);
+  });
+
+  test('setting stack to zero is allowed', () => {
+    const gm = new GameManager('adj-3');
+    gm.addPlayer('p1', 'Alice');
+    expect(gm.adjustStack('p1', 0)).toEqual({ success: true });
+    expect(gm.state.players[0].stack).toBe(0);
+  });
+
+  test('returns error for unknown playerId', () => {
+    const gm = new GameManager('adj-4');
+    gm.addPlayer('p1', 'Alice');
+    const result = gm.adjustStack('unknown-id', 1000);
+    expect(result).toHaveProperty('error');
+    expect(result.error).toMatch(/not found/i);
+  });
+
+  test('returns error for negative amount', () => {
+    const gm = new GameManager('adj-5');
+    gm.addPlayer('p1', 'Alice');
+    const result = gm.adjustStack('p1', -100);
+    expect(result).toHaveProperty('error');
+    expect(result.error).toMatch(/non-negative/i);
+  });
+
+  test('returns error for NaN', () => {
+    const gm = new GameManager('adj-6');
+    gm.addPlayer('p1', 'Alice');
+    const result = gm.adjustStack('p1', NaN);
+    expect(result).toHaveProperty('error');
+  });
+
+  test('returns error for Infinity', () => {
+    const gm = new GameManager('adj-7');
+    gm.addPlayer('p1', 'Alice');
+    const result = gm.adjustStack('p1', Infinity);
+    expect(result).toHaveProperty('error');
+  });
+
+  test('returns error for non-number string', () => {
+    const gm = new GameManager('adj-8');
+    gm.addPlayer('p1', 'Alice');
+    const result = gm.adjustStack('p1', 'big');
+    expect(result).toHaveProperty('error');
+  });
+
+  test('during active hand: allows amount >= committed chips', () => {
+    const { gm } = buildGame(2);
+    const actor = gm.state.current_turn;
+    gm.placeBet(actor, 'call'); // actor commits something
+    const p = gm.state.players.find(pl => pl.id === actor);
+    const committed = p.total_bet_this_round;
+    // Adjust to exactly what was committed — should succeed
+    const result = gm.adjustStack(actor, committed + 100);
+    expect(result).toEqual({ success: true });
+  });
+
+  test('during active hand: rejects amount below committed chips', () => {
+    const { gm } = buildGame(3);
+    // UTG calls (commits at least BB amount)
+    const actor = gm.state.current_turn;
+    gm.placeBet(actor, 'call');
+    const p = gm.state.players.find(pl => pl.id === actor);
+    const committed = p.total_bet_this_round;
+    if (committed > 0) {
+      const result = gm.adjustStack(actor, committed - 1);
+      expect(result).toHaveProperty('error');
+      expect(result.error).toMatch(/committed|below/i);
+    }
+  });
+
+  test('adjustStack is undoable via undoAction', () => {
+    const gm = new GameManager('adj-undo');
+    gm.addPlayer('p1', 'Alice');
+    gm.addPlayer('p2', 'Bob');
+    const stackBefore = gm.state.players[0].stack;
+    gm.adjustStack('p1', stackBefore + 500);
+    gm.undoAction();
+    expect(gm.state.players.find(p => p.id === 'p1').stack).toBe(stackBefore);
   });
 });

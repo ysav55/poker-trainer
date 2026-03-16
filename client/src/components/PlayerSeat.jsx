@@ -1,5 +1,6 @@
 import React from 'react';
 import Card from './Card';
+import { fmtChips } from '../utils/chips';
 
 // Color mapping for action badges
 const ACTION_STYLES = {
@@ -54,6 +55,9 @@ export default function PlayerSeat({
   onHoleCardClick,
   showdownResult = null,
   isWinner = false,
+  replayMode = null,
+  bbView = false,
+  bigBlind = 10,
 }) {
   if (!player) return null;
 
@@ -71,6 +75,8 @@ export default function PlayerSeat({
 
   const actionKey = player.action?.toLowerCase?.();
   const actionStyle = actionKey ? ACTION_STYLES[actionKey] : null;
+
+  const isReplayActive = replayMode?.active && replayMode?.current_action?.player_id === player.stableId;
 
   // Determine card visibility: coach sees all, "me" sees own cards
   const showCards = isCoach || isMe;
@@ -135,6 +141,7 @@ export default function PlayerSeat({
         absolute flex flex-col items-center gap-1 select-none
         ${isCurrentTurn ? 'turn-indicator rounded-xl' : ''}
         ${isFolded ? 'opacity-40' : isDisconnected ? 'opacity-50' : 'opacity-100'}
+        ${isReplayActive ? 'ring-2 ring-purple-400 ring-offset-1 rounded-xl' : ''}
         transition-opacity duration-300
       `}
       style={{
@@ -221,7 +228,7 @@ export default function PlayerSeat({
             style={{ background: '#d4af37', boxShadow: '0 0 4px rgba(212,175,55,0.7)' }}
           />
           <span className="text-[11px] font-mono text-gold-400 leading-none">
-            {formatStack(player.stack)}
+            {fmtChips(player.stack ?? 0, bigBlind, bbView)}
           </span>
         </div>
 

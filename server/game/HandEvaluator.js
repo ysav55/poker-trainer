@@ -221,6 +221,9 @@ function evaluateFive(cards) {
     const tripCards = cardsOfRank([tripRank]);
     const pairCards = cardsOfRank([pairRank]);
     const bestFive  = [...tripCards, ...pairCards];
+    // ISS-26: kickers holds the pair cards (2 cards) for Full House tiebreaking.
+    // Two Full Houses with identical trip ranks are split by the pair rank.
+    // Using pairCards (rather than []) lets compareHands() resolve that case correctly.
     return makeResult(
       HAND_RANKS.FULL_HOUSE,
       'FULL_HOUSE',
@@ -413,6 +416,10 @@ function evaluate(holeCards, boardCards) {
  * evaluateShort(cards) — evaluate a hand with fewer than 5 cards.
  * Used only as a fallback edge case; not called during normal gameplay.
  * Applies the same logic as evaluateFive but skips checks that need 5 cards.
+ *
+ * ISS-27: flush and straight detection are intentionally omitted — they require
+ * exactly 5 cards (or a community board context) and are not meaningful for
+ * partial hands. Only pair/trips/quads/high-card rankings are detected here.
  */
 function evaluateShort(cards) {
   const sorted = sortDesc(cards);

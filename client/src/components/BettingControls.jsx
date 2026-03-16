@@ -1,19 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { fmtChips } from '../utils/chips';
 
 const ACTIVE_PHASES = new Set(['preflop', 'flop', 'turn', 'river']);
-
-function formatChips(amount) {
-  if (amount === null || amount === undefined || isNaN(amount)) return '0';
-  if (amount >= 1000) return `${(amount / 1000).toFixed(1).replace(/\.0$/, '')}k`;
-  return String(Math.floor(amount));
-}
 
 export default function BettingControls({
   gameState,
   myId,
   isCoach,
   emit,
+  bbView = false,
+  bigBlind = 10,
 }) {
+  const fmt = (v) => fmtChips(v ?? 0, bigBlind, bbView);
   const player = gameState?.players?.find(p => p.id === myId) ?? null;
   // Guard: only render when it's our turn, active phase, not paused
   const isMyTurn =
@@ -42,7 +40,11 @@ export default function BettingControls({
   const [visible, setVisible] = useState(false);
   const [pendingBet, setPendingBet] = useState(false);
 
-  // Reset pending state whenever server sends a new game state
+  // Reset pending state whenever server sends a new game state.
+  // ISS-60: if the server sends a shallow-equal game_state object (same reference or
+  // same content) React may bail out of the re-render and this effect won't fire,
+  // leaving pendingBet stuck. In practice the server always sends a fresh object
+  // with an updated phase/current_turn, so this is not observed in normal play.
   useEffect(() => { setPendingBet(false); }, [gameState]);
 
   // Slide-up animation on mount / when it becomes our turn
@@ -112,16 +114,16 @@ export default function BettingControls({
           <div className="flex items-center gap-4">
             <div className="flex flex-col">
               <span className="label-sm">Stack</span>
-              <span className="text-sm font-semibold text-white">{formatChips(playerStack)}</span>
+              <span className="text-sm font-semibold text-white">{fmt(playerStack)}</span>
             </div>
             <div className="flex flex-col">
               <span className="label-sm">Pot</span>
-              <span className="text-sm font-semibold text-gold-400">{formatChips(pot)}</span>
+              <span className="text-sm font-semibold text-gold-400">{fmt(pot)}</span>
             </div>
             {toCall > 0 && (
               <div className="flex flex-col">
                 <span className="label-sm">To Call</span>
-                <span className="text-sm font-semibold text-blue-400">{formatChips(toCall)}</span>
+                <span className="text-sm font-semibold text-blue-400">{fmt(toCall)}</span>
               </div>
             )}
           </div>
@@ -139,7 +141,7 @@ export default function BettingControls({
                   onClick={() => handleQuickRaise(halfPot)}
                 >
                   ½ Pot
-                  <span className="block text-[10px] text-gray-500">{formatChips(halfPot)}</span>
+                  <span className="block text-[10px] text-gray-500">{fmt(halfPot)}</span>
                 </button>
               )}
               {onePot >= effectiveRaiseMin && onePot <= raiseMax && (
@@ -148,7 +150,7 @@ export default function BettingControls({
                   onClick={() => handleQuickRaise(onePot)}
                 >
                   1x Pot
-                  <span className="block text-[10px] text-gray-500">{formatChips(onePot)}</span>
+                  <span className="block text-[10px] text-gray-500">{fmt(onePot)}</span>
                 </button>
               )}
               {twoPot >= effectiveRaiseMin && twoPot <= raiseMax && (
@@ -157,7 +159,7 @@ export default function BettingControls({
                   onClick={() => handleQuickRaise(twoPot)}
                 >
                   2x Pot
-                  <span className="block text-[10px] text-gray-500">{formatChips(twoPot)}</span>
+                  <span className="block text-[10px] text-gray-500">{fmt(twoPot)}</span>
                 </button>
               )}
               <button
@@ -165,7 +167,7 @@ export default function BettingControls({
                 onClick={() => handleQuickRaise(raiseMax)}
               >
                 All-In
-                <span className="block text-[10px] text-gray-500">{formatChips(raiseMax)}</span>
+                <span className="block text-[10px] text-gray-500">{fmt(raiseMax)}</span>
               </button>
             </div>
 
@@ -208,9 +210,9 @@ export default function BettingControls({
 
             {/* Raise label */}
             <div className="flex justify-between mt-1.5 text-[10px] text-gray-600">
-              <span>Min: {formatChips(effectiveRaiseMin)}</span>
+              <span>Min: {fmt(effectiveRaiseMin)}</span>
               {isAllIn && <span className="text-red-400 font-medium">ALL-IN</span>}
-              <span>Max: {formatChips(raiseMax)}</span>
+              <span>Max: {fmt(raiseMax)}</span>
             </div>
           </div>
         )}
@@ -292,7 +294,7 @@ export default function BettingControls({
               disabled={pendingBet}
               onClick={handleCall}
             >
-              CALL {formatChips(toCall)}
+              CALL {fmt(toCall)}
             </button>
           )}
 
@@ -326,7 +328,7 @@ export default function BettingControls({
               onClick={handleRaise}
             >
               {showRaise
-                ? `RAISE ${formatChips(raiseAmount)}${isAllIn ? ' (ALL-IN)' : ''}`
+                ? `RAISE ${fmt(raiseAmount)}${isAllIn ? ' (ALL-IN)' : ''}`
                 : 'RAISE'}
             </button>
           )}

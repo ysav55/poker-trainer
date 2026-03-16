@@ -67,23 +67,23 @@ describe('Edge cases — heads-up (2 players)', () => {
     expect(bbs).toHaveLength(1);
   });
 
-  it('small blind posted correct amount (10)', () => {
+  it('small blind posted correct amount (5)', () => {
     const gm = buildHeadsUp();
     const sb = gm._gamePlayers().find(p => p.is_small_blind);
-    expect(sb.total_bet_this_round).toBe(10);
-    expect(sb.stack).toBe(990);
+    expect(sb.total_bet_this_round).toBe(5);
+    expect(sb.stack).toBe(995);
   });
 
-  it('big blind posted correct amount (20)', () => {
+  it('big blind posted correct amount (10)', () => {
     const gm = buildHeadsUp();
     const bb = gm._gamePlayers().find(p => p.is_big_blind);
-    expect(bb.total_bet_this_round).toBe(20);
-    expect(bb.stack).toBe(980);
+    expect(bb.total_bet_this_round).toBe(10);
+    expect(bb.stack).toBe(990);
   });
 
-  it('pot starts at 30 (SB + BB)', () => {
+  it('pot starts at 15 (SB + BB)', () => {
     const gm = buildHeadsUp();
-    expect(gm.state.pot).toBe(30);
+    expect(gm.state.pot).toBe(15);
   });
 
   it('current_turn is set to a valid player id', () => {
@@ -285,10 +285,10 @@ describe('Edge cases — maximum players (9)', () => {
     expect(gm.state.phase).toBe('showdown');
   });
 
-  it('pot is correct after blinds with 9 players (SB=10, BB=20 → pot=30)', () => {
+  it('pot is correct after blinds with 9 players (SB=5, BB=10 → pot=15)', () => {
     const gm = buildNinePlayerGame();
     gm.startGame('rng');
-    expect(gm.state.pot).toBe(30);
+    expect(gm.state.pot).toBe(15);
   });
 });
 
@@ -403,7 +403,7 @@ describe('Edge cases — all-in heads-up', () => {
 
     // Set p1 stack very low
     const p1 = gm.state.players.find(p => p.id === 'p1');
-    p1.stack = 5; // less than big blind (20)
+    p1.stack = 5; // less than big blind (10)
 
     const result = gm.startGame('rng');
     expect(result).toEqual({ success: true });

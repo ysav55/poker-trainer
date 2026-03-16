@@ -3,13 +3,41 @@ import { useState, useEffect, useCallback } from 'react';
 // ─── Tag color helpers ────────────────────────────────────────────────────────
 
 const TAG_COLORS = {
-  WALK:        { bg: 'rgba(110,118,129,0.18)', text: '#8b949e', border: 'rgba(110,118,129,0.3)' },
-  '3BET_POT':  { bg: 'rgba(188,140,255,0.15)', text: '#bc8cff', border: 'rgba(188,140,255,0.3)' },
-  C_BET:       { bg: 'rgba(88,166,255,0.15)',  text: '#58a6ff', border: 'rgba(88,166,255,0.3)'  },
-  BLUFF_CATCH: { bg: 'rgba(248,81,73,0.15)',   text: '#f85149', border: 'rgba(248,81,73,0.3)'   },
-  CHECK_RAISE: { bg: 'rgba(227,179,65,0.15)',  text: '#e3b341', border: 'rgba(227,179,65,0.3)'  },
-  WHALE_POT:   { bg: 'rgba(63,185,80,0.15)',   text: '#3fb950', border: 'rgba(63,185,80,0.3)'   },
-  UNDO_USED:   { bg: 'rgba(248,81,73,0.10)',   text: '#f85149', border: 'rgba(248,81,73,0.2)'   },
+  // ── Preflop structure ──────────────────────────────────────────────────────
+  WALK:           { bg: 'rgba(110,118,129,0.18)', text: '#8b949e', border: 'rgba(110,118,129,0.3)'  },
+  LIMPED_POT:     { bg: 'rgba(139,108,70,0.18)',  text: '#a07850', border: 'rgba(139,108,70,0.3)'   },
+  '3BET_POT':     { bg: 'rgba(188,140,255,0.15)', text: '#bc8cff', border: 'rgba(188,140,255,0.3)'  },
+  FOUR_BET_POT:   { bg: 'rgba(219,90,255,0.18)',  text: '#db5aff', border: 'rgba(219,90,255,0.35)'  },
+  SQUEEZE_POT:    { bg: 'rgba(255,153,51,0.15)',  text: '#ff9933', border: 'rgba(255,153,51,0.3)'   },
+  ALL_IN_PREFLOP: { bg: 'rgba(220,38,38,0.18)',   text: '#f87171', border: 'rgba(220,38,38,0.35)'   },
+  // ── Position / blind ──────────────────────────────────────────────────────
+  BTN_OPEN:       { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', border: 'rgba(59,130,246,0.3)'   },
+  BLIND_DEFENSE:  { bg: 'rgba(20,184,166,0.15)',  text: '#2dd4bf', border: 'rgba(20,184,166,0.3)'   },
+  // ── Streets reached ───────────────────────────────────────────────────────
+  SAW_FLOP:           { bg: 'rgba(75,85,99,0.18)',   text: '#9ca3af', border: 'rgba(75,85,99,0.3)'    },
+  SAW_TURN:           { bg: 'rgba(75,85,99,0.22)',   text: '#b0b8c4', border: 'rgba(75,85,99,0.35)'   },
+  SAW_RIVER:          { bg: 'rgba(75,85,99,0.26)',   text: '#c4cdd6', border: 'rgba(75,85,99,0.4)'    },
+  WENT_TO_SHOWDOWN:   { bg: 'rgba(34,197,94,0.13)',  text: '#4ade80', border: 'rgba(34,197,94,0.28)'  },
+  // ── Stack depth ───────────────────────────────────────────────────────────
+  SHORT_STACK:    { bg: 'rgba(239,68,68,0.13)',   text: '#fca5a5', border: 'rgba(239,68,68,0.28)'   },
+  DEEP_STACK:     { bg: 'rgba(6,182,212,0.13)',   text: '#67e8f9', border: 'rgba(6,182,212,0.28)'   },
+  WHALE_POT:      { bg: 'rgba(63,185,80,0.15)',   text: '#3fb950', border: 'rgba(63,185,80,0.3)'    },
+  // ── Player count ──────────────────────────────────────────────────────────
+  MULTIWAY:       { bg: 'rgba(249,115,22,0.15)',  text: '#fb923c', border: 'rgba(249,115,22,0.3)'   },
+  // ── Postflop patterns ─────────────────────────────────────────────────────
+  C_BET:          { bg: 'rgba(88,166,255,0.15)',  text: '#58a6ff', border: 'rgba(88,166,255,0.3)'   },
+  DONK_BET:       { bg: 'rgba(245,158,11,0.15)',  text: '#fbbf24', border: 'rgba(245,158,11,0.3)'   },
+  CHECK_RAISE:    { bg: 'rgba(227,179,65,0.15)',  text: '#e3b341', border: 'rgba(227,179,65,0.3)'   },
+  BLUFF_CATCH:    { bg: 'rgba(248,81,73,0.15)',   text: '#f85149', border: 'rgba(248,81,73,0.3)'    },
+  RIVER_RAISE:    { bg: 'rgba(251,113,133,0.15)', text: '#fb7185', border: 'rgba(251,113,133,0.3)'  },
+  OVERBET:        { bg: 'rgba(220,38,38,0.12)',   text: '#f87171', border: 'rgba(220,38,38,0.25)'   },
+  // ── Board texture ─────────────────────────────────────────────────────────
+  MONOTONE_BOARD: { bg: 'rgba(59,130,246,0.12)',  text: '#93c5fd', border: 'rgba(59,130,246,0.25)'  },
+  PAIRED_BOARD:   { bg: 'rgba(236,72,153,0.12)',  text: '#f9a8d4', border: 'rgba(236,72,153,0.25)'  },
+  // ── Mistakes ──────────────────────────────────────────────────────────────
+  OPEN_LIMP:      { bg: 'rgba(234,88,12,0.12)',   text: '#fdba74', border: 'rgba(234,88,12,0.25)'   },
+  MIN_RAISE:      { bg: 'rgba(202,138,4,0.12)',   text: '#fcd34d', border: 'rgba(202,138,4,0.25)'   },
+  UNDO_USED:      { bg: 'rgba(248,81,73,0.10)',   text: '#f85149', border: 'rgba(248,81,73,0.2)'    },
 };
 
 function TagPill({ tag }) {

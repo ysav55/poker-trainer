@@ -1,206 +1,292 @@
 # Poker Trainer — Getting Started
 
-A real-time poker training tool for coaches and players. The coach controls the game (deal, pause, undo, configure hands); players join from any browser on the same network and act in turn.
+A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to a local database so hand history and player stats survive restarts.
+
+**Last updated:** 2026-03-16 — Blind controls, BB view toggle, 100BB default stack, B145–B244 integration tests, in-hand toggle fix (ISS-72). 951 tests passing.
 
 ---
 
 ## Requirements
 
-- **Node.js** 18 or newer (includes npm)
+- **Node.js 18+** (includes npm)
 - A modern browser (Chrome, Firefox, Edge, Safari)
-- Players on the same local network, **or** a tunneling tool for remote access (see section 4)
+- Players on the same local network, or a tunneling tool for remote access
 
 ---
 
 ## 1. First-Time Setup
 
-Open a terminal in the `poker-trainer` folder and install dependencies for both the server and the client.
-
-```bash
-# Server dependencies (Express, Socket.io, SQLite, uuid, …)
-cd server
-npm install
-cd ..
-
-# Client dependencies (React, Vite, Tailwind, …)
-cd client
-npm install
-cd ..
-```
-
-This only needs to be done once. After that you can skip straight to section 2.
-
----
-
-## 2. Starting the Game (Every Session)
-
-You need **two terminal windows** open at the same time.
-
-**Terminal 1 — Start the server:**
-```bash
-cd poker-trainer/server
-node index.js
-```
-You should see:
-```
-Server running on port 3001
-```
-
-**Terminal 2 — Start the client (dev mode):**
-```bash
-cd poker-trainer/client
-npm run dev
-```
-You should see Vite print a local URL such as:
-```
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: http://192.168.x.x:5173/
-```
-
-Leave both terminals running for the entire session. The database file `poker_trainer.sqlite` is created automatically in the `poker-trainer` folder on first run.
-
----
-
-## 3. Joining the Table (Same Network)
-
-### Coach
-1. Open `http://localhost:5173` in your browser.
-2. Enter any name, select **Coach**, and click **Join Table**.
-3. You will see the full coach sidebar on the right with all controls.
-
-### Players (same Wi-Fi or LAN)
-1. Players open the **Network URL** shown by Vite (e.g. `http://192.168.x.x:5173`) in their browser. They can use a phone, tablet, or laptop.
-2. Each player enters their name, selects **Player**, and clicks **Join Table**.
-3. They will see their seat on the poker table.
-
-> **Tip:** The Network URL is printed by `npm run dev`. If players cannot reach it, make sure the coach's computer firewall allows connections on port 5173 and 3001.
-
----
-
-## 4. Getting Players Online (Remote / Internet)
-
-If players are not on the same Wi-Fi (e.g. playing over the internet), you need to expose the server and client to the internet. The easiest free option is **ngrok**.
-
-### Option A — ngrok (recommended for quick sessions)
-
-1. Download ngrok from [ngrok.com](https://ngrok.com) and create a free account.
-2. With the server and client already running, open a third terminal:
-
-```bash
-# Expose the server (port 3001)
-ngrok http 3001
-```
-
-ngrok prints a public URL like `https://abc123.ngrok-free.app`.
-
-3. Tell players to open your **client URL** (the Vite local URL or another ngrok tunnel for port 5173).
-4. Before sharing, update the socket URL in the client so it points to the public server:
-
-   Open `client/src/hooks/useSocket.js` and change line 3:
-   ```js
-   // Before:
-   const SOCKET_URL = 'http://localhost:3001';
-   // After (paste your ngrok URL):
-   const SOCKET_URL = 'https://abc123.ngrok-free.app';
-   ```
-   Save the file — Vite hot-reloads automatically.
-
-5. Optionally run a second ngrok tunnel for the client:
-   ```bash
-   ngrok http 5173
-   ```
-   Share the resulting URL (e.g. `https://xyz789.ngrok-free.app`) with players. They open it in any browser, no installation required.
-
-### Option B — Deploy permanently (advanced)
-
-For a permanent hosted game, deploy:
-- The **server** to any Node.js host (Railway, Render, Fly.io, VPS). Set `PORT` environment variable.
-- The **client** with `npm run build` and serve the `dist/` folder from any static host (Vercel, Netlify, Cloudflare Pages).
-- Set `VITE_SOCKET_URL` in the client build environment to your server's public URL.
-
----
-
-## 5. How to Play — Coach Controls
-
-Once players have joined, the coach controls the session from the right sidebar.
-
-| Action | How |
-|--------|-----|
-| **Start a hand (random)** | Click **Start Hand** in Game Controls |
-| **Configure a hand** | Click **Configure Hand** → set specific hole cards and board cards → **Start Hand** |
-| **Pause / Resume** | Click the Pause button — the action timer stops while paused |
-| **Skip to next street** | **Force Next Street** — deals the flop, turn, or river immediately |
-| **Undo last action** | **Undo** — rolls back one player action |
-| **Roll back to previous street** | **Rollback Street** |
-| **Manually deal a card** | Click any face-down card on the table to pick a specific card |
-| **Award pot manually** | **Award Pot To** → pick a player (for training scenarios where auto-showdown is overridden) |
-| **Adjust a player's stack** | **Adjust Stack** → enter the player ID and new chip total |
-| **Next hand** | **Reset Hand** after a hand ends |
-
-### Session Stats (Section 6)
-After each hand the sidebar shows live VPIP / PFR / WTSD / WSD stats for every player. These reset when the server restarts.
-
-### Hand History (Section 7)
-Click **History** to see the last 10 hands. Click any hand row to expand board, player stacks, and full action log. The history is persisted to `poker_trainer.sqlite` and survives server restarts.
-
-### Live Hand Tags (Section 8)
-During a hand, click any tag button (3BET_POT, C-BET, CHECK_RAISE, BLUFF_CATCH, WHALE_POT, etc.) to label the current hand for review. Tags are local only and are not yet persisted to the database (see ISS-61).
-
-### Playlist Manager (Section 9)
-Create named playlists of hands for sequential replay. Activate a playlist to have `reset_hand` automatically load the next scenario. Use **Add to Playlist** from the Scenario Loader to build the queue.
-
-### Scenario Loader (Section 10)
-Search historical hands from the database and load them directly into the config phase (hole cards + board pre-filled). Optionally add the scenario to an active playlist for batch review sessions.
-
----
-
-## 6. How to Play — Player View
-
-- Your hole cards are shown only to you (face-down to everyone else).
-- When it is your turn you will see **Fold / Check / Call / Raise** buttons.
-- You have **30 seconds** to act — a timer counts down. If you do not act in time you are automatically folded.
-- At showdown your cards are revealed and the winner is announced.
-
----
-
-## 7. Stopping the Server
-
-Press **Ctrl+C** in each terminal. The server saves any in-progress hand as "incomplete" in the database before shutting down.
-
----
-
-## 8. Resetting Everything
-
-To wipe the hand history database:
 ```bash
 # From the poker-trainer folder:
-rm poker_trainer.sqlite
+cd server && npm install && cd ..
+cd client && npm install && cd ..
 ```
-The file is recreated automatically on next server start. Player session stats (in-memory) are always reset when the server restarts.
 
 ---
 
-## 9. Running Tests
+## 2. Running the App
+
+### Production mode (single server, recommended)
 
 ```bash
-cd poker-trainer/server
+# Build the client once
+cd client && npm run build && cd ..
+
+# Start the server — serves everything on port 3001
+cd server && node index.js
+```
+
+Open **http://localhost:3001** in your browser.
+
+### Development mode (hot-reload for UI work)
+
+Terminal 1:
+```bash
+cd server && node index.js
+```
+
+Terminal 2:
+```bash
+cd client && npm run dev
+```
+
+Open **http://localhost:5173**. The client hot-reloads on file save; the server does not.
+
+---
+
+## 3. Accounts
+
+### Registering (first visit)
+
+1. Open the app and choose the **Register** tab.
+2. Enter a **display name**, **email**, and **password**. Click Register.
+3. Your identity is saved to the database. On return visits you only need your name and password.
+
+### Logging in (return visits)
+
+1. Choose the **Log In** tab.
+2. Enter your **name** and **password**. Click Log In.
+3. If your browser still has your stored identity, the form is pre-filled and you go straight to the table.
+
+### Watching without an account
+
+Click **Watch**. Enter any name. You can see the table but cannot act or place bets.
+
+### Joining as coach
+
+Click **Coach**. Enter your name and the coach password (set via the `COACH_PASSWORD` environment variable). The coach has full control of the game and also plays at the table as a regular seat.
+
+---
+
+## 4. Joining a Table
+
+After logging in or registering, enter a **table name** and click **Join Table**. Everyone who enters the same table name is in the same game.
+
+- Players on the same Wi-Fi use the **Network URL** printed by Vite in dev mode (e.g. `http://192.168.x.x:5173`), or the server's IP on port 3001 in production.
+- For remote/internet play, use [ngrok](https://ngrok.com): `ngrok http 3001` and share the resulting URL.
+
+---
+
+## 5. Coach Controls
+
+The coach sidebar appears on the right. It has ten sections.
+
+### Section 1 — Game Controls
+
+| Button | What it does |
+|--------|-------------|
+| **Start Hand** | Deals a new hand (random cards by default) |
+| **Configure Hand** | Opens the card configuration panel before dealing |
+| **Pause / Resume** | Freezes the action timer; players cannot act while paused |
+| **Force Next Street** | Skips to flop, turn, or river immediately |
+| **Undo** | Rolls back the last player action |
+| **Rollback Street** | Rolls back to the start of the current street |
+| **Force Fold** | Folds the player whose turn it is |
+
+### Section 2 — Manual Card Deal
+
+While a hand is running in manual mode, click any face-down card on the table to pick a specific card to reveal.
+
+### Section 3 — Pot & Stack Controls
+
+- **Award Pot To** — manually award the pot to any player (useful for training scenarios where you want to override auto-showdown).
+- **Adjust Stack** — directly set any player's chip count.
+
+### Section 4 — Blind Levels
+
+Change the small blind and big blind **between hands** (disabled during an active hand).
+
+- Enter new **SB** and **BB** values (BB must be greater than SB).
+- Click **Set Blinds** to apply. The current blinds are shown for reference.
+- Any player who **joins the table after blinds are set** automatically receives a default stack of **100 × the new BB** (e.g. 25/50 blinds → 5,000 starting chips).
+- The default blind levels are **5/10** (SB/BB), giving a 1,000-chip starting stack by default.
+
+### Section 5 — Players
+
+Lists every seated player. The coach can:
+- **Exclude / include a player from the next hand** using the ✕/✓ toggle before clicking Start Hand. An excluded player sits out that hand only; the flag resets automatically after the hand starts.
+
+### Section 6 — Session Stats
+
+Live VPIP / PFR / WTSD / WSD stats for every player, updated after each hand. Resets when the server restarts. For persistent career stats see the Stats Dashboard below.
+
+Click **Session Report** to open a full HTML report in a new browser tab — chip leaderboard, stats comparison, pattern summary, mistake flags, and key hand breakdowns for the current session.
+
+### Section 7 — Hand History
+
+Last 10 hands. Click any row to expand it: full board, player stacks, hole cards, and every action with street labels.
+
+### Section 8 — Live Hand Tags
+
+During a hand, click a tag button (3BET_POT, C-BET, CHECK_RAISE, BLUFF_CATCH, etc.) to label it for later review. Tags are saved to the database and visible in the Stats Dashboard.
+
+### Section 9 — Playlist Manager
+
+Create named playlists of hands and activate one for sequential replay. When a playlist is active, clicking Reset Hand automatically loads the next scenario in the queue.
+
+### Section 10 — Scenario Loader
+
+Search historical hands from the database by player name, date, or tags. There are two buttons per result:
+- **Load** (blue) — loads the hand into the config phase so hole cards and board are pre-filled for a fresh hand.
+- **Replay** (purple) — enters Guided Replay Mode for that hand (see Section 11 below). All hole cards are immediately visible.
+
+Add scenarios to a playlist for batch review sessions.
+
+### Section 11 — Replay Controls
+
+Appears automatically when a hand is loaded via the **Replay** button. The table shows the hand state at the selected step, with all hole cards face-up for coaching.
+
+| Control | What it does |
+|---------|-------------|
+| **Progress label** | Shows "Action N / Total" and describes the current action (player, street, action type, amount) |
+| **Scrubber** | Drag to jump directly to any action in the hand |
+| **◀ Back / Fwd ▶** | Step backward or forward one action at a time |
+| **Branch to Live from Here** | Freezes the replay at the current state and switches to live play. Players can now act from that exact board/stack position to explore alternative lines. A **BRANCHED** badge replaces the REPLAY badge. |
+| **Return to Replay** | Unwinds the live branch and returns to the exact replay step where you branched. |
+| **Exit Replay** | Ends replay mode and returns to the waiting lobby. Player stacks are restored to their pre-replay values. |
+
+> In replay mode, betting controls are hidden. Once you branch to live play, betting controls reappear and the game runs normally from the branched state.
+
+---
+
+## 6. Configuring a Hand (Manual / Hybrid Mode)
+
+1. Click **Configure Hand** in Section 1 (only visible between hands).
+2. For each player, use the **Cards / Range** toggle:
+   - **Cards** — click the two card slots to pin specific hole cards.
+   - **Range** — click scenario tags to constrain the dealt hand. The server picks randomly from the intersection of all selected tags.
+3. **Range tag groups** (radio within each group, intersect across groups):
+   - **PAIRS:** All Pairs · QQ+ · 77-JJ · 22-66
+   - **SUIT:** Suited · Offsuit
+   - **TYPE:** Broadway · Connectors · 1-Gap · Ace-high · King-high
+   - **SHORTCUT:** ATo+ · KJo+ · Premium (TT+,AK) · Strong (77+,AJ+,KQ)
+   - A combo count badge shows how many combos are in the intersection. Incompatible combinations (e.g. Pairs + Suited) show 0 combos and fall through to random.
+4. Set specific board cards (flop/turn/river) or leave any slot blank for random.
+5. Optionally expand **Board Texture** to constrain the flop:
+   - **Suit:** Rainbow | Flush Draw | Monotone
+   - **Pair:** Unpaired | Paired | Trips
+   - **Connect:** Connected | Disconnected
+   - **High:** Broadway | Low | Ace High
+   - Select at most one per group. The system retries the flop up to 100 times until all constraints are satisfied.
+6. Click **Start Hand**. The server validates everything before dealing — errors are shown as notifications.
+
+> Hole cards are keyed to each player's stable identity, not their current socket connection, so reconnecting between configuring and starting is safe.
+
+---
+
+## 7. Playing as a Player
+
+- Your hole cards are visible only to you (face-down to others).
+- **BB view toggle** — click the **Chips / BB** pill button in the top-right of the table to switch between flat chip counts (e.g. "1,000") and big-blind units (e.g. "100bb"). This is a personal setting — it only affects your view and is remembered across sessions via `localStorage`.
+- When it is your turn, the action panel slides up from the bottom:
+  - **Fold** — give up your hand.
+  - **Check** — pass (only when no bet is outstanding).
+  - **Call** — match the current bet.
+  - **Raise** — open the raise panel, choose an amount (slider, quick-buttons: ½ pot / 1× pot / 2× pot / all-in), then click Raise again to confirm.
+- You have **60 seconds** to act. The timer bar counts down. If you run out of time you are automatically folded.
+- If you disconnect during your turn, the timer pauses. You have 60 seconds to reconnect before being removed from the game.
+
+---
+
+## 8. Stats Dashboard
+
+Click the **Stats** button (top bar, coach only) to open the full stats dashboard.
+
+- **Leaderboard** — ranked by net chips or VPIP/PFR across all recorded sessions.
+- **Hand History** — full paginated list of all hands. Filter by player or date.
+- **Player Drilldown** — click any player for their career stats, hand-by-hand breakdown, and tagged hands.
+
+Stats are stored in `poker_trainer.sqlite` and persist across server restarts.
+
+---
+
+## 9. Disconnection Handling
+
+- A disconnected player's seat shows an amber **OFFLINE** badge at 50% opacity.
+- If it is their turn when they disconnect, the timer is paused.
+- They have **60 seconds** to reconnect. On reconnect the timer resumes from where it left off.
+- After 60 seconds with no reconnect the player is removed and the game continues.
+- If the **coach** disconnects, the game is automatically paused for all players until the coach returns.
+
+---
+
+## 10. Running Tests
+
+Server tests (Jest):
+```bash
+cd server
 npx jest --no-coverage
 ```
+Expected: **951 tests passing** across 20 suites.
 
-Expected output: **635 tests passing** across 12 test suites (excludes stress tests by default).
-
-To also run the 1000-hand stress test:
+Client tests (Vitest + React Testing Library):
 ```bash
-npx jest --no-coverage --testPathPattern="stress"
-```
-
-**Client tests (Vitest + React Testing Library):**
-```bash
-cd poker-trainer/client
+cd client
 npm test
 ```
+Expected: **46 tests passing** across 3 suites.
 
-Expected output: **8 tests passing** across 4 suites (Spectator View, Reconnection Sync, Illegal Bet, Coach Opacity).
+Batch integration simulation (100 scenario batches × 20 hands each):
+```bash
+npm run batches            # run all batches (B01–B244)
+npm run batches -- 145 244 # run specific range
+```
+Expected: 0 crashes, 0 anomalies.
+
+---
+
+## 11. Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3001` | Server port |
+| `DATABASE_PATH` | `./poker_trainer.sqlite` | Path to the SQLite file |
+| `COACH_PASSWORD` | *(none)* | Password required to join as coach |
+
+Set these in a `.env` file at the project root or via your hosting platform's environment settings.
+
+---
+
+## 12. Resetting the Database
+
+```bash
+rm poker_trainer.sqlite
+```
+
+The file is recreated automatically on next server start. All hand history and player accounts are erased.
+
+---
+
+## 13. Cloud Deployment
+
+The app runs as a single service on port 3001. Deploy to Render, Railway, Fly.io, or any Node.js host:
+
+1. Set `DATABASE_PATH` to a persistent volume path (e.g. `/data/poker_trainer.sqlite`).
+2. Set `COACH_PASSWORD`.
+3. Build command: `npm run build` (root `package.json`).
+4. Start command: `npm start` (root `package.json`).
+
+A `Dockerfile` and `fly.toml` are included for Docker and Fly.io deployments.
 
 ---
 
@@ -208,9 +294,10 @@ Expected output: **8 tests passing** across 4 suites (Spectator View, Reconnecti
 
 | Problem | Fix |
 |---------|-----|
-| "Cannot connect to server" | Make sure `node index.js` is running in `server/`. Check that port 3001 is not blocked by a firewall. |
-| Players can't reach the game | Use the **Network URL** from Vite (not `localhost`). Both ports 5173 (client) and 3001 (server) must be reachable. |
-| "better-sqlite3 not found" | Run `npm install` inside the `server/` folder. |
-| Socket shows wrong port | Check `client/src/hooks/useSocket.js` line 3 — `SOCKET_URL` must be `http://<host>:3001`. |
-| Coach sidebar not visible | Make sure you joined as **Coach**, not Player. Only one coach per table. |
-| Hand history not saving | The `poker_trainer.sqlite` file is created in the `poker-trainer` root. Make sure the server process has write permission there. |
+| "Cannot connect to server" | Make sure `node index.js` is running in `server/`. Check port 3001 is not blocked. |
+| Players can't reach the game | Use the server's IP address, not `localhost`. Both port 3001 must be reachable on the network. |
+| "better-sqlite3 not found" | Run `npm install` inside `server/`. |
+| Stale UI after code changes | Run `npm run build` in `client/` and restart the server. |
+| Coach sidebar not visible | Make sure you joined as Coach with the correct coach password. |
+| Hand history not saving | Check the server has write permission at `DATABASE_PATH`. |
+| "Please register or log in first" | Create an account on the Register tab before joining a table. |

@@ -17,6 +17,7 @@ function getRevealedSlots(phase) {
     case 'turn':      return [0, 1, 2, 3];
     case 'river':     return [0, 1, 2, 3, 4];
     case 'showdown':  return [0, 1, 2, 3, 4];
+    case 'replay':    return [0, 1, 2, 3, 4]; // replay exposes up to all 5; actual visibility driven by board array length
     default:          return [];
   }
 }

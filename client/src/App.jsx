@@ -288,6 +288,18 @@ function TopBar({ gameState, isCoach, connected, playerCount, onLeave, onOpenSta
             Coach
           </span>
         )}
+        {gameState?.playlist_mode?.active && (
+          <span
+            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest"
+            style={{
+              background: 'rgba(212,175,55,0.12)',
+              color: '#d4af37',
+              border: '1px solid rgba(212,175,55,0.35)',
+            }}
+          >
+            ▶ Playlist {(gameState.playlist_mode.currentIndex ?? 0) + 1}/{gameState.playlist_mode.hands?.length ?? '?'}
+          </span>
+        )}
       </div>
 
       {/* Center: phase */}
@@ -395,6 +407,16 @@ export default function App() {
     deactivatePlaylist,
     updateHandTags,
     setPlayerInHand,
+    loadReplay,
+    replayStepFwd,
+    replayStepBack,
+    replayJumpTo,
+    replayBranch,
+    replayUnbranch,
+    replayExit,
+    bbView,
+    toggleBBView,
+    setBlindLevels,
   } = useSocket();
 
   // ── Local state ────────────────────────────────────────────────────────────
@@ -433,6 +455,13 @@ export default function App() {
     deactivatePlaylist,
     updateHandTags,
     setPlayerInHand,
+    loadReplay,
+    replayStepFwd,
+    replayStepBack,
+    replayJumpTo,
+    replayBranch,
+    replayUnbranch,
+    replayExit,
   };
 
   // ── CardPicker handlers ───────────────────────────────────────────────────
@@ -519,6 +548,9 @@ export default function App() {
           actionTimer={actionTimer}
           emit={emit}
           onOpenCardPicker={handleOpenCardPicker}
+          bbView={bbView}
+          bigBlind={gameState?.big_blind ?? 10}
+          onToggleBBView={toggleBBView}
         />
       </div>
 
@@ -536,6 +568,7 @@ export default function App() {
           activeHandId={activeHandId}
           handTagsSaved={handTagsSaved}
           onOpenStats={() => setStatsOpen(true)}
+          setBlindLevels={setBlindLevels}
         />
       )}
 

@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Poker Trainer — Engine Map</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --gold: #d4af37;
+    --gold-dim: rgba(212,175,55,0.18);
+    --gold-mid: rgba(212,175,55,0.5);
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #1c2128;
+    --text: #e6edf3;
+    --muted: #7d8590;
+    --red: #f85149;
+    --green: #3fb950;
+    --blue: #58a6ff;
+    --amber: #e3b341;
+    --purple: #bc8cff;
+    --teal: #39d353;
+    --orange: #f0883e;
+  }
+  body { background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; }
+  .page { max-width: 1280px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  /* ── Header ── */
+  header { text-align: center; margin-bottom: 60px; }
+  header h1 { font-size: 2rem; font-weight: 700; color: var(--gold); letter-spacing: -0.5px; }
+  header p { color: var(--muted); margin-top: 8px; font-size: 0.95rem; }
+  .gold-bar { width: 80px; height: 3px; background: var(--gold); margin: 16px auto 0; border-radius: 2px; }
+
+  /* ── Section titles ── */
+  .section { margin-bottom: 72px; }
+  .section-title { font-size: 1.25rem; font-weight: 700; color: var(--gold); margin-bottom: 28px; padding-bottom: 10px; border-bottom: 1px solid var(--gold-dim); display: flex; align-items: center; gap: 10px; }
+  .section-title span.num { background: var(--gold); color: #000; font-size: 0.75rem; font-weight: 800; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  /* ── Cards ── */
+  .card { background: var(--bg2); border: 1px solid var(--gold-dim); border-radius: 10px; padding: 20px; }
+  .card-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 10px; }
+
+  /* ── Phase State Machine ── */
+  .phase-flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; justify-content: center; margin-bottom: 40px; }
+  .phase-node { background: var(--bg3); border: 2px solid var(--gold-mid); border-radius: 10px; padding: 14px 20px; text-align: center; min-width: 110px; position: relative; }
+  .phase-node .phase-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .phase-node .phase-name { font-weight: 700; font-size: 1rem; color: var(--text); margin-top: 2px; }
+  .phase-node .phase-detail { font-size: 0.72rem; color: var(--muted); margin-top: 6px; }
+  .phase-node.special { border-color: var(--blue); }
+  .phase-node.special .phase-name { color: var(--blue); }
+  .phase-node.end { border-color: var(--amber); }
+  .phase-node.end .phase-name { color: var(--amber); }
+  .phase-arrow { display: flex; flex-direction: column; align-items: center; padding: 0 6px; }
+  .phase-arrow .arr { color: var(--gold); font-size: 1.4rem; line-height: 1; }
+  .phase-arrow .arr-label { font-size: 0.65rem; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+  .shortcut-row { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; margin-top: 20px; }
+  .shortcut { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); border-radius: 8px; padding: 10px 16px; font-size: 0.78rem; color: var(--red); max-width: 260px; text-align: center; }
+  .shortcut strong { display: block; margin-bottom: 4px; }
+
+  /* ── Module Map ── */
+  .module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+  .module-box { border-radius: 10px; padding: 16px; border: 1px solid; }
+  .module-box.core   { background: rgba(212,175,55,0.07); border-color: rgba(212,175,55,0.35); }
+  .module-box.pure   { background: rgba(63,185,80,0.07); border-color: rgba(63,185,80,0.35); }
+  .module-box.wrap   { background: rgba(88,166,255,0.07); border-color: rgba(88,166,255,0.35); }
+  .module-box.util   { background: rgba(188,140,255,0.07); border-color: rgba(188,140,255,0.35); }
+  .module-box .mod-title { font-weight: 700; font-size: 0.9rem; margin-bottom: 8px; }
+  .module-box.core .mod-title { color: var(--gold); }
+  .module-box.pure .mod-title { color: var(--green); }
+  .module-box.wrap .mod-title { color: var(--blue); }
+  .module-box.util .mod-title { color: var(--purple); }
+  .module-box ul { padding-left: 14px; font-size: 0.78rem; color: var(--muted); }
+  .module-box ul li { margin-bottom: 3px; }
+  .coupling-note { font-size: 0.75rem; margin-top: 8px; color: var(--muted); padding: 6px 10px; background: var(--bg3); border-radius: 6px; }
+
+  /* ── Full Action Flow ── */
+  .flow-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media(max-width:700px) { .flow-cols { grid-template-columns: 1fr; } }
+  .flow-lane { background: var(--bg2); border: 1px solid var(--gold-dim); border-radius: 10px; padding: 20px; }
+  .flow-lane h3 { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 16px; }
+  .flow-step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+  .flow-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .flow-dot.s { background: rgba(88,166,255,0.2); border: 1px solid var(--blue); color: var(--blue); }
+  .flow-dot.g { background: rgba(212,175,55,0.2); border: 1px solid var(--gold); color: var(--gold); }
+  .flow-dot.d { background: rgba(63,185,80,0.2); border: 1px solid var(--green); color: var(--green); }
+  .flow-dot.e { background: rgba(248,81,73,0.2); border: 1px solid var(--red); color: var(--red); }
+  .flow-text strong { font-size: 0.85rem; display: block; }
+  .flow-text small { color: var(--muted); font-size: 0.75rem; }
+  .flow-connector { text-align: center; color: var(--muted); font-size: 0.8rem; margin: 2px 0 2px 38px; }
+
+  /* ── Raise Logic Deep Dive ── */
+  .raise-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width:700px){ .raise-grid { grid-template-columns: 1fr; } }
+  .raise-case { background: var(--bg3); border-radius: 8px; padding: 14px; font-size: 0.8rem; }
+  .raise-case .rc-title { font-weight: 700; margin-bottom: 6px; font-size: 0.85rem; }
+  .raise-case .rc-ok { color: var(--green); }
+  .raise-case .rc-block { color: var(--red); }
+  .raise-case ul { padding-left: 14px; color: var(--muted); margin-top: 4px; }
+  .raise-case ul li { margin-bottom: 2px; }
+
+  /* ── Gaps ── */
+  .gaps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .gap-card { background: rgba(227,179,65,0.06); border: 1px solid rgba(227,179,65,0.25); border-radius: 10px; padding: 16px; }
+  .gap-card .gap-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .gap-badge { background: var(--amber); color: #000; font-size: 0.65rem; font-weight: 800; padding: 3px 8px; border-radius: 20px; white-space: nowrap; }
+  .gap-badge.high { background: var(--red); color: #fff; }
+  .gap-badge.med  { background: var(--amber); color: #000; }
+  .gap-badge.low  { background: var(--muted); color: #fff; }
+  .gap-title { font-weight: 700; font-size: 0.9rem; }
+  .gap-body { font-size: 0.8rem; color: var(--muted); line-height: 1.55; }
+  .gap-body code { background: var(--bg3); padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 0.75rem; color: var(--text); }
+  .gap-impact { margin-top: 8px; font-size: 0.75rem; font-weight: 600; }
+  .gap-impact.high { color: var(--red); }
+  .gap-impact.med  { color: var(--amber); }
+  .gap-impact.low  { color: var(--muted); }
+
+  /* ── Ideas ── */
+  .ideas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+  .idea-card { border-radius: 12px; padding: 22px; border: 1px solid; position: relative; overflow: hidden; }
+  .idea-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .idea-1 { background: rgba(88,166,255,0.06); border-color: rgba(88,166,255,0.25); }
+  .idea-1::before { background: var(--blue); }
+  .idea-2 { background: rgba(63,185,80,0.06); border-color: rgba(63,185,80,0.25); }
+  .idea-2::before { background: var(--green); }
+  .idea-3 { background: rgba(188,140,255,0.06); border-color: rgba(188,140,255,0.25); }
+  .idea-3::before { background: var(--purple); }
+  .idea-4 { background: rgba(240,136,62,0.06); border-color: rgba(240,136,62,0.25); }
+  .idea-4::before { background: var(--orange); }
+  .idea-num { font-size: 2rem; font-weight: 800; opacity: 0.15; position: absolute; top: 12px; right: 16px; }
+  .idea-icon { font-size: 1.8rem; margin-bottom: 10px; }
+  .idea-title { font-weight: 700; font-size: 1rem; margin-bottom: 6px; }
+  .idea-1 .idea-title { color: var(--blue); }
+  .idea-2 .idea-title { color: var(--green); }
+  .idea-3 .idea-title { color: var(--purple); }
+  .idea-4 .idea-title { color: var(--orange); }
+  .idea-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+  .idea-bullets { font-size: 0.78rem; color: var(--muted); padding-left: 14px; }
+  .idea-bullets li { margin-bottom: 4px; }
+  .effort-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .effort-tag { font-size: 0.68rem; font-weight: 600; padding: 3px 8px; border-radius: 20px; background: var(--bg3); color: var(--muted); border: 1px solid rgba(255,255,255,0.08); }
+
+  /* ── Undo diagram ── */
+  .undo-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .snap { background: var(--bg3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 12px; font-size: 0.75rem; text-align: center; }
+  .snap.active { border-color: var(--gold); color: var(--gold); }
+  .snap.restore { border-color: var(--green); color: var(--green); }
+  .snap.lost { opacity: 0.3; }
+  .snap-arrow { color: var(--muted); }
+  .undo-label { font-size: 0.72rem; color: var(--muted); margin-top: 6px; }
+
+  footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding-top: 40px; border-top: 1px solid var(--gold-dim); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>Poker Trainer — Engine Map</h1>
+    <p>Backend workflow · Gaps · Improvement ideas</p>
+    <div class="gold-bar"></div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- SECTION 1 — PHASE STATE MACHINE                       -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title"><span class="num">1</span> Game Phase State Machine</div>
+
+    <div class="phase-flow">
+      <div class="phase-node special">
+        <div class="phase-label">Start</div>
+        <div class="phase-name">WAITING</div>
+        <div class="phase-detail">0 board cards<br>No active turn</div>
+      </div>
+      <div class="phase-arrow">
+        <div class="arr">→</div>
+        <div class="arr-label">startGame()<br>≥2 players</div>
+      </div>
+      <div class="phase-node">
+        <div class="phase-label">Street 1</div>
+        <div class="phase-name">PREFLOP</div>
+        <div class="phase-detail">0 board cards<br>Blinds posted<br>Turn = UTG</div>
+      </div>
+      <div class="phase-arrow">
+        <div class="arr">→</div>
+        <div class="arr-label">All acted<br>+ matched</div>
+      </div>
+      <div class="phase-node">
+        <div class="phase-label">Street 2</div>
+        <div class="phase-name">FLOP</div>
+        <div class="phase-detail">3 board cards<br>Turn = left of dealer</div>
+      </div>
+      <div class="phase-arrow">
+        <div class="arr">→</div>
+        <div class="arr-label">All acted<br>+ matched</div>
+      </div>
+      <div class="phase-node">
+        <div class="phase-label">Street 3</div>
+        <div class="phase-name">TURN</div>
+        <div class="phase-detail">4 board cards<br>Turn = left of dealer</div>
+      </div>
+      <div class="phase-arrow">
+        <div class="arr">→</div>
+        <div class="arr-label">All acted<br>+ matched</div>
+      </div>
+      <div class="phase-node">
+        <div class="phase-label">Street 4</div>
+        <div class="phase-name">RIVER</div>
+        <div class="phase-detail">5 board cards<br>Turn = left of dealer</div>
+      </div>
+      <div class="phase-arrow">
+        <div class="arr">→</div>
+        <div class="arr-label">All acted<br>+ matched</div>
+      </div>
+      <div class="phase-node end">
+        <div class="phase-label">End</div>
+        <div class="phase-name">SHOWDOWN</div>
+        <div class="phase-detail">Hands evaluated<br>Pots distributed<br>Winner set</div>
+      </div>
+    </div>
+
+    <div class="shortcut-row">
+      <div class="shortcut">
+        <strong>🔴 Fold-to-One Shortcut</strong>
+        Can happen at any phase. As soon as 1 active player remains, the hand ends immediately — no showdown needed. Winner gets the pot.
+      </div>
+      <div class="shortcut">
+        <strong>🔴 All-In Run-Out Shortcut</strong>
+        If all remaining active players are all-in, betting rounds auto-advance with no actions — streets run out to showdown automatically.
+      </div>
+      <div class="shortcut">
+        <strong>⚡ Coach Shortcuts</strong>
+        forceNextStreet() skips the current betting round. rollbackStreet() reverses to the previous street. undoAction() reverses one player action.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- SECTION 2 — MODULE MAP                                -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title"><span class="num">2</span> Module Map — Who Does What</div>
+
+    <div class="module-grid">
+      <div class="module-box wrap">
+        <div class="mod-title">🔷 SessionManager</div>
+        <ul>
+          <li>Wraps GameManager (drop-in)</li>
+          <li>Intercepts startGame, placeBet, resetForNextHand</li>
+          <li>Tracks live VPIP / PFR / WTSD / WSD</li>
+          <li>Computes stats ratios after each hand</li>
+          <li>Everything else: pass-through to GameManager</li>
+        </ul>
+        <div class="coupling-note">Owns: _stats map, _preflopTracking map, handsDealt counter</div>
+      </div>
+
+      <div class="module-box core">
+        <div class="mod-title">⭐ GameManager</div>
+        <ul>
+          <li>The entire poker state machine</li>
+          <li>All phases, all betting, all blinds</li>
+          <li>Undo / rollback stack management</li>
+          <li>Manual card injection, config phase</li>
+          <li>Dealer rotation, pot management</li>
+          <li>Playlist mode activation</li>
+        </ul>
+        <div class="coupling-note">Owns: state object · calls HandGenerator, HandEvaluator, SidePotCalculator, Deck</div>
+      </div>
+
+      <div class="module-box pure">
+        <div class="mod-title">🟢 HandEvaluator</div>
+        <ul>
+          <li>Pure function: no state, no side effects</li>
+          <li>7-card → best 5-card hand detection</li>
+          <li>All 9 hand ranks (Royal Flush → High Card)</li>
+          <li>Tie-breaking: card-by-card comparison</li>
+          <li>Wheel straight (A-2-3-4-5) edge case</li>
+        </ul>
+        <div class="coupling-note">Called by: GameManager._resolveShowdown()</div>
+      </div>
+
+      <div class="module-box pure">
+        <div class="mod-title">🟢 SidePotCalculator</div>
+        <ul>
+          <li>Pure function: no state, no side effects</li>
+          <li>Builds side pot breakdown from contribution levels</li>
+          <li>Returns empty array if no all-in / single pot covers all</li>
+          <li>Folded players contribute to amounts but can't win</li>
+        </ul>
+        <div class="coupling-note">Called by: GameManager._resolveShowdown()</div>
+      </div>
+
+      <div class="module-box pure">
+        <div class="mod-title">🟢 HandGenerator</div>
+        <ul>
+          <li>Fill-the-Gaps algorithm</li>
+          <li>null = fill randomly, string = use this card</li>
+          <li>Validates card formats and duplicates</li>
+          <li>Builds collision-free shuffled deck for remaining slots</li>
+        </ul>
+        <div class="coupling-note">Called by: GameManager.startGame() when config is set</div>
+      </div>
+
+      <div class="module-box util">
+        <div class="mod-title">🟣 Deck.js</div>
+        <ul>
+          <li>createDeck() — 52 deterministic cards</li>
+          <li>shuffleDeck() — Fisher-Yates</li>
+          <li>isValidCard() — format validator</li>
+          <li>getUsedCards() — duplicate prevention</li>
+        </ul>
+        <div class="coupling-note">Called by: GameManager, HandGenerator</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- SECTION 3 — FULL ACTION FLOW (SOCKET TO DB)          -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title"><span class="num">3</span> Full Action Flow — Socket Event → DB Write</div>
+
+    <div class="flow-cols">
+      <div class="flow-lane">
+        <h3>🃏 Start Hand</h3>
+        <div class="flow-step"><div class="flow-dot s">1</div><div class="flow-text"><strong>Client emits <code>start_game</code></strong><small>Coach clicks Start Hand button</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot g">2</div><div class="flow-text"><strong>SessionManager.startGame()</strong><small>Validates ≥2 players, captures starting stacks</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot g">3</div><div class="flow-text"><strong>GameManager.startGame()</strong><small>If config set: calls HandGenerator → validates, fills gaps, returns playerCards + board. Deals hole cards, posts blinds, sets UTG turn.</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot d">4</div><div class="flow-text"><strong>HandLogger.startHand()</strong><small>Writes sessions row (if new) + hands row + hand_players rows (stack_start). Marks is_scenario_hand and big_blind.</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot s">5</div><div class="flow-text"><strong>broadcastState() to all clients</strong><small>Each client gets personalized view: own cards visible, opponents HIDDEN</small></div></div>
+      </div>
+
+      <div class="flow-lane">
+        <h3>⚡ Player Action</h3>
+        <div class="flow-step"><div class="flow-dot s">1</div><div class="flow-text"><strong>Client emits <code>place_bet</code></strong><small>fold / check / call / raise + amount</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot e">2</div><div class="flow-text"><strong>Cancel action timer</strong><small>Timer stopped before any state mutation — prevents race condition</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot g">3</div><div class="flow-text"><strong>SessionManager.placeBet()</strong><small>If preflop: records call/raise in preflopTracking map for VPIP/PFR</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot g">4</div><div class="flow-text"><strong>GameManager.placeBet()</strong><small>Guards (turn, phase, paused) → snapshot → execute action → check fold-to-one → check round over → advance or next turn</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot d">5</div><div class="flow-text"><strong>HandLogger.recordAction()</strong><small>Writes action row with pre-bet street label, is_manual_scenario flag</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot s">6</div><div class="flow-text"><strong>Start new action timer</strong><small>30s (or saved remainder) for next player's turn</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot s">7</div><div class="flow-text"><strong>broadcastState() to all clients</strong></div></div>
+      </div>
+
+      <div class="flow-lane">
+        <h3>🏆 End Hand</h3>
+        <div class="flow-step"><div class="flow-dot s">1</div><div class="flow-text"><strong>Client emits <code>reset_hand</code></strong><small>Coach clicks Next Hand</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot g">2</div><div class="flow-text"><strong>SessionManager.resetForNextHand()</strong><small>Commits session stats: VPIP/PFR/WTSD/WSD ratios updated for all dealt-in players</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot d">3</div><div class="flow-text"><strong>HandLogger.endHand()</strong><small>Updates hands row (board, pot, winner). Updates hand_players (stack_end, hole_cards, is_winner, vpip, pfr, wtsd, wsd — computed from preflop action records)</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot d">4</div><div class="flow-text"><strong>HandLogger.analyzeAndTagHand()</strong><small>Scans committed actions (non-reverted). Writes auto_tags (WALK, 3BET_POT, C_BET, CHECK_RAISE, BLUFF_CATCH, WHALE_POT) and mistake_tags (UNDO_USED)</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot g">5</div><div class="flow-text"><strong>GameManager.resetForNextHand()</strong><small>Rotates dealer, clears all cards/bets, phase → WAITING</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot s">6</div><div class="flow-text"><strong>Emit session_stats + broadcastState()</strong></div></div>
+      </div>
+
+      <div class="flow-lane">
+        <h3>↩️ Undo / Rollback</h3>
+        <div class="flow-step"><div class="flow-dot s">1</div><div class="flow-text"><strong>Coach emits <code>undo_action</code></strong></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot g">2</div><div class="flow-text"><strong>GameManager.undoAction()</strong><small>Pops from 30-deep action snapshot stack. Restores entire state. Preserves undo/rollback stacks and playlist hands.</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot d">3</div><div class="flow-text"><strong>HandLogger.markLastActionReverted()</strong><small>Sets is_reverted=1 on newest non-reverted DB action row. Kept for audit — never deleted.</small></div></div>
+        <div class="flow-connector">↓</div>
+        <div class="flow-step"><div class="flow-dot s">4</div><div class="flow-text"><strong>broadcastState()</strong></div></div>
+        <div style="margin-top:16px; padding:12px; background:var(--bg3); border-radius:8px; font-size:0.75rem; color:var(--muted);">
+          <strong style="color:var(--text);display:block;margin-bottom:6px;">Snapshot Stack Layout</strong>
+          <div class="undo-row">
+            <div class="snap lost">s1</div><div class="snap-arrow">→</div>
+            <div class="snap lost">s2</div><div class="snap-arrow">→</div>
+            <div class="snap restore">s3</div><div class="snap-arrow">→</div>
+            <div class="snap active">s4 (current)</div>
+          </div>
+          <div class="undo-label">After undo: current = s3, s4 discarded. History max 30 deep.</div>
+          <div style="margin-top:8px;" class="undo-row">
+            <div class="snap lost">sr1</div><div class="snap-arrow">→</div>
+            <div class="snap restore">sr2</div><div class="snap-arrow">→</div>
+            <div class="snap active">sr3 (current street)</div>
+          </div>
+          <div class="undo-label">Street snapshots: separate stack, max 5 deep.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- SECTION 4 — RAISE LOGIC DEEP DIVE                    -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title"><span class="num">4</span> Raise Logic — The Most Complex Path</div>
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:16px;">Raise validation has 5 layers of guards and two distinct outcomes depending on whether the raise is "full" or an incomplete all-in.</p>
+    <div class="raise-grid">
+      <div class="raise-case">
+        <div class="rc-title rc-ok">✅ Valid Raise Allowed When:</div>
+        <ul>
+          <li>It's this player's turn (current_turn matches)</li>
+          <li>Game is not paused</li>
+          <li>Amount ≥ current_bet + min_raise, OR player is going all-in for less</li>
+          <li>Player has enough chips for the total commitment</li>
+          <li>If previous raise was incomplete: only the original raiser can re-raise</li>
+        </ul>
+      </div>
+      <div class="raise-case">
+        <div class="rc-title rc-block">🚫 Raise Blocked When:</div>
+        <ul>
+          <li>Not this player's turn</li>
+          <li>Game is paused</li>
+          <li>Amount is below minimum and player still has chips left</li>
+          <li>Previous raise was an incomplete all-in AND this player already acted this street AND is not the original raiser</li>
+        </ul>
+      </div>
+      <div class="raise-case">
+        <div class="rc-title" style="color:var(--amber);">⚡ Full Raise (≥ min_raise)</div>
+        <ul>
+          <li>min_raise updated to the new raise increment</li>
+          <li>All other active players' action reset to "waiting" — must act again</li>
+          <li>last_raise_was_full = true</li>
+          <li>last_aggressor = this player</li>
+        </ul>
+      </div>
+      <div class="raise-case">
+        <div class="rc-title" style="color:var(--blue);">🔵 Incomplete All-In (&lt; min_raise)</div>
+        <ul>
+          <li>min_raise stays the same (can't shrink it)</li>
+          <li>Other players' action NOT reset (round still closes normally)</li>
+          <li>last_raise_was_full = false</li>
+          <li>Subsequent players may call/fold only (no re-raise except original raiser)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- SECTION 5 — GAPS & PROBLEMS                          -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title"><span class="num">5</span> Identified Gaps &amp; Problems</div>
+    <div class="gaps-grid">
+
+      <div class="gap-card">
+        <div class="gap-header">
+          <span class="gap-badge high">HIGH</span>
+          <span class="gap-title">Blind levels changeable mid-hand</span>
+        </div>
+        <div class="gap-body"><code>setBlindLevels()</code> has no phase guard — the coach can change small/big blinds while a hand is running. Blinds already posted won't be adjusted, but <code>min_raise</code> (reset each street to <code>big_blind</code>) would silently change, creating inconsistent raise minimums within the same hand.</div>
+        <div class="gap-impact high">⚠ Impact: corrupts raise validation mid-hand</div>
+      </div>
+
+      <div class="gap-card">
+        <div class="gap-header">
+          <span class="gap-badge high">HIGH</span>
+          <span class="gap-title">Dealer rotation skips no one</span>
+        </div>
+        <div class="gap-body">On <code>resetForNextHand()</code>, dealer seat increments by 1 regardless of who's connected or in-hand. If a player with <code>in_hand=false</code> or <code>disconnected=true</code> is next in the rotation, they still receive the dealer button and have blinds posted against them — even if they're meant to sit out.</div>
+        <div class="gap-impact high">⚠ Impact: disconnected/sitting-out players become dealer</div>
+      </div>
+
+      <div class="gap-card">
+        <div class="gap-header">
+          <span class="gap-badge med">MED</span>
+          <span class="gap-title">Manual card injection works in any mode</span>
+        </div>
+        <div class="gap-body"><code>manualDealCard()</code> has no guard against being called in <code>rng</code> mode. A coach could manually override a card that was dealt from the shuffled deck, creating a state where the deck array and the actual dealt cards are inconsistent. The card is replaced in the player slot but the deck still "contains" that card in its remainder.</div>
+        <div class="gap-impact med">⚠ Impact: deck state inconsistency in rng mode</div>
+      </div>
+
+      <div class="gap-card">
+        <div class="gap-header">
+          <span class="gap-badge med">MED</span>
+          <span class="gap-title">No stack persistence on reconnect</span>
+        </div>
+        <div class="gap-body">When a player disconnects and the 60s TTL expires, they're removed via <code>removePlayer()</code>. If they reconnect after the TTL, <code>addPlayer()</code> gives them stack=1000 (default). Their actual stack from the previous session is lost. There's no mechanism to restore a player's previous stack when they re-join within the same table session.</div>
+        <div class="gap-impact med">⚠ Impact: chip counts reset for late re-joiners</div>
+      </div>
+
+      <div class="gap-card">
+        <div class="gap-header">
+          <span class="gap-badge med">MED</span>
+          <span class="gap-title">SessionManager doesn't track 3bet/aggression levels</span>
+        </div>
+        <div class="gap-body"><code>trackPreflopAction()</code> uses boolean flags — a player who opens raises and then 3-bets (calls a re-raise) would have <code>vpipThisHand=true, pfrThisHand=true</code>, same as someone who just opened. The system can't distinguish who was the initial raiser vs who 3-bet vs who called. Aggression frequency and 3-bet % are untracked.</div>
+        <div class="gap-impact med">⚠ Impact: missing key poker training metrics</div>
+      </div>
+
+      <div class="gap-card">
+        <div class="gap-header">
+          <span class="gap-badge med">MED</span>
+          <span class="gap-title">Snapshot deep-clone on every action</span>
+        </div>
+        <div class="gap-body">Every call to <code>_saveSnapshot()</code> deep-clones the entire game state object — all players, board, deck remainder, config. With 9 players and a 30-action history, you could hold 30 full-state copies in memory simultaneously. No structural sharing or lazy clone — it's a full <code>JSON.parse(JSON.stringify(state))</code> equivalent on every action.</div>
+        <div class="gap-impact med">⚠ Impact: memory pressure on long hands; CPU spikes at 30-action depth</div>
+      </div>
+
+      <div class="gap-card">
+        <div class="gap-header">
+          <span class="gap-badge med">MED</span>
+          <span class="gap-title">awardPot() has no winner validation</span>
+        </div>
+        <div class="gap-body">The coach can manually award the pot to any player ID — including a folded player, a player who sat out, or a non-existent ID. There's no guard that checks whether the target is an eligible winner. The system will silently award the pot and mark them as winner even if they folded preflop.</div>
+        <div class="gap-impact med">⚠ Impact: pot can be awarded to ineligible/invalid players</div>
+      </div>
+
+      <div class="gap-card" style="opacity:0.5">
+        <div class="gap-header">
+          <span class="gap-badge low" style="background:var(--teal)">RESOLVED</span>
+          <span class="gap-title"><code>notifications[]</code> dead state</span>
+        </div>
+        <div class="gap-body">Field verified absent in current codebase — ISS-33 closed 2026-03-16 as non-issue.</div>
+        <div class="gap-impact low">✓ Closed</div>
+      </div>
+
+      <div class="gap-card">
+        <div class="gap-header">
+          <span class="gap-badge low">LOW</span>
+          <span class="gap-title">No starting stack configuration</span>
+        </div>
+        <div class="gap-body"><code>addPlayer()</code> always initializes with <code>stack=1000</code>. There's no way for the coach to configure starting stacks at table creation time. The workaround is <code>adjustStack()</code> per player after joining — an extra manual step per player.</div>
+        <div class="gap-impact low">Low — UX friction only</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- SECTION 6 — 4 NEW IDEAS                              -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title"><span class="num">6</span> 4 Ideas to Improve the Engine</div>
+    <div class="ideas-grid">
+
+      <div class="idea-card idea-1">
+        <div class="idea-num">1</div>
+        <div class="idea-icon">📊</div>
+        <div class="idea-title">Real-Time Equity Engine</div>
+        <div class="idea-desc">Run a Monte Carlo simulation server-side on every street transition. Store the equity percentages (each player's probability of winning) in the game state. Coach sees live equity during pauses — turns abstract coaching ("you should have folded") into hard numbers ("you had 18% equity here").</div>
+        <ul class="idea-bullets">
+          <li>Calculate on each street advance: preflop, flop, turn, river</li>
+          <li>Use 5,000-sample Monte Carlo — fast enough to run synchronously</li>
+          <li>Expose equity per player in game_state (coach-only field)</li>
+          <li>Store final equity snapshot in hands table for post-session review</li>
+          <li>Power a new "Expected Value" column in the Stats Dashboard</li>
+        </ul>
+        <div class="effort-row">
+          <span class="effort-tag">New: EquityEngine.js module</span>
+          <span class="effort-tag">Uses existing HandEvaluator</span>
+          <span class="effort-tag">Medium effort</span>
+        </div>
+      </div>
+
+      <div class="idea-card idea-2" style="position:relative">
+        <div style="position:absolute;top:12px;left:12px;background:var(--green);color:#000;font-size:0.65rem;font-weight:800;padding:3px 10px;border-radius:20px;letter-spacing:0.05em">✓ IMPLEMENTED</div>
+        <div class="idea-icon" style="margin-top:20px">🎬</div>
+        <div class="idea-num">2</div>
+        <div class="idea-title">Guided Replay Mode</div>
+        <div class="idea-desc">Fully shipped. <code>phase = 'replay'</code> added to GameManager. 7 public methods (loadReplay, stepForward, stepBack, jumpTo, branchFromReplay, unBranch, exitReplay). All hole cards exposed during replay. Coach sidebar section 11 has scrubber + step buttons + branch/unbranch + exit.</div>
+        <ul class="idea-bullets">
+          <li><code>replay</code> phase built into GameManager — not a separate class</li>
+          <li>Branch mechanic: snapshot state at cursor → live play → unBranch restores</li>
+          <li>REPLAY badge (blue) / BRANCHED badge (amber) visible to all clients</li>
+          <li>Purple seat ring highlights active-player's position during step-through</li>
+          <li>36 replay tests passing; integrated with playlist load flow</li>
+        </ul>
+        <div class="effort-row">
+          <span class="effort-tag">Done 2026-03-15</span>
+          <span class="effort-tag">Epics R1–R5</span>
+        </div>
+      </div>
+
+      <div class="idea-card idea-3">
+        <div class="idea-icon">🧠</div>
+        <div class="idea-num">3</div>
+        <div class="idea-title">Decision Quality Scorer</div>
+        <div class="idea-desc">After each player action, score the decision quality independently of the result — a bad call can win, a good fold loses. Score based on pot odds vs equity, position, stack-to-pot ratio, and board texture. Aggregate into a "decision quality" metric that separates skill from luck over time.</div>
+        <ul class="idea-bullets">
+          <li>Runs after equity is computed (depends on Idea 1)</li>
+          <li>Pot-odds check: is the call price ≤ equity × pot?</li>
+          <li>Position check: is the player in or out of position?</li>
+          <li>New column in hand_actions: <code>decision_score</code> (A/B/C/D or 0–100)</li>
+          <li>New Stats Dashboard widget: average decision score per player per session</li>
+          <li>Separates "bad beat recipient" from "bad decision maker"</li>
+        </ul>
+        <div class="effort-row">
+          <span class="effort-tag">Depends on Idea 1</span>
+          <span class="effort-tag">New: DecisionScorer.js</span>
+          <span class="effort-tag">Medium effort</span>
+        </div>
+      </div>
+
+      <div class="idea-card idea-4">
+        <div class="idea-icon">⏱️</div>
+        <div class="idea-num">4</div>
+        <div class="idea-title">Decision Timing Profiler</div>
+        <div class="idea-desc">Track how long each player takes per decision (time from turn start to action). Store it alongside each action in the DB. Build a per-player timing histogram. Players who act instantly on tough spots (tell: no thinking) or take forever on easy spots (tell: tanking for deception) get flagged. Coaches can use this as a training tool for timing tells.</div>
+        <ul class="idea-bullets">
+          <li>Server stores <code>turn_started_at</code> when <code>current_turn</code> is set</li>
+          <li>New column in hand_actions: <code>think_time_ms</code> — gap between turn start and action</li>
+          <li>Stats Dashboard: "Avg think time by street" and "Think time vs decision type" charts</li>
+          <li>Flag outliers: &lt;2s on a river all-in decision, &gt;50s on a preflop fold</li>
+          <li>Zero changes to GameManager — computed and stored in the index.js action handler</li>
+        </ul>
+        <div class="effort-row">
+          <span class="effort-tag">Minimal engine changes</span>
+          <span class="effort-tag">DB column + index.js only</span>
+          <span class="effort-tag">Low effort</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>
+    Poker Trainer — Engine Map &nbsp;·&nbsp; Last updated 2026-03-16 &nbsp;·&nbsp; Epics 0–16 + Replay + Preset Ranges complete &nbsp;·&nbsp; 0 open issues
+  </footer>
+
+</div>
+</body>
+</html>

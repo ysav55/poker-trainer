@@ -1,19 +1,20 @@
 import React from 'react';
 import PlayerSeat from './PlayerSeat';
 import BoardCards from './BoardCards';
+import { fmtChips } from '../utils/chips';
 
 // Absolute seat positions as percentages of the container [left%, top%]
-// Seat 0 = bottom-center, going clockwise
+// Seat 0 = bottom-center, seats increase counter-clockwise (standard online poker)
 const SEAT_POSITIONS = [
   { left: '50%',  top: '92%'  }, // 0  bottom-center
-  { left: '78%',  top: '82%'  }, // 1  bottom-right
-  { left: '95%',  top: '55%'  }, // 2  right
-  { left: '82%',  top: '18%'  }, // 3  top-right
-  { left: '62%',  top: '4%'   }, // 4  top-center-r
-  { left: '38%',  top: '4%'   }, // 5  top-center-l
-  { left: '18%',  top: '18%'  }, // 6  top-left
-  { left: '5%',   top: '55%'  }, // 7  left
-  { left: '22%',  top: '82%'  }, // 8  bottom-left
+  { left: '22%',  top: '82%'  }, // 1  bottom-left
+  { left: '5%',   top: '55%'  }, // 2  left
+  { left: '18%',  top: '18%'  }, // 3  top-left
+  { left: '38%',  top: '4%'   }, // 4  top-center-l
+  { left: '62%',  top: '4%'   }, // 5  top-center-r
+  { left: '82%',  top: '18%'  }, // 6  top-right
+  { left: '95%',  top: '55%'  }, // 7  right
+  { left: '78%',  top: '82%'  }, // 8  bottom-right
 ];
 
 function formatPot(amount) {
@@ -85,6 +86,9 @@ export default function PokerTable({
   actionTimer = null,
   emit = {},
   onOpenCardPicker,
+  bbView = false,
+  bigBlind = 10,
+  onToggleBBView,
 }) {
   // ── Derived state ──────────────────────────────────────────────────────────
   const players        = gameState?.players ?? [];
@@ -99,7 +103,7 @@ export default function PokerTable({
   const winnerPot      = winner?.amount ?? pot;
   const notifications  = gameState?.notifications ?? [];
   const showdownResult = gameState?.showdown_result ?? null;
-  const isShowdown     = phase === 'showdown' && showdownResult != null;
+  const isShowdown     = phase === 'showdown';
   const isScenario    = gameState?.is_scenario === true;
   const isConfigPhase = gameState?.config_phase === true;
 
@@ -122,7 +126,7 @@ export default function PokerTable({
   // ── Helpers ────────────────────────────────────────────────────────────────
   function getSeatStyle(seatIndex) {
     // Rotate so myId's seat appears at position 0 (bottom-center)
-    const rotated = (seatIndex - mySeat + 9) % 9;
+    const rotated = (seatIndex - mySeat + SEAT_POSITIONS.length) % SEAT_POSITIONS.length;
     const pos = SEAT_POSITIONS[rotated] ?? SEAT_POSITIONS[0];
     return {
       left: pos.left,
@@ -200,7 +204,7 @@ export default function PokerTable({
                   {winnerName}
                 </span>
                 <span className="text-xs font-mono" style={{ color: '#d4af37' }}>
-                  +{formatPot(winnerPot)}
+                  +{fmtChips(winnerPot, bigBlind, bbView)}
                 </span>
               </div>
             ) : pot > 0 ? (
@@ -215,17 +219,17 @@ export default function PokerTable({
                   className="text-lg font-bold font-mono leading-none"
                   style={{ color: '#d4af37', textShadow: '0 0 10px rgba(212,175,55,0.5)' }}
                 >
-                  {formatPot(pot)}
+                  {fmtChips(pot, bigBlind, bbView)}
                 </span>
                 {sidePots.length > 0 && (
                   <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                    {sidePots.map((pot, idx) => {
-                      const eligibleNames = pot.eligiblePlayerIds
+                    {sidePots.map((sp, idx) => {
+                      const eligibleNames = sp.eligiblePlayerIds
                         .map(id => gameState.players.find(p => p.id === id)?.name ?? id)
                         .join(', ');
                       return (
                         <div key={idx} style={{ fontSize: 11, color: 'var(--color-text-muted, #888)', background: 'rgba(0,0,0,0.35)', borderRadius: 6, padding: '2px 10px' }}>
-                          Pot {idx + 1}: <strong style={{ color: 'var(--color-gold, #d4af37)' }}>{pot.amount}</strong>
+                          Pot {idx + 1}: <strong style={{ color: 'var(--color-gold, #d4af37)' }}>{fmtChips(sp.amount, bigBlind, bbView)}</strong>
                           <span style={{ marginLeft: 6, opacity: 0.75 }}>({eligibleNames})</span>
                         </div>
                       );
@@ -237,13 +241,45 @@ export default function PokerTable({
           </div>
 
           {/* ── Phase label — bottom center of oval ─────────────────────── */}
-          {phase && phase !== 'waiting' && (
+          {phase && phase !== 'waiting' && phase !== 'replay' && (
             <div className="absolute bottom-[14%] left-1/2 -translate-x-1/2">
               <span
                 className="text-[10px] font-semibold tracking-[0.3em] uppercase"
                 style={{ color: 'rgba(212,175,55,0.45)' }}
               >
                 {phase}
+              </span>
+            </div>
+          )}
+
+          {/* ── BB view toggle ───────────────────────────────────────── */}
+          {onToggleBBView && (
+            <button
+              onClick={onToggleBBView}
+              className="absolute top-2 right-3 z-10 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded transition-colors"
+              style={{
+                background: bbView ? 'rgba(88,166,255,0.2)' : 'rgba(255,255,255,0.07)',
+                color: bbView ? '#58a6ff' : 'rgba(255,255,255,0.35)',
+                border: `1px solid ${bbView ? 'rgba(88,166,255,0.5)' : 'rgba(255,255,255,0.1)'}`,
+              }}
+              title="Toggle between chip count and big-blind view"
+            >
+              {bbView ? 'BB' : 'Chips'}
+            </button>
+          )}
+
+          {/* ── Replay / Branched badges ─────────────────────────────── */}
+          {gameState?.replay_mode?.active && !gameState?.replay_mode?.branched && (
+            <div className="absolute bottom-[30%] left-1/2 -translate-x-1/2 pointer-events-none">
+              <span className="px-2 py-0.5 text-xs rounded bg-blue-600 text-white font-bold uppercase">
+                REPLAY
+              </span>
+            </div>
+          )}
+          {gameState?.replay_mode?.branched && (
+            <div className="absolute bottom-[30%] left-1/2 -translate-x-1/2 pointer-events-none">
+              <span className="px-2 py-0.5 text-xs rounded bg-amber-600 text-white font-bold uppercase">
+                BRANCHED
               </span>
             </div>
           )}
@@ -350,12 +386,12 @@ export default function PokerTable({
                 className="text-[10px] font-black tracking-[0.35em] uppercase leading-none"
                 style={{ color: '#d4af37' }}
               >
-                {showdownResult.splitPot ? 'SPLIT POT' : 'WINNER'}
+                {showdownResult?.splitPot ? 'SPLIT POT' : 'WINNER'}
               </span>
 
               {/* Winner name(s) */}
               <div className="flex flex-col items-center gap-0.5">
-                {showdownResult.winners.map((w) => (
+                {(showdownResult?.winners ?? [{ playerId: winner, playerName: winnerName }]).map((w) => (
                   <span
                     key={w.playerId}
                     className="text-base font-bold tracking-wide leading-tight text-center"
@@ -367,7 +403,7 @@ export default function PokerTable({
               </div>
 
               {/* Winning hand description — use first winner's hand */}
-              {showdownResult.winners[0]?.handResult?.description && (
+              {showdownResult?.winners[0]?.handResult?.description && (
                 <span
                   className="text-[11px] font-semibold text-center leading-snug"
                   style={{ color: 'rgba(212,175,55,0.85)' }}
@@ -377,7 +413,7 @@ export default function PokerTable({
               )}
 
               {/* Pot awarded */}
-              {showdownResult.potAwarded > 0 && (
+              {(showdownResult?.potAwarded ?? 0) > 0 && (
                 <span
                   className="text-[11px] font-mono leading-none"
                   style={{ color: 'rgba(212,175,55,0.65)' }}
@@ -421,6 +457,9 @@ export default function PokerTable({
                   onHoleCardClick={(position) => handleHoleCardClick(player, position)}
                   showdownResult={isShowdown ? showdownResult : null}
                   isWinner={isWinner}
+                  replayMode={gameState?.replay_mode ?? null}
+                  bbView={bbView}
+                  bigBlind={bigBlind}
                 />
               </div>
             );
@@ -431,12 +470,14 @@ export default function PokerTable({
       {/* ── Betting controls — outside/below the oval ─────────────────────── */}
       <div className="relative z-30 flex-shrink-0">
         <React.Suspense fallback={null}>
-          {BettingControls && (
+          {BettingControls && !(gameState?.replay_mode?.active && !gameState?.replay_mode?.branched) && (
             <BettingControls
               gameState={gameState}
               myId={myId}
               isCoach={isCoach}
               emit={emit}
+              bbView={bbView}
+              bigBlind={bigBlind}
             />
           )}
         </React.Suspense>

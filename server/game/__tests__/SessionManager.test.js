@@ -86,9 +86,9 @@ describe('SessionManager — construction', () => {
     expect(sm.handsDealt).toBe(0);
   });
 
-  it('creates with a sessionId that includes the tableId', () => {
+  it('creates with a sessionId that is a UUID (DB-07: no longer includes tableId)', () => {
     const sm = new SessionManager('my-table');
-    expect(sm.sessionId).toMatch(/my-table/);
+    expect(sm.sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   it('creates with empty _stats map', () => {
@@ -684,10 +684,10 @@ describe('SessionManager — getSessionStats() shape', () => {
     });
   });
 
-  it('sessionId starts with "session_"', () => {
+  it('sessionId is a UUID (DB-07: collision-safe, no longer prefixed)', () => {
     const sm = new SessionManager('my-room');
     const { sessionId } = sm.getSessionStats();
-    expect(sessionId).toMatch(/^session_my-room_/);
+    expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 });
 
@@ -837,6 +837,105 @@ describe('SessionManager — _preflopTracking cleared after resetForNextHand', (
 });
 
 // ─────────────────────────────────────────────
+//  Suite — GAP 7: WTSD/WSD side-pot path
+// ─────────────────────────────────────────────
+
+describe('GAP 7 — WTSD/WSD side-pot path', () => {
+  /**
+   * Build a synthetic showdown_result that mirrors what GameManager emits:
+   *  - main pot: won by p2 (Bob)
+   *  - side pot: won by p1 (Alice)
+   *  - allHands: both players are listed (both evaluated at showdown)
+   */
+  function makeShowdownWithSidePot({ mainWinner, sideWinner }) {
+    return {
+      winners: [{ playerId: mainWinner }],
+      sidePotResults: [
+        { winners: [{ playerId: sideWinner }] },
+      ],
+      allHands: [
+        { playerId: 'player1' },
+        { playerId: 'player2' },
+      ],
+    };
+  }
+
+  it('player who wins only a side pot (not the main) gets _wsdCount incremented', () => {
+    const sm = new SessionManager('side-pot-table');
+    sm.addPlayer('player1', 'P1');
+    sm.addPlayer('player2', 'P2');
+    sm.startGame('rng');
+
+    // Manually inject a showdown_result where player1 wins side pot but NOT main pot
+    sm.gm.state.showdown_result = {
+      winners: [{ playerId: 'player2' }],       // main pot: P2 wins
+      sidePotResults: [{ winners: [{ playerId: 'player1' }] }],  // side pot: P1 wins
+      allHands: [{ playerId: 'player1' }, { playerId: 'player2' }],
+    };
+
+    sm.endHand();
+
+    const p1Stats = sm._stats.get('player1');
+    const p2Stats = sm._stats.get('player2');
+
+    // Both reached showdown → both get _wtsdCount
+    expect(p1Stats._wtsdCount).toBeGreaterThanOrEqual(1);
+    expect(p2Stats._wtsdCount).toBeGreaterThanOrEqual(1);
+
+    // P1 wins side pot → _wsdCount = 1
+    expect(p1Stats._wsdCount).toBe(1);
+    // P2 wins main pot → _wsdCount = 1
+    expect(p2Stats._wsdCount).toBe(1);
+  });
+
+  it('player who loses both main and side pot: _wsdCount stays 0, _wtsdCount increments', () => {
+    const sm = new SessionManager('side-pot-table-2');
+    sm.addPlayer('player1', 'P1');
+    sm.addPlayer('player2', 'P2');
+    sm.addPlayer('player3', 'P3');
+    sm.startGame('rng');
+
+    // player1 loses everything; player2 wins main; player3 wins side
+    sm.gm.state.showdown_result = {
+      winners: [{ playerId: 'player2' }],
+      sidePotResults: [{ winners: [{ playerId: 'player3' }] }],
+      allHands: [
+        { playerId: 'player1' },
+        { playerId: 'player2' },
+        { playerId: 'player3' },
+      ],
+    };
+
+    sm.endHand();
+
+    const p1Stats = sm._stats.get('player1');
+    expect(p1Stats._wtsdCount).toBeGreaterThanOrEqual(1);   // was at showdown
+    expect(p1Stats._wsdCount).toBe(0);                     // won nothing
+  });
+
+  it('player not in allHands does not get _wtsdCount incremented', () => {
+    const sm = new SessionManager('side-pot-table-3');
+    sm.addPlayer('player1', 'P1');
+    sm.addPlayer('player2', 'P2');
+    sm.startGame('rng');
+
+    // player2 folded preflop — not listed in allHands
+    sm.gm.state.showdown_result = {
+      winners: [{ playerId: 'player1' }],
+      sidePotResults: [],
+      allHands: [{ playerId: 'player1' }],  // only player1 shown
+    };
+
+    sm.endHand();
+
+    const p2Stats = sm._stats.get('player2');
+    if (p2Stats) {
+      expect(p2Stats._wtsdCount).toBe(0);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────
 //  Suite — GAP 8: Aggression Frequency
 // ─────────────────────────────────────────────
 
@@ -888,6 +987,47 @@ describe('GAP 8 — aggression frequency tracking', () => {
     stats.players.forEach(p => {
       expect(p).toHaveProperty('aggFreq');
       expect(typeof p.aggFreq).toBe('number');
+    });
+  });
+
+  it('aggFreq is between 0 and 1 for mixed raise + call preflop', () => {
+    // Inject tracking directly: 1 raise + 1 call → aggFreq = 1/(1+1) = 0.5
+    const sm = setupTable(3);
+    sm.startGame('rng');
+
+    const currentId = sm.state.current_turn;
+    // First action: raise
+    sm.placeBet(currentId, 'raise', sm.state.big_blind * 3);
+    sm.resetForNextHand();
+    // Second hand: same player calls
+    sm.startGame('rng');
+    const secondId = sm.state.current_turn;
+
+    // If same player acts first again, call; otherwise just reset
+    if (secondId === currentId) {
+      sm.placeBet(currentId, 'call');
+    }
+    sm.resetForNextHand();
+
+    const stats = sm.getSessionStats().players.find(p => p.playerId === currentId);
+    if (stats) {
+      expect(stats.aggFreq).toBeGreaterThanOrEqual(0);
+      expect(stats.aggFreq).toBeLessThanOrEqual(1);
+      expect(Number.isNaN(stats.aggFreq)).toBe(false);
+    }
+  });
+
+  it('aggFreq is never NaN even when player only folds (denominator=0 guard)', () => {
+    // Player who never calls or raises: _aggFreqHands=0 → guard should return 0, not NaN
+    const sm = setupTable(3);
+    sm.startGame('rng');
+    // All players fold without calling or raising
+    sm.resetForNextHand();
+
+    const stats = sm.getSessionStats().players;
+    stats.forEach(p => {
+      expect(Number.isNaN(p.aggFreq)).toBe(false);
+      expect(p.aggFreq).toBe(0);
     });
   });
 });

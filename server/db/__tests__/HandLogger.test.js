@@ -7,8 +7,8 @@ jest.mock('../Database', () => {
   db.pragma('foreign_keys = ON');
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, table_id TEXT NOT NULL, started_at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS hands (hand_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, table_id TEXT NOT NULL, started_at INTEGER NOT NULL, ended_at INTEGER, board TEXT, final_pot INTEGER DEFAULT 0, winner_id TEXT, winner_name TEXT, phase_ended TEXT, completed_normally INTEGER DEFAULT 0, auto_tags TEXT, mistake_tags TEXT, coach_tags TEXT, dealer_seat INTEGER DEFAULT 0, is_scenario_hand INTEGER DEFAULT 0, FOREIGN KEY (session_id) REFERENCES sessions(session_id));
-    CREATE TABLE IF NOT EXISTS hand_players (hand_id TEXT NOT NULL, player_id TEXT NOT NULL, player_name TEXT NOT NULL, seat INTEGER, stack_start INTEGER DEFAULT 0, stack_end INTEGER, hole_cards TEXT, is_winner INTEGER DEFAULT 0, vpip INTEGER DEFAULT 0, pfr INTEGER DEFAULT 0, PRIMARY KEY (hand_id, player_id), FOREIGN KEY (hand_id) REFERENCES hands(hand_id));
+    CREATE TABLE IF NOT EXISTS hands (hand_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, table_id TEXT NOT NULL, started_at INTEGER NOT NULL, ended_at INTEGER, board TEXT, final_pot INTEGER DEFAULT 0, winner_id TEXT, winner_name TEXT, phase_ended TEXT, completed_normally INTEGER DEFAULT 0, auto_tags TEXT, mistake_tags TEXT, coach_tags TEXT, dealer_seat INTEGER DEFAULT 0, is_scenario_hand INTEGER DEFAULT 0, small_blind INTEGER DEFAULT 0, big_blind INTEGER DEFAULT 0, FOREIGN KEY (session_id) REFERENCES sessions(session_id));
+    CREATE TABLE IF NOT EXISTS hand_players (hand_id TEXT NOT NULL, player_id TEXT NOT NULL, player_name TEXT NOT NULL, seat INTEGER, stack_start INTEGER DEFAULT 0, stack_end INTEGER, hole_cards TEXT, is_winner INTEGER DEFAULT 0, vpip INTEGER DEFAULT 0, pfr INTEGER DEFAULT 0, wtsd INTEGER DEFAULT 0, wsd INTEGER DEFAULT 0, PRIMARY KEY (hand_id, player_id), FOREIGN KEY (hand_id) REFERENCES hands(hand_id));
     CREATE TABLE IF NOT EXISTS hand_actions (id INTEGER PRIMARY KEY AUTOINCREMENT, hand_id TEXT NOT NULL, player_id TEXT NOT NULL, player_name TEXT NOT NULL, street TEXT NOT NULL, action TEXT NOT NULL, amount INTEGER DEFAULT 0, timestamp INTEGER NOT NULL, is_manual_scenario INTEGER DEFAULT 0, is_reverted INTEGER DEFAULT 0, FOREIGN KEY (hand_id) REFERENCES hands(hand_id));
     CREATE TABLE IF NOT EXISTS playlists (playlist_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, table_id TEXT, created_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS playlist_hands (playlist_id TEXT NOT NULL, hand_id TEXT NOT NULL, display_order INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL, PRIMARY KEY (playlist_id, hand_id), FOREIGN KEY (playlist_id) REFERENCES playlists(playlist_id) ON DELETE CASCADE, FOREIGN KEY (hand_id) REFERENCES hands(hand_id) ON DELETE CASCADE);
@@ -147,6 +147,16 @@ describe('startHand', () => {
     const session = db.prepare('SELECT * FROM sessions WHERE session_id = ?').get(sessionId);
     expect(session).not.toBeNull();
   });
+
+  test('stores small_blind and big_blind columns correctly', () => {
+    const { sessionId, tableId } = makeSession();
+    const handId = uid('hand');
+    HandLogger.startHand({ handId, sessionId, tableId, players: [], smallBlind: 5, bigBlind: 10 });
+    const db = getDb();
+    const row = db.prepare('SELECT small_blind, big_blind FROM hands WHERE hand_id = ?').get(handId);
+    expect(row.small_blind).toBe(5);
+    expect(row.big_blind).toBe(10);
+  });
 });
 
 // ─── Suite 2: recordAction ───────────────────────────────────────────────────
@@ -246,6 +256,47 @@ describe('endHand — normal showdown', () => {
     const p2 = db.prepare('SELECT * FROM hand_players WHERE hand_id = ? AND player_id = ?').get(handId, 'p2');
     expect(p1.is_winner).toBe(1);
     expect(p2.is_winner).toBe(0);
+  });
+});
+
+// ─── Suite 3b: endHand — WTSD/WSD columns in hand_players ───────────────────
+
+describe('endHand — WTSD/WSD column writes', () => {
+  test('showdown: winner has wtsd=1 and wsd=1 in hand_players', () => {
+    const { handId } = startDefaultHand();
+    HandLogger.endHand({ handId, state: SHOWDOWN_STATE });
+    const db = getDb();
+    const p1 = db.prepare('SELECT wtsd, wsd FROM hand_players WHERE hand_id = ? AND player_id = ?').get(handId, 'p1');
+    expect(p1.wtsd).toBe(1);
+    expect(p1.wsd).toBe(1);
+  });
+
+  test('showdown: loser has wtsd=1 and wsd=0 in hand_players', () => {
+    const { handId } = startDefaultHand();
+    HandLogger.endHand({ handId, state: SHOWDOWN_STATE });
+    const db = getDb();
+    const p2 = db.prepare('SELECT wtsd, wsd FROM hand_players WHERE hand_id = ? AND player_id = ?').get(handId, 'p2');
+    expect(p2.wtsd).toBe(1);
+    expect(p2.wsd).toBe(0);
+  });
+
+  test('fold_to_one: all players have wtsd=0 in hand_players', () => {
+    const { handId } = startDefaultHand();
+    HandLogger.endHand({ handId, state: FOLD_STATE });
+    const db = getDb();
+    const rows = db.prepare('SELECT player_id, wtsd FROM hand_players WHERE hand_id = ?').all(handId);
+    rows.forEach(r => {
+      expect(r.wtsd).toBe(0);
+    });
+  });
+
+  test('fold_to_one: winner has wsd=0 (no showdown occurred)', () => {
+    const { handId } = startDefaultHand();
+    HandLogger.endHand({ handId, state: FOLD_STATE });
+    const db = getDb();
+    // Bob is the winner in FOLD_STATE
+    const p2 = db.prepare('SELECT wsd FROM hand_players WHERE hand_id = ? AND player_id = ?').get(handId, 'p2');
+    expect(p2.wsd).toBe(0);
   });
 });
 
@@ -494,28 +545,30 @@ describe('getSessionStats', () => {
 
   test('computes vpip ratio correctly', () => {
     const { sessionId, tableId } = makeSession();
-    // 2 hands: Alice called in hand 1, no action (null) in hand 2
+    // 2 hands: Alice called preflop in hand 1, folded in hand 2
     const h1 = uid('hand');
     HandLogger.startHand({ handId: h1, sessionId, tableId, players: DEFAULT_PLAYERS });
+    HandLogger.recordAction({ handId: h1, playerId: 'p1', playerName: 'Alice', street: 'preflop', action: 'call', amount: 20 });
     HandLogger.endHand({
       handId: h1,
       state: {
         ...SHOWDOWN_STATE,
         players: [
-          { id: 'p1', name: 'Alice', stack: 1200, hole_cards: ['As', 'Ks'], action: 'called' },
-          { id: 'p2', name: 'Bob',   stack: 800,  hole_cards: ['2h', '3d'], action: 'folded' },
+          { id: 'p1', name: 'Alice', stack: 1200, hole_cards: ['As', 'Ks'] },
+          { id: 'p2', name: 'Bob',   stack: 800,  hole_cards: ['2h', '3d'] },
         ],
       },
     });
     const h2 = uid('hand');
     HandLogger.startHand({ handId: h2, sessionId, tableId, players: DEFAULT_PLAYERS });
+    HandLogger.recordAction({ handId: h2, playerId: 'p2', playerName: 'Bob', street: 'preflop', action: 'raise', amount: 60 });
     HandLogger.endHand({
       handId: h2,
       state: {
         ...SHOWDOWN_STATE,
         players: [
-          { id: 'p1', name: 'Alice', stack: 900,  hole_cards: [], action: 'folded' },
-          { id: 'p2', name: 'Bob',   stack: 1100, hole_cards: [], action: 'raised' },
+          { id: 'p1', name: 'Alice', stack: 900,  hole_cards: [] },
+          { id: 'p2', name: 'Bob',   stack: 1100, hole_cards: [] },
         ],
         winner: 'p2', winner_name: 'Bob',
         showdown_result: { winners: [{ playerId: 'p2' }] },
@@ -534,25 +587,27 @@ describe('getSessionStats', () => {
     const { sessionId, tableId } = makeSession();
     const h1 = uid('hand');
     HandLogger.startHand({ handId: h1, sessionId, tableId, players: DEFAULT_PLAYERS });
+    HandLogger.recordAction({ handId: h1, playerId: 'p1', playerName: 'Alice', street: 'preflop', action: 'raise', amount: 60 });
     HandLogger.endHand({
       handId: h1,
       state: {
         ...SHOWDOWN_STATE,
         players: [
-          { id: 'p1', name: 'Alice', stack: 1200, hole_cards: ['As', 'Ks'], action: 'raised' },
-          { id: 'p2', name: 'Bob',   stack: 800,  hole_cards: ['2h', '3d'], action: 'called' },
+          { id: 'p1', name: 'Alice', stack: 1200, hole_cards: ['As', 'Ks'] },
+          { id: 'p2', name: 'Bob',   stack: 800,  hole_cards: ['2h', '3d'] },
         ],
       },
     });
     const h2 = uid('hand');
     HandLogger.startHand({ handId: h2, sessionId, tableId, players: DEFAULT_PLAYERS });
+    HandLogger.recordAction({ handId: h2, playerId: 'p2', playerName: 'Bob', street: 'preflop', action: 'raise', amount: 60 });
     HandLogger.endHand({
       handId: h2,
       state: {
         ...SHOWDOWN_STATE,
         players: [
-          { id: 'p1', name: 'Alice', stack: 900,  hole_cards: [], action: 'called' },
-          { id: 'p2', name: 'Bob',   stack: 1100, hole_cards: [], action: 'raised' },
+          { id: 'p1', name: 'Alice', stack: 900,  hole_cards: [] },
+          { id: 'p2', name: 'Bob',   stack: 1100, hole_cards: [] },
         ],
         winner: 'p2', winner_name: 'Bob',
         showdown_result: { winners: [{ playerId: 'p2' }] },

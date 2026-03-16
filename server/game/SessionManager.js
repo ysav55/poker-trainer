@@ -13,12 +13,13 @@
  * All other GameManager methods are proxied directly.
  */
 
+const { v4: uuidv4 } = require('uuid');
 const GameManager = require('./GameManager');
 
 class SessionManager {
   constructor(tableId) {
     this.gm = new GameManager(tableId);
-    this.sessionId = `session_${tableId}_${Date.now()}`;
+    this.sessionId = uuidv4(); // DB-07: collision-safe UUID instead of Date.now()
     this.handsDealt = 0;
 
     // Map<playerId, StatsEntry> — internal stats with counters
@@ -135,8 +136,10 @@ class SessionManager {
       }
 
       if (showdownResult) {
-        // WTSD — was the player still active at showdown?
-        if (p.is_active) {
+        // WTSD — did the player reach showdown? Use allHands (only evaluated players)
+        // rather than is_active, which can include all-in players that weren't shown.
+        const atShowdown = (showdownResult.allHands ?? []).some(h => h.playerId === p.id);
+        if (atShowdown) {
           stats._wtsdCount++;
 
           // WSD — did they win at showdown (main pot or any side pot)?
@@ -212,8 +215,8 @@ class SessionManager {
   //  GameManager proxy methods
   // ─────────────────────────────────────────────
 
-  addPlayer(socketId, name, isCoach = false) {
-    return this.gm.addPlayer(socketId, name, isCoach);
+  addPlayer(socketId, name, isCoach = false, stableId = null, stack = null) {
+    return this.gm.addPlayer(socketId, name, isCoach, stableId, stack);
   }
 
   removePlayer(socketId) {
@@ -221,7 +224,10 @@ class SessionManager {
   }
 
   getPublicState(requesterId, isCoach) {
-    return this.gm.getPublicState(requesterId, isCoach);
+    return {
+      ...this.gm.getPublicState(requesterId, isCoach),
+      session_id: this.sessionId,
+    };
   }
 
   /**
@@ -245,6 +251,27 @@ class SessionManager {
   }
   openConfigPhase() { return this.gm.openConfigPhase(); }
   updateHandConfig(config) { return this.gm.updateHandConfig(config); }
+
+  // Player state
+  setPlayerDisconnected(socketId, disconnected) {
+    return this.gm.setPlayerDisconnected(socketId, disconnected);
+  }
+  setPlayerInHand(playerId, inHand) { return this.gm.setPlayerInHand(playerId, inHand); }
+
+  // Playlist mode
+  activatePlaylistMode(opts) { return this.gm.activatePlaylistMode(opts); }
+  deactivatePlaylistMode() { return this.gm.deactivatePlaylistMode(); }
+  advancePlaylist() { return this.gm.advancePlaylist(); }
+  seekPlaylist(targetIdx) { return this.gm.seekPlaylist(targetIdx); }
+
+  // Guided replay
+  loadReplay(handDetail) { return this.gm.loadReplay(handDetail); }
+  replayStepForward() { return this.gm.replayStepForward(); }
+  replayStepBack() { return this.gm.replayStepBack(); }
+  replayJumpTo(cursor) { return this.gm.replayJumpTo(cursor); }
+  branchFromReplay() { return this.gm.branchFromReplay(); }
+  unBranchToReplay() { return this.gm.unBranchToReplay(); }
+  exitReplay() { return this.gm.exitReplay(); }
 
   // Direct state access
   get state() { return this.gm.state; }

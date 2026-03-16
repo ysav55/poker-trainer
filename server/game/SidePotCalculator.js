@@ -76,7 +76,10 @@ function buildSidePots(players) {
     }
 
     if (amount > 0) {
-      // Eligible: contributed at least L AND still active (not folded)
+      // Eligible: contributed at least L AND still active (not folded).
+      // ISS-06: all-in players have is_active === true (they haven't folded), so they
+      // are correctly included here. The combination is_active=false + is_all_in=true
+      // cannot occur in normal play — a player must fold voluntarily to become inactive.
       const eligiblePlayerIds = players
         .filter(p => p.total_contributed >= L && p.is_active === true)
         .map(p => p.id);

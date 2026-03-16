@@ -186,7 +186,7 @@ function PhasedEndedTag({ phase }) {
   );
 }
 
-function HandHistoryRow({ hand, index, onExpand }) {
+function HandHistoryRow({ hand, index, onExpand, onReplay }) {
   const isComplete = hand.completed_normally === 1;
   const winnerDisplay = isComplete ? (hand.winner_name || '—') : 'Incomplete';
   const board = parseBoardCards(hand.board);
@@ -202,7 +202,7 @@ function HandHistoryRow({ hand, index, onExpand }) {
       onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = '#0d1117'; }}
     >
-      {/* Top row: index, phase tag, pot, expand button */}
+      {/* Top row: index, winner, phase tag, pot, replay, expand */}
       <div className="flex items-center gap-1.5">
         <span
           style={{
@@ -233,6 +233,26 @@ function HandHistoryRow({ hand, index, onExpand }) {
         >
           ${Number(hand.final_pot || 0).toLocaleString()}
         </span>
+        {onReplay && (
+          <button
+            onClick={() => onReplay(hand.hand_id)}
+            title="Load instant replay"
+            style={{
+              background: 'rgba(139,92,246,0.15)',
+              border: '1px solid rgba(139,92,246,0.4)',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              padding: '1px 5px',
+              color: '#a78bfa',
+              fontSize: '10px',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.3)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.15)'; }}
+          >
+            ↺
+          </button>
+        )}
         <button
           onClick={onExpand}
           title="View detail"
@@ -477,12 +497,15 @@ export default function CoachSidebar({
   activeHandId = null,
   handTagsSaved = null,
   onOpenStats,
+  setBlindLevels = null,
 }) {
   // Local state
   const [mode, setMode] = useState('rng'); // 'rng' | 'manual'
   const [awardPotTarget, setAwardPotTarget] = useState('');
   const [stackAdjustTarget, setStackAdjustTarget] = useState('');
   const [stackAdjustValue, setStackAdjustValue] = useState('');
+  const [blindSB, setBlindSB] = useState('');
+  const [blindBB, setBlindBB] = useState('');
 
   // History hook
   const { hands, loading: historyLoading, handDetail, fetchHands, fetchHandDetail, clearDetail } = useHistory();
@@ -498,13 +521,14 @@ export default function CoachSidebar({
 
   // Section 10: Scenario Loader
   const [scenarioSearch, setScenarioSearch] = useState('');
+  const [scenarioTagFilter, setScenarioTagFilter] = useState([]);
   const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState('');
   const [scenarioHands, setScenarioHands] = useState([]);
   const [scenarioStackMode, setScenarioStackMode] = useState('keep')
 
   // Destructure game state with safe defaults
   const {
-    phase = 'WAITING',
+    phase: _phase = 'waiting',
     pot = 0,
     paused: is_paused = false,
     can_undo = false,
@@ -513,6 +537,7 @@ export default function CoachSidebar({
     board = [],
     config_phase = false,
   } = gameState;
+  const phase = (_phase ?? 'waiting').toUpperCase();
 
   // Auto-fetch hands when history panel opens
   useEffect(() => {
@@ -574,8 +599,12 @@ export default function CoachSidebar({
     (newMode) => {
       setMode(newMode);
       if (emit.setMode) emit.setMode(newMode);
+      // Auto-enter config phase when switching to manual so HandConfigPanel is live
+      if (newMode === 'manual' && phase === 'WAITING' && emit.openConfigPhase) {
+        emit.openConfigPhase();
+      }
     },
-    [emit]
+    [emit, phase]
   );
 
   const handleStartGame = useCallback(() => {
@@ -816,108 +845,157 @@ export default function CoachSidebar({
           <div className="coach-panel mb-3">
             <SectionHeader>GAME CONTROLS</SectionHeader>
 
-            {/* CONFIG PHASE: replace waiting controls with HandConfigPanel */}
-            {phase === 'WAITING' && config_phase ? (
+            {/* Mode toggle: RNG vs MANUAL */}
+            <div className="flex mb-3">
+              <button
+                onClick={() => handleModeToggle('rng')}
+                className="flex-1 py-1.5 text-xs font-semibold tracking-wider transition-all duration-150 rounded-l"
+                style={{
+                  background: mode === 'rng' ? '#d4af37' : '#161b22',
+                  color: mode === 'rng' ? '#000' : '#6e7681',
+                  border: `1px solid ${mode === 'rng' ? '#d4af37' : '#30363d'}`,
+                  borderRight: 'none',
+                }}
+              >
+                RNG MODE
+              </button>
+              <button
+                onClick={() => handleModeToggle('manual')}
+                className="flex-1 py-1.5 text-xs font-semibold tracking-wider transition-all duration-150 rounded-r"
+                style={{
+                  background: mode === 'manual' ? '#d4af37' : '#161b22',
+                  color: mode === 'manual' ? '#000' : '#6e7681',
+                  border: `1px solid ${mode === 'manual' ? '#d4af37' : '#30363d'}`,
+                  borderLeft: '1px solid #21262d',
+                }}
+              >
+                MANUAL MODE
+              </button>
+            </div>
+
+            {/* MANUAL MODE: inline hand configuration (has its own Start Hand button) */}
+            {mode === 'manual' && (
               <HandConfigPanel gameState={gameState} emit={emit} />
-            ) : (
-              <>
-                {/* Configure Hand button — only shown in waiting phase, before config is open */}
-                {phase === 'WAITING' && (
-                  <button
-                    onClick={() => { if (emit.openConfigPhase) emit.openConfigPhase(); }}
-                    className="btn-gold w-full mb-3"
-                    style={{ padding: '7px 12px' }}
-                  >
-                    Configure Hand
-                  </button>
-                )}
-
-                {/* Mode toggle */}
-                <div className="flex mb-3">
-                  <button
-                    onClick={() => handleModeToggle('rng')}
-                    className="flex-1 py-1.5 text-xs font-semibold tracking-wider transition-all duration-150 rounded-l"
-                    style={{
-                      background: mode === 'rng' ? '#d4af37' : '#161b22',
-                      color: mode === 'rng' ? '#000' : '#6e7681',
-                      border: `1px solid ${mode === 'rng' ? '#d4af37' : '#30363d'}`,
-                      borderRight: 'none',
-                    }}
-                  >
-                    RNG MODE
-                  </button>
-                  <button
-                    onClick={() => handleModeToggle('manual')}
-                    className="flex-1 py-1.5 text-xs font-semibold tracking-wider transition-all duration-150 rounded-r"
-                    style={{
-                      background: mode === 'manual' ? '#d4af37' : '#161b22',
-                      color: mode === 'manual' ? '#000' : '#6e7681',
-                      border: `1px solid ${mode === 'manual' ? '#d4af37' : '#30363d'}`,
-                      borderLeft: '1px solid #21262d',
-                    }}
-                  >
-                    MANUAL MODE
-                  </button>
-                </div>
-
-                {/* Start + Reset */}
-                <div className="flex gap-2 mb-2">
-                  <button
-                    onClick={handleStartGame}
-                    className="btn-gold flex-1"
-                    style={{ padding: '7px 12px' }}
-                  >
-                    Start Hand
-                  </button>
-                  <button
-                    onClick={handleResetHand}
-                    className="btn-ghost"
-                    style={{ padding: '7px 12px' }}
-                  >
-                    Reset
-                  </button>
-                </div>
-
-                {/* Pause/Resume */}
-                <button
-                  onClick={handleTogglePause}
-                  className="w-full flex items-center justify-center gap-2 py-1.5 rounded text-sm transition-all duration-150"
-                  style={{
-                    background: is_paused ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${is_paused ? '#1d4ed8' : '#30363d'}`,
-                    color: is_paused ? '#93c5fd' : '#8b949e',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = is_paused
-                      ? 'rgba(59,130,246,0.2)'
-                      : 'rgba(255,255,255,0.07)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = is_paused
-                      ? 'rgba(59,130,246,0.12)'
-                      : 'rgba(255,255,255,0.04)';
-                  }}
-                >
-                  {is_paused ? (
-                    <>
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <path d="M3 2l7 4-7 4V2z" fill="currentColor" />
-                      </svg>
-                      Resume Game
-                    </>
-                  ) : (
-                    <>
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <rect x="2.5" y="2" width="3" height="8" rx="0.5" fill="currentColor" />
-                        <rect x="6.5" y="2" width="3" height="8" rx="0.5" fill="currentColor" />
-                      </svg>
-                      Pause Game
-                    </>
-                  )}
-                </button>
-              </>
             )}
+
+            {/* RNG MODE: simple Start Hand button */}
+            {mode === 'rng' && (
+              <div className="flex gap-2 mb-2">
+                <button
+                  onClick={handleStartGame}
+                  className="btn-gold flex-1"
+                  style={{ padding: '7px 12px' }}
+                >
+                  Start Hand
+                </button>
+                <button
+                  onClick={handleResetHand}
+                  className="btn-ghost"
+                  style={{ padding: '7px 12px' }}
+                >
+                  Reset
+                </button>
+              </div>
+            )}
+
+            {/* Pause/Resume — always available */}
+            <button
+              onClick={handleTogglePause}
+              className="w-full flex items-center justify-center gap-2 py-1.5 rounded text-sm transition-all duration-150"
+              style={{
+                background: is_paused ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${is_paused ? '#1d4ed8' : '#30363d'}`,
+                color: is_paused ? '#93c5fd' : '#8b949e',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = is_paused
+                  ? 'rgba(59,130,246,0.2)'
+                  : 'rgba(255,255,255,0.07)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = is_paused
+                  ? 'rgba(59,130,246,0.12)'
+                  : 'rgba(255,255,255,0.04)';
+              }}
+            >
+              {is_paused ? (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M3 2l7 4-7 4V2z" fill="currentColor" />
+                  </svg>
+                  Resume Game
+                </>
+              ) : (
+                <>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <rect x="2.5" y="2" width="3" height="8" rx="0.5" fill="currentColor" />
+                    <rect x="6.5" y="2" width="3" height="8" rx="0.5" fill="currentColor" />
+                  </svg>
+                  Pause Game
+                </>
+              )}
+            </button>
           </div>
+
+          {/* ── BLIND LEVELS ───────────────────────────────────────────────── */}
+          {setBlindLevels && (
+            <div className="coach-panel mb-3">
+              <SectionHeader>BLIND LEVELS</SectionHeader>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="label-sm text-gray-500 w-6">SB</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={blindSB}
+                  onChange={(e) => setBlindSB(e.target.value)}
+                  placeholder={gameState?.small_blind ?? '5'}
+                  className="flex-1 bg-sidebar-800 border border-sidebar-border rounded px-2 py-1 text-sm text-white outline-none"
+                  style={{ appearance: 'textfield' }}
+                  disabled={gameState?.phase !== 'waiting'}
+                />
+                <span className="label-sm text-gray-500 w-6">BB</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={blindBB}
+                  onChange={(e) => setBlindBB(e.target.value)}
+                  placeholder={gameState?.big_blind ?? '10'}
+                  className="flex-1 bg-sidebar-800 border border-sidebar-border rounded px-2 py-1 text-sm text-white outline-none"
+                  style={{ appearance: 'textfield' }}
+                  disabled={gameState?.phase !== 'waiting'}
+                />
+              </div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-gray-600">
+                  Current: {gameState?.small_blind ?? 5}/{gameState?.big_blind ?? 10}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  const sb = Number(blindSB);
+                  const bb = Number(blindBB);
+                  if (!sb || !bb || sb <= 0 || bb <= sb) return;
+                  setBlindLevels(sb, bb);
+                  setBlindSB('');
+                  setBlindBB('');
+                }}
+                disabled={
+                  gameState?.phase !== 'waiting' ||
+                  !blindSB || !blindBB ||
+                  Number(blindBB) <= Number(blindSB) ||
+                  Number(blindSB) <= 0
+                }
+                className="btn-ghost w-full flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Set Blinds
+              </button>
+              {gameState?.phase !== 'waiting' && (
+                <div className="text-[10px] text-gray-600 text-center mt-1">
+                  Only available between hands
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── SECTION 2: Undo Controls ───────────────────────────────────── */}
           <div className="coach-panel mb-3">
@@ -1401,6 +1479,26 @@ export default function CoachSidebar({
                   );
                 })}
               </div>
+
+              {/* Session Report button */}
+              {gameState.session_id && (
+                <button
+                  onClick={() => window.open(`/api/sessions/${gameState.session_id}/report`, '_blank')}
+                  className="w-full mt-3 text-xs font-semibold rounded transition-all duration-150"
+                  style={{
+                    padding: '7px 10px',
+                    background: 'rgba(212,175,55,0.08)',
+                    border: '1px solid rgba(212,175,55,0.25)',
+                    color: '#d4af37',
+                    cursor: 'pointer',
+                    letterSpacing: '0.06em',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,175,55,0.16)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(212,175,55,0.08)'; }}
+                >
+                  Session Report
+                </button>
+              )}
             </div>
           )}
 
@@ -1527,7 +1625,14 @@ export default function CoachSidebar({
                     >
                       <div className="flex flex-col min-w-0">
                         <span style={{ fontSize: '11px', fontWeight: 500, color: '#e0ddd6' }} className="truncate">{pl.name}</span>
-                        <span style={{ fontSize: '9px', color: '#6e7681' }}>{pl.hand_count ?? 0} hands</span>
+                        <span style={{ fontSize: '9px', color: '#6e7681' }}>
+                          {pl.hand_count ?? 0} hands
+                          {activePlaylistId === pl.playlist_id && gameState.playlist_mode?.active && (
+                            <span style={{ color: '#d4af37', marginLeft: 4 }}>
+                              ▶ {(gameState.playlist_mode.currentIndex ?? 0) + 1}/{gameState.playlist_mode.hands?.length ?? pl.hand_count ?? '?'}
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1 shrink-0 ml-2">
                         {activePlaylistId === pl.playlist_id ? (
@@ -1613,6 +1718,58 @@ export default function CoachSidebar({
                   </button>
                 ))}
               </div>
+              {/* Tag filter chips */}
+              {(() => {
+                const FILTER_TAGS = [
+                  '3BET_POT','FOUR_BET_POT','SQUEEZE_POT','BLIND_DEFENSE','BTN_OPEN',
+                  'MULTIWAY','ALL_IN_PREFLOP','SAW_RIVER','WENT_TO_SHOWDOWN',
+                  'CHECK_RAISE','BLUFF_CATCH','DONK_BET','RIVER_RAISE','OVERBET',
+                  'MONOTONE_BOARD','PAIRED_BOARD','WHALE_POT','SHORT_STACK','DEEP_STACK',
+                  'LIMPED_POT','WALK',
+                ];
+                const toggleTag = (tag) => setScenarioTagFilter(prev =>
+                  prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                );
+                return (
+                  <div>
+                    <div style={{ fontSize: '8px', color: '#6e7681', marginBottom: 3, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      Filter by tag {scenarioTagFilter.length > 0 && (
+                        <span
+                          onClick={() => setScenarioTagFilter([])}
+                          style={{ color: '#d4af37', cursor: 'pointer', marginLeft: 4 }}
+                        >
+                          clear
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                      {FILTER_TAGS.map(tag => {
+                        const active = scenarioTagFilter.includes(tag);
+                        return (
+                          <span
+                            key={tag}
+                            onClick={() => toggleTag(tag)}
+                            style={{
+                              fontSize: '8px',
+                              padding: '1px 5px',
+                              borderRadius: '999px',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              border: active ? '1px solid rgba(212,175,55,0.6)' : '1px solid rgba(255,255,255,0.1)',
+                              background: active ? 'rgba(212,175,55,0.18)' : 'rgba(255,255,255,0.04)',
+                              color: active ? '#d4af37' : '#6e7681',
+                              transition: 'all 0.1s',
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Search filter */}
               <input
                 type="text"
@@ -1636,6 +1793,14 @@ export default function CoachSidebar({
                 ) : (
                   scenarioHands
                     .filter(h => {
+                      // Tag chip filter (OR — show hand if it has ANY of the selected tags)
+                      if (scenarioTagFilter.length > 0) {
+                        const handTags = h.auto_tags
+                          ? (Array.isArray(h.auto_tags) ? h.auto_tags : JSON.parse(h.auto_tags))
+                          : [];
+                        if (!scenarioTagFilter.some(t => handTags.includes(t))) return false;
+                      }
+                      // Text search
                       if (!scenarioSearch.trim()) return true;
                       const q = scenarioSearch.toLowerCase();
                       return (
@@ -1716,6 +1881,14 @@ export default function CoachSidebar({
                             onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
                           >
                             Load
+                          </button>
+                          <button
+                            onClick={() => emit.loadReplay?.(h.hand_id)}
+                            title="Load this hand in guided replay mode"
+                            className="px-2 py-1 text-xs rounded bg-purple-600 hover:bg-purple-500 text-white font-medium"
+                            style={{ whiteSpace: 'nowrap' }}
+                          >
+                            Replay
                           </button>
                           <button
                             onClick={() => emit.addToPlaylist?.(selectedPlaylistForAdd, h.hand_id)}
@@ -1862,6 +2035,7 @@ export default function CoachSidebar({
                               hand={hand}
                               index={idx + 1}
                               onExpand={() => fetchHandDetail(hand.hand_id)}
+                              onReplay={emit.loadReplay}
                             />
                           ))}
                         </div>
@@ -1870,6 +2044,81 @@ export default function CoachSidebar({
                   )}
                 </>
               )}
+            </div>
+          )}
+
+          {/* ── SECTION 11: Replay Controls ───────────────────────────── */}
+          {gameState.replay_mode?.active && (
+            <div className="mt-3 p-3 bg-gray-800 rounded-lg border border-purple-700">
+              <h3 className="text-purple-400 font-semibold text-sm uppercase tracking-wide mb-2">
+                Replay Controls
+              </h3>
+
+              {/* Progress */}
+              <div className="text-gray-300 text-xs mb-2">
+                {gameState.replay_mode.cursor === -1
+                  ? `Start — ${gameState.replay_mode.total_actions} actions`
+                  : `Action ${gameState.replay_mode.cursor + 1} / ${gameState.replay_mode.total_actions}`}
+                {gameState.replay_mode.current_action && (
+                  <span className="ml-2 text-purple-300">
+                    {gameState.replay_mode.current_action.player_name} — {gameState.replay_mode.current_action.street}: {gameState.replay_mode.current_action.action}
+                    {gameState.replay_mode.current_action.amount > 0 && ` $${gameState.replay_mode.current_action.amount}`}
+                  </span>
+                )}
+              </div>
+
+              {/* Scrubber */}
+              <input
+                type="range"
+                min={-1}
+                max={gameState.replay_mode.total_actions - 1}
+                value={gameState.replay_mode.cursor}
+                onChange={(e) => emit.replayJumpTo?.(parseInt(e.target.value))}
+                className="w-full mb-2 accent-purple-500"
+              />
+
+              {/* Step buttons */}
+              <div className="flex gap-2 mb-2">
+                <button
+                  onClick={() => emit.replayStepBack?.()}
+                  disabled={gameState.replay_mode.cursor <= -1}
+                  className="flex-1 py-1 text-sm rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+                >
+                  ◀ Back
+                </button>
+                <button
+                  onClick={() => emit.replayStepFwd?.()}
+                  disabled={gameState.replay_mode.cursor >= gameState.replay_mode.total_actions - 1}
+                  className="flex-1 py-1 text-sm rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white"
+                >
+                  Fwd ▶
+                </button>
+              </div>
+
+              {/* Branch / Unbranch */}
+              {!gameState.replay_mode.branched ? (
+                <button
+                  onClick={() => emit.replayBranch?.()}
+                  className="w-full py-1 text-sm rounded bg-amber-600 hover:bg-amber-500 text-white mb-2"
+                >
+                  Branch to Live from Here
+                </button>
+              ) : (
+                <button
+                  onClick={() => emit.replayUnbranch?.()}
+                  className="w-full py-1 text-sm rounded bg-amber-700 hover:bg-amber-600 text-white mb-2"
+                >
+                  Return to Replay
+                </button>
+              )}
+
+              {/* Exit */}
+              <button
+                onClick={() => emit.replayExit?.()}
+                className="w-full py-1 text-sm rounded bg-red-800 hover:bg-red-700 text-white"
+              >
+                Exit Replay
+              </button>
             </div>
           )}
 

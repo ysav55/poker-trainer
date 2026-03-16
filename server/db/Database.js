@@ -1,5 +1,6 @@
 'use strict';
 
+const fs   = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
@@ -10,6 +11,12 @@ let _db = null;
 
 function getDb() {
   if (_db) return _db;
+
+  // ISS-65: ensure parent directory exists before opening DB (e.g. /data/ on cloud)
+  const dbDir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
 
   _db = new Database(DB_PATH);
   _db.pragma('journal_mode = WAL');
@@ -78,6 +85,10 @@ function getDb() {
       created_at   INTEGER NOT NULL
     );
 
+    -- ISS-55: CASCADE DELETE on playlist_hands requires PRAGMA foreign_keys = ON.
+    -- That pragma is set above (line after getDb opens the DB) for every real connection.
+    -- Test helpers that open the DB independently must also set it, or orphaned rows
+    -- will accumulate when a playlist or hand is deleted.
     CREATE TABLE IF NOT EXISTS playlist_hands (
       playlist_id   TEXT NOT NULL,
       hand_id       TEXT NOT NULL,
@@ -98,6 +109,9 @@ function getDb() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_player_identities_name ON player_identities(last_known_name);
+
+    -- Gap 5 fix: fast player-history lookups
+    CREATE INDEX IF NOT EXISTS idx_hand_players_player ON hand_players(player_id);
   `);
 
   // Migration: add is_manual_scenario to existing databases that predate this column
@@ -124,6 +138,22 @@ function getDb() {
   try { _db.exec(`ALTER TABLE player_identities ADD COLUMN password_hash TEXT`); } catch {}
   try { _db.exec(`ALTER TABLE player_identities ADD COLUMN display_name TEXT`); } catch {}
   try { _db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_player_identities_email ON player_identities(email)`); } catch {}
+
+  // Gap 3: WTSD/WSD — went-to-showdown and won-at-showdown per player per hand
+  try { _db.exec(`ALTER TABLE hand_players ADD COLUMN wtsd INTEGER DEFAULT 0`); } catch {}
+  try { _db.exec(`ALTER TABLE hand_players ADD COLUMN wsd  INTEGER DEFAULT 0`); } catch {}
+
+  // Gap 7: store actual big blind so WHALE_POT tag uses the real value
+  try { _db.exec(`ALTER TABLE hands ADD COLUMN big_blind INTEGER DEFAULT 0`); } catch {}
+
+  // Blind controls: also store small blind per hand
+  try { _db.exec(`ALTER TABLE hands ADD COLUMN small_blind INTEGER DEFAULT 0`); } catch {}
+
+  // DB-03: enforce unique display_name (case-insensitive partial index — NULL allowed for legacy rows)
+  try {
+    _db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_player_identities_display_name
+              ON player_identities(lower(display_name)) WHERE display_name IS NOT NULL`);
+  } catch {}
 
   return _db;
 }
