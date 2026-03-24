@@ -74,6 +74,8 @@ const { getPosition } = require('./game/positions');
 const supabaseAdmin = require('./db/supabase');
 const PlayerRoster = require('./auth/PlayerRoster');
 const { generateHTMLReport } = require('./reports/SessionReport');
+const { generateReport: generateAlphaReport } = require('./logs/AlphaReporter');
+const log = require('./logs/logger');
 const { v4: uuidv4 } = require('uuid');
 
 const SESSION_SECRET = process.env.SESSION_SECRET;
@@ -99,6 +101,7 @@ const stableIdMap = new Map();
 const app = express();
 app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json());
+app.use(log.httpMiddleware());
 
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
@@ -457,7 +460,7 @@ io.on('connection', socket => {
     stableIdMap.set(socket.id, resolvedStableId);
     // Coaches use a non-UUID key (coach_<tableId>) — skip player_profiles upsert
     if (!isCoach) {
-      HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName).catch(err => console.error('[HandLogger] upsertPlayerIdentity:', err));
+      HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName).catch(err => log.error('db', 'upsert_identity_failed', '[HandLogger] upsertPlayerIdentity', { err, tableId, playerId: resolvedStableId }));
     }
 
     // Check if a previous session for this player name is pending TTL (reconnect path)
@@ -479,6 +482,7 @@ io.on('connection', socket => {
         // Remove the old ghost seat so the new socket takes over
         gm.removePlayer(oldSocketId);
         isReconnect = true;
+        log.info('socket', 'player_reconnect', `${trimmedName} rejoined, cancelled TTL`, { tableId, name: trimmedName });
         console.log(`[reconnect] ${trimmedName} rejoined, cancelled TTL for old socket ${oldSocketId}`);
         break;
       }
@@ -507,6 +511,7 @@ io.on('connection', socket => {
       }
       const publicState = gm.getPublicState(socket.id, false);
       socket.emit('game_state', publicState);
+      log.info('game', 'player_join', `${trimmedName} joined as spectator`, { tableId, name: trimmedName, role: 'spectator' });
       console.log(`[spectator] ${trimmedName} joined ${tableId} as spectator (${reason || 'explicit'})`);
     };
 
@@ -559,6 +564,8 @@ io.on('connection', socket => {
       message: `${trimmedName} ${isCoach ? '(Coach)' : ''} joined the table`
     });
 
+    log.info('game', 'player_join', `${trimmedName} joined`, { tableId, name: trimmedName, role: isCoach ? 'coach' : 'player', playerId: resolvedStableId });
+    log.trackSocket('join_room', tableId, resolvedStableId, { name: trimmedName, isCoach });
     console.log(`[join] ${trimmedName} (coach=${isCoach}) → ${tableId}`);
   });
 
@@ -593,8 +600,8 @@ io.on('connection', socket => {
         smallBlind: gm.state.small_blind,
         bigBlind: gm.state.big_blind,
         isScenario: false,
-        sessionType: mode,
-      }).catch(err => console.error('[HandLogger] startHand:', err));
+        sessionType: 'live',
+      }).catch(err => log.error('db', 'start_hand_failed', '[HandLogger] startHand', { err, tableId, sessionId: gm.sessionId }));
       activeHands.set(tableId, { handId, sessionId: gm.sessionId });
       socket.emit('hand_started', { handId }); // notify coach of active handId for tagging
     }
@@ -604,6 +611,8 @@ io.on('connection', socket => {
       message: `New hand started (${mode.toUpperCase()} mode)`
     });
     startActionTimer(tableId);
+    log.info('game', 'hand_start', `hand started mode=${mode}`, { tableId, mode, sessionId: gm.sessionId });
+    log.trackSocket('start_game', tableId, socket.data.stableId, { mode });
     console.log(`[start_game] mode=${mode}`);
   });
 
@@ -678,7 +687,7 @@ io.on('connection', socket => {
         potAtAction:   potBeforeBet,
         decisionTimeMs,
         position,
-      }).catch(err => console.error('[HandLogger] recordAction:', err));
+      }).catch(err => log.error('db', 'record_action_failed', '[HandLogger] recordAction', { err, tableId: socket.data.tableId }));
     }
 
     const actingPlayer = gm.state.players.find(p => p.id === effectivePlayerId);
@@ -727,7 +736,7 @@ io.on('connection', socket => {
     // Mark the undone action in DB so analyzer knows it was reverted
     const undoHandInfo = activeHands.get(socket.data.tableId);
     if (undoHandInfo) {
-      HandLogger.markLastActionReverted(undoHandInfo.handId).catch(err => console.error('[HandLogger] markLastActionReverted:', err));
+      HandLogger.markLastActionReverted(undoHandInfo.handId).catch(err => log.error('db', 'undo_revert_failed', '[HandLogger] markLastActionReverted', { err, tableId: socket.data.tableId }));
     }
   });
 
@@ -881,7 +890,7 @@ io.on('connection', socket => {
     if (handInfo && stateCopy) {
       HandLogger.endHand({ handId: handInfo.handId, state: stateCopy, socketToStable: Object.fromEntries(stableIdMap) })
         .then(() => HandLogger.analyzeAndTagHand(handInfo.handId))
-        .catch(err => console.error('[HandLogger] endHand/analyzeAndTagHand:', err));
+        .catch(err => log.error('db', 'end_hand_failed', '[HandLogger] endHand/analyzeAndTagHand', { err, tableId: socket.data.tableId }));
       activeHands.delete(tableId);
     }
 
@@ -975,7 +984,7 @@ io.on('connection', socket => {
       bigBlind: gm.state.big_blind,
       isScenario: true,
       sessionType: 'drill',
-    }).catch(err => console.error('[HandLogger] startHand (configured):', err));
+    }).catch(err => log.error('db', 'start_hand_configured_failed', '[HandLogger] startHand (configured)', { err, tableId: socket.data.tableId }));
     activeHands.set(tableId, { handId, sessionId: gm.sessionId, isManualScenario: true });
     socket.emit('hand_started', { handId }); // notify coach of active handId for tagging
 
@@ -1249,6 +1258,11 @@ io.on('connection', socket => {
     }
   });
 
+  // ── client_error — receives uncaught errors from the React client ─────────
+  socket.on('client_error', (payload) => {
+    log.logClientError(socket, payload);
+  });
+
   // ── disconnect ────────────────────────────
   socket.on('disconnect', () => {
     stableIdMap.delete(socket.id);
@@ -1302,6 +1316,8 @@ io.on('connection', socket => {
     }
 
     broadcastState(tableId); // keep state visible without that player's private data
+    log.info('game', 'player_disconnect', `${name} disconnected`, { tableId, name, isCoach, playerId: socket.data.stableId });
+    log.trackSocket('disconnect', tableId, socket.data.stableId, { name, isCoach });
     console.log(`[disconnect] ${name} (coach=${isCoach}) — starting 60s TTL`);
 
     // Delay removal — give player 60s to reconnect
@@ -1536,6 +1552,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
   const entry = await PlayerRoster.authenticate(name.trim(), password);
   if (!entry) {
+    log.warn('auth', 'login_fail', `Failed login attempt for "${name.trim()}"`, { name: name.trim(), ip: req.ip });
     return res.status(401).json({ error: 'invalid_credentials', message: 'Invalid name or password.' });
   }
 
@@ -1554,6 +1571,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     { expiresIn: '7d' }
   );
 
+  log.info('auth', 'login_ok', `${entry.name} logged in`, { name: entry.name, role: entry.role, playerId: stableId });
   res.json({ stableId, name: entry.name, role: entry.role, token });
 });
 
@@ -1578,6 +1596,36 @@ app.get('/health', async (_, res) => {
     db: dbStatus,
     ...(dbError ? { dbError } : {}),
   });
+});
+
+// ─────────────────────────────────────────────
+//  Alpha-testing report
+//  GET /api/alpha-report?hours=72
+//  No auth — view in any browser tab. Keep internal during alpha.
+// ─────────────────────────────────────────────
+app.get('/api/alpha-report', async (req, res) => {
+  try {
+    const hours = Math.min(Math.max(parseInt(req.query.hours, 10) || 72, 1), 720);
+    const html = await generateAlphaReport(hours);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(html);
+  } catch (err) {
+    log.error('system', 'alpha_report_failed', 'Alpha report generation failed', { err: err.message });
+    res.status(500).json({ error: 'report_failed', message: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+//  Global Express error middleware
+//  Catches any synchronous throws in route handlers.
+// ─────────────────────────────────────────────
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  log.error('http', 'unhandled_error', `Unhandled Express error: ${err.message}`, {
+    err: err.message, stack: err.stack?.slice(0, 500), path: req.path, method: req.method
+  });
+  res.status(500).json({ error: 'internal_error', message: 'An unexpected error occurred' });
 });
 
 // ─────────────────────────────────────────────

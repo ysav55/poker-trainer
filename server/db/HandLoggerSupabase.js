@@ -702,7 +702,7 @@ async function loginRosterPlayer(name) {
   const existing = await q(
     supabase.from('player_profiles')
       .select('id, display_name')
-      .ilike('display_name', trimmed)
+      .eq('display_name', trimmed)
       .limit(1)
       .maybeSingle()
   );

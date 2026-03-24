@@ -528,7 +528,7 @@ export default function CoachSidebar({
   const [mode, setMode] = useState('rng'); // 'rng' | 'manual'
   const [stackAdjustTarget, setStackAdjustTarget] = useState('');
   const [stackAdjustValue, setStackAdjustValue] = useState('');
-  const [blindBB, setBlindBB] = useState('');
+  const [blindBB, setBlindBB] = useState(() => String(gameState?.big_blind ?? ''));
 
   // History hook
   const { hands, loading: historyLoading, handDetail, fetchHands, fetchHandDetail, clearDetail } = useHistory();
@@ -570,6 +570,13 @@ export default function CoachSidebar({
 
   // Fetch playlists on mount
   useEffect(() => { emit.getPlaylists?.(); }, []);
+
+  // Keep blindBB in sync with the current big_blind from server (only when input is empty)
+  useEffect(() => {
+    if (gameState?.big_blind != null && blindBB === '') {
+      setBlindBB(String(gameState.big_blind));
+    }
+  }, [gameState?.big_blind]);
 
   // Auto-start countdown: triggered when config_phase becomes true during active playlist
   useEffect(() => {
@@ -973,7 +980,7 @@ export default function CoachSidebar({
                   if (!bb || bb < 2) return;
                   const sb = Math.floor(bb / 2);
                   setBlindLevels(sb, bb);
-                  setBlindBB('');
+                  setBlindBB(String(bb));
                 }}
                 disabled={gameState?.phase !== 'waiting' || !blindBB || Number(blindBB) < 2}
                 className="btn-ghost w-full flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"

@@ -79,6 +79,27 @@ export function useSocket() {
 
     socketRef.current = socket
 
+    // ── Global error capture for alpha testing ─────────────────────────────
+    // Ship uncaught JS errors + unhandled promise rejections back to the server
+    // so they appear in /api/alpha-report alongside server-side errors.
+    const handleWindowError = (event) => {
+      socket.emit('client_error', {
+        message: event.message || String(event.error),
+        stack:   event.error?.stack?.slice(0, 500),
+        context: { type: 'uncaught', filename: event.filename, lineno: event.lineno },
+      })
+    }
+    const handleUnhandledRejection = (event) => {
+      const err = event.reason
+      socket.emit('client_error', {
+        message: err?.message || String(err),
+        stack:   err?.stack?.slice(0, 500),
+        context: { type: 'unhandledRejection' },
+      })
+    }
+    window.addEventListener('error', handleWindowError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
     socket.on('connect', () => {
       setConnected(true)
       // Auto-rejoin if we were already seated (socket reconnected after a drop)
@@ -170,6 +191,8 @@ export function useSocket() {
       errorTimersRef.current = {}
       notifTimersRef.current = {}
 
+      window.removeEventListener('error', handleWindowError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
       socket.disconnect()
       socketRef.current = null
     }

@@ -492,6 +492,12 @@ class GameManager {
     const players = this._gamePlayers();
     if (players.length < 2) return { error: 'Need at least 2 seated players to start' };
 
+    const broke = players.filter(p => !p.is_coach && p.stack <= 0);
+    if (broke.length > 0) {
+      const names = broke.map(p => p.name).join(', ');
+      return { error: `Cannot start: ${names} ${broke.length === 1 ? 'has' : 'have'} 0 chips. Use Adjust Stacks to top up.` };
+    }
+
     // Validate config BEFORE mutating any state, so a bad config returns an error
     // without leaving the table in a broken phase.
     const hasConfig = this.state.config_phase && this.state.config !== null;
