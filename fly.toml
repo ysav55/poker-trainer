@@ -2,22 +2,28 @@ app = "poker-trainer-ysav55"
 primary_region = "iad"
 
 [build]
-
-[mounts]
-  source = "poker_data"
-  destination = "/data"
+  dockerfile = "Dockerfile"
 
 [env]
-  DATABASE_PATH = "/data/poker_trainer.sqlite"
+  PORT            = "3001"
+  NODE_ENV        = "production"
+  # Server exits cleanly after 20 min of zero connections.
+  # Fly auto-starts on the next request (~1s wake time).
+  IDLE_TIMEOUT_MINUTES = "20"
 
 [http_service]
-  internal_port = 3001
-  force_https = true
-  auto_stop_machines = "stop"
-  auto_start_machines = true
-  min_machines_running = 0
+  internal_port     = 3001
+  force_https       = true          # HTTP → HTTPS redirect, free TLS cert
+  auto_stop_machines  = "stop"      # Fly stops VM when idle (backs up in-app timer)
+  auto_start_machines = true        # Fly wakes VM in ~1s when someone visits
+  min_machines_running = 0          # scale-to-zero — no always-on cost
+
+  [http_service.concurrency]
+    type       = "connections"
+    hard_limit = 50
+    soft_limit = 40
 
 [[vm]]
-  memory = "256mb"
+  memory   = "512mb"   # bumped from 256mb — bcrypt + Socket.io needs a bit more headroom
   cpu_kind = "shared"
-  cpus = 1
+  cpus     = 1

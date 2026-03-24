@@ -43,6 +43,14 @@
   }
 }
 
+/* Hide number input spinners globally */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] { -moz-appearance: textfield; }
+
 /* Felt table gradient */
 .table-felt {
   background: radial-gradient(ellipse 80% 70% at 50% 50%, #1e5235 0%, #163d28 50%, #0f2318 100%);

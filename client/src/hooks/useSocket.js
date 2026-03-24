@@ -4,29 +4,6 @@ import { io } from 'socket.io-client'
 // In production (unified server), connect to the same host the page was served from.
 // In development, connect to the Vite dev server's proxy target (localhost:3001).
 const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3001' : ''
-
-// Stable player identity — generated once, persisted across sessions in localStorage.
-// Uses crypto.randomUUID() when available (secure contexts); falls back to Math.random()
-// for plain HTTP LAN access where crypto.randomUUID() is unavailable.
-function generateUUID() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-  });
-}
-
-function getOrCreateStableId() {
-  const KEY = 'poker_trainer_player_id';
-  let id = localStorage.getItem(KEY);
-  if (!id) {
-    id = generateUUID();
-    localStorage.setItem(KEY, id);
-  }
-  return id;
-}
 const MAX_ERRORS = 5
 const MAX_NOTIFICATIONS = 8
 const ERROR_TTL = 5000
@@ -106,10 +83,11 @@ export function useSocket() {
       setConnected(true)
       // Auto-rejoin if we were already seated (socket reconnected after a drop)
       if (joinParamsRef.current) {
-        const { name, role, stableId, password } = joinParamsRef.current
+        const { name, role, stableId } = joinParamsRef.current
         const isCoach = role === 'coach'
         const isSpectator = role === 'spectator'
-        socket.emit('join_room', { name, isCoach, isSpectator, stableId, password })
+        const freshToken = localStorage.getItem('poker_trainer_jwt') || ''
+        socket.emit('join_room', { name, isCoach, isSpectator, stableId, token: freshToken })
       }
     })
 
@@ -199,12 +177,12 @@ export function useSocket() {
 
   // ---------- emit helpers ----------
 
-  const joinRoom = useCallback((name, role = 'player', password = '') => {
-    const stableId = getOrCreateStableId()
+  const joinRoom = useCallback((name, role = 'player', token = '') => {
+    const stableId = role === 'spectator' ? `spectator_${Date.now()}` : null
     const isCoach = role === 'coach'
     const isSpectator = role === 'spectator'
-    joinParamsRef.current = { name, role, stableId, password }
-    socketRef.current?.emit('join_room', { name, isCoach, isSpectator, stableId, password })
+    joinParamsRef.current = { name, role, stableId, token }
+    socketRef.current?.emit('join_room', { name, isCoach, isSpectator, stableId, token })
   }, [])
 
   const leaveRoom = useCallback(() => {

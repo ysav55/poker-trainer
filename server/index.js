@@ -60,19 +60,35 @@
  */
 
 const path = require('path');
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const fs   = require('fs');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 const SessionManager = require('./game/SessionManager');
-const HandLogger = require('./db/HandLogger');
+const HandLogger = require('./db/HandLoggerSupabase');
+const { getPosition } = require('./game/positions');
+const supabaseAdmin = require('./db/supabase');
+const PlayerRoster = require('./auth/PlayerRoster');
 const { generateHTMLReport } = require('./reports/SessionReport');
 const { v4: uuidv4 } = require('uuid');
 
-// Coach password — set COACH_PASSWORD env var to require a password.
-// Leave unset (or empty) to allow any coach join without a password.
-const COACH_PASSWORD = process.env.COACH_PASSWORD || '';
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) {
+  console.error('[startup] FATAL: SESSION_SECRET environment variable is not set.');
+  console.error('[startup] Set a strong random secret in your .env file before starting the server.');
+  console.error('[startup] Example: SESSION_SECRET=<run: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))")>');
+  process.exit(1);
+}
+
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '';
+if (!ALLOWED_ORIGIN && process.env.NODE_ENV === 'production') {
+  console.warn('[startup] WARNING: CORS_ORIGIN is not set. Cross-origin requests will be blocked.');
+  console.warn('[startup] Set CORS_ORIGIN=https://your-domain.com in your production .env file.');
+}
 
 // Per-table active hand tracking
 const activeHands = new Map(); // tableId → { handId, sessionId }
@@ -81,15 +97,40 @@ const activeHands = new Map(); // tableId → { handId, sessionId }
 const stableIdMap = new Map();
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json());
 
 const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: '*',
+    origin: ALLOWED_ORIGIN,
     methods: ['GET', 'POST']
   }
+});
+
+// ─── Auth middleware ───────────────────────────────────────────────────────────
+
+function requireAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'auth_required', message: 'Login required' });
+  }
+  const payload = HandLogger.authenticateToken(auth.slice(7));
+  if (!payload) {
+    return res.status(401).json({ error: 'invalid_token', message: 'Session expired — please log in again' });
+  }
+  req.user = payload;
+  next();
+}
+
+// ─── Rate limiter for auth endpoint ───────────────────────────────────────────
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_requests', message: 'Too many login attempts — try again in 15 minutes' },
 });
 
 // One SessionManager per table. For MVP: single table.
@@ -252,19 +293,64 @@ function _activeNonCoachCount(gm) {
  *
  * Does NOT mutate playlist state.
  */
-function _findMatchingPlaylistIndex(gm, activeCount) {
+async function _findMatchingPlaylistIndex(gm, activeCount) {
   const pm = gm.state.playlist_mode;
   if (!pm.active || !pm.hands.length) return -1;
   const total = pm.hands.length;
   for (let i = 1; i <= total; i++) {
     const idx = (pm.currentIndex + i) % total;
     const h = pm.hands[idx];
-    const detail = HandLogger.getHandDetail(h.hand_id);
+    const detail = await HandLogger.getHandDetail(h.hand_id);
     if (!detail) continue; // deleted hand — skip
     const handCount = (detail.players || []).filter(p => (p.seat ?? -1) >= 0).length;
     if (handCount === activeCount) return idx;
   }
   return -1; // no matching hand anywhere in the playlist
+}
+
+/**
+ * _advancePlaylist
+ * Finds the next matching hand for the live table, loads it into config, and broadcasts.
+ * Returns true if a hand was loaded, false if the playlist was exhausted/hard-stopped.
+ * Mutates playlist state via seekPlaylist.
+ */
+async function _advancePlaylist(tableId, gm) {
+  const activeCount = _activeNonCoachCount(gm);
+  const matchIdx = await _findMatchingPlaylistIndex(gm, activeCount);
+
+  if (matchIdx === -1) {
+    gm.deactivatePlaylistMode();
+    io.to(tableId).emit('notification', {
+      type: 'playlist_complete',
+      message: `Playlist stopped — no ${activeCount}-player hands remaining.`
+    });
+    broadcastState(tableId);
+    return false;
+  }
+
+  const advance = gm.seekPlaylist(matchIdx);
+  const nextDetail = await HandLogger.getHandDetail(advance.hand.hand_id);
+  if (!nextDetail) {
+    io.to(tableId).emit('notification', {
+      type: 'warning',
+      message: `Playlist: hand not found (deleted?)`
+    });
+    broadcastState(tableId);
+    return false;
+  }
+
+  const loadResult = _loadScenarioIntoConfig(tableId, gm, nextDetail, 'keep');
+  if (loadResult.error) {
+    io.to(tableId).emit('notification', { type: 'warning', message: `Playlist load failed: ${loadResult.error}` });
+    broadcastState(tableId);
+    return false;
+  }
+
+  broadcastState(tableId, {
+    type: 'playlist_advance',
+    message: `Playlist: hand ${advance.currentIndex + 1} of ${gm.state.playlist_mode.hands.length}`
+  });
+  return true;
 }
 
 /**
@@ -339,26 +425,25 @@ io.on('connection', socket => {
   console.log(`[connect] ${socket.id}`);
 
   // ── join_room ─────────────────────────────
-  socket.on('join_room', ({ name, isCoach = false, isSpectator: payloadSpectator = false, tableId = 'main-table', stableId, password = '' } = {}) => {
+  socket.on('join_room', async ({ name, isCoach = false, isSpectator: payloadSpectator = false, tableId = 'main-table', stableId, token = '' } = {}) => {
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return sendError(socket, 'Name is required');
     }
 
-    // Validate coach password if one is configured
-    if (isCoach && COACH_PASSWORD && password !== COACH_PASSWORD) {
-      return sendError(socket, 'Incorrect coach password');
-    }
+    const trimmedName = name.trim();
 
-    // Registered player check — skip for coaches and explicit spectators
-    if (!isCoach && !payloadSpectator) {
-      const resolvedId = (stableId && typeof stableId === 'string' && stableId.length > 0) ? stableId : null;
-      if (!resolvedId || !HandLogger.isRegisteredPlayer(resolvedId)) {
-        return sendError(socket, 'Please register or log in before joining');
+    // Spectators skip auth — they cannot act, just observe
+    if (!payloadSpectator) {
+      const authResult = HandLogger.authenticateToken(token);
+      if (!authResult) {
+        return sendError(socket, 'Authentication required — please log in');
       }
+      // Use server-verified identity (ignore client-supplied flags)
+      isCoach = authResult.role === 'coach';
+      stableId = authResult.stableId;
     }
 
     const gm = getOrCreateTable(tableId);
-    const trimmedName = name.trim();
 
     // Resolve stable identity:
     // - coaches get a deterministic per-table key so it survives reconnects (DB-09)
@@ -370,7 +455,10 @@ io.on('connection', socket => {
         ? stableId
         : socket.id;
     stableIdMap.set(socket.id, resolvedStableId);
-    HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName);
+    // Coaches use a non-UUID key (coach_<tableId>) — skip player_profiles upsert
+    if (!isCoach) {
+      HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName).catch(err => console.error('[HandLogger] upsertPlayerIdentity:', err));
+    }
 
     // Check if a previous session for this player name is pending TTL (reconnect path)
     let isReconnect = false;
@@ -475,7 +563,7 @@ io.on('connection', socket => {
   });
 
   // ── start_game ────────────────────────────
-  socket.on('start_game', ({ mode = 'rng' } = {}) => {
+  socket.on('start_game', async ({ mode = 'rng' } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can start the game');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -485,23 +573,31 @@ io.on('connection', socket => {
 
     const tableId = socket.data.tableId;
 
-    // Log hand start to DB
-    const handId = uuidv4();
-    const nonCoachPlayers = gm.state.players
-      .filter(p => !p.is_coach)
-      .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack }));
-    HandLogger.startHand({
-      handId,
-      sessionId: gm.sessionId,
-      tableId,
-      players: nonCoachPlayers,
-      dealerSeat: gm.state.dealer_seat,
-      smallBlind: gm.state.small_blind,
-      bigBlind: gm.state.big_blind,
-      isScenario: false
-    });
-    activeHands.set(tableId, { handId, sessionId: gm.sessionId });
-    socket.emit('hand_started', { handId }); // notify coach of active handId for tagging
+    // Skip DB logging for branched replay hands — they're exploratory, not recorded
+    if (!gm.state.is_replay_branch) {
+      // Log hand start to DB
+      const handId = uuidv4();
+      // allSeatedPlayers (incl. coach) used for position computation — coach occupies a real seat
+      // in the blind rotation, so positions must account for their seat.
+      const allSeatedPlayers = gm.state.players
+        .filter(p => !p.is_shadow && !p.is_observer)
+        .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
+      const nonCoachPlayers = allSeatedPlayers.filter(p => !p.is_coach);
+      await HandLogger.startHand({
+        handId,
+        sessionId: gm.sessionId,
+        tableId,
+        players: nonCoachPlayers,
+        allPlayers: allSeatedPlayers,
+        dealerSeat: gm.state.dealer_seat,
+        smallBlind: gm.state.small_blind,
+        bigBlind: gm.state.big_blind,
+        isScenario: false,
+        sessionType: mode,
+      }).catch(err => console.error('[HandLogger] startHand:', err));
+      activeHands.set(tableId, { handId, sessionId: gm.sessionId });
+      socket.emit('hand_started', { handId }); // notify coach of active handId for tagging
+    }
 
     broadcastState(tableId, {
       type: 'game_start',
@@ -517,15 +613,31 @@ io.on('connection', socket => {
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
+    // In branched replay the coach acts on behalf of the current shadow player.
+    // Otherwise the sender acts for themselves as usual.
+    const isBranchedCoach = gm.state.is_replay_branch && socket.data.isCoach;
+    const effectivePlayerId = isBranchedCoach ? gm.state.current_turn : socket.id;
+
+    if (isBranchedCoach && !effectivePlayerId) {
+      return sendError(socket, 'No active shadow player to act for');
+    }
+
+    // Capture decision time BEFORE clearing the timer (clearActionTimer removes the entry)
+    const timerEntry = actionTimers.get(tableId);
+    const decisionTimeMs = timerEntry ? (Date.now() - timerEntry.startedAt) : null;
+
     // Cancel the running timer BEFORE placeBet to close the race window between
     // auto-fold timeout firing and a legitimate player action arriving.
     // We intentionally do NOT save the remainder here — the new action resets the next turn.
     clearActionTimer(tableId, { saving: false });
 
-    // Capture street BEFORE placeBet (phase may advance inside placeBet)
+    // Capture street + player stack + pot BEFORE placeBet (state mutates inside)
     const streetBeforeBet = gm.state.phase;
+    const playerBeforeBet = gm.state.players.find(p => p.id === effectivePlayerId);
+    const stackBeforeBet  = playerBeforeBet?.stack ?? null;
+    const potBeforeBet    = gm.state.pot ?? null;
 
-    const result = gm.placeBet(socket.id, action, Number(amount));
+    const result = gm.placeBet(effectivePlayerId, action, Number(amount));
 
     if (result.error) {
       // For pause/turn-order rejections, emit sync_error so client knows to resync
@@ -543,10 +655,17 @@ io.on('connection', socket => {
       return;
     }
 
-    // Log action to DB using the street captured BEFORE placeBet advanced the phase
+    // Log action to DB — skip for branched replay hands (exploratory, not recorded)
+    // Also skip coach actions — coach stableId is not a UUID and coach is not in hand_players
     const handInfo = activeHands.get(tableId);
-    if (handInfo) {
-      const player = gm.state.players.find(p => p.id === socket.id);
+    if (handInfo && !socket.data.isCoach && !isBranchedCoach) {
+      const player = gm.state.players.find(p => p.id === effectivePlayerId);
+      // Compute position using game state (socket.id keys) then look up by effectivePlayerId
+      const seatedForPos = gm.state.players
+        .filter(p => p.seat >= 0)
+        .sort((a, b) => a.seat - b.seat)
+        .map(p => ({ player_id: p.id, seat: p.seat }));
+      const position = getPosition(seatedForPos, gm.state.dealer_seat ?? -1, effectivePlayerId);
       HandLogger.recordAction({
         handId: handInfo.handId,
         playerId: socket.data.stableId || socket.id,
@@ -554,14 +673,18 @@ io.on('connection', socket => {
         street: streetBeforeBet,
         action,
         amount: Number(amount) || 0,
-        isManualScenario: handInfo.isManualScenario || false
-      });
+        isManualScenario: handInfo.isManualScenario || false,
+        stackAtAction: stackBeforeBet,
+        potAtAction:   potBeforeBet,
+        decisionTimeMs,
+        position,
+      }).catch(err => console.error('[HandLogger] recordAction:', err));
     }
 
-    const player = gm.state.players.find(p => p.id === socket.id);
+    const actingPlayer = gm.state.players.find(p => p.id === effectivePlayerId);
     broadcastState(tableId, {
       type: 'action',
-      message: `${player?.name} ${action}${action === 'raise' ? 's to ' + amount : action === 'call' ? 's' : 's'}`
+      message: `${actingPlayer?.name} ${action}${action === 'raise' ? 's to ' + amount : action === 'call' ? 's' : 's'}`
     });
     const freshState = gm.getPublicState(socket.id, socket.data.isCoach);
     if (freshState.phase === 'showdown' && freshState.showdown_result) {
@@ -604,7 +727,7 @@ io.on('connection', socket => {
     // Mark the undone action in DB so analyzer knows it was reverted
     const undoHandInfo = activeHands.get(socket.data.tableId);
     if (undoHandInfo) {
-      HandLogger.markLastActionReverted(undoHandInfo.handId);
+      HandLogger.markLastActionReverted(undoHandInfo.handId).catch(err => console.error('[HandLogger] markLastActionReverted:', err));
     }
   });
 
@@ -731,7 +854,7 @@ io.on('connection', socket => {
   });
 
   // ── reset_hand ────────────────────────────
-  socket.on('reset_hand', () => {
+  socket.on('reset_hand', async () => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can reset');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -739,6 +862,14 @@ io.on('connection', socket => {
     const tableId = socket.data.tableId;
     clearActionTimer(tableId);
     pausedTimerRemainders.delete(tableId); // discard any paused remainder from the old hand
+
+    // Branched replay hands are exploratory — unbranch back to replay instead of logging/advancing
+    if (gm.state.is_replay_branch) {
+      const result = gm.unBranchToReplay();
+      if (result.error) return sendSyncError(socket, result.error);
+      broadcastState(tableId, { type: 'replay_unbranced', message: 'Returned to replay' });
+      return;
+    }
 
     // Capture state BEFORE reset for DB logging
     const handInfo = activeHands.get(tableId);
@@ -748,9 +879,9 @@ io.on('connection', socket => {
 
     // Log completed hand to DB
     if (handInfo && stateCopy) {
-      HandLogger.endHand({ handId: handInfo.handId, state: stateCopy });
-      // Auto-tag the completed hand with pedagogical patterns
-      try { HandLogger.analyzeAndTagHand(handInfo.handId); } catch (tagErr) { console.error('[analyzeAndTagHand] failed for hand', handInfo.handId, tagErr); }
+      HandLogger.endHand({ handId: handInfo.handId, state: stateCopy, socketToStable: Object.fromEntries(stableIdMap) })
+        .then(() => HandLogger.analyzeAndTagHand(handInfo.handId))
+        .catch(err => console.error('[HandLogger] endHand/analyzeAndTagHand:', err));
       activeHands.delete(tableId);
     }
 
@@ -760,44 +891,10 @@ io.on('connection', socket => {
     const stats = gm.getSessionStats();
     io.to(tableId).emit('session_stats', stats);
 
-    // Playlist mode: find the next hand whose player count matches the live table,
-    // skipping hands with different player counts (they would produce mismatched scenarios).
+    // Playlist mode: advance to next matching hand (hard-stop if none match)
     const playlistGm = tables.get(tableId);
     if (playlistGm && playlistGm.state.playlist_mode?.active) {
-      const activeCount = _activeNonCoachCount(playlistGm);
-      const matchIdx = _findMatchingPlaylistIndex(playlistGm, activeCount);
-
-      if (matchIdx === -1) {
-        // No hand in the playlist matches this table's player count — playlist exhausted
-        playlistGm.deactivatePlaylistMode();
-        playlistGm.setMode('rng');
-        io.to(tableId).emit('notification', {
-          type: 'playlist_complete',
-          message: `Playlist complete — no more hands match the ${activeCount}-player table. Switching to RNG mode.`
-        });
-      } else {
-        // Jump directly to the matching hand (may skip several mismatched hands)
-        const skipped = ((matchIdx - playlistGm.state.playlist_mode.currentIndex - 1) + playlistGm.state.playlist_mode.hands.length) % playlistGm.state.playlist_mode.hands.length;
-        const advance = playlistGm.seekPlaylist(matchIdx);
-        const nextDetail = HandLogger.getHandDetail(advance.hand.hand_id);
-        if (nextDetail) {
-          const loadResult = _loadScenarioIntoConfig(tableId, playlistGm, nextDetail, 'keep');
-          if (loadResult.error) {
-            io.to(tableId).emit('notification', { type: 'warning', message: `Playlist load failed: ${loadResult.error}` });
-          }
-          const skipNote = skipped > 0 ? ` (skipped ${skipped} mismatched)` : '';
-          broadcastState(tableId, {
-            type: 'playlist_advance',
-            message: `Playlist: hand ${advance.currentIndex + 1} of ${playlistGm.state.playlist_mode.hands.length}${skipNote}`
-          });
-        } else {
-          io.to(tableId).emit('notification', {
-            type: 'warning',
-            message: `Playlist: hand ${advance.hand.hand_id} not found (deleted?)`
-          });
-          broadcastState(tableId);
-        }
-      }
+      await _advancePlaylist(tableId, playlistGm);
     }
   });
 
@@ -809,6 +906,13 @@ io.on('connection', socket => {
 
     const result = gm.adjustStack(playerId, Number(amount));
     if (result.error) return sendError(socket, result.error);
+
+    // Log restock to stack_adjustments for audit trail
+    const sessionId = gm.state?.session_id;
+    const stableId  = stableIdMap.get(playerId) || playerId;
+    if (sessionId && stableId && !String(stableId).startsWith('coach_')) {
+      HandLogger.logStackAdjustment(sessionId, stableId, Number(amount)).catch(() => {});
+    }
 
     broadcastState(socket.data.tableId);
   });
@@ -844,7 +948,7 @@ io.on('connection', socket => {
   });
 
   // ── start_configured_hand ─────────────────
-  socket.on('start_configured_hand', () => {
+  socket.on('start_configured_hand', async () => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can start a configured hand');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -857,19 +961,21 @@ io.on('connection', socket => {
 
     // Log hand start to DB (mark as manual scenario for action-level analytics)
     const handId = uuidv4();
-    const nonCoachPlayers = gm.state.players
-      .filter(p => !p.is_coach)
-      .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack }));
-    HandLogger.startHand({
+    const allSeatedPlayers = gm.state.players
+      .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
+    const nonCoachPlayers = allSeatedPlayers.filter(p => !p.is_coach);
+    await HandLogger.startHand({
       handId,
       sessionId: gm.sessionId,
       tableId,
       players: nonCoachPlayers,
+      allPlayers: allSeatedPlayers,
       dealerSeat: gm.state.dealer_seat,
       smallBlind: gm.state.small_blind,
       bigBlind: gm.state.big_blind,
-      isScenario: true
-    });
+      isScenario: true,
+      sessionType: 'drill',
+    }).catch(err => console.error('[HandLogger] startHand (configured):', err));
     activeHands.set(tableId, { handId, sessionId: gm.sessionId, isManualScenario: true });
     socket.emit('hand_started', { handId }); // notify coach of active handId for tagging
 
@@ -881,7 +987,7 @@ io.on('connection', socket => {
   });
 
   // ── load_hand_scenario ─────────────────────────────────────────────────────
-  socket.on('load_hand_scenario', ({ handId, stackMode = 'keep' } = {}) => {
+  socket.on('load_hand_scenario', async ({ handId, stackMode = 'keep' } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can load scenarios');
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
@@ -889,7 +995,7 @@ io.on('connection', socket => {
     if (gm.state.phase !== 'waiting') return sendError(socket, 'Can only load a scenario between hands');
     if (!['keep', 'historical'].includes(stackMode)) return sendError(socket, 'stackMode must be keep or historical');
 
-    const handDetail = HandLogger.getHandDetail(handId);
+    const handDetail = await HandLogger.getHandDetail(handId);
     if (!handDetail) return sendError(socket, `Hand ${handId} not found`);
 
     const result = _loadScenarioIntoConfig(tableId, gm, handDetail, stackMode);
@@ -909,60 +1015,86 @@ io.on('connection', socket => {
   });
 
   // ── update_hand_tags ───────────────────────────────────────────────────────
-  socket.on('update_hand_tags', ({ handId, tags } = {}) => {
+  socket.on('update_hand_tags', async ({ handId, tags } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can tag hands');
     if (!handId || !Array.isArray(tags)) return sendError(socket, 'handId and tags[] are required');
     try {
-      HandLogger.updateCoachTags(handId, tags);
+      await HandLogger.updateCoachTags(handId, tags);
       socket.emit('hand_tags_saved', { handId, coach_tags: tags });
+
+      // Auto-create a playlist for each tag that doesn't have one yet,
+      // then add this hand to every matching playlist.
+      if (tags.length > 0) {
+        const tableId = socket.data.tableId;
+        const existingPlaylists = await HandLogger.getPlaylists({ tableId });
+        const nameToPlaylist = new Map(
+          existingPlaylists.map(p => [p.name.toLowerCase(), p])
+        );
+        let playlistsChanged = false;
+        for (const tag of tags) {
+          const key = tag.toLowerCase();
+          let pl = nameToPlaylist.get(key);
+          if (!pl) {
+            pl = await HandLogger.createPlaylist({ name: tag, tableId });
+            nameToPlaylist.set(key, pl);
+            playlistsChanged = true;
+          }
+          // upsert keeps this idempotent
+          await HandLogger.addHandToPlaylist(pl.playlist_id, handId);
+          playlistsChanged = true;
+        }
+        if (playlistsChanged) {
+          socket.emit('playlist_state', { playlists: await HandLogger.getPlaylists({ tableId }) });
+        }
+      }
     } catch (err) {
       sendError(socket, `Failed to save tags: ${err.message}`);
     }
   });
 
   // ── create_playlist ────────────────────────────────────────────────────────
-  socket.on('create_playlist', ({ name, description = '' } = {}) => {
+  socket.on('create_playlist', async ({ name, description = '' } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can create playlists');
     if (!name || typeof name !== 'string' || !name.trim()) {
       return sendError(socket, 'Playlist name is required');
     }
     const tableId = socket.data.tableId;
-    const playlist = HandLogger.createPlaylist({ name: name.trim(), description, tableId });
-    socket.emit('playlist_state', { playlists: HandLogger.getPlaylists({ tableId }) });
+    const playlist = await HandLogger.createPlaylist({ name: name.trim(), description, tableId });
+    socket.emit('playlist_state', { playlists: await HandLogger.getPlaylists({ tableId }) });
     socket.emit('notification', { type: 'playlist_created', message: `Playlist "${playlist.name}" created` });
   });
 
   // ── get_playlists ──────────────────────────────────────────────────────────
-  socket.on('get_playlists', () => {
+  socket.on('get_playlists', async () => {
     const tableId = socket.data.tableId;
-    const playlists = HandLogger.getPlaylists({ tableId: tableId || null });
+    const playlists = await HandLogger.getPlaylists({ tableId: tableId || null });
     socket.emit('playlist_state', { playlists });
   });
 
   // ── add_to_playlist ────────────────────────────────────────────────────────
-  socket.on('add_to_playlist', ({ playlistId, handId } = {}) => {
+  socket.on('add_to_playlist', async ({ playlistId, handId } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can modify playlists');
     if (!playlistId || !handId) return sendError(socket, 'playlistId and handId are required');
     try {
-      HandLogger.addHandToPlaylist(playlistId, handId);
+      await HandLogger.addHandToPlaylist(playlistId, handId);
       const tableId = socket.data.tableId;
-      socket.emit('playlist_state', { playlists: HandLogger.getPlaylists({ tableId }) });
+      socket.emit('playlist_state', { playlists: await HandLogger.getPlaylists({ tableId }) });
     } catch (err) {
       sendError(socket, `Could not add hand to playlist: ${err.message}`);
     }
   });
 
   // ── remove_from_playlist ───────────────────────────────────────────────────
-  socket.on('remove_from_playlist', ({ playlistId, handId } = {}) => {
+  socket.on('remove_from_playlist', async ({ playlistId, handId } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can modify playlists');
     if (!playlistId || !handId) return sendError(socket, 'playlistId and handId are required');
-    HandLogger.removeHandFromPlaylist(playlistId, handId);
+    await HandLogger.removeHandFromPlaylist(playlistId, handId);
     const tableId = socket.data.tableId;
-    socket.emit('playlist_state', { playlists: HandLogger.getPlaylists({ tableId }) });
+    socket.emit('playlist_state', { playlists: await HandLogger.getPlaylists({ tableId }) });
   });
 
   // ── delete_playlist ────────────────────────────────────────────────────────
-  socket.on('delete_playlist', ({ playlistId } = {}) => {
+  socket.on('delete_playlist', async ({ playlistId } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can delete playlists');
     if (!playlistId) return sendError(socket, 'playlistId is required');
     const tableId = socket.data.tableId;
@@ -971,13 +1103,13 @@ io.on('connection', socket => {
     if (gm && gm.state.playlist_mode?.playlistId === playlistId) {
       gm.deactivatePlaylistMode();
     }
-    HandLogger.deletePlaylist(playlistId);
-    socket.emit('playlist_state', { playlists: HandLogger.getPlaylists({ tableId }) });
+    await HandLogger.deletePlaylist(playlistId);
+    socket.emit('playlist_state', { playlists: await HandLogger.getPlaylists({ tableId }) });
     socket.emit('notification', { type: 'playlist_deleted', message: 'Playlist deleted' });
   });
 
   // ── activate_playlist ──────────────────────────────────────────────────────
-  socket.on('activate_playlist', ({ playlistId } = {}) => {
+  socket.on('activate_playlist', async ({ playlistId } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can activate playlists');
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
@@ -986,33 +1118,25 @@ io.on('connection', socket => {
     // allows playlist activation during the config phase — no extra check needed.
     if (gm.state.phase !== 'waiting') return sendError(socket, 'Can only activate playlist between hands');
 
-    const hands = HandLogger.getPlaylistHands(playlistId);
+    const hands = await HandLogger.getPlaylistHands(playlistId);
     if (!hands.length) return sendError(socket, 'Playlist is empty');
 
     const result = gm.activatePlaylistMode({ playlistId, hands });
     if (result.error) return sendError(socket, result.error);
 
-    // Find the first hand whose player count matches the live table
-    // (currentIndex starts at 0, so seekPlaylist(-1) trick: we use _findMatchingPlaylistIndex
-    // which searches from currentIndex+1 wrapping around — set currentIndex=-1 first so
-    // search starts from index 0)
+    // Find the first hand whose player count matches the live table.
+    // Hard-stop: if no match found anywhere, deactivate and notify.
     gm.state.playlist_mode.currentIndex = -1;
     const activeCount = _activeNonCoachCount(gm);
-    const matchIdx = _findMatchingPlaylistIndex(gm, activeCount);
+    const matchIdx = await _findMatchingPlaylistIndex(gm, activeCount);
 
-    let firstDetail = null;
-    if (matchIdx !== -1) {
-      gm.seekPlaylist(matchIdx);
-      firstDetail = HandLogger.getHandDetail(hands[matchIdx].hand_id);
-    } else {
-      // No count match anywhere — fall back to first hand with a notification
-      gm.seekPlaylist(0);
-      firstDetail = HandLogger.getHandDetail(hands[0].hand_id);
-      io.to(tableId).emit('notification', {
-        type: 'warning',
-        message: `Playlist: no hands match the current ${activeCount}-player table — loaded hand[0] anyway`
-      });
+    if (matchIdx === -1) {
+      gm.deactivatePlaylistMode();
+      return sendError(socket, `Playlist has no ${activeCount}-player hands — add matching hands or adjust table size`);
     }
+
+    gm.seekPlaylist(matchIdx);
+    const firstDetail = await HandLogger.getHandDetail(hands[matchIdx].hand_id);
     if (firstDetail) {
       const loadResult = _loadScenarioIntoConfig(tableId, gm, firstDetail, 'keep');
       if (loadResult.error) {
@@ -1022,9 +1146,9 @@ io.on('connection', socket => {
 
     broadcastState(tableId, {
       type: 'playlist_activated',
-      message: `Playlist activated — ${result.totalHands} hands queued`
+      message: `Playlist activated — ${result.totalHands} hands queued (hand 1 of ${result.totalHands})`
     });
-    io.to(tableId).emit('playlist_state', { playlists: HandLogger.getPlaylists({ tableId: tableId }) });
+    io.to(tableId).emit('playlist_state', { playlists: await HandLogger.getPlaylists({ tableId: tableId }) });
   });
 
   // ── deactivate_playlist ────────────────────────────────────────────────────
@@ -1038,14 +1162,13 @@ io.on('connection', socket => {
   });
 
   // ── load_replay ────────────────────────────────────────────────────────────
-  socket.on('load_replay', ({ handId } = {}) => {
+  socket.on('load_replay', async ({ handId } = {}) => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can load replays');
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     if (gm.state.phase !== 'waiting') return sendSyncError(socket, 'Can only load replay between hands');
-    if (gm.state.playlist_mode?.active) return sendSyncError(socket, 'Cannot load replay while a playlist is active — deactivate the playlist first');
-    const handDetail = HandLogger.getHandDetail(handId);
+    const handDetail = await HandLogger.getHandDetail(handId);
     if (!handDetail) return sendSyncError(socket, `Hand ${handId} not found`);
     const result = gm.loadReplay(handDetail);
     if (result.error) return sendSyncError(socket, result.error);
@@ -1111,14 +1234,19 @@ io.on('connection', socket => {
   });
 
   // ── replay_exit ────────────────────────────────────────────────────────────
-  socket.on('replay_exit', () => {
+  socket.on('replay_exit', async () => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can exit replay');
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     const result = gm.exitReplay();
     if (result.error) return sendSyncError(socket, result.error);
-    broadcastState(tableId, { type: 'replay_exited', message: 'Replay mode ended' });
+    // If a playlist was active when the replay was loaded, resume it now
+    if (result.playlistWasActive && gm.state.playlist_mode?.active) {
+      await _advancePlaylist(tableId, gm);
+    } else {
+      broadcastState(tableId, { type: 'replay_exited', message: 'Replay mode ended' });
+    }
   });
 
   // ── disconnect ────────────────────────────
@@ -1213,13 +1341,25 @@ io.on('connection', socket => {
 //  History REST API
 // ─────────────────────────────────────────────
 
+// GET /api/players/:stableId/hover-stats?sessionId=...  (no auth — spectators can see)
+app.get('/api/players/:stableId/hover-stats', async (req, res) => {
+  try {
+    const { stableId } = req.params;
+    const { sessionId } = req.query;
+    const stats = await HandLogger.getPlayerHoverStats(stableId, sessionId || null);
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/hands?limit=20&offset=0&tableId=main-table
-app.get('/api/hands', (req, res) => {
+app.get('/api/hands', requireAuth, async (req, res) => {
   try {
     const limit  = Math.min(parseInt(req.query.limit)  || 20, 100);
     const offset = parseInt(req.query.offset) || 0;
     const tableId = req.query.tableId || null;
-    const hands = HandLogger.getHands({ tableId, limit, offset });
+    const hands = await HandLogger.getHands({ tableId, limit, offset });
     res.json({ hands, limit, offset });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1227,9 +1367,9 @@ app.get('/api/hands', (req, res) => {
 });
 
 // GET /api/hands/:handId
-app.get('/api/hands/:handId', (req, res) => {
+app.get('/api/hands/:handId', requireAuth, async (req, res) => {
   try {
-    const detail = HandLogger.getHandDetail(req.params.handId);
+    const detail = await HandLogger.getHandDetail(req.params.handId);
     if (!detail) return res.status(404).json({ error: 'Hand not found' });
     res.json(detail);
   } catch (err) {
@@ -1238,9 +1378,9 @@ app.get('/api/hands/:handId', (req, res) => {
 });
 
 // GET /api/players/:stableId/stats  — career stats across all sessions
-app.get('/api/players/:stableId/stats', (req, res) => {
+app.get('/api/players/:stableId/stats', requireAuth, async (req, res) => {
   try {
-    const stats = HandLogger.getPlayerStats(req.params.stableId);
+    const stats = await HandLogger.getPlayerStats(req.params.stableId);
     if (!stats) return res.status(404).json({ error: 'Player not found' });
     res.json(stats);
   } catch (err) {
@@ -1249,9 +1389,9 @@ app.get('/api/players/:stableId/stats', (req, res) => {
 });
 
 // GET /api/players — all registered players with aggregate stats
-app.get('/api/players', (req, res) => {
+app.get('/api/players', requireAuth, async (req, res) => {
   try {
-    const players = HandLogger.getAllPlayersWithStats();
+    const players = await HandLogger.getAllPlayersWithStats();
     res.json({ players });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1259,11 +1399,11 @@ app.get('/api/players', (req, res) => {
 });
 
 // GET /api/players/:stableId/hands — paginated hand history for a specific player
-app.get('/api/players/:stableId/hands', (req, res) => {
+app.get('/api/players/:stableId/hands', requireAuth, async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const offset = parseInt(req.query.offset) || 0;
-    const hands = HandLogger.getPlayerHands(req.params.stableId, { limit, offset });
+    const hands = await HandLogger.getPlayerHands(req.params.stableId, { limit, offset });
     res.json({ hands, limit, offset });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1271,9 +1411,9 @@ app.get('/api/players/:stableId/hands', (req, res) => {
 });
 
 // GET /api/sessions/:sessionId/stats
-app.get('/api/sessions/:sessionId/stats', (req, res) => {
+app.get('/api/sessions/:sessionId/stats', requireAuth, async (req, res) => {
   try {
-    const stats = HandLogger.getSessionStats(req.params.sessionId);
+    const stats = await HandLogger.getSessionStats(req.params.sessionId);
     res.json({ sessionId: req.params.sessionId, players: stats });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1281,9 +1421,9 @@ app.get('/api/sessions/:sessionId/stats', (req, res) => {
 });
 
 // GET /api/sessions/:sessionId/report — self-contained HTML report
-app.get('/api/sessions/:sessionId/report', (req, res) => {
+app.get('/api/sessions/:sessionId/report', requireAuth, async (req, res) => {
   try {
-    const reportData = HandLogger.getSessionReport(req.params.sessionId);
+    const reportData = await HandLogger.getSessionReport(req.params.sessionId);
     if (!reportData) return res.status(404).send('Session not found');
     const html = generateHTMLReport(reportData);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -1311,9 +1451,9 @@ app.get('/api/sessions/current', (req, res) => {
 // ─────────────────────────────────────────────
 
 // GET /api/playlists?tableId=main-table
-app.get('/api/playlists', (req, res) => {
+app.get('/api/playlists', async (req, res) => {
   try {
-    const playlists = HandLogger.getPlaylists({ tableId: req.query.tableId || null });
+    const playlists = await HandLogger.getPlaylists({ tableId: req.query.tableId || null });
     res.json({ playlists });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1321,11 +1461,11 @@ app.get('/api/playlists', (req, res) => {
 });
 
 // POST /api/playlists — body: { name, description?, tableId? }
-app.post('/api/playlists', (req, res) => {
+app.post('/api/playlists', async (req, res) => {
   try {
     const { name, description = '', tableId = null } = req.body || {};
     if (!name) return res.status(400).json({ error: 'name is required' });
-    const playlist = HandLogger.createPlaylist({ name, description, tableId });
+    const playlist = await HandLogger.createPlaylist({ name, description, tableId });
     res.status(201).json(playlist);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1333,9 +1473,9 @@ app.post('/api/playlists', (req, res) => {
 });
 
 // GET /api/playlists/:playlistId/hands
-app.get('/api/playlists/:playlistId/hands', (req, res) => {
+app.get('/api/playlists/:playlistId/hands', async (req, res) => {
   try {
-    const hands = HandLogger.getPlaylistHands(req.params.playlistId);
+    const hands = await HandLogger.getPlaylistHands(req.params.playlistId);
     res.json({ hands });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1343,11 +1483,11 @@ app.get('/api/playlists/:playlistId/hands', (req, res) => {
 });
 
 // POST /api/playlists/:playlistId/hands — body: { handId }
-app.post('/api/playlists/:playlistId/hands', (req, res) => {
+app.post('/api/playlists/:playlistId/hands', async (req, res) => {
   try {
     const { handId } = req.body || {};
     if (!handId) return res.status(400).json({ error: 'handId is required' });
-    const entry = HandLogger.addHandToPlaylist(req.params.playlistId, handId);
+    const entry = await HandLogger.addHandToPlaylist(req.params.playlistId, handId);
     res.status(201).json(entry);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1355,9 +1495,9 @@ app.post('/api/playlists/:playlistId/hands', (req, res) => {
 });
 
 // DELETE /api/playlists/:playlistId/hands/:handId
-app.delete('/api/playlists/:playlistId/hands/:handId', (req, res) => {
+app.delete('/api/playlists/:playlistId/hands/:handId', async (req, res) => {
   try {
-    HandLogger.removeHandFromPlaylist(req.params.playlistId, req.params.handId);
+    await HandLogger.removeHandFromPlaylist(req.params.playlistId, req.params.handId);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1365,9 +1505,9 @@ app.delete('/api/playlists/:playlistId/hands/:handId', (req, res) => {
 });
 
 // DELETE /api/playlists/:playlistId
-app.delete('/api/playlists/:playlistId', (req, res) => {
+app.delete('/api/playlists/:playlistId', async (req, res) => {
   try {
-    HandLogger.deletePlaylist(req.params.playlistId);
+    await HandLogger.deletePlaylist(req.params.playlistId);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1375,62 +1515,115 @@ app.delete('/api/playlists/:playlistId', (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-//  Auth endpoints (Epic 15)
+//  Auth endpoints (roster-based)
 // ─────────────────────────────────────────────
 
-// POST /api/auth/register
-app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password } = req.body || {};
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'invalid_input', message: 'name, email, and password are required' });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'invalid_input', message: 'Password must be at least 6 characters' });
-  }
-  try {
-    const result = await HandLogger.registerPlayerAccount(name, email, password);
-    if (result.error) {
-      return res.status(409).json(result);
-    }
-    res.json({ stableId: result.stableId });
-  } catch (err) {
-    res.status(500).json({ error: 'server_error', message: err.message });
-  }
+// POST /api/auth/register — self-registration is disabled; admin manages players.csv
+app.post('/api/auth/register', (req, res) => {
+  res.status(410).json({
+    error: 'registration_disabled',
+    message: 'Self-registration is disabled. Contact the coach to be added to the roster.',
+  });
 });
 
-// POST /api/auth/login
-app.post('/api/auth/login', async (req, res) => {
+// POST /api/auth/login — validates against players.csv, returns a server-signed JWT
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { name, password } = req.body || {};
-  if (!name || !password) {
-    return res.status(400).json({ error: 'invalid_input', message: 'name and password are required' });
+  if (!name || typeof name !== 'string' || name.trim().length === 0)
+    return res.status(400).json({ error: 'invalid_input', message: 'Name is required.' });
+  if (!password || typeof password !== 'string')
+    return res.status(400).json({ error: 'invalid_input', message: 'Password is required.' });
+
+  const entry = await PlayerRoster.authenticate(name.trim(), password);
+  if (!entry) {
+    return res.status(401).json({ error: 'invalid_credentials', message: 'Invalid name or password.' });
   }
+
+  // Get (or create) stableId for this player in the DB
+  let stableId;
   try {
-    const result = await HandLogger.loginPlayerAccount(name, password);
-    if (result.error) {
-      return res.status(401).json(result);
-    }
-    res.json({ stableId: result.stableId, name: result.name });
+    const record = await HandLogger.loginRosterPlayer(entry.name);
+    stableId = record.stableId;
   } catch (err) {
-    res.status(500).json({ error: 'server_error', message: err.message });
+    return res.status(500).json({ error: 'db_error', message: 'Could not resolve player identity.' });
   }
+
+  const token = jwt.sign(
+    { stableId, name: entry.name, role: entry.role },
+    SESSION_SECRET,
+    { expiresIn: '7d' }
+  );
+
+  res.json({ stableId, name: entry.name, role: entry.role, token });
 });
 
 // ─────────────────────────────────────────────
-//  Health check
+//  Health check — verifies server + DB connectivity
 // ─────────────────────────────────────────────
-app.get('/health', (_, res) => res.json({ status: 'ok', tables: tables.size }));
+app.get('/health', async (_, res) => {
+  let dbStatus = 'ok';
+  let dbError  = null;
+  try {
+    // Lightweight probe: select 1 row from a known table
+    const { error } = await supabaseAdmin.from('player_profiles').select('player_id').limit(1);
+    if (error) { dbStatus = 'error'; dbError = error.message; }
+  } catch (err) {
+    dbStatus = 'error';
+    dbError  = err.message;
+  }
+  const status = dbStatus === 'ok' ? 'ok' : 'degraded';
+  res.status(status === 'ok' ? 200 : 503).json({
+    status,
+    tables: tables.size,
+    db: dbStatus,
+    ...(dbError ? { dbError } : {}),
+  });
+});
 
 // ─────────────────────────────────────────────
 //  Graceful shutdown
 // ─────────────────────────────────────────────
 function markAllHandsIncomplete() {
   for (const [tableId, handInfo] of activeHands.entries()) {
-    try { HandLogger.markIncomplete(handInfo.handId); } catch {}
+    const gm = tables.get(tableId);
+    HandLogger.markIncomplete(handInfo.handId, gm?.state ?? null).catch(() => {});
   }
 }
 
 process.on('SIGINT',  () => { markAllHandsIncomplete(); process.exit(0); });
 process.on('SIGTERM', () => { markAllHandsIncomplete(); process.exit(0); });
+
+// ─────────────────────────────────────────────
+//  Idle auto-shutdown
+//  If IDLE_TIMEOUT_MINUTES is set (e.g. in production), the server exits
+//  cleanly after that many minutes of zero connected sockets.
+//  The hosting platform (Fly.io) will restart it on the next request.
+// ─────────────────────────────────────────────
+const IDLE_MINUTES = parseInt(process.env.IDLE_TIMEOUT_MINUTES, 10) || 0;
+if (IDLE_MINUTES > 0) {
+  let _idleTimer = null;
+
+  const _scheduleIdleShutdown = () => {
+    clearTimeout(_idleTimer);
+    if (io.engine.clientsCount === 0) {
+      _idleTimer = setTimeout(() => {
+        console.log(`[idle] No connections for ${IDLE_MINUTES} min — shutting down for hosting cost savings`);
+        markAllHandsIncomplete();
+        process.exit(0);
+      }, IDLE_MINUTES * 60 * 1000);
+    }
+  };
+
+  io.on('connection', (socket) => {
+    clearTimeout(_idleTimer); // someone connected — cancel shutdown
+    socket.on('disconnect', _scheduleIdleShutdown);
+  });
+
+  // Also start the timer at boot in case no one ever connects
+  httpServer.on('listening', _scheduleIdleShutdown);
+
+  console.log(`[idle] Auto-shutdown enabled — will exit after ${IDLE_MINUTES} min of zero connections`);
+}
 
 // ─────────────────────────────────────────────
 //  Static file serving (production)

@@ -13,14 +13,12 @@
 
 'use strict';
 
-// ─── 0. Use an in-memory database ─────────────────────────────────────────────
-process.env.DATABASE_PATH = process.env.DATABASE_PATH || './sim_results.db';
-
 // ─── 1. Boot the server in-process ───────────────────────────────────────────
 const { httpServer } = require('./server/index');
+const HandLogger     = require('./server/db/HandLoggerSupabase');
 
 const ioc     = require('./server/node_modules/socket.io-client');
-const http    = require('http');
+
 
 // ─── 2. Config ────────────────────────────────────────────────────────────────
 const TABLE_ID     = 'sim-table';
@@ -50,27 +48,6 @@ function waitFor(socket, event, ms = 5000) {
   });
 }
 
-/** POST JSON to the server and return parsed response body */
-function postJSON(port, path, body) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify(body);
-    const req = http.request(
-      { hostname: '127.0.0.1', port, path, method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } },
-      res => {
-        let raw = '';
-        res.on('data', d => raw += d);
-        res.on('end', () => {
-          try { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
-          catch { resolve({ status: res.statusCode, body: raw }); }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
-  });
-}
 
 /** Create a socket.io client on the given port */
 function mkSocket(port) {
@@ -111,22 +88,19 @@ async function main() {
   const { port } = httpServer.address();
   log(`\n[sim] Server on port ${port} (DATABASE_PATH=${process.env.DATABASE_PATH || './sim_results.db'})`);
 
-  // Use a unique suffix per run to avoid 409 conflicts if the DB is shared
+  // Use a unique suffix per run to avoid name collisions if the DB is shared
   const RUN_ID = process.pid;
   const PLAYERS = [
-    { name: `Alice_${RUN_ID}`, email: `alice_${RUN_ID}@sim.test`, password: 'password1' },
-    { name: `Bob_${RUN_ID}`,   email: `bob_${RUN_ID}@sim.test`,   password: 'password2' },
-    { name: `Carol_${RUN_ID}`, email: `carol_${RUN_ID}@sim.test`, password: 'password3' },
+    { name: `Alice_${RUN_ID}` },
+    { name: `Bob_${RUN_ID}`   },
+    { name: `Carol_${RUN_ID}` },
   ];
 
   for (const p of PLAYERS) {
-    const { status, body } = await postJSON(port, '/api/auth/register', {
-      name: p.name, email: p.email, password: p.password,
-    });
-    if (!body.stableId) throw new Error(`Register failed for ${p.name} (HTTP ${status}): ${JSON.stringify(body)}`);
-    p.stableId = body.stableId;
+    const { stableId } = await HandLogger.loginRosterPlayer(p.name);
+    p.stableId = stableId;
   }
-  log(`[sim] Registered: ${PLAYERS.map(p => `${p.name} (${p.stableId.slice(0, 8)}…)`).join(', ')}`);
+  log(`[sim] Players: ${PLAYERS.map(p => `${p.name} (${p.stableId.slice(0, 8)}…)`).join(', ')}`);
 
   // Create and connect sockets
   const coachSock   = mkSocket(port);

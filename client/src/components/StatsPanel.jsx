@@ -1,4 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { apiFetch } from '../lib/api';
+
+function parseTagsFromRows(hand_tags = []) {
+  return {
+    auto_tags:    (hand_tags || []).filter(t => t.tag_type === 'auto').map(t => t.tag),
+    mistake_tags: (hand_tags || []).filter(t => t.tag_type === 'mistake').map(t => t.tag),
+    coach_tags:   (hand_tags || []).filter(t => t.tag_type === 'coach').map(t => t.tag),
+  };
+}
 
 // ─── Tag color helpers ────────────────────────────────────────────────────────
 
@@ -99,169 +108,6 @@ function CardList({ cards }) {
   );
 }
 
-// ─── Sortable table header cell ───────────────────────────────────────────────
-
-function SortTh({ col, label, sortKey, sortDir, onSort, align = 'left' }) {
-  const active = sortKey === col;
-  return (
-    <th
-      onClick={() => onSort(col)}
-      style={{
-        padding: '8px 10px',
-        cursor: 'pointer',
-        userSelect: 'none',
-        textAlign: align,
-        whiteSpace: 'nowrap',
-        color: active ? '#d4af37' : '#8b949e',
-        fontSize: '11px',
-        fontWeight: 600,
-        letterSpacing: '0.06em',
-        textTransform: 'uppercase',
-        borderBottom: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.02)',
-      }}
-    >
-      {label}
-      {active && (
-        <span style={{ marginLeft: 4, opacity: 0.7 }}>
-          {sortDir === 'asc' ? '▲' : '▼'}
-        </span>
-      )}
-    </th>
-  );
-}
-
-// ─── Leaderboard view ─────────────────────────────────────────────────────────
-
-function LeaderboardView({ onSelectPlayer }) {
-  const [players, setPlayers]   = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [sortKey, setSortKey]   = useState('total_net_chips');
-  const [sortDir, setSortDir]   = useState('desc');
-  const [error, setError]       = useState(null);
-
-  useEffect(() => {
-    setLoading(true);
-    fetch('/api/players')
-      .then(r => r.json())
-      .then(data => { setPlayers(data.players ?? []); setLoading(false); })
-      .catch(err => { setError(err.message); setLoading(false); });
-  }, []);
-
-  function handleSort(col) {
-    if (sortKey === col) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(col);
-      setSortDir('desc');
-    }
-  }
-
-  const sorted = [...players].sort((a, b) => {
-    const av = a[sortKey] ?? 0;
-    const bv = b[sortKey] ?? 0;
-    const cmp = typeof av === 'string' ? av.localeCompare(bv) : (av - bv);
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
-
-  const thProps = { sortKey, sortDir, onSort: handleSort };
-
-  return (
-    <div className="flex flex-col h-full">
-      <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-        <h2 style={{ color: '#d4af37', fontSize: '13px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-          Registered Players
-        </h2>
-        <p style={{ color: '#6e7681', fontSize: '11px', marginTop: 2 }}>
-          Click a row to see hand history
-        </p>
-      </div>
-
-      {loading && (
-        <div style={{ color: '#6e7681', textAlign: 'center', padding: '40px 20px', fontSize: '13px' }}>
-          Loading…
-        </div>
-      )}
-
-      {error && (
-        <div style={{ color: '#f85149', textAlign: 'center', padding: '40px 20px', fontSize: '13px' }}>
-          Error: {error}
-        </div>
-      )}
-
-      {!loading && !error && players.length === 0 && (
-        <div style={{ color: '#444', textAlign: 'center', padding: '60px 20px', fontSize: '13px', fontStyle: 'italic' }}>
-          No registered players yet
-        </div>
-      )}
-
-      {!loading && !error && sorted.length > 0 && (
-        <div style={{ overflowX: 'auto', flex: 1 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '8px 10px', color: '#8b949e', fontSize: '11px', fontWeight: 600, textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', whiteSpace: 'nowrap' }}>
-                  Rank
-                </th>
-                <SortTh col="name" label="Name" {...thProps} />
-                <SortTh col="total_hands" label="Hands" align="right" {...thProps} />
-                <SortTh col="total_wins" label="Win %" align="right" {...thProps} />
-                <SortTh col="vpip_percent" label="VPIP%" align="right" {...thProps} />
-                <SortTh col="pfr_percent" label="PFR%" align="right" {...thProps} />
-                <SortTh col="total_net_chips" label="Net Chips" align="right" {...thProps} />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((p, i) => {
-                const winPct = p.total_hands > 0
-                  ? ((p.total_wins / p.total_hands) * 100).toFixed(1)
-                  : '0.0';
-                const net = p.total_net_chips ?? 0;
-                return (
-                  <tr
-                    key={p.stableId}
-                    onClick={() => onSelectPlayer(p)}
-                    style={{ cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', transition: 'background 0.1s' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    <td style={{ padding: '9px 10px', color: '#6e7681', fontFamily: 'monospace', fontSize: '11px' }}>
-                      #{i + 1}
-                    </td>
-                    <td style={{ padding: '9px 10px', color: '#e6edf3', fontWeight: 500 }}>
-                      {p.name || '—'}
-                      {p.email && (
-                        <span style={{ marginLeft: 6, fontSize: '10px', color: '#6e7681' }}>
-                          {p.email}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '9px 10px', color: '#adbac7', textAlign: 'right', fontFamily: 'monospace' }}>
-                      {p.total_hands ?? 0}
-                    </td>
-                    <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: 'monospace', color: '#adbac7' }}>
-                      {winPct}%
-                    </td>
-                    <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: 'monospace', color: '#adbac7' }}>
-                      {p.vpip_percent ?? 0}%
-                    </td>
-                    <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: 'monospace', color: '#adbac7' }}>
-                      {p.pfr_percent ?? 0}%
-                    </td>
-                    <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: net > 0 ? '#3fb950' : net < 0 ? '#f85149' : '#8b949e' }}>
-                      {net > 0 ? '+' : ''}{Number(net).toLocaleString()}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Global Hand History view ─────────────────────────────────────────────────
 
 function HandHistoryView() {
@@ -271,9 +117,11 @@ function HandHistoryView() {
 
   useEffect(() => {
     setLoading(true);
-    fetch('/api/hands?limit=50')
-      .then(r => r.json())
-      .then(data => { setHands(data.hands ?? []); setLoading(false); })
+    apiFetch('/api/hands?limit=50')
+      .then(data => {
+        setHands((data.hands || []).map(h => ({ ...h, ...parseTagsFromRows(h.hand_tags) })));
+        setLoading(false);
+      })
       .catch(err => { setError(err.message); setLoading(false); });
   }, []);
 
@@ -392,9 +240,11 @@ function PlayerDetailView({ player, onBack }) {
   useEffect(() => {
     if (!player?.stableId) return;
     setLoading(true);
-    fetch(`/api/players/${encodeURIComponent(player.stableId)}/hands?limit=50`)
-      .then(r => r.json())
-      .then(data => { setHands(data.hands ?? []); setLoading(false); })
+    apiFetch(`/api/players/${encodeURIComponent(player.stableId)}/hands?limit=50`)
+      .then(data => {
+        setHands(data.hands || []);
+        setLoading(false);
+      })
       .catch(err => { setError(err.message); setLoading(false); });
   }, [player?.stableId]);
 
@@ -552,23 +402,23 @@ function PlayerDetailView({ player, onBack }) {
 // ─── Main StatsPanel component ────────────────────────────────────────────────
 
 export default function StatsPanel({ isOpen, onClose, isCoach }) {
-  const [view, setView] = useState('leaderboard'); // 'leaderboard' | 'history' | 'player'
+  const [view, setView] = useState('history'); // 'history' | 'player'
   const [selectedPlayer, setSelectedPlayer] = useState(null);
 
-  const handleSelectPlayer = useCallback((player) => {
+  function handleSelectPlayer(player) {
     setSelectedPlayer(player);
     setView('player');
-  }, []);
+  }
 
-  const handleBackToLeaderboard = useCallback(() => {
-    setView('leaderboard');
+  function handleBackToLeaderboard() {
+    setView('history');
     setSelectedPlayer(null);
-  }, []);
+  }
 
-  // Reset to leaderboard when panel is closed/reopened
+  // Reset to hand history when panel is closed/reopened
   useEffect(() => {
     if (!isOpen) {
-      setView('leaderboard');
+      setView('history');
       setSelectedPlayer(null);
     }
   }, [isOpen]);
@@ -586,8 +436,7 @@ export default function StatsPanel({ isOpen, onClose, isCoach }) {
   if (!isOpen) return null;
 
   const tabs = [
-    { id: 'leaderboard', label: 'Leaderboard' },
-    { id: 'history',     label: 'Hand History' },
+    { id: 'history', label: 'Hand History' },
   ];
 
   return (
@@ -694,9 +543,6 @@ export default function StatsPanel({ isOpen, onClose, isCoach }) {
 
         {/* Content area */}
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {view === 'leaderboard' && (
-            <LeaderboardView onSelectPlayer={handleSelectPlayer} />
-          )}
           {view === 'history' && (
             <HandHistoryView />
           )}

@@ -1,0 +1,59 @@
+version: '3.9'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Poker Trainer — Docker Compose
+#
+# Usage:
+#   Development (hot-reload, separate Vite + Node):
+#     docker compose --profile dev up
+#
+#   Production (single container, pre-built React assets):
+#     docker compose --profile prod up --build
+#
+# Prerequisites:
+#   - Copy .env.example → .env and fill in all values
+#   - Run database migrations: node scripts/run-migration.js
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ─── Production: single container serving React build + Express API ─────────
+  app:
+    profiles: [prod]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "${PORT:-3001}:3001"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ─── Development: server with nodemon (client runs separately via `npm run dev`) ─
+  server-dev:
+    profiles: [dev]
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "cd server && npm install && npx nodemon index.js"
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./server:/app/server
+      - ./players.csv:/app/players.csv:ro
+      - server_node_modules:/app/server/node_modules
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+
+volumes:
+  server_node_modules:

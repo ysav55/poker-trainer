@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSocket } from './hooks/useSocket';
 import PokerTable from './components/PokerTable';
 import CoachSidebar from './components/CoachSidebar';
@@ -57,13 +57,14 @@ function AuthInput({ type = 'text', value, onChange, placeholder, maxLength }) {
   );
 }
 
+const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
 function JoinScreen({ joinRoom, connected }) {
-  const [mode, setMode]         = useState('login');
-  const [name, setName]         = useState('');
-  const [email, setEmail]       = useState('');
+  const [mode, setMode]       = useState('login');
+  const [name, setName]       = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError]       = useState('');
-  const [loading, setLoading]   = useState(false);
+  const [error, setError]     = useState('');
+  const [loading, setLoading] = useState(false);
 
   const clearFields = (newMode) => {
     setMode(newMode);
@@ -74,39 +75,33 @@ function JoinScreen({ joinRoom, connected }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!name.trim() || name.trim().length < 2) {
-      setError('Name must be at least 2 characters.');
+
+    if (mode === 'spectate') {
+      if (!name.trim() || name.trim().length < 2) { setError('Name must be at least 2 characters.'); return; }
+      joinRoom(name.trim(), 'spectator', '');
       return;
     }
+
+    if (!name.trim()) { setError('Name is required.'); return; }
+    if (!password)    { setError('Password is required.'); return; }
+
     setLoading(true);
     try {
-      if (mode === 'login') {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), password }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setError(data.message || 'Login failed'); setLoading(false); return; }
-        localStorage.setItem('poker_trainer_player_id', data.stableId);
-        joinRoom(name.trim(), 'player');
-      } else if (mode === 'register') {
-        if (!email.trim()) { setError('Email is required.'); setLoading(false); return; }
-        if (password.length < 6) { setError('Password must be at least 6 characters.'); setLoading(false); return; }
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
-        });
-        const data = await res.json();
-        if (!res.ok) { setError(data.message || 'Registration failed'); setLoading(false); return; }
-        localStorage.setItem('poker_trainer_player_id', data.stableId);
-        joinRoom(name.trim(), 'player');
-      } else if (mode === 'spectate') {
-        joinRoom(name.trim(), 'spectator');
-      } else if (mode === 'coach') {
-        joinRoom(name.trim(), 'coach', password);
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'Login failed.');
+        setLoading(false);
+        return;
       }
+      // Store JWT and stableId for reconnects
+      localStorage.setItem('poker_trainer_jwt', data.token);
+      localStorage.setItem('poker_trainer_player_id', data.stableId);
+      joinRoom(data.name, data.role === 'coach' ? 'coach' : 'player', data.token);
     } catch {
       setError('Network error — is the server running?');
     }
@@ -114,17 +109,13 @@ function JoinScreen({ joinRoom, connected }) {
   };
 
   const TABS = [
-    { key: 'login',    label: 'Log In' },
-    { key: 'register', label: 'Register' },
+    { key: 'login',   label: 'Log In' },
     { key: 'spectate', label: 'Spectate' },
-    { key: 'coach',    label: 'Coach' },
   ];
 
   const submitLabel = {
-    login:    loading ? 'Logging in…'    : 'Log In',
-    register: loading ? 'Registering…'   : 'Create Account',
-    spectate: loading ? 'Joining…'       : 'Watch as Spectator',
-    coach:    loading ? 'Joining…'       : 'Join as Coach',
+    login:   loading ? 'Logging in…' : 'Log In',
+    spectate: loading ? 'Joining…'    : 'Watch as Spectator',
   }[mode];
 
   return (
@@ -164,7 +155,7 @@ function JoinScreen({ joinRoom, connected }) {
 
         {/* Mode tabs */}
         <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-          {TABS.map((tab) => (
+          {TABS.map((tab, i) => (
             <button
               key={tab.key}
               type="button"
@@ -173,7 +164,7 @@ function JoinScreen({ joinRoom, connected }) {
               style={{
                 background: mode === tab.key ? 'rgba(212,175,55,0.15)' : 'transparent',
                 color: mode === tab.key ? '#d4af37' : 'rgba(156,163,175,0.7)',
-                borderRight: tab.key !== 'coach' ? '1px solid rgba(255,255,255,0.08)' : 'none',
+                borderRight: i < TABS.length - 1 ? '1px solid rgba(255,255,255,0.08)' : 'none',
               }}
             >
               {tab.label}
@@ -183,9 +174,9 @@ function JoinScreen({ joinRoom, connected }) {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          {/* Name — shown on all tabs */}
+          {/* Name — always shown */}
           <div className="flex flex-col gap-1.5">
-            <label className="label-sm">Display Name</label>
+            <label className="label-sm">{mode === 'spectate' ? 'Display Name' : 'Name'}</label>
             <AuthInput
               value={name}
               onChange={(e) => { setName(e.target.value); setError(''); }}
@@ -194,31 +185,15 @@ function JoinScreen({ joinRoom, connected }) {
             />
           </div>
 
-          {/* Email — register only */}
-          {mode === 'register' && (
+          {/* Password — login only */}
+          {mode === 'login' && (
             <div className="flex flex-col gap-1.5">
-              <label className="label-sm">Email</label>
-              <AuthInput
-                type="email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                placeholder="you@example.com"
-                maxLength={128}
-              />
-            </div>
-          )}
-
-          {/* Password — login, register, coach */}
-          {(mode === 'login' || mode === 'register' || mode === 'coach') && (
-            <div className="flex flex-col gap-1.5">
-              <label className="label-sm">
-                {mode === 'coach' ? 'Coach Password' : 'Password'}
-              </label>
+              <label className="label-sm">Password</label>
               <AuthInput
                 type="password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                placeholder={mode === 'coach' ? 'Coach password' : 'Password'}
+                placeholder="Password"
               />
             </div>
           )}
@@ -249,10 +224,13 @@ function JoinScreen({ joinRoom, connected }) {
 
 // ── Top bar ───────────────────────────────────────────────────────────────────
 
-function TopBar({ gameState, isCoach, connected, playerCount, onLeave, onOpenStats }) {
+function TopBar({ gameState, isCoach, connected, playerCount, onLeave, bbView, onToggleBBView }) {
   const tableName = gameState?.table_name ?? gameState?.room ?? 'Training Table';
   const mode      = gameState?.mode ?? 'live';
   const phase     = gameState?.phase ?? 'waiting';
+
+  const replayActive   = gameState?.replay_mode?.active;
+  const replayBranched = gameState?.replay_mode?.branched;
 
   const modeBadgeClasses =
     mode === 'review'
@@ -268,19 +246,32 @@ function TopBar({ gameState, isCoach, connected, playerCount, onLeave, onOpenSta
         background: 'rgba(6,10,15,0.95)',
         borderBottom: '1px solid rgba(255,255,255,0.05)',
         backdropFilter: 'blur(8px)',
+        height: 44,
       }}
     >
-      {/* Left: table name */}
+      {/* Left: BB toggle + table name + mode badges */}
       <div className="flex items-center gap-3">
+        {onToggleBBView && (
+          <button
+            onClick={onToggleBBView}
+            className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded transition-colors"
+            style={{
+              background: bbView ? 'rgba(88,166,255,0.2)' : 'rgba(255,255,255,0.07)',
+              color: bbView ? '#58a6ff' : 'rgba(255,255,255,0.35)',
+              border: `1px solid ${bbView ? 'rgba(88,166,255,0.5)' : 'rgba(255,255,255,0.1)'}`,
+            }}
+            title="Toggle between chip count and big-blind view"
+          >
+            {bbView ? 'BB' : 'Chips'}
+          </button>
+        )}
         <span
           className="text-sm font-semibold tracking-wide"
           style={{ color: '#d4af37' }}
         >
           {tableName}
         </span>
-        <span
-          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${modeBadgeClasses}`}
-        >
+        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${modeBadgeClasses}`}>
           {mode}
         </span>
         {isCoach && (
@@ -291,20 +282,24 @@ function TopBar({ gameState, isCoach, connected, playerCount, onLeave, onOpenSta
         {gameState?.playlist_mode?.active && (
           <span
             className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest"
-            style={{
-              background: 'rgba(212,175,55,0.12)',
-              color: '#d4af37',
-              border: '1px solid rgba(212,175,55,0.35)',
-            }}
+            style={{ background: 'rgba(212,175,55,0.12)', color: '#d4af37', border: '1px solid rgba(212,175,55,0.35)' }}
           >
-            ▶ Playlist {(gameState.playlist_mode.currentIndex ?? 0) + 1}/{gameState.playlist_mode.hands?.length ?? '?'}
+            ▶ Playlist {(gameState.playlist_mode.currentIndex ?? 0) + 1}/{gameState.playlist_mode.totalHands ?? '?'}
+          </span>
+        )}
+        {replayActive && (
+          <span
+            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest"
+            style={{ background: replayBranched ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)', color: replayBranched ? '#f59e0b' : '#60a5fa', border: `1px solid ${replayBranched ? 'rgba(245,158,11,0.4)' : 'rgba(59,130,246,0.4)'}` }}
+          >
+            {replayBranched ? 'BRANCHED' : 'REPLAY'}
           </span>
         )}
       </div>
 
       {/* Center: phase */}
-      {phase && phase !== 'waiting' && (
-        <span className="text-[10px] text-gray-500 tracking-[0.25em] uppercase">
+      {phase && phase !== 'waiting' && phase !== 'replay' && (
+        <span className="text-[10px] text-gray-500 tracking-[0.25em] uppercase absolute left-1/2 -translate-x-1/2">
           {phase}
         </span>
       )}
@@ -315,23 +310,175 @@ function TopBar({ gameState, isCoach, connected, playerCount, onLeave, onOpenSta
           {playerCount} player{playerCount !== 1 ? 's' : ''}
         </span>
         <ConnectionDot connected={connected} />
-        {onOpenStats && (
-          <button
-            onClick={onOpenStats}
-            className="text-xs text-gray-500 hover:text-amber-400 transition-colors px-1.5 py-0.5 rounded border border-gray-800 hover:border-amber-700"
-            title="View stats"
-          >
-            Stats
-          </button>
-        )}
         <button
           onClick={onLeave}
-          className="text-xs text-gray-600 hover:text-gray-400 transition-colors px-1.5 py-0.5 rounded border border-gray-800 hover:border-gray-600"
+          className="text-xs font-semibold uppercase tracking-widest px-3 py-1 rounded transition-all duration-150 active:scale-95"
+          style={{
+            background: 'rgba(239,68,68,0.15)',
+            color: '#f87171',
+            border: '1px solid rgba(239,68,68,0.35)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(239,68,68,0.28)';
+            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.6)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(239,68,68,0.15)';
+            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)';
+          }}
           title="Leave table"
         >
           Leave
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Notification toast (top-right) ───────────────────────────────────────────
+
+function NotificationToast({ notification, onDismiss }) {
+  return (
+    <div
+      className="toast-enter flex items-start gap-2 px-3 py-2 rounded-lg shadow-xl cursor-pointer"
+      style={{
+        background: 'rgba(15, 23, 42, 0.95)',
+        border: '1px solid rgba(212,175,55,0.25)',
+        backdropFilter: 'blur(8px)',
+        maxWidth: 280,
+      }}
+      onClick={onDismiss}
+    >
+      <span className="text-xs text-gray-200 leading-snug flex-1">
+        {notification.message ?? notification}
+      </span>
+      <span className="text-gray-500 text-xs shrink-0 mt-0.5">✕</span>
+    </div>
+  );
+}
+
+// ── Tag Hand Pill (floating, coach-only) ──────────────────────────────────────
+
+const HAND_TAGS = ['Review', 'Bluff', 'Hero Call', 'Mistake', 'Key Hand', '3-Bet Pot'];
+
+function TagHandPill({ currentHandTags, setCurrentHandTags, handTagsSaved, gameState, sidebarOpen }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Auto-collapse and reset on new hand (phase → waiting)
+  useEffect(() => {
+    if (gameState?.phase === 'waiting') {
+      setExpanded(false);
+    }
+  }, [gameState?.phase]);
+
+  // Hide when not in an active hand
+  const isActive = gameState && gameState.phase !== 'waiting' && gameState.phase !== 'replay';
+  if (!isActive) return null;
+
+  const rightOffset = sidebarOpen ? 'calc(18rem + 8px)' : '8px';
+
+  return (
+    <div
+      className="fixed z-50 flex flex-col items-end gap-1"
+      style={{ top: '54px', right: rightOffset, transition: 'right 0.2s' }}
+    >
+      {expanded ? (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{
+            background: 'rgba(6,10,15,0.97)',
+            border: '1px solid rgba(212,175,55,0.3)',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
+            minWidth: 200,
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
+            <span style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.15em', color: '#d4af37' }}>TAG HAND</span>
+            <div className="flex items-center gap-2">
+              {handTagsSaved && (
+                <span style={{ fontSize: '9px', color: '#3fb950', letterSpacing: '0.06em' }}>✓ Saved</span>
+              )}
+              <button
+                onClick={() => setExpanded(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6e7681', fontSize: 14, lineHeight: 1, padding: '0 2px' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#f85149'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Tag chips */}
+          <div className="flex flex-wrap gap-1.5 p-3">
+            {HAND_TAGS.map(tag => {
+              const active = currentHandTags.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  onClick={() => setCurrentHandTags(prev =>
+                    prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                  )}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide border transition-all duration-100"
+                  style={active ? {
+                    background: 'rgba(212,175,55,0.2)',
+                    borderColor: 'rgba(212,175,55,0.6)',
+                    color: '#d4b896',
+                  } : {
+                    background: 'rgba(255,255,255,0.05)',
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    color: '#6e7681',
+                  }}
+                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)'; }}
+                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tag count + clear */}
+          {currentHandTags.length > 0 && (
+            <div className="flex items-center justify-between px-3 pb-2">
+              <span style={{ fontSize: '9px', color: '#6e7681' }}>
+                {currentHandTags.length} tag{currentHandTags.length > 1 ? 's' : ''} applied
+              </span>
+              <button
+                onClick={() => setCurrentHandTags([])}
+                style={{ fontSize: '9px', color: 'rgba(248,81,73,0.7)', background: 'none', border: 'none', cursor: 'pointer' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#f85149'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(248,81,73,0.7)'; }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          onClick={() => setExpanded(true)}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-full transition-all duration-150"
+          style={{
+            background: currentHandTags.length > 0 ? 'rgba(212,175,55,0.2)' : 'rgba(6,10,15,0.9)',
+            border: `1px solid ${currentHandTags.length > 0 ? 'rgba(212,175,55,0.5)' : 'rgba(255,255,255,0.12)'}`,
+            color: currentHandTags.length > 0 ? '#d4af37' : 'rgba(255,255,255,0.4)',
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.15em',
+            backdropFilter: 'blur(8px)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.45)'; e.currentTarget.style.color = '#d4af37'; }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = currentHandTags.length > 0 ? 'rgba(212,175,55,0.5)' : 'rgba(255,255,255,0.12)';
+            e.currentTarget.style.color = currentHandTags.length > 0 ? '#d4af37' : 'rgba(255,255,255,0.4)';
+          }}
+        >
+          {currentHandTags.length > 0 && <span style={{ fontSize: 9 }}>{currentHandTags.length}</span>}
+          TAG HAND
+        </button>
+      )}
     </div>
   );
 }
@@ -424,10 +571,17 @@ export default function App() {
   const [dismissedErrorIds, setDismissedErrorIds] = useState(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [currentHandTags, setCurrentHandTags] = useState([]);
+  const tagDebounceRef = useRef(null);
 
   const handleToggleSidebar = useCallback(() => {
     setSidebarOpen((v) => !v);
   }, []);
+
+  // ── Tag Hand: reset on new hand ───────────────────────────────────────────
+  useEffect(() => {
+    if (gameState?.phase === 'waiting') setCurrentHandTags([]);
+  }, [gameState?.phase]);
 
   // ── Emit bundle ───────────────────────────────────────────────────────────
   const emit = {
@@ -463,6 +617,16 @@ export default function App() {
     replayUnbranch,
     replayExit,
   };
+
+  // ── Tag Hand: debounced save ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!activeHandId || !updateHandTags) return;
+    clearTimeout(tagDebounceRef.current);
+    tagDebounceRef.current = setTimeout(() => {
+      updateHandTags(activeHandId, currentHandTags);
+    }, 500);
+    return () => clearTimeout(tagDebounceRef.current);
+  }, [currentHandTags, activeHandId]);
 
   // ── CardPicker handlers ───────────────────────────────────────────────────
   const handleOpenCardPicker = useCallback((target) => {
@@ -522,12 +686,24 @@ export default function App() {
           connected={connected}
           playerCount={playerCount}
           onLeave={leaveRoom}
-          onOpenStats={() => setStatsOpen(true)}
+          bbView={bbView}
+          onToggleBBView={toggleBBView}
         />
 
-        {/* Error toasts — top center */}
+        {/* Tag Hand Pill — coach-only, floating below TopBar */}
+        {isCoach && !isSpectator && (
+          <TagHandPill
+            currentHandTags={currentHandTags}
+            setCurrentHandTags={setCurrentHandTags}
+            handTagsSaved={handTagsSaved}
+            gameState={gameState}
+            sidebarOpen={sidebarOpen}
+          />
+        )}
+
+        {/* Error toasts — fixed top center */}
         {visibleErrors.length > 0 && (
-          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
+          <div className="fixed top-[52px] left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
             {visibleErrors.map((err, i) => (
               <div key={err.id} className="pointer-events-auto">
                 <ErrorToast
@@ -550,7 +726,6 @@ export default function App() {
           onOpenCardPicker={handleOpenCardPicker}
           bbView={bbView}
           bigBlind={gameState?.big_blind ?? 10}
-          onToggleBBView={toggleBBView}
         />
       </div>
 
@@ -567,7 +742,6 @@ export default function App() {
           onToggle={handleToggleSidebar}
           activeHandId={activeHandId}
           handTagsSaved={handTagsSaved}
-          onOpenStats={() => setStatsOpen(true)}
           setBlindLevels={setBlindLevels}
         />
       )}

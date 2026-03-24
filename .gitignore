@@ -17,6 +17,11 @@ client/dist/
 .env.local
 .env.production
 .env.*.local
+server/.env
+server/.env.local
+
+# Player roster (contains names + bcrypt hashes — keep off version control)
+players.csv
 
 # OS / editor
 .DS_Store

@@ -1,21 +1,38 @@
 import React from 'react';
 import PlayerSeat from './PlayerSeat';
+import GhostSeat from './GhostSeat';
+import WatcherIndicator from './WatcherIndicator';
 import BoardCards from './BoardCards';
 import { fmtChips } from '../utils/chips';
 
-// Absolute seat positions as percentages of the container [left%, top%]
-// Seat 0 = bottom-center, seats increase counter-clockwise (standard online poker)
+// Absolute seat positions as percentages of the OVAL (seats are now inside the oval div)
+// Seat 0 = bottom-center (hero), increasing counter-clockwise
+// These are centered via transform: translate(-50%, -50%) on each seat card
 const SEAT_POSITIONS = [
-  { left: '50%',  top: '92%'  }, // 0  bottom-center
-  { left: '22%',  top: '82%'  }, // 1  bottom-left
-  { left: '5%',   top: '55%'  }, // 2  left
-  { left: '18%',  top: '18%'  }, // 3  top-left
-  { left: '38%',  top: '4%'   }, // 4  top-center-l
-  { left: '62%',  top: '4%'   }, // 5  top-center-r
-  { left: '82%',  top: '18%'  }, // 6  top-right
-  { left: '95%',  top: '55%'  }, // 7  right
-  { left: '78%',  top: '82%'  }, // 8  bottom-right
+  { left: '50%',  top: '94%'  }, // 0  bottom-center (hero)
+  { left: '20%',  top: '86%'  }, // 1  bottom-left
+  { left: '2%',   top: '55%'  }, // 2  left
+  { left: '14%',  top: '16%'  }, // 3  top-left
+  { left: '36%',  top: '4%'   }, // 4  top-center-l
+  { left: '64%',  top: '4%'   }, // 5  top-center-r
+  { left: '86%',  top: '16%'  }, // 6  top-right
+  { left: '98%',  top: '55%'  }, // 7  right
+  { left: '80%',  top: '86%'  }, // 8  bottom-right
 ];
+
+// For N players, the SEAT_POSITIONS indices to use — evenly distributed around the table.
+// Avoids clustering everyone on one side when seat numbers are consecutive.
+const POSITIONS_BY_COUNT = {
+  1: [0],
+  2: [0, 4],
+  3: [0, 3, 6],
+  4: [0, 2, 5, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 1, 3, 5, 6, 8],
+  7: [0, 1, 3, 4, 5, 6, 8],
+  8: [0, 1, 2, 4, 5, 6, 7, 8],
+  9: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+};
 
 function formatPot(amount) {
   if (amount == null) return '0';
@@ -88,7 +105,6 @@ export default function PokerTable({
   onOpenCardPicker,
   bbView = false,
   bigBlind = 10,
-  onToggleBBView,
 }) {
   // ── Derived state ──────────────────────────────────────────────────────────
   const players        = gameState?.players ?? [];
@@ -118,21 +134,36 @@ export default function PokerTable({
   // Current turn player id
   const currentTurnId = gameState?.current_player ?? gameState?.current_turn ?? null;
 
-  // Find my seat offset for POV rotation
-  const myPlayer = visiblePlayers.find(p => p.id === myId) ?? null;
-  // For coach (no seat / seat=-1), mySeat=0 means no rotation
-  const mySeat = (myPlayer?.seat != null && myPlayer.seat >= 0) ? myPlayer.seat : 0;
+  // Sort players by seat for consistent play-order positioning
+  const sortedBySeat = React.useMemo(
+    () => [...visiblePlayers].sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0)),
+    [visiblePlayers]
+  );
+  const myIdx = sortedBySeat.findIndex(p => p.id === myId);
+  const n = sortedBySeat.length;
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  function getSeatStyle(seatIndex) {
-    // Rotate so myId's seat appears at position 0 (bottom-center)
-    const rotated = (seatIndex - mySeat + SEAT_POSITIONS.length) % SEAT_POSITIONS.length;
-    const pos = SEAT_POSITIONS[rotated] ?? SEAT_POSITIONS[0];
+  function getSeatStyle(player) {
+    // Rotate sorted list so viewer is always at index 0 (bottom-center).
+    // Then distribute evenly using POSITIONS_BY_COUNT so no side is crowded.
+    const playerIdx = sortedBySeat.findIndex(p => p.id === player.id);
+    const effectiveMyIdx = myIdx >= 0 ? myIdx : 0;
+    const relativeIdx = (playerIdx - effectiveMyIdx + n) % n;
+    const positions = POSITIONS_BY_COUNT[n] ?? POSITIONS_BY_COUNT[9];
+    const pos = SEAT_POSITIONS[positions[relativeIdx]] ?? SEAT_POSITIONS[0];
     return {
       left: pos.left,
       top: pos.top,
       transform: 'translate(-50%, -50%)',
     };
+  }
+
+  // Ghost seat positioning — distributes recorded players around the table.
+  // No hero rotation: seats are shown from an observer's perspective.
+  function getGhostSeatStyle(seatIndex, totalGhosts) {
+    const positions = POSITIONS_BY_COUNT[totalGhosts] ?? POSITIONS_BY_COUNT[9];
+    const pos = SEAT_POSITIONS[positions[seatIndex] ?? 0] ?? SEAT_POSITIONS[0];
+    return { left: pos.left, top: pos.top, transform: 'translate(-50%, -50%)' };
   }
 
   function handleHoleCardClick(player, position) {
@@ -156,81 +187,117 @@ export default function PokerTable({
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 relative flex flex-col overflow-hidden">
-      {/* ── Notifications (top-right, max 3) ──────────────────────────────── */}
-      <div className="absolute top-3 right-3 z-40 flex flex-col gap-2 pointer-events-none">
-        {notifications.slice(-3).map((n, i) => (
-          <div key={i} className="pointer-events-auto">
-            <Toast notification={n} onDismiss={() => {}} />
-          </div>
-        ))}
-      </div>
+    <div className="flex-1 flex flex-col overflow-hidden">
 
-      {/* ── Table container — fills available space ──────────────────────── */}
-      <div className="flex-1 relative flex items-center justify-center">
-        {/* Oval felt table */}
+      {/* ── Table container — fills available vertical space ─────────────── */}
+      <div className="flex-1 relative flex items-center justify-center min-h-0">
+        {/* Oval felt table — sized as % of parent so it adapts to sidebar open/closed */}
         <div
           className="table-felt relative"
           style={{
-            width: '70vw',
-            height: '45vh',
+            width: 'min(75%, 900px)',
+            height: 'min(48vh, 500px)',
             borderRadius: '50%',
           }}
         >
+          {/* ── Logo watermark — centered on felt, behind everything ─────── */}
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            style={{ zIndex: 0 }}
+          >
+            <span
+              style={{
+                fontSize: 48,
+                fontWeight: 900,
+                letterSpacing: '0.3em',
+                color: 'rgba(212,175,55,0.04)',
+                userSelect: 'none',
+                textTransform: 'uppercase',
+              }}
+            >
+              POKER
+            </span>
+          </div>
           {/* ── Board cards — top center of oval ────────────────────────── */}
           <div className="absolute top-[18%] left-1/2 -translate-x-1/2">
             <BoardCards
               board={board}
               phase={phase}
-              isCoach={isCoach}
-              onCardClick={handleBoardCardClick}
+              isCoach={isCoach && phase !== 'replay'}
+              onCardClick={null}
             />
           </div>
 
-          {/* ── Pot display — center of oval ────────────────────────────── */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 pointer-events-none">
-            {winnerName ? (
-              <div className="flex flex-col items-center gap-1">
+          {/* ── Pot / Winner — sits between board and center of oval ─────── */}
+          <div
+            className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none"
+            style={{ top: '36%', transform: 'translate(-50%, -50%)', zIndex: 2 }}
+          >
+            {isShowdown ? (
+              /* Winner block replaces pot at showdown */
+              <div className="flex flex-col items-center gap-1.5 pointer-events-auto">
                 <span
-                  className="text-xs font-semibold tracking-widest uppercase"
+                  className="text-[10px] font-black tracking-[0.35em] uppercase leading-none"
                   style={{ color: '#d4af37' }}
                 >
-                  WINNER
+                  {showdownResult?.splitPot ? 'SPLIT POT' : 'WINNER'}
                 </span>
-                <span
-                  className="text-base font-bold tracking-wide"
-                  style={{ color: '#f0d060', textShadow: '0 0 12px rgba(212,175,55,0.7)' }}
-                >
-                  {winnerName}
-                </span>
-                <span className="text-xs font-mono" style={{ color: '#d4af37' }}>
-                  +{fmtChips(winnerPot, bigBlind, bbView)}
-                </span>
+                {(showdownResult?.winners ?? [{ playerId: winner, playerName: winnerName }]).map((w) => (
+                  <span
+                    key={w.playerId}
+                    className="text-base font-bold tracking-wide leading-tight text-center"
+                    style={{ color: '#f0d060', textShadow: '0 0 12px rgba(212,175,55,0.6)' }}
+                  >
+                    {w.playerName}
+                  </span>
+                ))}
+                {showdownResult?.winners[0]?.handResult?.description && (
+                  <span
+                    className="text-[10px] font-semibold text-center leading-snug"
+                    style={{ color: 'rgba(212,175,55,0.8)' }}
+                  >
+                    {showdownResult.winners[0].handResult.description}
+                  </span>
+                )}
+                {(showdownResult?.potAwarded ?? 0) > 0 && (
+                  <span className="text-[11px] font-mono" style={{ color: 'rgba(212,175,55,0.65)' }}>
+                    +{fmtChips(showdownResult.potAwarded, bigBlind, bbView)}
+                  </span>
+                )}
+                {isCoach && (
+                  <button
+                    className="btn-gold mt-1 px-4 py-1 text-[10px] tracking-widest uppercase"
+                    onClick={() => emit.resetHand?.()}
+                    style={{ pointerEvents: 'auto' }}
+                  >
+                    Next Hand
+                  </button>
+                )}
               </div>
             ) : pot > 0 ? (
               <div className="flex flex-col items-center gap-0.5">
                 <span
-                  className="text-[11px] font-semibold tracking-[0.2em] uppercase"
-                  style={{ color: 'rgba(212,175,55,0.6)' }}
+                  className="text-[10px] font-semibold tracking-[0.25em] uppercase"
+                  style={{ color: 'rgba(212,175,55,0.55)' }}
                 >
                   POT
                 </span>
                 <span
-                  className="text-lg font-bold font-mono leading-none"
-                  style={{ color: '#d4af37', textShadow: '0 0 10px rgba(212,175,55,0.5)' }}
+                  className="text-base font-bold font-mono leading-none"
+                  style={{ color: '#d4af37', textShadow: '0 0 10px rgba(212,175,55,0.4)' }}
                 >
                   {fmtChips(pot, bigBlind, bbView)}
                 </span>
                 {sidePots.length > 0 && (
-                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                     {sidePots.map((sp, idx) => {
                       const eligibleNames = sp.eligiblePlayerIds
                         .map(id => gameState.players.find(p => p.id === id)?.name ?? id)
                         .join(', ');
                       return (
-                        <div key={idx} style={{ fontSize: 11, color: 'var(--color-text-muted, #888)', background: 'rgba(0,0,0,0.35)', borderRadius: 6, padding: '2px 10px' }}>
-                          Pot {idx + 1}: <strong style={{ color: 'var(--color-gold, #d4af37)' }}>{fmtChips(sp.amount, bigBlind, bbView)}</strong>
-                          <span style={{ marginLeft: 6, opacity: 0.75 }}>({eligibleNames})</span>
+                        <div key={idx} style={{ fontSize: 10, color: '#888', background: 'rgba(0,0,0,0.35)', borderRadius: 6, padding: '2px 8px' }}>
+                          Pot {idx + 1}: <strong style={{ color: '#d4af37' }}>{fmtChips(sp.amount, bigBlind, bbView)}</strong>
+                          <span style={{ marginLeft: 4, opacity: 0.75 }}>({eligibleNames})</span>
                         </div>
                       );
                     })}
@@ -240,33 +307,7 @@ export default function PokerTable({
             ) : null}
           </div>
 
-          {/* ── Phase label — bottom center of oval ─────────────────────── */}
-          {phase && phase !== 'waiting' && phase !== 'replay' && (
-            <div className="absolute bottom-[14%] left-1/2 -translate-x-1/2">
-              <span
-                className="text-[10px] font-semibold tracking-[0.3em] uppercase"
-                style={{ color: 'rgba(212,175,55,0.45)' }}
-              >
-                {phase}
-              </span>
-            </div>
-          )}
 
-          {/* ── BB view toggle ───────────────────────────────────────── */}
-          {onToggleBBView && (
-            <button
-              onClick={onToggleBBView}
-              className="absolute top-2 right-3 z-10 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded transition-colors"
-              style={{
-                background: bbView ? 'rgba(88,166,255,0.2)' : 'rgba(255,255,255,0.07)',
-                color: bbView ? '#58a6ff' : 'rgba(255,255,255,0.35)',
-                border: `1px solid ${bbView ? 'rgba(88,166,255,0.5)' : 'rgba(255,255,255,0.1)'}`,
-              }}
-              title="Toggle between chip count and big-blind view"
-            >
-              {bbView ? 'BB' : 'Chips'}
-            </button>
-          )}
 
           {/* ── Replay / Branched badges ─────────────────────────────── */}
           {gameState?.replay_mode?.active && !gameState?.replay_mode?.branched && (
@@ -353,134 +394,239 @@ export default function PokerTable({
             </div>
           )}
 
-          {/* ── Action Timer ───────────────────────────────────────────────── */}
-          {actionTimer && !isPaused && (
-            <div className="absolute bottom-[6%] left-1/2 -translate-x-1/2">
-              <ActionTimerBar timer={actionTimer} />
-            </div>
-          )}
-          {actionTimer && isPaused && (
-            <div className="absolute bottom-[6%] left-1/2 -translate-x-1/2">
-              <span className="text-[9px] tracking-widest uppercase" style={{ color: 'rgba(212,175,55,0.4)' }}>
-                TIMER PAUSED
-              </span>
-            </div>
-          )}
+          {/* ── Player seats — absolutely positioned relative to the oval ── */}
+          <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 3 }}>
+          {(() => {
+            const replayMode = gameState?.replay_mode;
+            const isNonBranchedReplay = replayMode?.active && !replayMode?.branched;
 
-          {/* ── Showdown banner ─────────────────────────────────────────── */}
-          {isShowdown && !isPaused && (
-            <div
-              className="absolute left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 px-5 py-3 rounded-2xl pointer-events-auto"
-              style={{
-                top: '38%',
-                background: 'rgba(0,0,0,0.85)',
-                border: '1px solid #d4af37',
-                boxShadow: '0 0 24px rgba(212,175,55,0.25)',
-                backdropFilter: 'blur(8px)',
-                minWidth: 220,
-                maxWidth: 340,
-              }}
-            >
-              {/* Header */}
-              <span
-                className="text-[10px] font-black tracking-[0.35em] uppercase leading-none"
-                style={{ color: '#d4af37' }}
+            if (isNonBranchedReplay) {
+              // ── REPLAY MODE: show ghost seats from recorded hand ──────────
+              const playerMeta = replayMode.player_meta ?? {};
+              const originalHoleCards = replayMode.original_hole_cards ?? {};
+              const currentAction = replayMode.current_action;
+
+              // Sort ghost players by their original seat number
+              const ghostPlayers = Object.entries(playerMeta)
+                .map(([stableId, meta]) => ({ stableId, ...meta }))
+                .sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0));
+
+              const totalGhosts = ghostPlayers.length;
+
+              return (
+                <>
+                  {/* Ghost seats for each recorded player */}
+                  {ghostPlayers.map((ghost, idx) => {
+                    const isCurrentAction = currentAction?.player_id === ghost.stableId;
+                    const isCoachSlot = String(ghost.stableId).startsWith('coach_');
+                    const holeCards = originalHoleCards[ghost.stableId] ?? [];
+                    return (
+                      <GhostSeat
+                        key={ghost.stableId}
+                        stableId={ghost.stableId}
+                        name={ghost.name}
+                        isCoachSlot={isCoachSlot}
+                        isCurrentAction={isCurrentAction}
+                        holeCards={holeCards}
+                        action={isCurrentAction ? currentAction.action : null}
+                        style={getGhostSeatStyle(idx, totalGhosts)}
+                        bbView={bbView}
+                        bigBlind={bigBlind}
+                      />
+                    );
+                  })}
+
+                  {/* Watcher indicators for real seated players */}
+                  {visiblePlayers.map((player) => (
+                    <WatcherIndicator
+                      key={player.id}
+                      player={player}
+                      isMe={player.id === myId}
+                      style={getSeatStyle(player)}
+                    />
+                  ))}
+                </>
+              );
+            }
+
+            // ── BRANCHED REPLAY: shadow players (is_shadow) play; real players (is_observer) watch ──
+            if (replayMode?.active && replayMode?.branched) {
+              const shadowPlayers = visiblePlayers.filter(p => p.is_shadow);
+              const observerPlayers = visiblePlayers.filter(p => p.is_observer);
+
+              return (
+                <>
+                  {shadowPlayers.map((player) => {
+                    const isCurrentTurn = player.id === currentTurnId;
+                    return (
+                      <div key={player.id} className="pointer-events-none">
+                        <PlayerSeat
+                          player={player}
+                          isCurrentTurn={isCurrentTurn}
+                          isMe={false}
+                          isCoach={false}
+                          style={getSeatStyle(player)}
+                          onHoleCardClick={() => {}}
+                          showdownResult={isShowdown ? showdownResult : null}
+                          isWinner={isShowdown && winnerIds.has(player.id)}
+                          replayMode={replayMode}
+                          bbView={bbView}
+                          bigBlind={bigBlind}
+                          sessionId={null}
+                          actionTimer={actionTimer}
+                        />
+                      </div>
+                    );
+                  })}
+                  {observerPlayers.map((player) => (
+                    <WatcherIndicator
+                      key={player.id}
+                      player={player}
+                      isMe={player.id === myId}
+                      style={getSeatStyle(player)}
+                    />
+                  ))}
+                </>
+              );
+            }
+
+            // ── NORMAL: show real player seats ────────────────────────────
+            return visiblePlayers.map((player) => {
+              const seatStyle = getSeatStyle(player);
+              const isCurrentTurn = player.id === currentTurnId;
+              const isMe = player.id === myId;
+              const isWinner = isShowdown && winnerIds.has(player.id);
+
+              return (
+                <div key={player.id} className="pointer-events-auto">
+                  <PlayerSeat
+                    player={player}
+                    isCurrentTurn={isCurrentTurn}
+                    isMe={isMe}
+                    isCoach={isCoach}
+                    style={seatStyle}
+                    onHoleCardClick={() => {}}
+                    showdownResult={isShowdown ? showdownResult : null}
+                    isWinner={isWinner}
+                    replayMode={replayMode}
+                    bbView={bbView}
+                    bigBlind={bigBlind}
+                    sessionId={gameState?.session_id ?? null}
+                    actionTimer={actionTimer}
+                  />
+                </div>
+              );
+            });
+          })()}
+          </div>{/* closes seats container */}
+        </div>{/* closes oval */}
+      </div>{/* closes table area */}
+
+      {/* ── Betting / Replay controls — in-flow below the table ─────────── */}
+      <div className="relative z-30 flex-shrink-0">
+        {gameState?.replay_mode?.active && !gameState?.replay_mode?.branched ? (
+          /* ── Replay controls (replaces betting panel during replay) ───── */
+          <div style={{
+            background: 'rgba(10,14,20,0.97)',
+            borderTop: '1px solid rgba(212,175,55,0.18)',
+            padding: '10px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}>
+            {/* Progress label + scrubber */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '11px', color: '#8b949e', flexShrink: 0 }}>
+                {gameState.replay_mode.cursor === -1
+                  ? `Start — ${gameState.replay_mode.total_actions} actions`
+                  : `${gameState.replay_mode.cursor + 1} / ${gameState.replay_mode.total_actions}`}
+              </span>
+              {gameState.replay_mode.current_action && (
+                <span style={{ fontSize: '11px', color: '#a78bfa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {gameState.replay_mode.current_action.player_name} — {gameState.replay_mode.current_action.street}: {gameState.replay_mode.current_action.action}
+                  {gameState.replay_mode.current_action.amount > 0 && ` $${gameState.replay_mode.current_action.amount}`}
+                </span>
+              )}
+              <input
+                type="range"
+                min={-1}
+                max={gameState.replay_mode.total_actions - 1}
+                value={gameState.replay_mode.cursor}
+                onChange={(e) => emit.replayJumpTo?.(parseInt(e.target.value))}
+                style={{ flex: 1, accentColor: '#a78bfa', minWidth: 0 }}
+              />
+            </div>
+
+            {/* Action row: Back · Fwd · Branch · Exit */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => emit.replayStepBack?.()}
+                disabled={gameState.replay_mode.cursor <= -1}
+                style={{
+                  flex: 1, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
+                  background: '#161b22', border: '1px solid #30363d', color: '#a78bfa',
+                  opacity: gameState.replay_mode.cursor <= -1 ? 0.4 : 1,
+                }}
               >
-                {showdownResult?.splitPot ? 'SPLIT POT' : 'WINNER'}
-              </span>
-
-              {/* Winner name(s) */}
-              <div className="flex flex-col items-center gap-0.5">
-                {(showdownResult?.winners ?? [{ playerId: winner, playerName: winnerName }]).map((w) => (
-                  <span
-                    key={w.playerId}
-                    className="text-base font-bold tracking-wide leading-tight text-center"
-                    style={{ color: '#f0d060', textShadow: '0 0 12px rgba(212,175,55,0.6)' }}
-                  >
-                    {w.playerName}
-                  </span>
-                ))}
-              </div>
-
-              {/* Winning hand description — use first winner's hand */}
-              {showdownResult?.winners[0]?.handResult?.description && (
-                <span
-                  className="text-[11px] font-semibold text-center leading-snug"
-                  style={{ color: 'rgba(212,175,55,0.85)' }}
-                >
-                  {showdownResult.winners[0].handResult.description}
-                </span>
-              )}
-
-              {/* Pot awarded */}
-              {(showdownResult?.potAwarded ?? 0) > 0 && (
-                <span
-                  className="text-[11px] font-mono leading-none"
-                  style={{ color: 'rgba(212,175,55,0.65)' }}
-                >
-                  +{Number(showdownResult.potAwarded).toLocaleString('en-US')} chips
-                </span>
-              )}
-
-              {/* Next Hand button — coach only */}
-              {isCoach && (
+                ◀ Back
+              </button>
+              <button
+                onClick={() => emit.replayStepFwd?.()}
+                disabled={gameState.replay_mode.cursor >= gameState.replay_mode.total_actions - 1}
+                style={{
+                  flex: 1, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
+                  background: '#161b22', border: '1px solid #30363d', color: '#a78bfa',
+                  opacity: gameState.replay_mode.cursor >= gameState.replay_mode.total_actions - 1 ? 0.4 : 1,
+                }}
+              >
+                Fwd ▶
+              </button>
+              {!gameState.replay_mode.branched ? (
                 <button
-                  className="btn-gold mt-1 px-4 py-1.5 text-[11px] tracking-widest uppercase"
-                  onClick={() => emit.resetHand?.()}
+                  onClick={() => emit.replayBranch?.()}
+                  style={{
+                    flex: 2, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
+                    background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', color: '#f59e0b',
+                  }}
                 >
-                  Next Hand
+                  Branch to Live from Here
+                </button>
+              ) : (
+                <button
+                  onClick={() => emit.replayUnbranch?.()}
+                  style={{
+                    flex: 2, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
+                    background: 'rgba(245,158,11,0.25)', border: '1px solid rgba(245,158,11,0.6)', color: '#fbbf24',
+                  }}
+                >
+                  Return to Replay
                 </button>
               )}
+              <button
+                onClick={() => emit.replayExit?.()}
+                style={{
+                  flex: 1, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
+                  background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171',
+                }}
+              >
+                Exit Replay
+              </button>
             </div>
-          )}
-        </div>
-
-        {/* ── Player seats — absolutely positioned around the oval ──────── */}
-        {/* We need a full-size container for absolute seat positioning */}
-        <div className="absolute inset-0 pointer-events-none">
-          {visiblePlayers.map((player) => {
-            const seatIndex = player.seat ?? 0;
-            const seatStyle = getSeatStyle(seatIndex);
-            const isCurrentTurn = player.id === currentTurnId;
-            const isMe = player.id === myId;
-
-            const isWinner = isShowdown && winnerIds.has(player.id);
-
-            return (
-              <div key={player.id} className="pointer-events-auto">
-                <PlayerSeat
-                  player={player}
-                  isCurrentTurn={isCurrentTurn}
-                  isMe={isMe}
-                  isCoach={isCoach}
-                  style={seatStyle}
-                  onHoleCardClick={(position) => handleHoleCardClick(player, position)}
-                  showdownResult={isShowdown ? showdownResult : null}
-                  isWinner={isWinner}
-                  replayMode={gameState?.replay_mode ?? null}
-                  bbView={bbView}
-                  bigBlind={bigBlind}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── Betting controls — outside/below the oval ─────────────────────── */}
-      <div className="relative z-30 flex-shrink-0">
-        <React.Suspense fallback={null}>
-          {BettingControls && !(gameState?.replay_mode?.active && !gameState?.replay_mode?.branched) && (
-            <BettingControls
-              gameState={gameState}
-              myId={myId}
-              isCoach={isCoach}
-              emit={emit}
-              bbView={bbView}
-              bigBlind={bigBlind}
-            />
-          )}
-        </React.Suspense>
+          </div>
+        ) : (
+          <React.Suspense fallback={null}>
+            {BettingControls && (
+              <BettingControls
+                gameState={gameState}
+                myId={myId}
+                isCoach={isCoach}
+                emit={emit}
+                bbView={bbView}
+                bigBlind={bigBlind}
+              />
+            )}
+          </React.Suspense>
+        )}
       </div>
     </div>
   );

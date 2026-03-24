@@ -78,6 +78,7 @@ class GameManager {
         branched: false,
         pre_branch_snapshot: null,
       },
+      is_replay_branch: false,
     };
   }
 
@@ -86,9 +87,11 @@ class GameManager {
   // ─────────────────────────────────────────────
   getPublicState(requesterId, isCoach) {
     const s = this.state;
+    // Coach sees all cards only in non-branched replay (for review) or at showdown.
+    // During live play the coach is a regular player and must not see opponents' cards.
+    const coachInReview = isCoach && s.replay_mode.active && !s.replay_mode.branched;
     const players = s.players.map(p => {
-      // Coach sees everything. Showdown reveals everything.
-      if (isCoach || p.id === requesterId || s.phase === 'showdown') {
+      if (p.id === requesterId || s.phase === 'showdown' || coachInReview) {
         return { ...p };
       }
       return {
@@ -97,8 +100,9 @@ class GameManager {
       };
     });
 
-    // In replay mode all hole cards are visible for coaching
-    if (s.replay_mode.active) {
+    // In non-branched replay restore original hole cards so all clients see the full hand.
+    // Skip this in branched mode — shadow players already have their dealt cards.
+    if (s.replay_mode.active && !s.replay_mode.branched) {
       players.forEach(p => {
         const cards = s.replay_mode.original_hole_cards[p.stableId];
         if (cards && cards.length > 0) p.hole_cards = [...cards];
@@ -173,7 +177,12 @@ class GameManager {
         branched: s.replay_mode.branched,
         source_hand_id: s.replay_mode.source_hand_id,
         current_action: s.replay_mode.actions[s.replay_mode.cursor] ?? null,
+        // Ghost seat data — exposed during replay so client can render shadow players
+        // independently of who is currently seated at the table
+        player_meta: s.replay_mode.active ? s.replay_mode.player_meta : {},
+        original_hole_cards: s.replay_mode.active ? s.replay_mode.original_hole_cards : {},
       },
+      is_replay_branch: s.is_replay_branch ?? false,
     };
   }
 
@@ -254,6 +263,10 @@ class GameManager {
   }
 
   _gamePlayers() {
+    // In branched replay, only shadow players participate — observers sit out of game logic
+    if (this.state.replay_mode?.branched) {
+      return this.state.players.filter(p => p.seat >= 0 && p.is_shadow);
+    }
     return this.state.players.filter(p => p.seat >= 0);
   }
 
@@ -462,13 +475,19 @@ class GameManager {
     if (this.state.phase !== 'waiting') {
       return { error: 'Can only start a new hand when waiting between hands' };
     }
-    // Clear any stale replay state before starting a fresh hand
-    if (this.state.replay_mode.active || this.state.replay_mode.branched) {
+    // Clear active non-branched replay state before starting a fresh hand.
+    // When branched, keep the replay_mode (pre_branch_snapshot needed for unbranching).
+    if (this.state.replay_mode.active && !this.state.replay_mode.branched) {
       this.state.replay_mode = {
         active: false, source_hand_id: null, actions: [], cursor: -1,
         original_hole_cards: {}, original_board: [], original_stacks: {},
         player_meta: {}, dealer_seat: 0, branched: false, pre_branch_snapshot: null,
+        playlist_was_active: false,
       };
+    }
+    // Mark branched hands so DB logging and reset_hand can be skipped
+    if (this.state.replay_mode.branched) {
+      this.state.is_replay_branch = true;
     }
     const players = this._gamePlayers();
     if (players.length < 2) return { error: 'Need at least 2 seated players to start' };
@@ -585,10 +604,13 @@ class GameManager {
       this.state.config = null;
     } else {
       // RNG mode (or config with mode='rng'): deal randomly.
+      // Shadow players in a branched replay receive their original recorded hole cards.
       this.state.deck = shuffleDeck(createDeck());
       players.forEach(p => {
         if (p.in_hand === false) {
           p.hole_cards = [];
+        } else if (p.is_shadow && p._original_hole_cards?.length) {
+          p.hole_cards = [...p._original_hole_cards];
         } else {
           p.hole_cards = [this.state.deck.pop(), this.state.deck.pop()];
         }
@@ -604,6 +626,11 @@ class GameManager {
 
     // Reset in_hand flag for all players after dealing (each hand is a fresh choice)
     players.forEach(p => { p.in_hand = true; });
+
+    // If everyone went all-in just posting blinds, no one has a turn — run the board out now.
+    if (this.state.current_turn === null) {
+      this._advanceStreet();
+    }
 
     return { success: true };
   }
@@ -968,8 +995,9 @@ class GameManager {
         return;
       }
     }
-    // All remaining active players are all-in — no action needed, clear the turn
+    // All remaining active players are all-in — run the board out automatically.
     this.state.current_turn = null;
+    this._advanceStreet();
   }
 
   // Coach: force advance to next street without completing betting
@@ -1106,7 +1134,9 @@ class GameManager {
       active: false, source_hand_id: null, actions: [], cursor: -1,
       original_hole_cards: {}, original_board: [], original_stacks: {},
       player_meta: {}, dealer_seat: 0, branched: false, pre_branch_snapshot: null,
+      playlist_was_active: false,
     };
+    this.state.is_replay_branch = false;
     return { success: true };
   }
 
@@ -1145,6 +1175,8 @@ class GameManager {
     rm.cursor = -1;
     rm.branched = false;
     rm.pre_branch_snapshot = null;
+    // Remember if a playlist was active so exitReplay can resume it
+    rm.playlist_was_active = this.state.playlist_mode?.active ?? false;
 
     // Build lookup maps from handDetail.players
     rm.original_hole_cards = {};
@@ -1197,12 +1229,52 @@ class GameManager {
     if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
     const rm = this.state.replay_mode;
     if (rm.branched) return { error: 'Already branched' };
+
     rm.pre_branch_snapshot = JSON.parse(JSON.stringify(this.state));
     rm.branched = true;
+
+    // Mark all real seated players as observers — coach acts for shadow players
+    this.state.players.forEach(p => {
+      p.is_observer = true;
+      p.in_hand = false;
+    });
+
+    // Inject a shadow player for every recorded player in this hand.
+    // Shadow players use the recorded player_id as their `id` so current_turn
+    // (which carries player_id values during replay) resolves correctly.
+    Object.entries(rm.player_meta).forEach(([playerId, meta]) => {
+      const originalCards = rm.original_hole_cards[playerId] ?? [];
+      const stack = rm.original_stacks[playerId] ?? (this.state.big_blind * 100);
+      this.state.players.push({
+        id: playerId,
+        stableId: playerId,
+        name: meta.name,
+        seat: meta.seat ?? 0,
+        stack,
+        hole_cards: [],
+        // Stash for startGame — cleared by reset loop but preserved here for later
+        _original_hole_cards: originalCards,
+        current_bet: 0,
+        total_bet_this_round: 0,
+        total_contributed: 0,
+        action: 'waiting',
+        is_active: true,
+        is_dealer: false,
+        is_small_blind: false,
+        is_big_blind: false,
+        is_all_in: false,
+        is_coach: false,
+        is_shadow: true,
+        acted_this_street: false,
+        in_hand: true,
+        disconnected: false,
+      });
+    });
+
     this.state.phase = 'waiting';
     this.state.history = [];
     this.state.street_snapshots = [];
-    this.state.current_turn = null; // stableId from replay is not a socketId; clear to avoid timer confusion
+    this.state.current_turn = null;
     return { success: true };
   }
 
@@ -1220,11 +1292,27 @@ class GameManager {
   }
 
   exitReplay() {
-    const rm = this.state.replay_mode;
+    let rm = this.state.replay_mode;
     if (this.state.phase !== 'replay' && !rm.branched) {
       return { error: 'Not in replay mode' };
     }
-    // Restore stacks to pre-replay values
+    // Capture playlist flag — may be on either current rm or the pre-branch snapshot
+    const playlistWasActive = rm.playlist_was_active
+      ?? rm.pre_branch_snapshot?.replay_mode?.playlist_was_active
+      ?? false;
+
+    // If currently branched, restore the pre-branch snapshot first.
+    // This removes shadow players and un-marks real players as observers.
+    if (rm.branched && rm.pre_branch_snapshot) {
+      const playlistHands = rm.pre_branch_snapshot.playlist_mode?.hands ?? [];
+      this.state = JSON.parse(JSON.stringify(rm.pre_branch_snapshot));
+      if (this.state.playlist_mode && playlistHands.length) {
+        this.state.playlist_mode.hands = playlistHands;
+      }
+      rm = this.state.replay_mode; // now points to pre-branch replay_mode
+    }
+
+    // Restore stacks to pre-replay values and clear hand state
     this.state.players.forEach(p => {
       if (rm.original_stacks[p.stableId] !== undefined) {
         p.stack = rm.original_stacks[p.stableId];
@@ -1233,12 +1321,14 @@ class GameManager {
       p.action = 'waiting';
       p.is_active = true;
       p.current_bet = 0;
+      p.is_observer = false;
     });
     this.state.board = [];
     this.state.pot = 0;
     this.state.current_bet = 0;
     this.state.current_turn = null;
     this.state.phase = 'waiting';
+    this.state.is_replay_branch = false;
     // Reset replay_mode
     this.state.replay_mode = {
       active: false,
@@ -1252,8 +1342,9 @@ class GameManager {
       dealer_seat: 0,
       branched: false,
       pre_branch_snapshot: null,
+      playlist_was_active: false,
     };
-    return { success: true };
+    return { success: true, playlistWasActive };
   }
 
   _sortWinnersBySBProximity(winners) {

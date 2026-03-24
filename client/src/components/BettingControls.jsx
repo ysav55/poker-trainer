@@ -13,19 +13,31 @@ export default function BettingControls({
 }) {
   const fmt = (v) => fmtChips(v ?? 0, bigBlind, bbView);
   const player = gameState?.players?.find(p => p.id === myId) ?? null;
-  // Guard: only render when it's our turn, active phase, not paused
+
+  // In branched replay the coach acts for the current shadow player
+  const isBranchedReplay = gameState?.is_replay_branch && isCoach;
+  const shadowPlayer = isBranchedReplay
+    ? (gameState?.players?.find(p => p.id === gameState?.current_turn && p.is_shadow) ?? null)
+    : null;
+
+  // Use shadow player stats when coach is acting for them, otherwise use own stats
+  const activePlayer = shadowPlayer ?? player;
+
+  // Guard: only render when it's our turn (or coach's shadow turn), active phase, not paused
   const isMyTurn =
-    player &&
     gameState &&
-    gameState.current_turn === myId &&
     ACTIVE_PHASES.has(gameState.phase) &&
-    !gameState.paused;
+    !gameState.paused &&
+    (
+      (player && gameState.current_turn === myId) ||
+      (isBranchedReplay && shadowPlayer !== null)
+    );
 
   const currentBet = gameState?.current_bet ?? 0;
   const minRaise = gameState?.min_raise ?? currentBet;
   const pot = gameState?.pot ?? 0;
-  const playerStack = player?.stack ?? 0;
-  const playerBetThisRound = player?.total_bet_this_round ?? 0;
+  const playerStack = activePlayer?.stack ?? 0;
+  const playerBetThisRound = activePlayer?.total_bet_this_round ?? 0;
 
   // How much more the player needs to put in to call
   const toCall = Math.max(0, currentBet - playerBetThisRound);
@@ -93,12 +105,12 @@ export default function BettingControls({
   return (
     <div
       className={`
-        fixed bottom-0 left-1/2 -translate-x-1/2 z-50
+        w-full flex justify-center
         transition-all duration-300 ease-out
         ${visible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}
       `}
-      style={{ width: 'min(520px, 96vw)' }}
     >
+    <div style={{ width: 'min(520px, 96vw)' }}>
       {/* Container panel */}
       <div
         className="mx-auto rounded-t-xl overflow-hidden"
@@ -127,7 +139,9 @@ export default function BettingControls({
               </div>
             )}
           </div>
-          <div className="label-sm text-gold-500/60 tracking-widest">YOUR TURN</div>
+          <div className="label-sm text-gold-500/60 tracking-widest">
+            {shadowPlayer ? `ACT FOR ${shadowPlayer.name.toUpperCase()}` : 'YOUR TURN'}
+          </div>
         </div>
 
         {/* Raise panel — shown when raise is toggled */}
@@ -359,13 +373,9 @@ export default function BettingControls({
             cursor: pointer;
             border: 2px solid #b8962e;
           }
-          input[type='number']::-webkit-inner-spin-button,
-          input[type='number']::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-          }
         `}</style>
       </div>
+    </div>
     </div>
   );
 }

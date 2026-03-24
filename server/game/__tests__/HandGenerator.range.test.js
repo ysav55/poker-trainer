@@ -319,9 +319,9 @@ describe('hole_cards_combos — pre-resolved preset combos', () => {
     expect(result.error).toBeUndefined();
     const [c1, c2] = result.playerCards.p1;
     expect(c1[1]).toBe(c2[1]); // same suit
-    const ranks = 'A23456789TJQKA';
-    const ri1 = 'A23456789TJQKA'.indexOf(c1[0]);
-    const ri2 = 'A23456789TJQKA'.indexOf(c2[0]);
+    const ranks = '23456789TJQKA'; // A at index 12, K at 11 → abs diff = 1 for AK
+    const ri1 = ranks.indexOf(c1[0]);
+    const ri2 = ranks.indexOf(c2[0]);
     expect(Math.abs(ri1 - ri2)).toBe(1); // adjacent ranks
   });
 

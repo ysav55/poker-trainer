@@ -797,14 +797,17 @@ describe('getPublicState — card hiding', () => {
     expect(p2View.hole_cards).toEqual(['HIDDEN', 'HIDDEN']);
   });
 
-  test('coach sees all hole cards', () => {
+  test('coach does NOT see opponent hole cards during live play (FE-15)', () => {
+    // Coach participates in live play and must not see opponents' hole cards.
+    // Full visibility is only granted during non-branched replay review.
     const { gm, ids } = buildGame(2);
     gm.manualDealCard('player', ids[0], 0, 'Ah');
     gm.manualDealCard('player', ids[1], 0, '2c');
 
-    const pub = gm.getPublicState('coach-id', true); // isCoach = true
+    // Coach requests state during live play (not replay). coach-id is not a seated player.
+    const pub = gm.getPublicState('coach-id', true);
     pub.players.forEach(p => {
-      p.hole_cards.forEach(c => expect(c).not.toBe('HIDDEN'));
+      p.hole_cards.forEach(c => expect(c).toBe('HIDDEN'));
     });
   });
 

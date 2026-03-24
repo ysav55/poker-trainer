@@ -1,8 +1,8 @@
 # Poker Trainer — Getting Started
 
-A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to a local database so hand history and player stats survive restarts.
+A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history and player stats survive restarts and are accessible from any device.
 
-**Last updated:** 2026-03-16 — Blind controls, BB view toggle, 100BB default stack, B145–B244 integration tests, in-hand toggle fix (ISS-72). 951 tests passing.
+**Last updated:** 2026-03-24 — Replay controls moved inline (below table, replaces betting panel during replay); ghost seat cards now show face-down backs when hole cards missing; board suppressed as interactive during replay; markIncomplete saves board+cards on shutdown; number input spinners hidden globally; blind levels input overflow fixed.
 
 ---
 
@@ -11,6 +11,7 @@ A real-time poker training tool. The **coach** controls the game (deal hands, pa
 - **Node.js 18+** (includes npm)
 - A modern browser (Chrome, Firefox, Edge, Safari)
 - Players on the same local network, or a tunneling tool for remote access
+- A **Supabase project** (free tier works; schema already deployed)
 
 ---
 
@@ -21,6 +22,19 @@ A real-time poker training tool. The **coach** controls the game (deal hands, pa
 cd server && npm install && cd ..
 cd client && npm install && cd ..
 ```
+
+### Environment Variables
+
+**`/.env`** (project root — read by the server):
+```
+SUPABASE_URL=https://<your-project>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service_role_key>
+SESSION_SECRET=<a-long-random-string>
+```
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are available in your Supabase dashboard under Settings → API. `SESSION_SECRET` can be any random string (e.g. output of `openssl rand -hex 32`) — it signs the JWTs that keep players logged in.
+
+> The browser client no longer has any Supabase credentials. The `client/.env` file is not required.
 
 ---
 
@@ -56,17 +70,34 @@ Open **http://localhost:5173**. The client hot-reloads on file save; the server 
 
 ## 3. Accounts
 
-### Registering (first visit)
+This is a **closed system** — there is no self-registration. The admin edits `players.csv` at the project root to add or remove players.
 
-1. Open the app and choose the **Register** tab.
-2. Enter a **display name**, **email**, and **password**. Click Register.
-3. Your identity is saved to the database. On return visits you only need your name and password.
+### Managing the player roster (`players.csv`)
 
-### Logging in (return visits)
+```csv
+# Poker Trainer — Player Roster
+# Format: name,password,role
+# role must be: coach   or   student
+# Lines starting with # are ignored. Whitespace around commas is trimmed.
 
-1. Choose the **Log In** tab.
-2. Enter your **name** and **password**. Click Log In.
-3. If your browser still has your stored identity, the form is pre-filled and you go straight to the table.
+Coach,coach123,coach
+Alice,alice123,student
+Bob,bob123,student
+```
+
+- Add a row to give someone access.
+- Delete a row to revoke access immediately (takes effect on next server restart, or call `reload()` in server console).
+- `role` must be exactly `coach` or `student`.
+- Names are case-insensitive for login but the capitalisation in the file is what appears in-game.
+- There is no email field — name + password is sufficient.
+
+> The server exits with a fatal error at startup if `players.csv` is missing.
+
+### Logging in
+
+1. Open the app — the **Log In** tab is shown by default.
+2. Enter your **name** and **password** exactly as listed in `players.csv`. Click Log In.
+3. The server returns a `stableId` that is stored in `localStorage` so your hand history persists across sessions.
 
 ### Watching without an account
 
@@ -74,13 +105,13 @@ Click **Watch**. Enter any name. You can see the table but cannot act or place b
 
 ### Joining as coach
 
-Click **Coach**. Enter your name and the coach password (set via the `COACH_PASSWORD` environment variable). The coach has full control of the game and also plays at the table as a regular seat.
+Log in with a name that has `role: coach` in `players.csv`. The coach flag is granted automatically — there is no separate coach password.
 
 ---
 
 ## 4. Joining a Table
 
-After logging in or registering, enter a **table name** and click **Join Table**. Everyone who enters the same table name is in the same game.
+After logging in, everyone automatically joins the main table. Players on the same server see the same game.
 
 - Players on the same Wi-Fi use the **Network URL** printed by Vite in dev mode (e.g. `http://192.168.x.x:5173`), or the server's IP on port 3001 in production.
 - For remote/internet play, use [ngrok](https://ngrok.com): `ngrok http 3001` and share the resulting URL.
@@ -89,83 +120,99 @@ After logging in or registering, enter a **table name** and click **Join Table**
 
 ## 5. Coach Controls
 
-The coach sidebar appears on the right. It has ten sections.
+The **coach sidebar** appears on the right (collapsible via the tab on its left edge). All sections are individually collapsible — click a section header to expand or collapse it. The default order is:
 
-### Section 1 — Game Controls
+1. **GAME CONTROLS** — start/reset hands, pause, mode selection
+2. **BLIND LEVELS** — change BB between hands (collapsed by default)
+3. **CARD INJECTION** — manual card picker (manual mode only)
+4. **UNDO CONTROLS** — undo last action / rollback street (collapsed by default)
+5. **POT & STACKS** — award pot, adjust stacks (collapsed by default)
+6. **PLAYERS** — seated players with in-hand toggles and hole card view
+7. **PLAYLISTS** — create / manage / activate hand playlists (collapsed by default)
+8. **SCENARIO LOADER** — search and load historical hands (collapsed by default)
+9. **HISTORY** — recent hand history with expandable detail (collapsed by default)
+
+### TAG HAND Pill
+
+While a hand is in progress, a **TAG HAND** pill button floats in the top-right corner (below the TopBar, to the left of the sidebar). Click it to expand a chip panel with quick tags: **Review, Bluff, Hero Call, Mistake, Key Hand, 3-Bet Pot**. Selected tags are saved automatically (debounced). The pill collapses and resets at the start of each new hand.
+
+**Auto-playlist from tags:** When you save a manual tag on a hand, a playlist is automatically created with that tag's name if one doesn't already exist, and the hand is added to it.
+
+### GAME CONTROLS
 
 | Button | What it does |
 |--------|-------------|
-| **Start Hand** | Deals a new hand (random cards by default) |
-| **Configure Hand** | Opens the card configuration panel before dealing |
+| **RNG MODE / MANUAL MODE** | Toggle between random-deal and configured-hand modes |
+| **Start Hand** | Deals a new hand |
+| **Reset** | Resets to the waiting lobby |
 | **Pause / Resume** | Freezes the action timer; players cannot act while paused |
-| **Force Next Street** | Skips to flop, turn, or river immediately |
-| **Undo** | Rolls back the last player action |
-| **Rollback Street** | Rolls back to the start of the current street |
-| **Force Fold** | Folds the player whose turn it is |
 
-### Section 2 — Manual Card Deal
+### BLIND LEVELS
 
-While a hand is running in manual mode, click any face-down card on the table to pick a specific card to reveal.
+Change the big blind **between hands** (disabled during an active hand).
 
-### Section 3 — Pot & Stack Controls
+- Enter a new **BB** value. The small blind is automatically set to `floor(BB / 2)`. Click **Set Blinds**.
+- Any player joining after blinds are set receives a default stack of **100 × the new BB**.
+- Default blind levels are **5/10** (1,000-chip stack).
 
-- **Award Pot To** — manually award the pot to any player (useful for training scenarios where you want to override auto-showdown).
-- **Adjust Stack** — directly set any player's chip count.
+### REPLAY CONTROLS
 
-### Section 4 — Blind Levels
-
-Change the small blind and big blind **between hands** (disabled during an active hand).
-
-- Enter new **SB** and **BB** values (BB must be greater than SB).
-- Click **Set Blinds** to apply. The current blinds are shown for reference.
-- Any player who **joins the table after blinds are set** automatically receives a default stack of **100 × the new BB** (e.g. 25/50 blinds → 5,000 starting chips).
-- The default blind levels are **5/10** (SB/BB), giving a 1,000-chip starting stack by default.
-
-### Section 5 — Players
-
-Lists every seated player. The coach can:
-- **Exclude / include a player from the next hand** using the ✕/✓ toggle before clicking Start Hand. An excluded player sits out that hand only; the flag resets automatically after the hand starts.
-
-### Section 6 — Session Stats
-
-Live VPIP / PFR / WTSD / WSD stats for every player, updated after each hand. Resets when the server restarts. For persistent career stats see the Stats Dashboard below.
-
-Click **Session Report** to open a full HTML report in a new browser tab — chip leaderboard, stats comparison, pattern summary, mistake flags, and key hand breakdowns for the current session.
-
-### Section 7 — Hand History
-
-Last 10 hands. Click any row to expand it: full board, player stacks, hole cards, and every action with street labels.
-
-### Section 8 — Live Hand Tags
-
-During a hand, click a tag button (3BET_POT, C-BET, CHECK_RAISE, BLUFF_CATCH, etc.) to label it for later review. Tags are saved to the database and visible in the Stats Dashboard.
-
-### Section 9 — Playlist Manager
-
-Create named playlists of hands and activate one for sequential replay. When a playlist is active, clicking Reset Hand automatically loads the next scenario in the queue.
-
-### Section 10 — Scenario Loader
-
-Search historical hands from the database by player name, date, or tags. There are two buttons per result:
-- **Load** (blue) — loads the hand into the config phase so hole cards and board are pre-filled for a fresh hand.
-- **Replay** (purple) — enters Guided Replay Mode for that hand (see Section 11 below). All hole cards are immediately visible.
-
-Add scenarios to a playlist for batch review sessions.
-
-### Section 11 — Replay Controls
-
-Appears automatically when a hand is loaded via the **Replay** button. The table shows the hand state at the selected step, with all hole cards face-up for coaching.
+When a hand is loaded via Replay, the **replay panel appears inline below the table** — replacing the betting controls for the duration of the replay. All hole cards are shown face-up for coaching.
 
 | Control | What it does |
 |---------|-------------|
-| **Progress label** | Shows "Action N / Total" and describes the current action (player, street, action type, amount) |
-| **Scrubber** | Drag to jump directly to any action in the hand |
-| **◀ Back / Fwd ▶** | Step backward or forward one action at a time |
-| **Branch to Live from Here** | Freezes the replay at the current state and switches to live play. Players can now act from that exact board/stack position to explore alternative lines. A **BRANCHED** badge replaces the REPLAY badge. |
-| **Return to Replay** | Unwinds the live branch and returns to the exact replay step where you branched. |
-| **Exit Replay** | Ends replay mode and returns to the waiting lobby. Player stacks are restored to their pre-replay values. |
+| **Progress label** | Shows "N / Total" and the current action description |
+| **Scrubber** | Drag to jump to any action |
+| **◀ Back / Fwd ▶** | Step one action at a time |
+| **Branch to Live from Here** | Switches to live play from the current board state. Coach acts for shadow players using the normal betting controls. |
+| **Return to Replay** | Unwinds the live branch and restores the replay state. |
+| **Exit Replay** | Ends replay and returns to the waiting lobby. |
 
-> In replay mode, betting controls are hidden. Once you branch to live play, betting controls reappear and the game runs normally from the branched state.
+> In branched mode, the coach acts for each shadow player's turn using the betting controls (showing "ACT FOR [name]").
+
+### CARD INJECTION (manual mode)
+
+All card picking is done through the sidebar only — clicking cards on the table does nothing. Click any card slot in CARD INJECTION to open the card picker.
+
+### UNDO CONTROLS
+
+- **Undo Last Action** — roll back the most recent player action
+- **Rollback Street** — roll back to the start of the current street
+- **Force Next Street** — skip immediately to the next community card street
+
+### POT & STACKS
+
+- **Award Pot To** — manually award the pot to any player
+- **Adjust Stack** — directly set any player's chip count
+
+### PLAYERS
+
+Lists every seated player. The coach can:
+- **Exclude / include a player from the next hand** using the ✕/✓ toggle before clicking Start Hand.
+
+### Player Stats Hover Cards
+
+Hover over any player's seat on the table to see their stats (visible to all clients):
+
+| Stat | Session | All-time |
+|------|---------|----------|
+| VPIP | ✓ | ✓ |
+| PFR | ✓ | ✓ |
+| WTSD | ✓ | ✓ |
+| WSD | ✓ | ✓ |
+| 3-bet % | ✓ | ✓ |
+| Alltime Winning | — | ✓ (0 if negative) |
+
+### SCENARIO LOADER
+
+Search historical hands by player name, date, or auto-tags. Per result:
+- **Load** (blue) — pre-fills cards for a new hand
+- **Replay** (purple) — enters Guided Replay Mode for that hand
+- **+ Playlist** — adds to a selected playlist
+
+### HISTORY
+
+Last 10 hands with expandable detail: full board, player stacks, hole cards, and every action.
 
 ---
 
@@ -197,7 +244,7 @@ Appears automatically when a hand is loaded via the **Replay** button. The table
 ## 7. Playing as a Player
 
 - Your hole cards are visible only to you (face-down to others).
-- **BB view toggle** — click the **Chips / BB** pill button in the top-right of the table to switch between flat chip counts (e.g. "1,000") and big-blind units (e.g. "100bb"). This is a personal setting — it only affects your view and is remembered across sessions via `localStorage`.
+- **BB view toggle** — click the **Chips / BB** pill button in the **top bar (top-left)** to switch between flat chip counts (e.g. "1,000") and big-blind units (e.g. "100bb"). This is a personal setting — it only affects your view and is remembered across sessions via `localStorage`.
 - When it is your turn, the action panel slides up from the bottom:
   - **Fold** — give up your hand.
   - **Check** — pass (only when no bet is outstanding).
@@ -212,11 +259,10 @@ Appears automatically when a hand is loaded via the **Replay** button. The table
 
 Click the **Stats** button (top bar, coach only) to open the full stats dashboard.
 
-- **Leaderboard** — ranked by net chips or VPIP/PFR across all recorded sessions.
-- **Hand History** — full paginated list of all hands. Filter by player or date.
-- **Player Drilldown** — click any player for their career stats, hand-by-hand breakdown, and tagged hands.
+- **Hand History** — full list of the last 50 hands with winner, pot, phase-ended, and all tags.
+- **Player Drilldown** — click any player row for their career stats, hand-by-hand breakdown, and tagged hands.
 
-Stats are stored in `poker_trainer.sqlite` and persist across server restarts.
+Stats are stored in Supabase (PostgreSQL) and persist across server restarts and deployments. All data loads through Express — no Supabase credentials are embedded in the browser.
 
 ---
 
@@ -237,7 +283,7 @@ Server tests (Jest):
 cd server
 npx jest --no-coverage
 ```
-Expected: **951 tests passing** across 20 suites.
+Expected: **951 tests passing** across 21 suites.
 
 Client tests (Vitest + React Testing Library):
 ```bash
@@ -257,23 +303,31 @@ Expected: 0 crashes, 0 anomalies.
 
 ## 11. Environment Variables
 
+### Server (`.env` at project root)
+
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3001` | Server port |
-| `DATABASE_PATH` | `./poker_trainer.sqlite` | Path to the SQLite file |
-| `COACH_PASSWORD` | *(none)* | Password required to join as coach |
+| `SUPABASE_URL` | *(required)* | Your Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | *(required)* | Service role key — used for all DB access (only the server ever holds this) |
+| `SESSION_SECRET` | `dev-secret-change-in-production` | Signs player JWTs — set to a long random string in production |
+| `CORS_ORIGIN` | `*` | Allowed origin for CORS — set to your domain in production (e.g. `https://poker.example.com`) |
 
-Set these in a `.env` file at the project root or via your hosting platform's environment settings.
+> The client has no `.env` file. The browser never receives any Supabase credentials.
+> There is no `COACH_PASSWORD` variable. Coach access is granted by adding a `coach` role row to `players.csv`.
 
 ---
 
 ## 12. Resetting the Database
 
-```bash
-rm poker_trainer.sqlite
-```
+The database lives in Supabase. To clear hand history:
 
-The file is recreated automatically on next server start. All hand history and player accounts are erased.
+1. Open the Supabase dashboard → Table Editor.
+2. Truncate the `hand_actions`, `hand_players`, `hand_tags`, `hands`, and `sessions` tables (in that order, to respect foreign keys).
+3. Optionally truncate `leaderboard` and `session_player_stats` to reset aggregated stats.
+
+> Player identities (`player_profiles`) are separate — truncating hand tables does not revoke access.
+> To revoke a player's access, remove their row from `players.csv` and restart the server.
 
 ---
 
@@ -281,12 +335,12 @@ The file is recreated automatically on next server start. All hand history and p
 
 The app runs as a single service on port 3001. Deploy to Render, Railway, Fly.io, or any Node.js host:
 
-1. Set `DATABASE_PATH` to a persistent volume path (e.g. `/data/poker_trainer.sqlite`).
-2. Set `COACH_PASSWORD`.
+1. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`, and `CORS_ORIGIN` as environment variables on the host.
+2. Upload `players.csv` to a persistent volume or bake it into your deployment image.
 3. Build command: `npm run build` (root `package.json`).
 4. Start command: `npm start` (root `package.json`).
 
-A `Dockerfile` and `fly.toml` are included for Docker and Fly.io deployments.
+No persistent disk is needed — all data lives in Supabase. A `Dockerfile` and `fly.toml` are included for Docker and Fly.io deployments.
 
 ---
 
@@ -295,9 +349,11 @@ A `Dockerfile` and `fly.toml` are included for Docker and Fly.io deployments.
 | Problem | Fix |
 |---------|-----|
 | "Cannot connect to server" | Make sure `node index.js` is running in `server/`. Check port 3001 is not blocked. |
-| Players can't reach the game | Use the server's IP address, not `localhost`. Both port 3001 must be reachable on the network. |
-| "better-sqlite3 not found" | Run `npm install` inside `server/`. |
+| Players can't reach the game | Use the server's IP address, not `localhost`. Port 3001 must be reachable on the network. |
 | Stale UI after code changes | Run `npm run build` in `client/` and restart the server. |
-| Coach sidebar not visible | Make sure you joined as Coach with the correct coach password. |
-| Hand history not saving | Check the server has write permission at `DATABASE_PATH`. |
-| "Please register or log in first" | Create an account on the Register tab before joining a table. |
+| Coach sidebar not visible | Make sure your name has `role: coach` in `players.csv` and you logged in correctly. |
+| Hand history not saving | Check `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set correctly in `.env`. |
+| Stats Dashboard shows no data | Check `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set in `.env` and the server is running. |
+| "Session expired" errors after restart | `SESSION_SECRET` changed between restarts; players need to log in again. |
+| "Invalid name or password" | Check the name and password match a row in `players.csv` exactly (name is case-insensitive; password is exact). |
+| Server exits immediately at startup | `players.csv` is missing or not found. Create it at the project root. |

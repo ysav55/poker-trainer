@@ -106,28 +106,16 @@ function pickAction(state) {
   return { action };
 }
 
-// ─── Registration cache ───────────────────────────────────────────────────────
+// ─── Player stableId cache ────────────────────────────────────────────────────
 
+const HandLogger = require('./server/db/HandLoggerSupabase');
 const registeredPlayers = {};
 
-async function ensureRegistered(port, name) {
+async function ensureRegistered(_port, name) {
   if (registeredPlayers[name]) return registeredPlayers[name];
-  const email = `${name.toLowerCase()}@sim.test`;
-  const reg = await postJSON(port, '/api/auth/register', { name, email, password: 'pw12345' });
-  if (reg.body.stableId) {
-    registeredPlayers[name] = reg.body.stableId;
-    return reg.body.stableId;
-  }
-  // Name already taken — log in instead
-  if (reg.body.error === 'name_taken') {
-    const login = await postJSON(port, '/api/auth/login', { name, password: 'pw12345' });
-    if (login.body.stableId) {
-      registeredPlayers[name] = login.body.stableId;
-      return login.body.stableId;
-    }
-    throw new Error(`Login fallback failed for ${name}: ${JSON.stringify(login.body)}`);
-  }
-  throw new Error(`Register failed for ${name}: ${JSON.stringify(reg.body)}`);
+  const { stableId } = await HandLogger.loginRosterPlayer(name);
+  registeredPlayers[name] = stableId;
+  return stableId;
 }
 
 // ─── Play one hand ────────────────────────────────────────────────────────────
@@ -555,11 +543,9 @@ async function playPlaylistHand(handNum, coachSock, allActors, batchCrashes, bat
 let _3betPlaylistId = null;
 
 async function setup3betPlaylist(_port, coachSock, allActors, crashes, anomalies) {
-  const HandLogger = require('./server/db/HandLogger');
-
   // Create the shared playlist once (first batch to run)
   if (!_3betPlaylistId) {
-    const playlist = HandLogger.createPlaylist({
+    const playlist = await HandLogger.createPlaylist({
       name: '3-bet situations',
       description: 'Hands with 3+ rounds of preflop aggression (auto-tagged 3BET_POT)'
     });
@@ -571,14 +557,16 @@ async function setup3betPlaylist(_port, coachSock, allActors, crashes, anomalies
   const thisCount = allActors.filter(a => !a.isCoach).length;
 
   // How many 3BET_POT hands do we already have at this player count in the DB?
-  const allHands = HandLogger.getHands({ tableId: null, limit: 9999 });
+  const allHands = await HandLogger.getHands({ tableId: null, limit: 9999 });
   const parseAutoTags = h => { try { return JSON.parse(h.auto_tags || '[]'); } catch { return []; } };
 
-  const atThisCount = allHands.filter(h => {
-    if (!parseAutoTags(h).includes('3BET_POT')) return false;
-    const detail = HandLogger.getHandDetail(h.hand_id);
-    return detail && (detail.players || []).filter(p => (p.seat ?? -1) >= 0).length === thisCount;
-  });
+  const atThisCount = [];
+  for (const h of allHands.filter(h => parseAutoTags(h).includes('3BET_POT'))) {
+    const detail = await HandLogger.getHandDetail(h.hand_id);
+    if (detail && (detail.players || []).filter(p => (p.seat ?? -1) >= 0).length === thisCount) {
+      atThisCount.push(h);
+    }
+  }
 
   // Generate extra seed hands at this table's player count if needed
   if (atThisCount.length < 8) {
@@ -588,29 +576,31 @@ async function setup3betPlaylist(_port, coachSock, allActors, crashes, anomalies
   }
 
   // Refresh and pick up to 15 new 3BET_POT hands at this player count
-  const refreshed = HandLogger.getHands({ tableId: null, limit: 9999 });
-  const newAtCount = refreshed.filter(h => {
-    if (!parseAutoTags(h).includes('3BET_POT')) return false;
-    const detail = HandLogger.getHandDetail(h.hand_id);
-    return detail && (detail.players || []).filter(p => (p.seat ?? -1) >= 0).length === thisCount;
-  });
+  const refreshed = await HandLogger.getHands({ tableId: null, limit: 9999 });
+  const newAtCount = [];
+  for (const h of refreshed.filter(h => parseAutoTags(h).includes('3BET_POT'))) {
+    const detail = await HandLogger.getHandDetail(h.hand_id);
+    if (detail && (detail.players || []).filter(p => (p.seat ?? -1) >= 0).length === thisCount) {
+      newAtCount.push(h);
+    }
+  }
 
   // Add hands not already in the playlist (cap at 15 per player-count)
-  const existing = new Set(HandLogger.getPlaylistHands(_3betPlaylistId).map(h => h.hand_id));
+  const existing = new Set((await HandLogger.getPlaylistHands(_3betPlaylistId)).map(h => h.hand_id));
   let added = 0;
   for (const h of newAtCount) {
     if (added >= 15) break;
     if (!existing.has(h.hand_id)) {
-      HandLogger.addHandToPlaylist(_3betPlaylistId, h.hand_id);
+      await HandLogger.addHandToPlaylist(_3betPlaylistId, h.hand_id);
       added++;
     }
   }
 
   // Log distribution across all playlist hands
-  const playlistHands = HandLogger.getPlaylistHands(_3betPlaylistId);
+  const playlistHands = await HandLogger.getPlaylistHands(_3betPlaylistId);
   const dist = {};
   for (const h of playlistHands) {
-    const detail = HandLogger.getHandDetail(h.hand_id);
+    const detail = await HandLogger.getHandDetail(h.hand_id);
     const n = detail ? (detail.players || []).filter(p => (p.seat ?? -1) >= 0).length : '?';
     dist[n] = (dist[n] || 0) + 1;
   }
@@ -4864,26 +4854,21 @@ const BATCHES = [
   },
 
   // ══════════════════════════════════════════════════════════════════════════════
-  // GROUP R — Registration / auth edge cases (B237–B240)
+  // GROUP R — Auth edge cases (B237–B240)
   // ══════════════════════════════════════════════════════════════════════════════
 
   {
     id: 'B237',
-    label: 'Auth: register same player twice — second call succeeds via login fallback',
+    label: 'Auth: POST /api/auth/register returns 410 (self-registration disabled)',
     players: ['Alice'],
     stacks: null, mode: 'rng',
     setup: async (port, _coachSock, _allActors, _crashes, anomalies) => {
-      // First registration
-      const reg1 = await postJSON(port, '/api/auth/register', { name: 'DupUser', email: 'dup@test.sim', password: 'pw12345' });
-      if (!reg1.body.stableId) { anomalies.push({ hand: 0, msg: `B237: first register failed: ${JSON.stringify(reg1.body)}` }); return {}; }
-      // Second registration — should return name_taken or auto-login
-      const reg2 = await postJSON(port, '/api/auth/register', { name: 'DupUser', email: 'dup@test.sim', password: 'pw12345' });
-      if (reg2.body.stableId) {
-        // Returned a stableId — fine (auto-login path)
-      } else if (reg2.body.error === 'name_taken') {
-        // Also fine — expected
-      } else {
-        anomalies.push({ hand: 0, msg: `B237: unexpected response on duplicate register: ${JSON.stringify(reg2.body)}` });
+      const res = await postJSON(port, '/api/auth/register', { name: 'Anyone', password: 'pw12345' });
+      if (res.status !== 410) {
+        anomalies.push({ hand: 0, msg: `B237: expected 410 from /api/auth/register, got ${res.status}` });
+      }
+      if (res.body.error !== 'registration_disabled') {
+        anomalies.push({ hand: 0, msg: `B237: expected error=registration_disabled, got ${JSON.stringify(res.body.error)}` });
       }
       return {};
     },
@@ -4891,15 +4876,17 @@ const BATCHES = [
 
   {
     id: 'B238',
-    label: 'Auth: login with wrong password returns error (not stableId)',
+    label: 'Auth: login with wrong password returns 401 (not stableId)',
     players: ['Alice'],
     stacks: null, mode: 'rng',
     setup: async (port, _coachSock, _allActors, _crashes, anomalies) => {
-      const reg = await postJSON(port, '/api/auth/register', { name: 'PwTestUser', email: 'pw@test.sim', password: 'correctpw' });
-      if (!reg.body.stableId && reg.body.error !== 'name_taken') { return {}; }
-      const bad = await postJSON(port, '/api/auth/login', { name: 'PwTestUser', password: 'wrongpw' });
+      // Alice is created via loginRosterPlayer on buildSession; wrong password should fail
+      const bad = await postJSON(port, '/api/auth/login', { name: 'Alice', password: 'wrongpw' });
       if (bad.body.stableId) {
         anomalies.push({ hand: 0, msg: 'B238: login with wrong password returned a stableId' });
+      }
+      if (bad.status !== 401) {
+        anomalies.push({ hand: 0, msg: `B238: expected 401, got ${bad.status}` });
       }
       return {};
     },
@@ -4907,7 +4894,7 @@ const BATCHES = [
 
   {
     id: 'B239',
-    label: 'Auth: login for non-existent player returns error',
+    label: 'Auth: login for non-existent player returns 401',
     players: ['Alice'],
     stacks: null, mode: 'rng',
     setup: async (port, _coachSock, _allActors, _crashes, anomalies) => {
@@ -4915,13 +4902,16 @@ const BATCHES = [
       if (res.body.stableId) {
         anomalies.push({ hand: 0, msg: 'B239: login for non-existent player returned stableId' });
       }
+      if (res.status !== 401) {
+        anomalies.push({ hand: 0, msg: `B239: expected 401, got ${res.status}` });
+      }
       return {};
     },
   },
 
   {
     id: 'B240',
-    label: 'Auth: GET /api/players after registration includes registered player name',
+    label: 'Auth: GET /api/players includes roster-joined players',
     players: ['Alice', 'Bob'],
     stacks: null, mode: 'rng',
     setup: async (port, _coachSock, allActors, _crashes, anomalies) => {
@@ -4930,7 +4920,7 @@ const BATCHES = [
       const names = res.body.map(p => p.display_name || p.name);
       const missing = allActors.filter(a => !a.isCoach && !names.includes(a.name));
       for (const m of missing) {
-        anomalies.push({ hand: 0, msg: `B240: registered player ${m.name} not in /api/players` });
+        anomalies.push({ hand: 0, msg: `B240: roster player ${m.name} not in /api/players` });
       }
       return {};
     },
@@ -4984,6 +4974,201 @@ const BATCHES = [
         },
       };
     },
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // T — Dead-end path fixes (B245–B247)
+  // Verifies that the server auto-advances through streets when all remaining
+  // players are all-in, so games never require force_next_street to un-stick.
+  // Without the _advanceStreet() and startGame() fixes, these hands would loop
+  // indefinitely on the river and exceed MAX_STEPS.
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'B245',
+    label: 'Dead-end fix: 1-chip stacks → blind-posting all-in → server auto-runs board to showdown',
+    players: ['Alice', 'Bob', 'Carol'],
+    stacks: { all: 1 },
+    mode: 'rng',
+    // All players have 1 chip, which is less than SB (5) — they go all-in the moment
+    // blinds are posted. The startGame() dead-end fix must self-advance the board.
+    // Without the fix, current_turn stays null on the river → MAX_STEPS exceeded → crash.
+    setup: async (_p, _c, _a, _cr, anomalies) => ({ anomalies }),
+    hooksFactory: (h, _a, ctx) => {
+      let sawEnd = false;
+      return {
+        onState: (state) => {
+          if (state.showdown_result || state.winner) sawEnd = true;
+          // If hand reaches waiting without ever seeing showdown/winner, flag it
+          if (state.phase === 'waiting' && !sawEnd) {
+            ctx.anomalies.push({ hand: h, msg: 'B245: hand ended in waiting without showdown_result or winner — possible dead-end' });
+          }
+        },
+      };
+    },
+  },
+
+  {
+    id: 'B246',
+    label: 'Dead-end fix: 1×BB stacks → preflop all-in cascade → server auto-runs board to showdown',
+    players: ['Dave', 'Eve', 'Frank'],
+    stacks: { all: DEFAULT_BIG_BLIND },
+    mode: 'rng',
+    // BB (10) = full stack → BB is all-in posting. Callers go all-in matching the BB.
+    // _advanceStreet() fix must auto-advance flop→turn→river→showdown without external triggers.
+  },
+
+  {
+    id: 'B247',
+    label: 'Dead-end fix: mixed 1-chip + 200BB stacks → side pot + mid-hand all-in cascade',
+    players: ['Alice', 'Bob', 'Carol'],
+    stacks: { Alice: 1, Bob: 1, Coach: 200 * DEFAULT_BIG_BLIND, Carol: 200 * DEFAULT_BIG_BLIND },
+    mode: 'rng',
+    // Alice+Bob (1 chip) go all-in on blind posting. Coach+Carol (200BB) continue playing.
+    // If Coach/Carol later go all-in (common with random raises), the server must auto-run
+    // remaining streets without entering the dead-end loop.
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // V — Auto-playlist from manual tags (B248–B250)
+  // Verifies that update_hand_tags auto-creates a named playlist and adds the
+  // tagged hand to it — implemented in the update_hand_tags handler in index.js.
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'B248',
+    label: 'Auto-playlist: single unique tag → playlist auto-created and hand added',
+    players: ['Alice', 'Bob'],
+    stacks: null, mode: 'rng',
+    afterHand: async (coachSock, _allActors, h, lastHandId) => {
+      if (h !== 1 || !lastHandId) return;
+      const tag = 'B248_SINGLE_TAG_TEST';
+      coachSock.emit('update_hand_tags', { handId: lastHandId, tags: [tag] });
+      await waitFor(coachSock, 'playlist_state', 1500).catch(() => null);
+      const playlists = await HandLogger.getPlaylists({ tableId: 'sim-B248' });
+      const match = playlists.find(p => p.name.toLowerCase() === tag.toLowerCase());
+      if (!match) throw new Error(`B248: playlist '${tag}' was not auto-created after tagging hand`);
+      const hands = await HandLogger.getPlaylistHands(match.playlist_id);
+      if (!hands.some(hw => hw.hand_id === lastHandId))
+        throw new Error(`B248: hand ${lastHandId} not found in auto-created playlist '${tag}'`);
+    },
+  },
+
+  {
+    id: 'B249',
+    label: 'Auto-playlist: two different tags on same hand → two separate playlists, both contain the hand',
+    players: ['Alice', 'Bob'],
+    stacks: null, mode: 'rng',
+    afterHand: async (coachSock, _allActors, h, lastHandId) => {
+      if (h !== 1 || !lastHandId) return;
+      const tag1 = 'B249_TAG_ALPHA';
+      const tag2 = 'B249_TAG_BETA';
+      coachSock.emit('update_hand_tags', { handId: lastHandId, tags: [tag1, tag2] });
+      await waitFor(coachSock, 'playlist_state', 1500).catch(() => null);
+      const playlists = await HandLogger.getPlaylists({ tableId: 'sim-B249' });
+      for (const tag of [tag1, tag2]) {
+        const match = playlists.find(p => p.name.toLowerCase() === tag.toLowerCase());
+        if (!match) throw new Error(`B249: playlist '${tag}' was not auto-created for two-tag hand`);
+        const hands = await HandLogger.getPlaylistHands(match.playlist_id);
+        if (!hands.some(hw => hw.hand_id === lastHandId))
+          throw new Error(`B249: hand ${lastHandId} not found in playlist '${tag}'`);
+      }
+    },
+  },
+
+  {
+    id: 'B250',
+    label: 'Auto-playlist: same tag on two different hands → one playlist containing both hands (no duplicate playlist)',
+    players: ['Alice', 'Bob'],
+    stacks: null, mode: 'rng',
+    afterHand: async (coachSock, _allActors, h, lastHandId) => {
+      if (h > 2 || !lastHandId) return;
+      const tag = 'B250_PERSISTENT_TAG';
+      coachSock.emit('update_hand_tags', { handId: lastHandId, tags: [tag] });
+      await waitFor(coachSock, 'playlist_state', 1500).catch(() => null);
+      if (h === 2) {
+        const playlists = await HandLogger.getPlaylists({ tableId: 'sim-B250' });
+        const matching = playlists.filter(p => p.name.toLowerCase() === tag.toLowerCase());
+        if (matching.length !== 1)
+          throw new Error(`B250: expected 1 playlist '${tag}', found ${matching.length} — duplicate playlist created`);
+        const hands = await HandLogger.getPlaylistHands(matching[0].playlist_id);
+        if (hands.length < 2)
+          throw new Error(`B250: expected >= 2 hands in playlist '${tag}', found ${hands.length}`);
+      }
+    },
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // W — Coach card privacy (B251–B252)
+  // B251: In live play, the coach socket must see HIDDEN for all opponent hole cards.
+  // B252: In non-branched replay, the coach socket must see real cards for all players.
+  // These verify the getPublicState() privacy fix and the coachInReview flag.
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  {
+    id: 'B251',
+    label: 'Coach privacy: live preflop — coach socket sees HIDDEN for all non-coach player hole_cards',
+    players: ['Alice', 'Bob', 'Carol'],
+    stacks: { all: 1000 }, mode: 'rng',
+    setup: async (_p, _c, _a, _cr, anomalies) => ({ anomalies }),
+    hooksFactory: (h, allActors, ctx) => {
+      const coachActor = allActors.find(a => a.isCoach);
+      let checked = false;
+      return {
+        onState: (state) => {
+          // Only check once per hand, on first preflop state with cards dealt
+          if (state.phase !== 'preflop' || checked) return;
+          const hasCards = (state.players || []).some(p => (p.hole_cards || []).length > 0);
+          if (!hasCards) return;
+          checked = true;
+          for (const p of (state.players || [])) {
+            if (p.id === coachActor?.serverId) continue; // coach always sees own real cards
+            const cards = p.hole_cards || [];
+            if (cards.length === 0) continue; // player may have been excluded (in_hand=false)
+            for (const card of cards) {
+              if (card && card !== '' && card !== 'HIDDEN') {
+                ctx.anomalies.push({
+                  hand: h,
+                  msg: `B251: coach socket sees real card '${card}' for player '${p.name}' in live preflop — expected HIDDEN`,
+                });
+              }
+            }
+          }
+        },
+      };
+    },
+  },
+
+  {
+    id: 'B252',
+    label: 'Coach privacy: non-branched replay — coach socket sees real (non-HIDDEN) hole_cards for all players',
+    players: ['Alice', 'Bob'],
+    stacks: { all: 1000 }, mode: 'rng',
+    // Seed 5 hands in setup, then replay hands 6-10 to check card visibility
+    setup: async (_p, coachSock, allActors, crashes, anomalies) => {
+      for (let i = 0; i < 5; i++) await playHand(i + 1, coachSock, allActors, crashes, anomalies);
+      return {};
+    },
+    handMode: (h) => (h >= 6 && h <= 10) ? 'replay' : 'rng',
+    hooksFactory: () => ({
+      replayOps: async (_coachSock, nextRState, _crashes, anomalies, handNum) => {
+        // First game_state after load_replay should show all players' real hole_cards
+        const state = await nextRState(1500).catch(() => null);
+        if (!state) return;
+        for (const p of (state.players || [])) {
+          const cards = p.hole_cards || [];
+          if (cards.length === 0) continue; // player had no cards (excluded from hand)
+          for (const card of cards) {
+            if (card === 'HIDDEN') {
+              anomalies.push({
+                hand: handNum,
+                msg: `B252: in non-branched replay, coach sees HIDDEN for player '${p.name}' — expected real card`,
+              });
+            }
+          }
+        }
+      },
+    }),
   },
 
 ];

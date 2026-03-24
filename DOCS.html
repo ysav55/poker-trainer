@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Poker Trainer — Project Docs</title>
+<style>
+:root {
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --surface2: #21262d;
+  --border:   #30363d;
+  --gold:     #d4af37;
+  --gold-dim: rgba(212,175,55,0.18);
+  --gold-faint: rgba(212,175,55,0.07);
+  --blue:     #58a6ff;
+  --green:    #3fb950;
+  --purple:   #bc8cff;
+  --amber:    #e3b341;
+  --red:      #f85149;
+  --orange:   #f0883e;
+  --teal:     #39d353;
+  --text:     #e6edf3;
+  --muted:    #8b949e;
+  --nav-w:    252px;
+  --radius:   10px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:15px}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;line-height:1.65;display:flex;min-height:100vh}
+
+/* ── Sidebar ── */
+nav#sidebar{
+  width:var(--nav-w);flex-shrink:0;position:fixed;top:0;left:0;bottom:0;
+  background:var(--surface);border-right:1px solid var(--border);
+  overflow-y:auto;padding:28px 0 40px;z-index:100;
+}
+.nav-logo{padding:0 20px 24px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.nav-logo .suits{font-size:1.1rem;letter-spacing:6px;color:var(--gold);opacity:0.7;display:block;margin-bottom:6px}
+.nav-logo strong{font-size:0.95rem;font-weight:700;color:var(--text)}
+.nav-logo span{font-size:0.72rem;color:var(--muted);display:block;margin-top:2px}
+.nav-section{padding:0 12px;margin-bottom:4px}
+.nav-section-label{font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);padding:10px 8px 4px}
+nav a{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:7px;color:var(--muted);text-decoration:none;font-size:0.82rem;font-weight:500;transition:background 0.15s,color 0.15s}
+nav a:hover,nav a.active{background:var(--gold-faint);color:var(--text)}
+nav a .nav-icon{font-size:0.95rem;width:18px;text-align:center;flex-shrink:0}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:0.6rem;font-weight:700;padding:1px 6px;border-radius:20px}
+
+/* ── Main ── */
+main{margin-left:var(--nav-w);flex:1;padding:0 0 80px}
+.section{padding:56px 52px 0;max-width:1060px}
+.section:first-child{padding-top:48px}
+
+/* ── Section headers ── */
+.section-head{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.section-num{width:34px;height:34px;border-radius:50%;background:var(--gold-dim);border:1px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;color:var(--gold);flex-shrink:0}
+.section-head h2{font-size:1.55rem;font-weight:700;color:var(--text);letter-spacing:-0.01em}
+.section-sub{color:var(--muted);font-size:0.9rem;margin-bottom:32px;padding-left:48px}
+.divider{height:1px;background:var(--border);margin:52px 52px 0}
+
+/* ── Hero ── */
+.hero{padding:52px 52px 40px;background:linear-gradient(135deg,#111827 0%,var(--bg) 60%);border-bottom:1px solid var(--border);position:relative;overflow:hidden}
+.hero::before{content:'♠ ♥ ♦ ♣';position:absolute;right:48px;top:32px;font-size:2.8rem;letter-spacing:14px;opacity:0.05;pointer-events:none}
+.hero h1{font-size:2.4rem;font-weight:800;letter-spacing:-0.02em;background:linear-gradient(90deg,var(--blue),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px}
+.hero p{font-size:1.05rem;color:var(--muted);max-width:560px;margin-bottom:22px}
+.badge-row{display:flex;flex-wrap:wrap;gap:8px}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;font-weight:600;padding:4px 10px;border-radius:20px;border:1px solid}
+.badge.blue{background:rgba(88,166,255,0.1);border-color:rgba(88,166,255,0.35);color:var(--blue)}
+.badge.green{background:rgba(63,185,80,0.1);border-color:rgba(63,185,80,0.35);color:var(--green)}
+.badge.gold{background:rgba(212,175,55,0.1);border-color:rgba(212,175,55,0.35);color:var(--gold)}
+.badge.purple{background:rgba(188,140,255,0.1);border-color:rgba(188,140,255,0.35);color:var(--purple)}
+.badge.amber{background:rgba(227,179,65,0.1);border-color:rgba(227,179,65,0.35);color:var(--amber)}
+.badge.red{background:rgba(248,81,73,0.1);border-color:rgba(248,81,73,0.35);color:var(--red)}
+
+/* ── Cards ── */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.card:hover{border-color:rgba(212,175,55,0.4);box-shadow:0 4px 24px rgba(212,175,55,0.08)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius) var(--radius) 0 0}
+.card.c-blue::before{background:linear-gradient(90deg,var(--blue),var(--purple))}
+.card.c-green::before{background:linear-gradient(90deg,var(--green),var(--teal))}
+.card.c-gold::before{background:linear-gradient(90deg,var(--gold),var(--amber))}
+.card.c-purple::before{background:linear-gradient(90deg,var(--purple),var(--blue))}
+.card.c-red::before{background:linear-gradient(90deg,var(--red),var(--orange))}
+.card.c-teal::before{background:linear-gradient(90deg,var(--teal),var(--blue))}
+.card.c-orange::before{background:linear-gradient(90deg,var(--orange),var(--gold))}
+.card-icon{font-size:1.6rem;margin-bottom:10px}
+.card-title{font-weight:700;font-size:0.95rem;color:var(--text);margin-bottom:10px}
+.card ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+.card ul li{font-size:0.82rem;color:var(--muted);padding-left:14px;position:relative}
+.card ul li::before{content:'·';position:absolute;left:3px;color:var(--gold);font-weight:700}
+
+/* ── Code blocks ── */
+.code-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:0.78rem;line-height:1.7;overflow-x:auto;margin-bottom:12px}
+.code-block .comment{color:var(--muted)}
+.code-block .key{color:var(--blue)}
+.code-block .val{color:var(--green)}
+.code-label{font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px}
+
+/* ── Tables ── */
+.doc-table{width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:8px}
+.doc-table th{text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--border)}
+.doc-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--muted)}
+.doc-table td:first-child{color:var(--text);font-weight:500}
+.doc-table tr:last-child td{border-bottom:none}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:20px}
+
+/* ── Phase state machine ── */
+.phase-flow{display:flex;align-items:center;flex-wrap:wrap;gap:0;justify-content:center;margin:20px 0 24px}
+.phase-node{background:var(--surface2);border:2px solid rgba(212,175,55,0.4);border-radius:9px;padding:12px 18px;text-align:center;min-width:100px}
+.phase-node.p-blue{border-color:rgba(88,166,255,0.5)}
+.phase-node.p-amber{border-color:rgba(227,179,65,0.5)}
+.phase-node .pl{font-size:0.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.phase-node .pn{font-weight:700;font-size:0.9rem;color:var(--text);margin-top:2px}
+.phase-node.p-blue .pn{color:var(--blue)}
+.phase-node.p-amber .pn{color:var(--amber)}
+.phase-node .pd{font-size:0.68rem;color:var(--muted);margin-top:4px}
+.phase-arrow{display:flex;flex-direction:column;align-items:center;padding:0 4px}
+.phase-arrow .arr{color:var(--gold);font-size:1.2rem;line-height:1}
+.phase-arrow .arl{font-size:0.6rem;color:var(--muted);white-space:nowrap;margin-top:1px;text-align:center}
+
+/* ── Module map ── */
+.module-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.mod-box{border-radius:9px;padding:16px;border:1px solid}
+.mod-box.core{background:rgba(212,175,55,0.06);border-color:rgba(212,175,55,0.3)}
+.mod-box.pure{background:rgba(63,185,80,0.06);border-color:rgba(63,185,80,0.3)}
+.mod-box.wrap{background:rgba(88,166,255,0.06);border-color:rgba(88,166,255,0.3)}
+.mod-box.util{background:rgba(188,140,255,0.06);border-color:rgba(188,140,255,0.3)}
+.mod-box.db{background:rgba(57,211,83,0.06);border-color:rgba(57,211,83,0.3)}
+.mod-title{font-weight:700;font-size:0.85rem;margin-bottom:8px}
+.mod-box.core .mod-title{color:var(--gold)}
+.mod-box.pure .mod-title{color:var(--green)}
+.mod-box.wrap .mod-title{color:var(--blue)}
+.mod-box.util .mod-title{color:var(--purple)}
+.mod-box.db .mod-title{color:var(--teal)}
+.mod-box ul{padding-left:12px;font-size:0.76rem;color:var(--muted)}
+.mod-box ul li{margin-bottom:3px}
+.coupling{font-size:0.7rem;margin-top:8px;color:var(--muted);background:var(--surface2);padding:5px 8px;border-radius:5px}
+
+/* ── Flow lanes ── */
+.flow-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:760px){.flow-grid{grid-template-columns:1fr}}
+.flow-lane{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+.flow-lane h3{font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px}
+.flow-step{display:flex;gap:10px;align-items:flex-start;margin-bottom:8px}
+.fdot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.68rem;font-weight:700;flex-shrink:0;margin-top:1px}
+.fdot.s{background:rgba(88,166,255,0.15);border:1px solid var(--blue);color:var(--blue)}
+.fdot.g{background:rgba(212,175,55,0.15);border:1px solid var(--gold);color:var(--gold)}
+.fdot.d{background:rgba(63,185,80,0.15);border:1px solid var(--green);color:var(--green)}
+.fdot.e{background:rgba(248,81,73,0.15);border:1px solid var(--red);color:var(--red)}
+.ft strong{font-size:0.82rem;display:block}
+.ft small{color:var(--muted);font-size:0.73rem}
+.fcon{text-align:center;color:var(--muted);font-size:0.78rem;margin:2px 0 2px 34px}
+
+/* ── Issues ── */
+.issue-tabs{display:flex;gap:4px;margin-bottom:20px}
+.issue-tab{padding:7px 16px;border-radius:7px;font-size:0.8rem;font-weight:600;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s}
+.issue-tab.active{background:var(--gold-faint);border-color:var(--gold);color:var(--gold)}
+.issue-pane{display:none}
+.issue-pane.active{display:block}
+.issue-row{display:grid;grid-template-columns:70px 60px 1fr;gap:0;border-bottom:1px solid var(--border);padding:14px 0}
+.issue-row:last-child{border-bottom:none}
+.issue-id{font-family:monospace;font-size:0.78rem;color:var(--blue);font-weight:600}
+.sev-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.sev-critical .sev-dot{background:var(--red)}
+.sev-high .sev-dot{background:var(--orange)}
+.sev-medium .sev-dot{background:var(--amber)}
+.sev-low .sev-dot{background:var(--muted)}
+.sev-resolved .sev-dot{background:var(--green)}
+.issue-sev{font-size:0.72rem;font-weight:700;display:flex;align-items:center;padding-top:2px}
+.sev-critical .issue-sev{color:var(--red)}
+.sev-high .issue-sev{color:var(--orange)}
+.sev-medium .issue-sev{color:var(--amber)}
+.sev-low .issue-sev{color:var(--muted)}
+.sev-resolved .issue-sev{color:var(--green)}
+.issue-body strong{font-size:0.85rem;color:var(--text);display:block;margin-bottom:3px}
+.issue-body p{font-size:0.8rem;color:var(--muted);line-height:1.55}
+.issue-body code{background:var(--surface2);padding:1px 5px;border-radius:3px;font-family:monospace;font-size:0.75rem;color:var(--text)}
+.issue-list{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:0 16px}
+details>summary{cursor:pointer;padding:12px 0;font-size:0.82rem;font-weight:600;color:var(--muted);list-style:none;display:flex;align-items:center;gap:8px}
+details>summary::before{content:'▶';font-size:0.65rem;color:var(--gold);transition:transform .2s}
+details[open]>summary::before{transform:rotate(90deg)}
+.resolved-row{font-size:0.78rem;padding:6px 0;border-bottom:1px solid var(--border);display:grid;grid-template-columns:70px 60px 1fr 80px;gap:8px;align-items:baseline}
+.resolved-row:last-child{border-bottom:none}
+.fix-date{font-size:0.72rem;color:var(--green);white-space:nowrap}
+
+/* ── Roadmap ── */
+.idea-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px}
+.idea-card{border-radius:12px;padding:22px;border:1px solid;position:relative;overflow:hidden}
+.idea-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.idea-1{background:rgba(88,166,255,0.05);border-color:rgba(88,166,255,0.25)}
+.idea-1::before{background:var(--blue)}
+.idea-2{background:rgba(63,185,80,0.05);border-color:rgba(63,185,80,0.25)}
+.idea-2::before{background:var(--green)}
+.idea-3{background:rgba(188,140,255,0.05);border-color:rgba(188,140,255,0.25)}
+.idea-3::before{background:var(--purple)}
+.idea-4{background:rgba(240,136,62,0.05);border-color:rgba(240,136,62,0.25)}
+.idea-4::before{background:var(--orange)}
+.idea-icon{font-size:1.6rem;margin-bottom:8px}
+.idea-title{font-weight:700;font-size:0.95rem;margin-bottom:6px}
+.idea-1 .idea-title{color:var(--blue)}
+.idea-2 .idea-title{color:var(--green)}
+.idea-3 .idea-title{color:var(--purple)}
+.idea-4 .idea-title{color:var(--orange)}
+.idea-desc{font-size:0.8rem;color:var(--muted);line-height:1.6;margin-bottom:10px}
+.idea-bullets{font-size:0.77rem;color:var(--muted);padding-left:14px}
+.idea-bullets li{margin-bottom:3px}
+.effort-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.effort-tag{font-size:0.67rem;font-weight:600;padding:3px 8px;border-radius:20px;background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+.done-stamp{position:absolute;top:10px;right:10px;background:var(--green);color:#000;font-size:0.62rem;font-weight:800;padding:2px 8px;border-radius:20px}
+
+/* ── Misc ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:700px){.two-col{grid-template-columns:1fr}}
+.info-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;font-size:0.82rem}
+.info-box h4{font-size:0.82rem;font-weight:700;color:var(--text);margin-bottom:8px}
+.info-box ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+.info-box ul li{color:var(--muted);padding-left:14px;position:relative}
+.info-box ul li::before{content:'→';position:absolute;left:0;color:var(--gold);font-size:0.75rem}
+.warn-box{background:rgba(227,179,65,0.06);border:1px solid rgba(227,179,65,0.3);border-radius:var(--radius);padding:12px 16px;font-size:0.8rem;color:var(--amber);margin-bottom:16px}
+.warn-box strong{font-weight:700}
+h3.sub{font-size:1rem;font-weight:700;color:var(--text);margin:28px 0 12px}
+h3.sub .tag{font-size:0.7rem;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--gold-dim);color:var(--gold);margin-left:8px;vertical-align:middle}
+footer.page-footer{padding:40px 52px;border-top:1px solid var(--border);font-size:0.78rem;color:var(--muted);text-align:center}
+footer.page-footer span{color:var(--gold);font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- ══════ SIDEBAR ══════ -->
+<nav id="sidebar">
+  <div class="nav-logo">
+    <span class="suits">♠ ♥ ♦ ♣</span>
+    <strong>Poker Trainer</strong>
+    <span>Project Documentation</span>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Project</div>
+    <a href="#overview"><span class="nav-icon">🏠</span> Overview</a>
+    <a href="#quickstart"><span class="nav-icon">⚡</span> Quick Start</a>
+    <a href="#accounts"><span class="nav-icon">👤</span> Accounts</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Features</div>
+    <a href="#coach"><span class="nav-icon">🎓</span> Coach Controls</a>
+    <a href="#player"><span class="nav-icon">🃏</span> Playing</a>
+    <a href="#stats"><span class="nav-icon">📊</span> Stats Dashboard</a>
+    <a href="#replay"><span class="nav-icon">🎬</span> Guided Replay</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Architecture</div>
+    <a href="#engine"><span class="nav-icon">⚙️</span> Engine</a>
+    <a href="#data"><span class="nav-icon">🗄️</span> Data Layer</a>
+    <a href="#sockets"><span class="nav-icon">🔌</span> Socket Contract</a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-label">Operations</div>
+    <a href="#issues"><span class="nav-icon">🐛</span> Issues <span class="nav-badge">4</span></a>
+    <a href="#tests"><span class="nav-icon">✅</span> Tests</a>
+    <a href="#roadmap"><span class="nav-icon">🗺️</span> Roadmap</a>
+    <a href="#troubleshooting"><span class="nav-icon">🔧</span> Troubleshooting</a>
+  </div>
+</nav>
+
+<!-- ══════ MAIN ══════ -->
+<main>
+
+<!-- HERO -->
+<div class="hero" id="overview">
+  <h1>Poker Trainer</h1>
+  <p>Real-time poker training tool. A coach controls the game; players join from any browser and act in turn. All hand history and stats persist to <strong>Supabase (PostgreSQL)</strong>.</p>
+  <div class="badge-row">
+    <span class="badge blue">Node.js 18+ · Express · Socket.io</span>
+    <span class="badge purple">React + Vite + Tailwind</span>
+    <span class="badge green">Supabase (PostgreSQL)</span>
+    <span class="badge gold">910 tests passing</span>
+    <span class="badge amber">Last updated 2026-03-17</span>
+  </div>
+</div>
+
+<!-- ── OVERVIEW cards ── -->
+<div class="section">
+  <div class="section-head" style="margin-top:0;padding-top:40px">
+    <div class="section-num">1</div>
+    <h2>What it does</h2>
+  </div>
+  <p class="section-sub">Six core capabilities that make it a training tool, not just a poker game.</p>
+  <div class="card-grid">
+    <div class="card c-blue">
+      <div class="card-icon">🎓</div>
+      <div class="card-title">Coach-led sessions</div>
+      <ul>
+        <li>Coach controls deal, pace, undo, pause</li>
+        <li>Configure specific hole cards or ranges per player</li>
+        <li>Force-next-street, rollback, award pot manually</li>
+        <li>Adjust blind levels and stacks between hands</li>
+      </ul>
+    </div>
+    <div class="card c-green">
+      <div class="card-icon">🃏</div>
+      <div class="card-title">Live hand play</div>
+      <ul>
+        <li>60-second action timer with auto-fold</li>
+        <li>Full betting: fold, check, call, raise, all-in</li>
+        <li>Side-pot support for multi-player all-ins</li>
+        <li>BB-view toggle persisted to localStorage</li>
+      </ul>
+    </div>
+    <div class="card c-purple">
+      <div class="card-icon">🎬</div>
+      <div class="card-title">Guided replay</div>
+      <ul>
+        <li>Step through any historical hand action-by-action</li>
+        <li>All hole cards exposed for coaching discussion</li>
+        <li>Branch to live play from any point in the replay</li>
+        <li>Unbranch back to the saved replay state</li>
+      </ul>
+    </div>
+    <div class="card c-gold">
+      <div class="card-icon">📊</div>
+      <div class="card-title">Stats &amp; analytics</div>
+      <ul>
+        <li>VPIP / PFR / WTSD / WSD / 3-bet% per player</li>
+        <li>Career stats hover cards on every seat</li>
+        <li>Session HTML report (auto-generated)</li>
+        <li>30+ auto-tags: 3BET_POT, C_BET, WHALE_POT…</li>
+      </ul>
+    </div>
+    <div class="card c-teal">
+      <div class="card-icon">🗂️</div>
+      <div class="card-title">Hand config &amp; ranges</div>
+      <ul>
+        <li>Pin specific cards or constrain by range tags</li>
+        <li>Board texture constraints (monotone, paired, etc.)</li>
+        <li>Combo intersection with live count badge</li>
+        <li>Playlists for curated drill sequences</li>
+      </ul>
+    </div>
+    <div class="card c-orange">
+      <div class="card-icon">🔐</div>
+      <div class="card-title">Closed-system auth</div>
+      <ul>
+        <li>Roster managed in <code style="font-size:0.75rem;background:var(--surface2);padding:1px 4px;border-radius:3px">players.csv</code></li>
+        <li>Coach role granted by CSV entry, not env var</li>
+        <li>Spectator mode: name-only, no DB record</li>
+        <li>Stable UUID per player persisted in Supabase</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── QUICK START ── -->
+<div class="section" id="quickstart">
+  <div class="section-head">
+    <div class="section-num">2</div>
+    <h2>Quick Start</h2>
+  </div>
+  <p class="section-sub">From zero to running game in four steps.</p>
+
+  <div class="two-col">
+    <div>
+      <h3 class="sub">Install dependencies</h3>
+      <div class="code-block">cd server &amp;&amp; npm install &amp;&amp; cd ..
+cd client &amp;&amp; npm install &amp;&amp; cd ..</div>
+
+      <h3 class="sub">Production mode <span class="tag">recommended</span></h3>
+      <div class="code-block"><span class="comment"># Build client once</span>
+cd client &amp;&amp; npm run build &amp;&amp; cd ..
+<span class="comment"># Start server — serves everything on :3001</span>
+cd server &amp;&amp; node index.js</div>
+      <p style="font-size:0.82rem;color:var(--muted)">Open <strong style="color:var(--text)">http://localhost:3001</strong> in your browser.</p>
+
+      <h3 class="sub">Development mode</h3>
+      <div class="code-label">Terminal 1</div>
+      <div class="code-block">cd server &amp;&amp; node index.js</div>
+      <div class="code-label">Terminal 2</div>
+      <div class="code-block">cd client &amp;&amp; npm run dev</div>
+      <p style="font-size:0.82rem;color:var(--muted)">Open <strong style="color:var(--text)">http://localhost:5173</strong>. Client hot-reloads; server does not.</p>
+    </div>
+
+    <div>
+      <h3 class="sub">Environment variables</h3>
+      <div class="code-label">/.env &nbsp;(project root — server reads this)</div>
+      <div class="code-block"><span class="key">SUPABASE_URL</span>=https://&lt;project&gt;.supabase.co
+<span class="key">SUPABASE_SERVICE_ROLE_KEY</span>=&lt;service_role_key&gt;
+<span class="key">SUPABASE_ANON_KEY</span>=&lt;anon_key&gt;
+<span class="key">PORT</span>=3001  <span class="comment"># optional, default 3001</span></div>
+      <div class="code-label">/client/.env &nbsp;(Vite reads this)</div>
+      <div class="code-block"><span class="key">VITE_SUPABASE_URL</span>=https://&lt;project&gt;.supabase.co
+<span class="key">VITE_SUPABASE_ANON_KEY</span>=&lt;anon_key&gt;</div>
+
+      <div class="table-wrap" style="margin-top:16px">
+        <table class="doc-table">
+          <thead><tr><th>Variable</th><th>Used by</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>SUPABASE_URL</td><td>Server</td><td>Your project URL from Supabase dashboard</td></tr>
+            <tr><td>SUPABASE_SERVICE_ROLE_KEY</td><td>Server</td><td>Bypasses RLS — all DB writes use this</td></tr>
+            <tr><td>SUPABASE_ANON_KEY</td><td>Server + Client</td><td>Returned to browser for direct Supabase reads</td></tr>
+            <tr><td>VITE_SUPABASE_URL</td><td>Client build</td><td>Embedded in browser bundle</td></tr>
+            <tr><td>VITE_SUPABASE_ANON_KEY</td><td>Client build</td><td>Embedded in browser bundle</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="warn-box">⚠ No <code>COACH_PASSWORD</code> or <code>DATABASE_PATH</code>. SQLite has been fully replaced by Supabase. Coach access is granted by <code>role: coach</code> in <code>players.csv</code>.</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── ACCOUNTS ── -->
+<div class="section" id="accounts">
+  <div class="section-head">
+    <div class="section-num">3</div>
+    <h2>Accounts &amp; Access</h2>
+  </div>
+  <p class="section-sub">Closed system — no self-registration. Admin edits <code style="font-size:0.82rem">players.csv</code> at the project root.</p>
+
+  <div class="two-col">
+    <div>
+      <h3 class="sub">players.csv format</h3>
+      <div class="code-block"><span class="comment"># Poker Trainer — Player Roster
+# Format: name,password,role
+# role must be: coach  or  student</span>
+
+Coach,coach123,coach
+Alice,alice123,student
+Bob,bob123,student</div>
+      <div class="info-box">
+        <h4>Rules</h4>
+        <ul>
+          <li>Add a row → grant access immediately on next restart</li>
+          <li>Delete a row → revoke access (restart or call <code>reload()</code>)</li>
+          <li>Role must be exactly <code>coach</code> or <code>student</code></li>
+          <li>Names are case-insensitive for login; capitalisation in file is shown in-game</li>
+          <li>Server exits fatally at startup if <code>players.csv</code> is missing</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <h3 class="sub">Logging in</h3>
+      <div class="info-box" style="margin-bottom:12px">
+        <h4>🔑 Player / Coach</h4>
+        <ul>
+          <li>Open the app → <strong>Log In</strong> tab</li>
+          <li>Enter name + password from roster</li>
+          <li>Server returns a stable UUID stored in localStorage</li>
+          <li>Coach flag is granted automatically by CSV role</li>
+        </ul>
+      </div>
+      <div class="info-box">
+        <h4>👁 Spectator</h4>
+        <ul>
+          <li>Click <strong>Watch</strong> tab</li>
+          <li>Enter any display name — no password needed</li>
+          <li>No DB record created; cannot act or bet</li>
+          <li>Sees the table live but opponents' cards stay hidden</li>
+        </ul>
+      </div>
+      <div class="warn-box" style="margin-top:12px">⚠ <strong>ISS-76:</strong> <code>loginRosterPlayer</code> uses exact case match. Ensure names in <code>players.csv</code> match exactly what players type at login.</div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── COACH CONTROLS ── -->
+<div class="section" id="coach">
+  <div class="section-head">
+    <div class="section-num">4</div>
+    <h2>Coach Controls</h2>
+  </div>
+  <p class="section-sub">11 sections in the right-side sidebar. Only visible when logged in with a coach role.</p>
+
+  <div class="card-grid">
+    <div class="card c-blue">
+      <div class="card-title">§1 — Game Controls</div>
+      <ul>
+        <li><strong>Start Hand</strong> — deal (random or configured)</li>
+        <li><strong>Configure Hand</strong> — open card config phase</li>
+        <li><strong>Pause / Resume</strong> — freeze action timer</li>
+        <li><strong>Force Next Street</strong> — skip betting round</li>
+        <li><strong>Undo</strong> — roll back last player action</li>
+        <li><strong>Rollback Street</strong> — revert to street start</li>
+      </ul>
+    </div>
+    <div class="card c-gold">
+      <div class="card-title">§4 — Blind Levels</div>
+      <ul>
+        <li>Change SB / BB between hands only</li>
+        <li>Default: SB=5, BB=10 → 1,000 starting stack</li>
+        <li>Any player joining after a blind change gets 100×BB</li>
+        <li>BB must be greater than SB</li>
+      </ul>
+    </div>
+    <div class="card c-green">
+      <div class="card-title">§5 — Player Management</div>
+      <ul>
+        <li>✕/✓ toggle to exclude a player from next hand</li>
+        <li>Excluded flag resets automatically after hand starts</li>
+        <li>OFFLINE badge shown for disconnected players</li>
+        <li>Adjust Stack: directly set any player's chips</li>
+      </ul>
+    </div>
+    <div class="card c-purple">
+      <div class="card-title">§6 — Session Report</div>
+      <ul>
+        <li>Opens a full HTML report in a new browser tab</li>
+        <li>VPIP/PFR/WTSD/WSD comparison across all players</li>
+        <li>Pattern summary and mistake flags</li>
+        <li>Key hand breakdowns for the session</li>
+      </ul>
+    </div>
+    <div class="card c-teal">
+      <div class="card-title">§8 — Live Hand Tags</div>
+      <ul>
+        <li>Click tag buttons during a hand to annotate it</li>
+        <li>Tags: 3BET_POT, C-BET, CHECK_RAISE, BLUFF_CATCH…</li>
+        <li>Saved to Supabase; visible in Stats Dashboard</li>
+        <li>Manually tagging auto-creates a playlist for that tag</li>
+      </ul>
+    </div>
+    <div class="card c-orange">
+      <div class="card-title">§9 — Playlist Manager</div>
+      <ul>
+        <li>Create named playlists of hands for drill sessions</li>
+        <li>Activate a playlist → Reset Hand loads next scenario</li>
+        <li>Auto-playlist from tags: tag a hand → playlist created</li>
+        <li>Same hand can appear in multiple playlists</li>
+      </ul>
+    </div>
+    <div class="card c-blue">
+      <div class="card-title">§10 — Scenario Loader</div>
+      <ul>
+        <li>Search hands by player, date, or tags</li>
+        <li><strong>Load</strong> — pre-fills config for a fresh replay</li>
+        <li><strong>Replay</strong> — enters Guided Replay Mode</li>
+        <li>Add results to a playlist for batch drill</li>
+      </ul>
+    </div>
+    <div class="card c-purple">
+      <div class="card-title">§11 — Replay Controls</div>
+      <ul>
+        <li>Scrubber + Back/Forward step buttons</li>
+        <li>Branch to Live: play from current replay state</li>
+        <li>Return to Replay: undo live branch</li>
+        <li>Exit Replay: restores pre-replay stacks</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub">§6 — Configuring a Hand</h3>
+  <div class="info-box">
+    <h4>Hand Configuration Flow</h4>
+    <ul>
+      <li>Click <strong>Configure Hand</strong> → config phase opens (only between hands)</li>
+      <li>Per player: toggle <strong>Cards</strong> (pin specific hole cards) or <strong>Range</strong> (constrain by tags)</li>
+      <li>Range groups — radio within group, intersection across groups: <strong>PAIRS</strong> (All/QQ+/77-JJ/22-66) · <strong>SUIT</strong> (Suited/Offsuit) · <strong>TYPE</strong> (Broadway/Connectors/1-Gap/Ace-high/King-high) · <strong>SHORTCUT</strong> (ATo+/KJo+/Premium/Strong)</li>
+      <li>A combo count badge shows live intersection size; 0 combos = falls through to random</li>
+      <li>Board texture constraints: Suit (Rainbow/Flush Draw/Monotone) · Pair (Unpaired/Paired/Trips) · Connect (Connected/Disconnected) · High (Broadway/Low/Ace High)</li>
+      <li>Server retries flop generation up to 100 times to satisfy all constraints</li>
+    </ul>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── PLAYER ── -->
+<div class="section" id="player">
+  <div class="section-head">
+    <div class="section-num">5</div>
+    <h2>Playing</h2>
+  </div>
+  <p class="section-sub">What players see and can do during a hand.</p>
+  <div class="two-col">
+    <div class="info-box">
+      <h4>🃏 During a hand</h4>
+      <ul>
+        <li>Your hole cards are visible only to you (HIDDEN to others)</li>
+        <li>Action panel slides up when it's your turn</li>
+        <li>Actions: Fold · Check · Call · Raise (slider + ½pot / 1×pot / 2×pot / all-in)</li>
+        <li>60-second timer — auto-folds on expiry</li>
+        <li>Disconnecting during your turn pauses the timer for 60 s</li>
+      </ul>
+    </div>
+    <div class="info-box">
+      <h4>📊 Stats hover cards</h4>
+      <ul>
+        <li>Hover any seat to see VPIP / PFR / WTSD / WSD / 3-bet% / Alltime Winning</li>
+        <li>Shows both session stats and all-time career stats</li>
+        <li>Alltime Winning displays 0 if the total is negative</li>
+        <li>Fetched from Supabase on first hover; cached for the page session</li>
+      </ul>
+    </div>
+    <div class="info-box">
+      <h4>🔢 BB view toggle</h4>
+      <ul>
+        <li><strong>Chips / BB</strong> pill button in top-left corner of the table</li>
+        <li>Switches between flat amounts (e.g. "1,000") and BB units (e.g. "100bb")</li>
+        <li>Personal setting — only affects your view</li>
+        <li>Remembered across sessions via localStorage</li>
+      </ul>
+    </div>
+    <div class="info-box">
+      <h4>🔌 Disconnection</h4>
+      <ul>
+        <li>Amber <strong>OFFLINE</strong> badge at 50% opacity on disconnected seat</li>
+        <li>If it's their turn: timer pauses; 60 s to reconnect</li>
+        <li>After 60 s with no reconnect: player removed, game continues</li>
+        <li>Coach disconnect: game pauses for all players until coach returns</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── STATS ── -->
+<div class="section" id="stats">
+  <div class="section-head">
+    <div class="section-num">6</div>
+    <h2>Stats Dashboard</h2>
+  </div>
+  <p class="section-sub">Click <strong>Stats</strong> in the top bar (coach only). Data loads directly from Supabase — no Express round-trip.</p>
+  <div class="two-col">
+    <div class="info-box">
+      <h4>📋 Hand History</h4>
+      <ul>
+        <li>Last 50 hands: winner, pot, phase-ended, all tags</li>
+        <li>Click row to expand: full board, stacks, hole cards, every action</li>
+        <li>Auto-tags shown: WALK, 3BET_POT, C_BET, CHECK_RAISE, BLUFF_CATCH, WHALE_POT, MULTIWAY, ALL_IN_PREFLOP, LIMPED_POT, SHORT_STACK, DEEP_STACK, and 20+ more</li>
+        <li>Mistake tags: UNDO_USED, OPEN_LIMP, MIN_RAISE</li>
+      </ul>
+    </div>
+    <div class="info-box">
+      <h4>👤 Player Drilldown</h4>
+      <ul>
+        <li>Click any player for career stats breakdown</li>
+        <li>Hand-by-hand history with profit/loss per hand</li>
+        <li>Tagged hands filterable by pattern</li>
+        <li>3-bet%, aggression frequency tracked</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── REPLAY ── -->
+<div class="section" id="replay">
+  <div class="section-head">
+    <div class="section-num">7</div>
+    <h2>Guided Replay Mode</h2>
+  </div>
+  <p class="section-sub"><code>phase = 'replay'</code> built into GameManager — not a separate class. Accessed via §10 Scenario Loader in the coach sidebar.</p>
+  <div class="table-wrap">
+    <table class="doc-table">
+      <thead><tr><th>Control</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>Progress label</td><td>"Action N / Total" — describes player, street, action type, amount at current step</td></tr>
+        <tr><td>Scrubber</td><td>Drag to jump directly to any action in the hand</td></tr>
+        <tr><td>◀ Back / Fwd ▶</td><td>Step backward or forward one action at a time</td></tr>
+        <tr><td>Branch to Live</td><td>Snapshot state at cursor → switch to live play. BRANCHED badge (amber) replaces REPLAY badge (blue).</td></tr>
+        <tr><td>Return to Replay</td><td>Unwind the live branch; restore the exact step where you branched</td></tr>
+        <tr><td>Exit Replay</td><td>End replay; restore pre-replay stacks; return to WAITING lobby</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="info-box">
+    <h4>Key behaviours</h4>
+    <ul>
+      <li>All hole cards are exposed to coach during non-branched replay (<code>coachInReview = true</code>)</li>
+      <li>Betting controls hidden during non-branched replay; reappear when branched to live</li>
+      <li>Purple ring on player seat whose turn it is at the current replay step</li>
+      <li>Loading a replay while a playlist is active is blocked (prevents state corruption)</li>
+      <li><code>pre_branch_snapshot</code> is stripped from undo history entries — prevents exponential memory growth</li>
+    </ul>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── ENGINE ── -->
+<div class="section" id="engine">
+  <div class="section-head">
+    <div class="section-num">8</div>
+    <h2>Engine Architecture</h2>
+  </div>
+  <p class="section-sub">The server is a state machine. All game logic lives in <code>server/game/</code>.</p>
+
+  <h3 class="sub">Phase State Machine</h3>
+  <div class="phase-flow">
+    <div class="phase-node p-blue"><div class="pl">Start</div><div class="pn">WAITING</div><div class="pd">0 board cards<br>No active turn</div></div>
+    <div class="phase-arrow"><div class="arr">→</div><div class="arl">startGame()<br>≥2 players</div></div>
+    <div class="phase-node"><div class="pl">Street 1</div><div class="pn">PREFLOP</div><div class="pd">0 board<br>Blinds posted<br>Turn = UTG</div></div>
+    <div class="phase-arrow"><div class="arr">→</div><div class="arl">All acted<br>+ matched</div></div>
+    <div class="phase-node"><div class="pl">Street 2</div><div class="pn">FLOP</div><div class="pd">3 board cards</div></div>
+    <div class="phase-arrow"><div class="arr">→</div><div class="arl">All acted<br>+ matched</div></div>
+    <div class="phase-node"><div class="pl">Street 3</div><div class="pn">TURN</div><div class="pd">4 board cards</div></div>
+    <div class="phase-arrow"><div class="arr">→</div><div class="arl">All acted<br>+ matched</div></div>
+    <div class="phase-node"><div class="pl">Street 4</div><div class="pn">RIVER</div><div class="pd">5 board cards</div></div>
+    <div class="phase-arrow"><div class="arr">→</div><div class="arl">All acted<br>+ matched</div></div>
+    <div class="phase-node p-amber"><div class="pl">End</div><div class="pn">SHOWDOWN</div><div class="pd">Hands evaluated<br>Pots distributed</div></div>
+  </div>
+
+  <div class="card-grid" style="margin-bottom:28px">
+    <div class="card c-red" style="grid-column:span 1">
+      <div class="card-title">🔴 Fold-to-One Shortcut</div>
+      <ul><li>1 active player remains → hand ends immediately, no showdown</li></ul>
+    </div>
+    <div class="card c-red" style="grid-column:span 1">
+      <div class="card-title">🔴 All-In Run-Out</div>
+      <ul><li>All remaining players all-in → streets auto-advance to showdown with no actions</li></ul>
+    </div>
+    <div class="card c-blue" style="grid-column:span 1">
+      <div class="card-title">⚡ Special Phases</div>
+      <ul><li><code>config</code> — hand configuration before deal</li><li><code>replay</code> — guided replay mode (step-through)</li></ul>
+    </div>
+  </div>
+
+  <h3 class="sub">Module Map</h3>
+  <div class="module-grid">
+    <div class="mod-box core">
+      <div class="mod-title">⭐ GameManager</div>
+      <ul>
+        <li>Entire poker state machine</li>
+        <li>All phases, all betting, blinds</li>
+        <li>Undo / rollback stack (30 deep)</li>
+        <li>Manual card injection, config phase</li>
+        <li>Dealer rotation, pot management</li>
+        <li>Playlist activation</li>
+        <li>Replay: 7 public methods</li>
+      </ul>
+      <div class="coupling">Calls: HandGenerator, HandEvaluator, SidePotCalculator, Deck</div>
+    </div>
+    <div class="mod-box wrap">
+      <div class="mod-title">🔷 SessionManager</div>
+      <ul>
+        <li>Drop-in wrapper over GameManager</li>
+        <li>Intercepts startGame, placeBet, resetForNextHand</li>
+        <li>Tracks VPIP / PFR / WTSD / WSD / 3-bet%</li>
+        <li>Computes stat ratios after each hand</li>
+      </ul>
+      <div class="coupling">Owns: _stats map, _preflopTracking, handsDealt</div>
+    </div>
+    <div class="mod-box pure">
+      <div class="mod-title">🟢 HandEvaluator</div>
+      <ul>
+        <li>Pure function — no state, no side effects</li>
+        <li>7-card → best 5-card hand</li>
+        <li>All 9 hand ranks + tie-breaking</li>
+        <li>Wheel straight (A-2-3-4-5) edge case</li>
+      </ul>
+      <div class="coupling">Called by: GameManager._resolveShowdown()</div>
+    </div>
+    <div class="mod-box pure">
+      <div class="mod-title">🟢 HandGenerator</div>
+      <ul>
+        <li>Fill-the-Gaps algorithm</li>
+        <li>null = random, string = use this card</li>
+        <li>Range, combos, board texture support</li>
+        <li>Collision-free shuffled deck for blanks</li>
+      </ul>
+      <div class="coupling">Called by: GameManager.startGame()</div>
+    </div>
+    <div class="mod-box pure">
+      <div class="mod-title">🟢 SidePotCalculator</div>
+      <ul>
+        <li>Pure function — builds side pots from contribution levels</li>
+        <li>Folded players contribute but can't win</li>
+      </ul>
+      <div class="coupling">Called by: GameManager._resolveShowdown()</div>
+    </div>
+    <div class="mod-box util">
+      <div class="mod-title">🟣 RangeParser</div>
+      <ul>
+        <li>Server: CommonJS (server/game/RangeParser.js)</li>
+        <li>Client: ES module mirror (client/src/utils/rangeParser.js)</li>
+        <li>parseRange, validateRange, countCombos</li>
+        <li>pickFromRange exists server-side only</li>
+      </ul>
+      <div class="coupling">Intentional mirror — avoids network round-trips for UI</div>
+    </div>
+    <div class="mod-box db">
+      <div class="mod-title">🌿 HandLoggerSupabase</div>
+      <ul>
+        <li>All persistence — Supabase (PostgreSQL)</li>
+        <li>Async throughout (all functions await)</li>
+        <li>Includes analyzeAndTagHand (30+ patterns)</li>
+        <li>loginRosterPlayer, isRegisteredPlayer</li>
+      </ul>
+      <div class="coupling">Used by: server/index.js, simulate_game.js, simulate_batches.js</div>
+    </div>
+    <div class="mod-box wrap">
+      <div class="mod-title">🔷 PlayerRoster</div>
+      <ul>
+        <li>Loads players.csv on startup</li>
+        <li>authenticate(name, pw) → entry|null</li>
+        <li>getRole(name) → 'coach'|'student'|null</li>
+        <li>Server exits fatally if CSV missing</li>
+      </ul>
+      <div class="coupling">Used by: server/index.js (join_room, auth endpoints)</div>
+    </div>
+  </div>
+
+  <h3 class="sub">Full Action Flow — Socket → DB</h3>
+  <div class="flow-grid">
+    <div class="flow-lane">
+      <h3>🃏 Start Hand</h3>
+      <div class="flow-step"><div class="fdot s">1</div><div class="ft"><strong>Client emits <code>start_game</code></strong><small>Coach clicks Start Hand</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot g">2</div><div class="ft"><strong>SessionManager.startGame()</strong><small>Validates ≥2 players, captures starting stacks</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot g">3</div><div class="ft"><strong>GameManager.startGame()</strong><small>If config set: HandGenerator fills gaps → validates, deals hole cards, posts blinds, sets UTG turn</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot d">4</div><div class="ft"><strong>await HandLogger.startHand()</strong><small>Writes sessions row (if new) + hands row + hand_players rows with stack_start</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot s">5</div><div class="ft"><strong>broadcastState() to all clients</strong><small>Personalised: own cards visible, opponents HIDDEN</small></div></div>
+    </div>
+
+    <div class="flow-lane">
+      <h3>⚡ Player Action</h3>
+      <div class="flow-step"><div class="fdot s">1</div><div class="ft"><strong>Client emits <code>place_bet</code></strong><small>fold / check / call / raise + amount</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot e">2</div><div class="ft"><strong>Cancel action timer</strong><small>Stopped before any state mutation</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot g">3</div><div class="ft"><strong>SessionManager.placeBet()</strong><small>Preflop: records call/raise in preflopTracking for VPIP/PFR/3-bet</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot g">4</div><div class="ft"><strong>GameManager.placeBet()</strong><small>Guards → snapshot → execute → check fold-to-one → advance or next turn</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot d">5</div><div class="ft"><strong>HandLogger.recordAction()</strong><small>Skipped for coach. street label, is_manual_scenario, stack/pot context</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot s">6</div><div class="ft"><strong>Start new timer + broadcastState()</strong></div></div>
+    </div>
+
+    <div class="flow-lane">
+      <h3>🏆 End Hand</h3>
+      <div class="flow-step"><div class="fdot s">1</div><div class="ft"><strong>Client emits <code>reset_hand</code></strong><small>Coach clicks Next Hand</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot g">2</div><div class="ft"><strong>SessionManager.resetForNextHand()</strong><small>Commits VPIP/PFR/WTSD/WSD/3-bet ratios for all dealt-in players</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot d">3</div><div class="ft"><strong>HandLogger.endHand()</strong><small>Updates hands (board, pot, winner). Updates hand_players (stack_end, hole_cards, is_winner, vpip, pfr, wtsd, wsd)</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot d">4</div><div class="ft"><strong>HandLogger.analyzeAndTagHand()</strong><small>Scans non-reverted actions. Writes auto_tags + mistake_tags</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot g">5</div><div class="ft"><strong>GameManager.resetForNextHand()</strong><small>Rotates dealer, clears cards/bets, phase → WAITING</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot s">6</div><div class="ft"><strong>Emit session_stats + broadcastState()</strong></div></div>
+    </div>
+
+    <div class="flow-lane">
+      <h3>↩️ Undo / Rollback</h3>
+      <div class="flow-step"><div class="fdot s">1</div><div class="ft"><strong>Coach emits <code>undo_action</code></strong></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot g">2</div><div class="ft"><strong>GameManager.undoAction()</strong><small>Pops from 30-deep snapshot stack. Restores entire state. Preserves playlist hands.</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot d">3</div><div class="ft"><strong>HandLogger.markLastActionReverted()</strong><small>Sets is_reverted=1 on newest non-reverted DB row. Never deleted — audit trail.</small></div></div>
+      <div class="fcon">↓</div>
+      <div class="flow-step"><div class="fdot s">4</div><div class="ft"><strong>broadcastState()</strong></div></div>
+    </div>
+  </div>
+
+  <h3 class="sub">Raise Logic</h3>
+  <div class="two-col">
+    <div class="info-box">
+      <h4 style="color:var(--green)">✅ Valid Raise — Allowed When</h4>
+      <ul>
+        <li>It's this player's turn (<code>current_turn</code> matches)</li>
+        <li>Game is not paused</li>
+        <li>Amount ≥ current_bet + min_raise, OR player going all-in for less</li>
+        <li>Player has enough chips for total commitment</li>
+        <li>If previous raise was incomplete: only original raiser can re-raise</li>
+      </ul>
+    </div>
+    <div class="info-box">
+      <h4 style="color:var(--red)">🚫 Raise Blocked — When</h4>
+      <ul>
+        <li>Not this player's turn</li>
+        <li>Game is paused</li>
+        <li>Amount below minimum and player still has chips</li>
+        <li>Previous raise was incomplete all-in AND this player already acted AND is not original raiser</li>
+      </ul>
+    </div>
+    <div class="info-box">
+      <h4 style="color:var(--amber)">⚡ Full Raise (≥ min_raise)</h4>
+      <ul>
+        <li>min_raise updated to new raise increment</li>
+        <li>All other active players' action reset to "waiting" — must act again</li>
+        <li>last_raise_was_full = true</li>
+      </ul>
+    </div>
+    <div class="info-box">
+      <h4 style="color:var(--blue)">🔵 Incomplete All-In (&lt; min_raise)</h4>
+      <ul>
+        <li>min_raise stays the same</li>
+        <li>Other players' action NOT reset — round closes normally</li>
+        <li>Subsequent players may call/fold only (no re-raise)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── DATA LAYER ── -->
+<div class="section" id="data">
+  <div class="section-head">
+    <div class="section-num">9</div>
+    <h2>Data Layer — Supabase</h2>
+  </div>
+  <p class="section-sub">All persistence is Supabase (PostgreSQL). SQLite has been fully removed. The server uses the service role key; the browser client uses the anon key.</p>
+
+  <h3 class="sub">Tables</h3>
+  <div class="card-grid">
+    <div class="card c-blue"><div class="card-icon">🧑</div><div class="card-title">player_profiles</div><ul><li>stable_id (UUID PK)</li><li>display_name · last_known_name</li><li>is_roster INTEGER (1 = active in CSV)</li><li>last_seen timestamp</li></ul></div>
+    <div class="card c-green"><div class="card-icon">🎮</div><div class="card-title">sessions</div><ul><li>session_id (UUID PK)</li><li>table_id · started_at</li><li>All hands link back here</li></ul></div>
+    <div class="card c-gold"><div class="card-icon">🃏</div><div class="card-title">hands</div><ul><li>hand_id (UUID PK) · session_id FK</li><li>board · final_pot · winner_id/name</li><li>auto_tags · mistake_tags · coach_tags</li><li>small_blind · big_blind · dealer_seat</li></ul></div>
+    <div class="card c-red"><div class="card-icon">👥</div><div class="card-title">hand_players</div><ul><li>PK (hand_id, player_id)</li><li>stack_start / stack_end · hole_cards</li><li>is_winner · vpip · pfr · wtsd · wsd</li><li>seat · position (BTN/SB/BB/UTG…)</li></ul></div>
+    <div class="card c-purple"><div class="card-icon">⚡</div><div class="card-title">hand_actions</div><ul><li>id (auto) · hand_id FK · player_id</li><li>street · action · amount · timestamp</li><li>is_reverted · is_manual_scenario</li><li>stack_at_action · pot_at_action</li></ul></div>
+    <div class="card c-teal"><div class="card-icon">📋</div><div class="card-title">playlists + playlist_hands</div><ul><li>playlists: name · table_id · created_at</li><li>playlist_hands: playlist_id + hand_id (PK)</li><li>display_order for sequencing</li><li>CASCADE DELETE on playlist removal</li></ul></div>
+    <div class="card c-orange"><div class="card-icon">💰</div><div class="card-title">stack_adjustments</div><ul><li>session_id · player_id · amount</li><li>timestamp of manual stack change</li><li>Used for Alltime Winning calculation</li></ul></div>
+  </div>
+
+  <h3 class="sub">Key design decisions</h3>
+  <div class="info-box">
+    <h4>Stable player identity</h4>
+    <ul>
+      <li><code>player_id</code> in ALL tables is the client's stable UUID — NOT socket.id</li>
+      <li>UUID stored in localStorage under key <code>poker_trainer_player_id</code></li>
+      <li>Server <code>stableIdMap: Map&lt;socketId, stableId&gt;</code> populated on <code>join_room</code></li>
+      <li>Coach stableId is deterministic <code>coach_&lt;tableId&gt;</code> (not a UUID — skips upsertPlayerIdentity)</li>
+      <li>join_room validates registered stableId for non-coach/non-spectator players</li>
+    </ul>
+  </div>
+
+  <h3 class="sub">RLS &amp; access policy</h3>
+  <div class="warn-box">⚠ <strong>ISS-75:</strong> Supabase anon read policies (<code>USING (true)</code>) on all tables are temporary (Phase 3 measure). Any unauthenticated client can read all hand/player data. Acceptable for local/private use. Replace with user-scoped RLS policies in Phase 1 (Auth Migration) before internet-facing deployment.</div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── SOCKETS ── -->
+<div class="section" id="sockets">
+  <div class="section-head">
+    <div class="section-num">10</div>
+    <h2>Socket Event Contract</h2>
+  </div>
+  <p class="section-sub">Complete list of socket.io events. Client → Server events are emitted by the browser; Server → Client events are received by it.</p>
+
+  <div class="two-col">
+    <div>
+      <h3 class="sub">Client → Server</h3>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Event</th><th>Payload / Notes</th></tr></thead>
+          <tbody>
+            <tr><td>join_room</td><td>{name, isCoach, isSpectator, stableId, password, tableId}</td></tr>
+            <tr><td>start_game</td><td>—</td></tr>
+            <tr><td>place_bet</td><td>{action, amount}</td></tr>
+            <tr><td>undo_action</td><td>—</td></tr>
+            <tr><td>rollback_street</td><td>—</td></tr>
+            <tr><td>force_next_street</td><td>—</td></tr>
+            <tr><td>toggle_pause</td><td>—</td></tr>
+            <tr><td>award_pot</td><td>{playerId}</td></tr>
+            <tr><td>reset_hand</td><td>—</td></tr>
+            <tr><td>adjust_stack</td><td>{playerId, amount}</td></tr>
+            <tr><td>set_blind_levels</td><td>{sb, bb} — coach only, phase=waiting</td></tr>
+            <tr><td>set_mode</td><td>{mode} — rng|manual|hybrid</td></tr>
+            <tr><td>open_config_phase</td><td>—</td></tr>
+            <tr><td>update_hand_config</td><td>full config object</td></tr>
+            <tr><td>start_configured_hand</td><td>—</td></tr>
+            <tr><td>manual_deal_card</td><td>{slotType, slotIndex, card}</td></tr>
+            <tr><td>set_player_in_hand</td><td>{playerId, inHand} — coach only</td></tr>
+            <tr><td>load_hand_scenario</td><td>{handId, stackMode}</td></tr>
+            <tr><td>create_playlist</td><td>{name, description}</td></tr>
+            <tr><td>get_playlists</td><td>—</td></tr>
+            <tr><td>add_to_playlist</td><td>{playlistId, handId}</td></tr>
+            <tr><td>remove_from_playlist</td><td>{playlistId, handId}</td></tr>
+            <tr><td>delete_playlist</td><td>{playlistId}</td></tr>
+            <tr><td>activate_playlist</td><td>{playlistId}</td></tr>
+            <tr><td>deactivate_playlist</td><td>—</td></tr>
+            <tr><td>update_hand_tags</td><td>{handId, tags[]}</td></tr>
+            <tr><td>load_replay</td><td>{handId}</td></tr>
+            <tr><td>replay_step_forward</td><td>—</td></tr>
+            <tr><td>replay_step_back</td><td>—</td></tr>
+            <tr><td>replay_jump_to</td><td>{index}</td></tr>
+            <tr><td>replay_branch</td><td>—</td></tr>
+            <tr><td>replay_unbranch</td><td>—</td></tr>
+            <tr><td>replay_exit</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3 class="sub">Server → Client</h3>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Event</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>room_joined</td><td>{playerId, tableId, role}</td></tr>
+            <tr><td>game_state</td><td>Personalised — opponents' cards HIDDEN during live play</td></tr>
+            <tr><td>notification</td><td>{message, type} — informational toast</td></tr>
+            <tr><td>error</td><td>{message} — hard error (auth, fatal)</td></tr>
+            <tr><td>sync_error</td><td>{message} — soft game-state error (invalid action)</td></tr>
+            <tr><td>showdown_result</td><td>Winner + all hands revealed</td></tr>
+            <tr><td>session_stats</td><td>VPIP/PFR/WTSD/WSD for all players this session</td></tr>
+            <tr><td>action_timer</td><td>{remaining, playerId} — countdown updates</td></tr>
+            <tr><td>coach_disconnected</td><td>Triggers paused overlay on all clients</td></tr>
+            <tr><td>playlist_state</td><td>Full playlist list after any playlist change</td></tr>
+            <tr><td>hand_started</td><td>{handId} — fired when hand begins</td></tr>
+            <tr><td>hand_tags_saved</td><td>{handId, tags} — after update_hand_tags</td></tr>
+            <tr><td>replay_loaded</td><td>{handId, totalActions} — replay ready</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub">REST Endpoints</h3>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Route</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>POST /api/auth/login</td><td>{name, password} → {stableId, name, role}</td></tr>
+            <tr><td>POST /api/auth/register</td><td>→ 410 Gone (permanently disabled)</td></tr>
+            <tr><td>GET /api/hands</td><td>?tableId=&amp;limit=&amp;offset= — hand list</td></tr>
+            <tr><td>GET /api/players</td><td>All players with career stats</td></tr>
+            <tr><td>GET /api/players/:id/stats</td><td>Single player career stats</td></tr>
+            <tr><td>GET /api/players/:id/hands</td><td>Player's hand history</td></tr>
+            <tr><td>GET /api/sessions/:id/report</td><td>→ HTML session report</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── ISSUES ── -->
+<div class="section" id="issues">
+  <div class="section-head">
+    <div class="section-num">11</div>
+    <h2>Issues Registry</h2>
+  </div>
+  <p class="section-sub">🔴 CRITICAL — crash or wrong outcome &nbsp;·&nbsp; 🟠 HIGH — broken feature &nbsp;·&nbsp; 🟡 MEDIUM — inconsistency / tech debt &nbsp;·&nbsp; 🟢 LOW — minor / cosmetic</p>
+
+  <div class="issue-tabs">
+    <button class="issue-tab active" onclick="showTab('open')">Open Issues <span style="background:var(--red);color:#fff;font-size:0.65rem;padding:1px 7px;border-radius:20px;margin-left:6px">4</span></button>
+    <button class="issue-tab" onclick="showTab('resolved')">Resolved <span style="background:var(--surface2);color:var(--muted);font-size:0.65rem;padding:1px 7px;border-radius:20px;margin-left:6px">90+</span></button>
+  </div>
+
+  <div class="issue-pane active" id="tab-open">
+    <div class="issue-list">
+      <div class="issue-row sev-high">
+        <div class="issue-id">ISS-74</div>
+        <div class="issue-sev"><span class="sev-dot"></span>HIGH</div>
+        <div class="issue-body">
+          <strong>Coach sidebar overlays table — rightmost seat partially obscured</strong>
+          <p>Sidebar is <code>position: fixed</code>, 18 rem wide. Full fix requires flex layout to push main content. Partial mitigation: seat 7 moved from 95%→88%. Workaround: collapse sidebar during play.</p>
+        </div>
+      </div>
+      <div class="issue-row sev-medium">
+        <div class="issue-id">ISS-73</div>
+        <div class="issue-sev"><span class="sev-dot"></span>MEDIUM</div>
+        <div class="issue-body">
+          <strong>Replay hole cards missing for hands recorded before ISS-69 fix (2026-03-16)</strong>
+          <p>Pre-fix hands stored <code>socket.id</code> as <code>player_id</code>; replay lookup keys on <code>stableId</code> so they never match. New hands are unaffected. Mitigation: use Load Scenario instead of Replay for old hands.</p>
+        </div>
+      </div>
+      <div class="issue-row sev-medium">
+        <div class="issue-id">ISS-75</div>
+        <div class="issue-sev"><span class="sev-dot"></span>MEDIUM</div>
+        <div class="issue-body">
+          <strong>Supabase anon read policies are open (<code>USING (true)</code>)</strong>
+          <p>Temporary Phase 3 measure — any unauthenticated client can read all hand/player data. Acceptable for local/private training use. Replace with user-scoped RLS in Phase 1 (Auth Migration) before internet-facing deployment.</p>
+        </div>
+      </div>
+      <div class="issue-row sev-medium">
+        <div class="issue-id">ISS-76</div>
+        <div class="issue-sev"><span class="sev-dot"></span>MEDIUM</div>
+        <div class="issue-body">
+          <strong><code>loginRosterPlayer</code> is case-sensitive on display_name</strong>
+          <p>Uses <code>.eq('display_name', name)</code> — exact match. If <code>players.csv</code> capitalisation differs from what the player types, login returns "not found". Full fix: case-insensitive collation or lowercase normalisation on upsert + lookup.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="issue-pane" id="tab-resolved">
+    <details>
+      <summary>Critical fixes (🔴)</summary>
+      <div class="issue-list" style="padding:0 0 0 8px">
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-01</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>GameManager used directly instead of SessionManager — session stats never tracked</span><span class="fix-date">Epic 4</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-66</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>player_id in DB was ephemeral socket.id — same student treated as new entity on reconnect</span><span class="fix-date">Epic 11</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-69</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>SessionManager.addPlayer() dropped stableId — all non-coach players got socket.id, breaking range/combo lookups</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-71</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>GameManager generatorConfig only forwarded mode/holeCards/board — range/combos/texture never fired</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-72</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>startGame() reset is_active=true then let sitting-out players become current_turn</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">WF-03</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>startGame() callable during phase='replay' — destroyed replay state and dealt mid-replay</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">SIM-01</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>_advanceStreet() didn't set current_turn=null when all-in — stale current_turn hung the game</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">EC-01</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>Stored XSS in SessionReport.js via raw player name + missing CSP header</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">FE-07</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>All 7 replay emit helpers implemented in useSocket.js but never added to emit bundle — buttons silent</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">FE-10</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>Board cards invisible in replay phase — missing case in getRevealedSlots()</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">DB-02</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>bigBlind never passed to startHand() — all hands stored with big_blind=0, WHALE_POT never fired</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">EC-23</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>set_mode had no phase guard — callable mid-hand, corrupting betting state machine</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">SB-01</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>Coach stableId is not a UUID — upsertPlayerIdentity and recordAction threw FK/UUID errors for coaches</span><span class="fix-date">2026-03-17</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">SB-02</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>startHand() was fire-and-forget — recordAction could arrive before hands row existed in Supabase (FK violation)</span><span class="fix-date">2026-03-17</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">SB-03</span><span class="issue-sev"><span class="sev-dot"></span>CRIT</span><span>endHand() used socket.ids not stableIds — winner_id was non-UUID, hand_players UPDATE matched zero rows</span><span class="fix-date">2026-03-17</span></div>
+      </div>
+    </details>
+    <details>
+      <summary>High fixes (🟠)</summary>
+      <div class="issue-list" style="padding:0 0 0 8px">
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-02</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>/auth preflight fetch in App.jsx — endpoint didn't exist, blocked all joins</span><span class="fix-date">Epic 7</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-05</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>startGame() mutated state before generateHand — on error, phase stuck as 'preflop'</span><span class="fix-date">Epic 7</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-70</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>CoachSidebar used uppercase 'WAITING' vs lowercase value — Configure Hand never rendered</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">FE-12</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>All players clustered on one side of table — POSITIONS_BY_COUNT even-distribution fix</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">FE-13</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>Hero seat at top:92% — hidden behind BettingControls bar. Raised to 85%.</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">FE-14</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>BB/Chips toggle inside oval overlapped top-right seat. Moved to absolute top-3 left-3.</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">FE-15</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>Coach received all opponent hole cards in live play — getPublicState() privacy fix</span><span class="fix-date">2026-03-17</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">WF-11</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>rollback_street error path returned without broadcastState() — client hung</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">EC-22</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>Action timer auto-fold didn't re-check phase/current_turn — could fold on wrong phase</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">AUTH-01</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>Self-registration removed; system closed; POST /api/auth/register → 410</span><span class="fix-date">2026-03-17</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">SB-04</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>simulate_game.js used old SQLite HandLogger after Supabase migration</span><span class="fix-date">2026-03-17</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">SB-05</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>client/vite.config.js had no /api proxy — login fetch failed in dev mode</span><span class="fix-date">2026-03-17</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">SB-07</span><span class="issue-sev"><span class="sev-dot"></span>HIGH</span><span>All Supabase tables had RLS requiring auth.uid() — anon reads returned 500. Fixed via migration 003.</span><span class="fix-date">2026-03-17</span></div>
+      </div>
+    </details>
+    <details>
+      <summary>Medium &amp; low fixes (🟡 🟢)</summary>
+      <div class="issue-list" style="padding:0 0 0 8px">
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-12/13</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>Double snapshot per forceNextStreet — corrupted rollback state</span><span class="fix-date">Epic 16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-15</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>setBlindLevels() rejected valid structures like 10/15 (bb &lt; sb*2) — relaxed to bb &gt; sb</span><span class="fix-date">Epic 16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-16</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>_saveSnapshot() called before action validation — failed actions polluted undo stack</span><span class="fix-date">Epic 16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">ISS-51</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>WALK false positive — BB always posted but was counted as a raise</span><span class="fix-date">Epic 16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">GAP-2</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>VPIP/PFR saved from last action (e.g. river fold) instead of preflop — stats wrong</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">GAP-3</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>WTSD/WSD never persisted to DB — career stats missing these metrics</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">WF-01/02</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>replay_mode not reset in resetForNextHand; _saveSnapshot captured pre_branch_snapshot causing memory growth</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">WF-06</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>branchFromReplay() left stale current_turn</span><span class="fix-date">2026-03-15</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">DB-03</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>No UNIQUE constraint on display_name — duplicate names could corrupt coach UI</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">DB-09</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>Coach stableId fell back to socket.id — breaking career stat joins on reconnect</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">SB-06</span><span class="issue-sev"><span class="sev-dot"></span>MED</span><span>CoachSidebar JSON.parse(h.auto_tags) crashed when Supabase returned a native array</span><span class="fix-date">2026-03-17</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">FE-16</span><span class="issue-sev"><span class="sev-dot"></span>LOW</span><span>Opponent cards at 50% opacity via isOpponentCard hack — removed; HIDDEN sentinel handles it</span><span class="fix-date">2026-03-16</span></div>
+        <div class="resolved-row sev-resolved"><span class="issue-id">FEAT-05</span><span class="issue-sev"><span class="sev-dot"></span>LOW</span><span>Manual tag did not auto-create playlist — update_hand_tags now auto-creates per new tag name</span><span class="fix-date">2026-03-16</span></div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── TESTS ── -->
+<div class="section" id="tests">
+  <div class="section-head">
+    <div class="section-num">12</div>
+    <h2>Tests</h2>
+  </div>
+  <p class="section-sub">Run from the project root.</p>
+  <div class="two-col">
+    <div>
+      <h3 class="sub">Server tests (Jest)</h3>
+      <div class="code-block">cd server
+npx jest --no-coverage</div>
+      <div class="badge green" style="margin-bottom:16px">910 tests · 21 suites · all passing</div>
+      <div class="info-box">
+        <h4>Test suites</h4>
+        <ul>
+          <li>GameManager.test.js — core game flow</li>
+          <li>GameManager.config.test.js (76) — hand config</li>
+          <li>GameManager.sidepots.test.js (30) — side pots</li>
+          <li>GameManager.epic12.test.js — coach seat, in_hand</li>
+          <li>GameManager.bugfixes.test.js — regression tests</li>
+          <li>GameManager.replay.test.js (36) — replay mode</li>
+          <li>HandEvaluator.test.js · HandGenerator.test.js (47)</li>
+          <li>HandGenerator.range.test.js (42)</li>
+          <li>RangeParser.test.js (38)</li>
+          <li>SessionManager.test.js (69)</li>
+          <li>SidePot.test.js (20)</li>
+          <li>stress.test.js (1000 hands) · edge_cases · disconnect</li>
+          <li>socket.integration.test.js (33)</li>
+          <li>REST.api.test.js · Phase6.test.js</li>
+          <li>PlayerRoster.test.js · SessionReport.test.js (55)</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <h3 class="sub">Client tests (Vitest)</h3>
+      <div class="code-block">cd client
+npm test</div>
+      <div class="badge green" style="margin-bottom:16px">46 tests · 3 suites · all passing</div>
+      <div class="info-box" style="margin-bottom:16px">
+        <h4>Client suites</h4>
+        <ul>
+          <li>chips.test.js (24) — fmtChips utility</li>
+          <li>rangeParser coverage</li>
+          <li>Component tests</li>
+        </ul>
+      </div>
+
+      <h3 class="sub">Batch simulation</h3>
+      <div class="code-block"><span class="comment"># Run all batches (B01–B250+)</span>
+npm run batches
+
+<span class="comment"># Run specific range</span>
+npm run batches -- 145 244</div>
+      <div class="info-box">
+        <h4>What it tests</h4>
+        <ul>
+          <li>250+ scenario batches × 20 hands each</li>
+          <li>Writes to real Supabase DB (~4 KB/hand)</li>
+          <li>Expected: 0 crashes, 0 anomalies</li>
+          <li>Covers: action order, all-in, undo, rollback, replay, auth, config, range/combo intersection, board texture, playlists</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── ROADMAP ── -->
+<div class="section" id="roadmap">
+  <div class="section-head">
+    <div class="section-num">13</div>
+    <h2>Roadmap &amp; Ideas</h2>
+  </div>
+  <p class="section-sub">Known pending phases and improvement ideas.</p>
+
+  <h3 class="sub">Pending: Supabase Migration</h3>
+  <div class="card-grid" style="margin-bottom:28px">
+    <div class="card c-amber">
+      <div class="card-title">Phase 1 — Auth Migration ⏳</div>
+      <ul>
+        <li>Replace open anon RLS with Supabase Auth (JWT)</li>
+        <li>User-scoped row-level security policies</li>
+        <li>Required before internet-facing deployment</li>
+      </ul>
+    </div>
+    <div class="card c-amber">
+      <div class="card-title">Phase 6 — New Data Fields ⏳</div>
+      <ul>
+        <li>Position context (BTN/SB/BB/UTG) stored per hand</li>
+        <li>Stack-to-pot ratio at key decision points</li>
+        <li>Migration: 004_phase6_new_data.sql</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub">Engine improvement ideas</h3>
+  <div class="idea-grid">
+    <div class="idea-card idea-1">
+      <div class="idea-icon">📊</div>
+      <div class="idea-title">Real-Time Equity Engine</div>
+      <div class="idea-desc">Run Monte Carlo (5,000 samples) server-side on every street transition. Coach sees live equity % per player during pauses — turns abstract coaching into hard numbers.</div>
+      <ul class="idea-bullets">
+        <li>New: EquityEngine.js — uses existing HandEvaluator</li>
+        <li>Store final equity snapshot in hands table</li>
+        <li>Power an "Expected Value" column in Stats Dashboard</li>
+      </ul>
+      <div class="effort-row"><span class="effort-tag">Medium effort</span><span class="effort-tag">New module only</span></div>
+    </div>
+    <div class="idea-card idea-2">
+      <div class="done-stamp">✓ DONE</div>
+      <div class="idea-icon" style="margin-top:20px">🎬</div>
+      <div class="idea-title">Guided Replay Mode</div>
+      <div class="idea-desc">Fully shipped. <code>phase='replay'</code> in GameManager. 7 public methods. Scrubber, step buttons, branch/unbranch, exit. 36 replay tests passing.</div>
+      <div class="effort-row"><span class="effort-tag">Done 2026-03-15</span><span class="effort-tag">Epics R1–R5</span></div>
+    </div>
+    <div class="idea-card idea-3">
+      <div class="idea-icon">🧠</div>
+      <div class="idea-title">Decision Quality Scorer</div>
+      <div class="idea-desc">After each action, score decision quality independently of outcome. Good fold can lose; bad call can win. Score based on pot odds vs equity, position, stack-to-pot ratio.</div>
+      <ul class="idea-bullets">
+        <li>Depends on Equity Engine (Idea 1)</li>
+        <li>New column in hand_actions: decision_score</li>
+        <li>New Stats Dashboard widget: avg score per session</li>
+      </ul>
+      <div class="effort-row"><span class="effort-tag">Depends on Idea 1</span><span class="effort-tag">New: DecisionScorer.js</span></div>
+    </div>
+    <div class="idea-card idea-4">
+      <div class="idea-icon">⏱️</div>
+      <div class="idea-title">Decision Timing Profiler</div>
+      <div class="idea-desc">Track ms from turn-start to action. Build per-player timing histogram. Flag outliers: &lt;2 s on river all-in, &gt;50 s on preflop fold. Useful for timing tell coaching.</div>
+      <ul class="idea-bullets">
+        <li>Zero changes to GameManager</li>
+        <li>New column: think_time_ms in hand_actions</li>
+        <li>Store turn_started_at in index.js handler</li>
+      </ul>
+      <div class="effort-row"><span class="effort-tag">Low effort</span><span class="effort-tag">DB column + index.js only</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── TROUBLESHOOTING ── -->
+<div class="section" id="troubleshooting">
+  <div class="section-head">
+    <div class="section-num">14</div>
+    <h2>Troubleshooting</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="doc-table">
+      <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Cannot connect to server</td><td>Make sure <code>node index.js</code> is running in <code>server/</code>. Port 3001 must not be blocked.</td></tr>
+        <tr><td>Players can't reach the game</td><td>Use the server's IP address, not <code>localhost</code>. Port 3001 must be reachable on the network.</td></tr>
+        <tr><td>Stale UI after code changes</td><td>Run <code>npm run build</code> in <code>client/</code> and restart the server.</td></tr>
+        <tr><td>Coach sidebar not visible</td><td>Ensure your name has <code>role: coach</code> in <code>players.csv</code> and you logged in correctly.</td></tr>
+        <tr><td>Hand history not saving</td><td>Check <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> in <code>.env</code>.</td></tr>
+        <tr><td>Stats Dashboard shows no data</td><td>Check <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in <code>client/.env</code>; rebuild client.</td></tr>
+        <tr><td>Supabase 500 errors in console</td><td>Run migration <code>003_anon_read_policies.sql</code> in Supabase SQL editor.</td></tr>
+        <tr><td>"Invalid name or password"</td><td>Name and password must match a row in <code>players.csv</code> exactly (name case-insensitive; password exact).</td></tr>
+        <tr><td>Server exits immediately at startup</td><td><code>players.csv</code> is missing or not found at the project root. Create it.</td></tr>
+        <tr><td>Replay shows no hole cards</td><td>Hand was recorded before the ISS-69 fix (2026-03-16). Use Load Scenario instead of Replay for old hands.</td></tr>
+        <tr><td>Login fails in dev mode (Network error)</td><td>Check <code>client/vite.config.js</code> has the <code>/api</code> proxy pointing to <code>http://localhost:3001</code>.</td></tr>
+        <tr><td>Auto-tags not appearing (WHALE_POT, etc.)</td><td>Ensure <code>bigBlind</code> is being passed correctly to <code>startHand()</code>. Check for errors in analyzeAndTagHand in server logs.</td></tr>
+        <tr><td>Cloud deployment</td><td>Set all 3 Supabase env vars on the host. Upload <code>players.csv</code> to a persistent volume. Build command: <code>npm run build</code>. Start: <code>npm start</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<footer class="page-footer">
+  <span>Poker Trainer</span> &nbsp;·&nbsp; Last updated 2026-03-17 &nbsp;·&nbsp; Supabase (PostgreSQL) only &nbsp;·&nbsp; 910 server tests passing &nbsp;·&nbsp; 4 open issues
+</footer>
+
+</main>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.issue-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.issue-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// Highlight active nav link on scroll
+const sections = document.querySelectorAll('[id]');
+const navLinks = document.querySelectorAll('nav a');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const link = document.querySelector(`nav a[href="#${e.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

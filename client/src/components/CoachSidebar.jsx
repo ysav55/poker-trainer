@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Card from './Card';
 import HandConfigPanel from './HandConfigPanel';
 import { useHistory } from '../hooks/useHistory';
+import { apiFetch } from '../lib/api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -27,23 +28,47 @@ const BOARD_POSITION_LABELS = ['Flop 1', 'Flop 2', 'Flop 3', 'Turn', 'River'];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SectionHeader({ children }) {
-  return (
-    <div
-      className="label-sm mb-2"
-      style={{ color: '#d4af37', letterSpacing: '0.12em' }}
-    >
-      {children}
-    </div>
-  );
-}
-
 function Divider() {
   return (
     <div
       className="my-3"
       style={{ height: '1px', background: '#21262d' }}
     />
+  );
+}
+
+function CollapsibleSection({ title, children, defaultOpen = true, headerExtra = null, onToggle = null }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (onToggle) onToggle(next);
+  };
+  return (
+    <div className="coach-panel mb-3">
+      <div className="flex items-center justify-between mb-2">
+        <button
+          onClick={toggle}
+          className="flex items-center gap-1.5 flex-1 min-w-0"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          <span className="label-sm" style={{ color: '#d4af37', letterSpacing: '0.12em' }}>{title}</span>
+          <svg
+            width="10" height="10" viewBox="0 0 10 10" fill="none"
+            style={{
+              color: '#6e7681',
+              transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 0.15s',
+              flexShrink: 0,
+            }}
+          >
+            <path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+        {headerExtra}
+      </div>
+      {open && children}
+    </div>
   );
 }
 
@@ -496,32 +521,27 @@ export default function CoachSidebar({
   actionTimer = null,
   activeHandId = null,
   handTagsSaved = null,
-  onOpenStats,
   setBlindLevels = null,
+  myId = null,
 }) {
   // Local state
   const [mode, setMode] = useState('rng'); // 'rng' | 'manual'
-  const [awardPotTarget, setAwardPotTarget] = useState('');
   const [stackAdjustTarget, setStackAdjustTarget] = useState('');
   const [stackAdjustValue, setStackAdjustValue] = useState('');
-  const [blindSB, setBlindSB] = useState('');
   const [blindBB, setBlindBB] = useState('');
 
   // History hook
   const { hands, loading: historyLoading, handDetail, fetchHands, fetchHandDetail, clearDetail } = useHistory();
-  const [historyOpen, setHistoryOpen] = useState(false);
-
-  // Section 8: Live Hand Tags
-  const [currentHandTags, setCurrentHandTags] = useState([]);
-  const tagDebounceRef = useRef(null)
 
   // Section 9: Playlist Manager
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [activePlaylistId, setActivePlaylistId] = useState(null);
+  const [coachPlaylistMode, setCoachPlaylistMode] = useState('play'); // 'play' | 'monitor'
+  const [autoStartCountdown, setAutoStartCountdown] = useState(null); // null | number
+  const prevConfigPhaseRef = useRef(false);
 
   // Section 10: Scenario Loader
   const [scenarioSearch, setScenarioSearch] = useState('');
-  const [scenarioTagFilter, setScenarioTagFilter] = useState([]);
   const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState('');
   const [scenarioHands, setScenarioHands] = useState([]);
   const [scenarioStackMode, setScenarioStackMode] = useState('keep')
@@ -539,13 +559,6 @@ export default function CoachSidebar({
   } = gameState;
   const phase = (_phase ?? 'waiting').toUpperCase();
 
-  // Auto-fetch hands when history panel opens
-  useEffect(() => {
-    if (historyOpen) {
-      fetchHands();
-    }
-  }, [historyOpen, fetchHands]);
-
   // Auto-fetch hands when phase transitions to 'waiting' (after a hand ends)
   const prevPhaseRef = React.useRef(phase);
   useEffect(() => {
@@ -555,31 +568,48 @@ export default function CoachSidebar({
     prevPhaseRef.current = phase;
   }, [phase, fetchHands]);
 
-  // Reset hand tags when a new hand starts (phase returns to waiting)
-  useEffect(() => {
-    if (phase === 'WAITING') {
-      setCurrentHandTags([]);
-    }
-  }, [phase]);
-
-  // Debounced persistent tag save — fires 500ms after last tag change while a hand is active
-  useEffect(() => {
-    if (!activeHandId || !emit.updateHandTags) return
-    clearTimeout(tagDebounceRef.current)
-    tagDebounceRef.current = setTimeout(() => {
-      emit.updateHandTags(activeHandId, currentHandTags)
-    }, 500)
-    return () => clearTimeout(tagDebounceRef.current)
-  }, [currentHandTags, activeHandId])
-
   // Fetch playlists on mount
   useEffect(() => { emit.getPlaylists?.(); }, []);
 
+  // Auto-start countdown: triggered when config_phase becomes true during active playlist
+  useEffect(() => {
+    const configPhase = gameState?.config_phase ?? false;
+    const playlistActive = gameState?.playlist_mode?.active ?? false;
+    if (!prevConfigPhaseRef.current && configPhase && playlistActive) {
+      setAutoStartCountdown(5);
+    }
+    if (!configPhase) setAutoStartCountdown(null); // reset if scenario cleared
+    prevConfigPhaseRef.current = configPhase;
+  }, [gameState?.config_phase, gameState?.playlist_mode?.active]);
+
+  // Countdown tick
+  useEffect(() => {
+    if (autoStartCountdown === null) return;
+    if (autoStartCountdown <= 0) {
+      // Apply monitor mode before starting
+      if (coachPlaylistMode === 'monitor' && myId && emit.setPlayerInHand) {
+        emit.setPlayerInHand(myId, false);
+      }
+      emit.startConfiguredHand?.();
+      setAutoStartCountdown(null);
+      return;
+    }
+    const t = setTimeout(() => setAutoStartCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [autoStartCountdown]);
+
   // Fetch scenario hands on mount
   useEffect(() => {
-    fetch('/api/hands?limit=50')
-      .then(r => r.json())
-      .then(data => setScenarioHands(data.hands ?? []))
+    apiFetch('/api/hands?limit=50')
+      .then(({ hands }) => {
+        setScenarioHands((hands || []).map(h => ({
+          ...h,
+          auto_tags:    (h.hand_tags || []).filter(t => t.tag_type === 'auto').map(t => t.tag),
+          coach_tags:   (h.hand_tags || []).filter(t => t.tag_type === 'coach').map(t => t.tag),
+          mistake_tags: (h.hand_tags || []).filter(t => t.tag_type === 'mistake').map(t => t.tag),
+          players:      [],
+        })));
+      })
       .catch(() => {});
   }, []);
 
@@ -631,13 +661,6 @@ export default function CoachSidebar({
     if (emit.forceNextStreet) emit.forceNextStreet();
   }, [emit]);
 
-  const handleAwardPot = useCallback(() => {
-    if (emit.awardPot && awardPotTarget) {
-      emit.awardPot(awardPotTarget);
-      setAwardPotTarget('');
-    }
-  }, [emit, awardPotTarget]);
-
   const handleSetStack = useCallback(() => {
     const val = parseFloat(stackAdjustValue);
     if (emit.adjustStack && stackAdjustTarget && !isNaN(val) && val >= 0) {
@@ -675,7 +698,7 @@ export default function CoachSidebar({
   if (!isOpen) {
     return (
       <div
-        className="fixed right-0 top-0 h-full z-40 flex items-center"
+        className="h-full flex items-center flex-shrink-0"
         style={{ pointerEvents: 'none' }}
       >
         <button
@@ -740,7 +763,7 @@ export default function CoachSidebar({
 
   return (
     <div
-      className="fixed right-0 top-0 h-full z-40 flex"
+      className="h-full flex flex-shrink-0"
       style={{ width: '18rem' }}
     >
       {/* Collapse tab on left edge of open sidebar */}
@@ -823,28 +846,14 @@ export default function CoachSidebar({
                 <span style={{ color: '#3fb950' }}>● LIVE</span>
               ) : null}
             </div>
-            {onOpenStats && (
-              <button
-                onClick={onOpenStats}
-                className="text-xs px-2 py-0.5 rounded transition-colors"
-                style={{ color: '#6e7681', border: '1px solid #30363d' }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = '#d4af37'; e.currentTarget.style.borderColor = '#d4af37'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; e.currentTarget.style.borderColor = '#30363d'; }}
-                title="View player stats"
-              >
-                Stats
-              </button>
-            )}
           </div>
         </div>
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto" style={{ padding: '12px 12px 20px' }}>
 
-          {/* ── SECTION 1: Game Controls ───────────────────────────────────── */}
-          <div className="coach-panel mb-3">
-            <SectionHeader>GAME CONTROLS</SectionHeader>
-
+          {/* ── 1: GAME CONTROLS ──────────────────────────────────────────── */}
+          <CollapsibleSection title="GAME CONTROLS" defaultOpen={true}>
             {/* Mode toggle: RNG vs MANUAL */}
             <div className="flex mb-3">
               <button
@@ -935,56 +944,38 @@ export default function CoachSidebar({
                 </>
               )}
             </button>
-          </div>
+          </CollapsibleSection>
 
-          {/* ── BLIND LEVELS ───────────────────────────────────────────────── */}
+          {/* ── 2: BLIND LEVELS ───────────────────────────────────────────── */}
           {setBlindLevels && (
-            <div className="coach-panel mb-3">
-              <SectionHeader>BLIND LEVELS</SectionHeader>
+            <CollapsibleSection title="BLIND LEVELS" defaultOpen={false}>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="label-sm text-gray-500 w-6">SB</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={blindSB}
-                  onChange={(e) => setBlindSB(e.target.value)}
-                  placeholder={gameState?.small_blind ?? '5'}
-                  className="flex-1 bg-sidebar-800 border border-sidebar-border rounded px-2 py-1 text-sm text-white outline-none"
-                  style={{ appearance: 'textfield' }}
-                  disabled={gameState?.phase !== 'waiting'}
-                />
                 <span className="label-sm text-gray-500 w-6">BB</span>
                 <input
-                  type="number"
-                  min={1}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   value={blindBB}
-                  onChange={(e) => setBlindBB(e.target.value)}
+                  onChange={(e) => setBlindBB(e.target.value.replace(/[^0-9]/g, ''))}
                   placeholder={gameState?.big_blind ?? '10'}
-                  className="flex-1 bg-sidebar-800 border border-sidebar-border rounded px-2 py-1 text-sm text-white outline-none"
-                  style={{ appearance: 'textfield' }}
+                  className="flex-1 min-w-0 bg-sidebar-800 border border-sidebar-border rounded px-2 py-1 text-sm text-white outline-none"
                   disabled={gameState?.phase !== 'waiting'}
                 />
               </div>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[10px] text-gray-600">
-                  Current: {gameState?.small_blind ?? 5}/{gameState?.big_blind ?? 10}
+                  Current: {gameState?.big_blind ?? 10} BB / {gameState?.small_blind ?? 5} SB (auto)
                 </span>
               </div>
               <button
                 onClick={() => {
-                  const sb = Number(blindSB);
                   const bb = Number(blindBB);
-                  if (!sb || !bb || sb <= 0 || bb <= sb) return;
+                  if (!bb || bb < 2) return;
+                  const sb = Math.floor(bb / 2);
                   setBlindLevels(sb, bb);
-                  setBlindSB('');
                   setBlindBB('');
                 }}
-                disabled={
-                  gameState?.phase !== 'waiting' ||
-                  !blindSB || !blindBB ||
-                  Number(blindBB) <= Number(blindSB) ||
-                  Number(blindSB) <= 0
-                }
+                disabled={gameState?.phase !== 'waiting' || !blindBB || Number(blindBB) < 2}
                 className="btn-ghost w-full flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Set Blinds
@@ -994,12 +985,11 @@ export default function CoachSidebar({
                   Only available between hands
                 </div>
               )}
-            </div>
+            </CollapsibleSection>
           )}
 
-          {/* ── SECTION 2: Undo Controls ───────────────────────────────────── */}
-          <div className="coach-panel mb-3">
-            <SectionHeader>UNDO CONTROLS</SectionHeader>
+          {/* ── 5: UNDO CONTROLS ──────────────────────────────────────────── */}
+          <CollapsibleSection title="UNDO CONTROLS" defaultOpen={false}>
             <div className="flex flex-col gap-1.5">
               <button
                 onClick={handleUndoAction}
@@ -1007,13 +997,7 @@ export default function CoachSidebar({
                 className="btn-ghost w-full flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path
-                    d="M1.5 4.5h5a3 3 0 0 1 0 6h-2M1.5 4.5L4 2M1.5 4.5L4 7"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                  <path d="M1.5 4.5h5a3 3 0 0 1 0 6h-2M1.5 4.5L4 2M1.5 4.5L4 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Undo Last Action
               </button>
@@ -1023,13 +1007,7 @@ export default function CoachSidebar({
                 className="btn-ghost w-full flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path
-                    d="M1.5 6h5a2 2 0 1 1 0 4H5M1.5 6L4 3.5M1.5 6L4 8.5"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                  <path d="M1.5 6h5a2 2 0 1 1 0 4H5M1.5 6L4 3.5M1.5 6L4 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Rollback Street
               </button>
@@ -1038,225 +1016,17 @@ export default function CoachSidebar({
                 className="btn-ghost w-full flex items-center justify-center gap-2"
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path
-                    d="M2 6h6M5.5 3l3 3-3 3M9.5 3v6"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
+                  <path d="M2 6h6M5.5 3l3 3-3 3M9.5 3v6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 Force Next Street
               </button>
             </div>
-          </div>
+          </CollapsibleSection>
 
-          {/* ── SECTION 3: Manual Card Injection (manual mode only) ────────── */}
-          {mode === 'manual' && (
-            <div className="coach-panel mb-3">
-              <SectionHeader>CARD INJECTION</SectionHeader>
-
-              {/* Player hole cards */}
-              {seatedPlayers.length === 0 ? (
-                <div
-                  className="text-xs text-center py-2"
-                  style={{ color: '#444' }}
-                >
-                  No players seated
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 mb-3">
-                  {seatedPlayers.map((player) => {
-                    const holeCards = player.hole_cards || [null, null];
-                    return (
-                      <div
-                        key={player.id}
-                        className="flex items-center gap-2 py-1.5 px-2 rounded"
-                        style={{ background: '#0d1117', border: '1px solid #21262d' }}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div
-                            className="text-xs font-medium truncate"
-                            style={{ color: '#f0ece3' }}
-                          >
-                            {player.name || `Seat ${player.seat}`}
-                          </div>
-                          <div
-                            className="text-xs font-mono"
-                            style={{ color: '#6e7681' }}
-                          >
-                            ${(player.stack || 0).toLocaleString()}
-                          </div>
-                        </div>
-                        <div className="flex gap-1.5 flex-shrink-0">
-                          <CardSlot
-                            card={holeCards[0] || null}
-                            label={`${player.name || 'Player'} — Card 1`}
-                            onClick={() => handlePlayerCardSlot(player.id, 0)}
-                          />
-                          <CardSlot
-                            card={holeCards[1] || null}
-                            label={`${player.name || 'Player'} — Card 2`}
-                            onClick={() => handlePlayerCardSlot(player.id, 1)}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Board cards */}
-              <div
-                className="pt-2"
-                style={{ borderTop: '1px solid #21262d' }}
-              >
-                <div
-                  className="text-xs font-medium mb-2 tracking-wider"
-                  style={{ color: '#6e7681' }}
-                >
-                  BOARD
-                </div>
-                <div className="flex gap-1.5">
-                  {BOARD_POSITION_LABELS.map((label, idx) => (
-                    <div key={idx} className="flex flex-col items-center gap-1">
-                      <CardSlot
-                        card={board[idx] || null}
-                        label={label}
-                        onClick={() => handleBoardCardSlot(idx)}
-                      />
-                      <span
-                        className="text-center"
-                        style={{
-                          fontSize: '8px',
-                          color: '#444',
-                          lineHeight: 1,
-                          letterSpacing: '0.05em',
-                        }}
-                      >
-                        {idx < 3 ? `F${idx + 1}` : idx === 3 ? 'TN' : 'RV'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── SECTION 4: Pot & Stack Management ─────────────────────────── */}
-          <div className="coach-panel mb-3">
-            <SectionHeader>POT & STACKS</SectionHeader>
-
-            {/* Pot display */}
-            <div
-              className="flex items-center justify-between mb-3 px-3 py-2 rounded"
-              style={{ background: '#0d1117', border: '1px solid #21262d' }}
-            >
-              <span className="label-sm">Current Pot</span>
-              <span
-                className="text-sm font-bold font-mono"
-                style={{ color: '#d4af37' }}
-              >
-                ${Number(pot || 0).toLocaleString()}
-              </span>
-            </div>
-
-            {/* Award Pot */}
-            <div className="mb-3">
-              <div className="label-sm mb-1.5">Award Pot To</div>
-              <div className="flex gap-2">
-                <select
-                  value={awardPotTarget}
-                  onChange={(e) => setAwardPotTarget(e.target.value)}
-                  className="flex-1 rounded text-xs py-1.5 px-2 min-w-0"
-                  style={{
-                    background: '#161b22',
-                    border: '1px solid #30363d',
-                    color: awardPotTarget ? '#f0ece3' : '#6e7681',
-                    outline: 'none',
-                  }}
-                >
-                  <option value="" disabled>Select player…</option>
-                  {activePlayers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name || `Seat ${p.seat}`}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={handleAwardPot}
-                  disabled={!awardPotTarget}
-                  className="btn-gold disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ padding: '6px 12px', whiteSpace: 'nowrap' }}
-                >
-                  Award Pot
-                </button>
-              </div>
-            </div>
-
-            <Divider />
-
-            {/* Stack adjuster */}
-            <div>
-              <div className="label-sm mb-1.5">Adjust Stack</div>
-              <select
-                value={stackAdjustTarget}
-                onChange={(e) => setStackAdjustTarget(e.target.value)}
-                className="w-full rounded text-xs py-1.5 px-2 mb-2"
-                style={{
-                  background: '#161b22',
-                  border: '1px solid #30363d',
-                  color: stackAdjustTarget ? '#f0ece3' : '#6e7681',
-                  outline: 'none',
-                }}
-              >
-                <option value="" disabled>Select player…</option>
-                {seatedPlayers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name || `Seat ${p.seat}`}
-                    {p.stack !== undefined ? ` — $${Number(p.stack).toLocaleString()}` : ''}
-                  </option>
-                ))}
-              </select>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  placeholder="New stack…"
-                  value={stackAdjustValue}
-                  onChange={(e) => setStackAdjustValue(e.target.value)}
-                  className="flex-1 rounded text-xs py-1.5 px-2 min-w-0 font-mono"
-                  style={{
-                    background: '#161b22',
-                    border: '1px solid #30363d',
-                    color: '#f0ece3',
-                    outline: 'none',
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = '#d4af37')}
-                  onBlur={(e) => (e.target.style.borderColor = '#30363d')}
-                />
-                <button
-                  onClick={handleSetStack}
-                  disabled={!stackAdjustTarget || stackAdjustValue === ''}
-                  className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ padding: '6px 12px', whiteSpace: 'nowrap' }}
-                >
-                  Set Stack
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* ── SECTION 5: Players List ────────────────────────────────────── */}
-          <div className="coach-panel">
-            <SectionHeader>PLAYERS</SectionHeader>
-
+          {/* ── 6: PLAYERS ────────────────────────────────────────────────── */}
+          <CollapsibleSection title="PLAYERS" defaultOpen={true}>
             {seatedPlayers.length === 0 ? (
-              <div
-                className="text-xs text-center py-3"
-                style={{ color: '#444' }}
-              >
+              <div className="text-xs text-center py-3" style={{ color: '#444' }}>
                 No players seated
               </div>
             ) : (
@@ -1265,76 +1035,48 @@ export default function CoachSidebar({
                   const holeCards = player.hole_cards || [];
                   const isActive = player.is_active;
                   const hasFolded = player.is_active === false;
-
                   return (
                     <div
                       key={player.id ?? idx}
                       className="rounded p-2"
                       style={{
-                        background: isActive
-                          ? 'rgba(212,175,55,0.05)'
-                          : '#0d1117',
+                        background: isActive ? 'rgba(212,175,55,0.05)' : '#0d1117',
                         border: `1px solid ${isActive ? 'rgba(212,175,55,0.3)' : '#21262d'}`,
                         opacity: hasFolded ? 0.5 : 1,
                         transition: 'opacity 0.2s, border-color 0.2s',
                       }}
                     >
-                      {/* Name row */}
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          {/* Seat indicator */}
                           <span
                             className="flex-shrink-0 inline-flex items-center justify-center rounded-full text-xs font-bold"
-                            style={{
-                              width: '18px',
-                              height: '18px',
-                              background: isActive ? '#d4af37' : '#21262d',
-                              color: isActive ? '#000' : '#6e7681',
-                              fontSize: '9px',
-                            }}
+                            style={{ width: '18px', height: '18px', background: isActive ? '#d4af37' : '#21262d', color: isActive ? '#000' : '#6e7681', fontSize: '9px' }}
                           >
                             {player.seat ?? idx + 1}
                           </span>
                           <span
                             className="text-xs font-medium truncate"
-                            style={{
-                              color: hasFolded ? '#6e7681' : '#f0ece3',
-                              textDecoration: hasFolded ? 'line-through' : 'none',
-                            }}
+                            style={{ color: hasFolded ? '#6e7681' : '#f0ece3', textDecoration: hasFolded ? 'line-through' : 'none' }}
                           >
                             {player.name || `Seat ${player.seat}`}
                           </span>
                         </div>
-
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
-                          {player.action && (
-                            <ActionBadge action={player.action} />
-                          )}
+                          {player.action && <ActionBadge action={player.action} />}
                           {player.is_dealer && (
                             <span
                               className="inline-flex items-center justify-center rounded-full text-xs font-bold"
-                              style={{
-                                width: '16px',
-                                height: '16px',
-                                background: '#d4af37',
-                                color: '#000',
-                                fontSize: '8px',
-                              }}
+                              style={{ width: '16px', height: '16px', background: '#d4af37', color: '#000', fontSize: '8px' }}
                               title="Dealer"
-                            >
-                              D
-                            </span>
+                            >D</span>
                           )}
-                          {/* in-hand toggle (waiting phase only) */}
                           {phase === 'WAITING' && (
                             <button
                               onClick={() => emit.setPlayerInHand?.(player.id, player.in_hand === false)}
                               title={player.in_hand === false ? 'Click to include in next hand' : 'Click to exclude from next hand'}
                               className="inline-flex items-center justify-center rounded transition-colors"
                               style={{
-                                width: '16px',
-                                height: '16px',
-                                fontSize: '10px',
+                                width: '16px', height: '16px', fontSize: '10px',
                                 background: player.in_hand === false ? 'rgba(239,68,68,0.15)' : 'transparent',
                                 color: player.in_hand === false ? '#f85149' : '#3fb950',
                                 border: `1px solid ${player.in_hand === false ? '#f8514966' : '#3fb95066'}`,
@@ -1345,13 +1087,8 @@ export default function CoachSidebar({
                           )}
                         </div>
                       </div>
-
-                      {/* Stack + hole cards */}
                       <div className="flex items-center justify-between">
-                        <span
-                          className="text-xs font-mono"
-                          style={{ color: '#6e7681' }}
-                        >
+                        <span className="text-xs font-mono" style={{ color: '#6e7681' }}>
                           ${Number(player.stack || 0).toLocaleString()}
                           {player.current_bet > 0 && (
                             <span style={{ color: '#e3b341', marginLeft: '4px' }}>
@@ -1359,17 +1096,10 @@ export default function CoachSidebar({
                             </span>
                           )}
                         </span>
-
-                        {/* Hole cards */}
                         {holeCards.length > 0 && (
                           <div className="flex gap-1">
                             {holeCards.map((c, i) => (
-                              <Card
-                                key={i}
-                                card={c === 'HIDDEN' ? undefined : c}
-                                hidden={c === 'HIDDEN' || !c}
-                                small
-                              />
+                              <Card key={i} card={c === 'HIDDEN' ? undefined : c} hidden={c === 'HIDDEN' || !c} small />
                             ))}
                           </div>
                         )}
@@ -1379,191 +1109,11 @@ export default function CoachSidebar({
                 })}
               </div>
             )}
-          </div>
+          </CollapsibleSection>
 
-          {/* ── SECTION 6: Session Stats ───────────────────────────────── */}
-          {sessionStats && sessionStats.players && sessionStats.players.length > 0 && (
-            <div className="coach-panel mt-3">
-              <SectionHeader>SESSION STATS</SectionHeader>
-
-              {/* Hands dealt subtitle */}
-              <div
-                className="text-xs mb-3"
-                style={{ color: '#6e7681' }}
-              >
-                Hands dealt: {sessionStats.handsDealt ?? 0}
-              </div>
-
-              {/* Per-player stat cards */}
-              <div className="flex flex-col gap-2">
-                {sessionStats.players.map((player) => {
-                  const netChips = player.netChips ?? 0;
-                  const netPositive = netChips >= 0;
-                  return (
-                    <div
-                      key={player.playerId}
-                      className="rounded p-2"
-                      style={{
-                        background: '#0d1117',
-                        border: '1px solid #21262d',
-                      }}
-                    >
-                      {/* Player name + net chips */}
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span
-                          className="text-xs font-medium truncate"
-                          style={{ color: '#f0ece3' }}
-                        >
-                          {player.playerName}
-                        </span>
-                        <span
-                          className="text-xs font-mono font-semibold flex-shrink-0 ml-2"
-                          style={{ color: netPositive ? '#3fb950' : '#f85149' }}
-                        >
-                          {netPositive ? '+' : ''}{netChips}
-                        </span>
-                      </div>
-
-                      {/* Hands played / won */}
-                      <div
-                        className="text-xs mb-1.5"
-                        style={{ color: '#6e7681' }}
-                      >
-                        Hands:{' '}
-                        <span style={{ color: '#f0ece3' }}>
-                          {player.handsPlayed ?? 0} played / {player.handsWon ?? 0} won
-                        </span>
-                      </div>
-
-                      {/* Stat grid: VPIP / PFR / WTSD / WSD */}
-                      <div
-                        className="grid gap-1"
-                        style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}
-                      >
-                        {[
-                          { label: 'VPIP', value: player.vpip },
-                          { label: 'PFR',  value: player.pfr  },
-                          { label: 'WTSD', value: player.wtsd },
-                          { label: 'WSD',  value: player.wsd  },
-                        ].map(({ label, value }) => (
-                          <div
-                            key={label}
-                            className="flex flex-col items-center rounded py-1"
-                            style={{ background: 'rgba(255,255,255,0.03)' }}
-                          >
-                            <span
-                              style={{
-                                fontSize: '8px',
-                                color: '#6e7681',
-                                letterSpacing: '0.08em',
-                                lineHeight: 1,
-                              }}
-                            >
-                              {label}
-                            </span>
-                            <span
-                              style={{
-                                fontSize: '11px',
-                                color: '#f0ece3',
-                                fontWeight: 600,
-                                lineHeight: 1.4,
-                                fontVariantNumeric: 'tabular-nums',
-                              }}
-                            >
-                              {((value ?? 0) * 100).toFixed(0)}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Session Report button */}
-              {gameState.session_id && (
-                <button
-                  onClick={() => window.open(`/api/sessions/${gameState.session_id}/report`, '_blank')}
-                  className="w-full mt-3 text-xs font-semibold rounded transition-all duration-150"
-                  style={{
-                    padding: '7px 10px',
-                    background: 'rgba(212,175,55,0.08)',
-                    border: '1px solid rgba(212,175,55,0.25)',
-                    color: '#d4af37',
-                    cursor: 'pointer',
-                    letterSpacing: '0.06em',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,175,55,0.16)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(212,175,55,0.08)'; }}
-                >
-                  Session Report
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* ─── Section 8: Live Hand Tags ─────────────────────────── */}
-          <div className="coach-panel mt-3">
-            <SectionHeader>LIVE HAND TAGS</SectionHeader>
-            <div className="px-3 pb-3">
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {['Review', 'Bluff', 'Hero Call', 'Mistake', 'Key Hand', '3-Bet Pot'].map(tag => (
-                  <button
-                    key={tag}
-                    onClick={() => {
-                      setCurrentHandTags(prev =>
-                        prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-                      )
-                    }}
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide border transition-all duration-100 ${
-                      currentHandTags.includes(tag)
-                        ? 'bg-gold-500/20 border-gold-500/60 text-gold-300'
-                        : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
-                    }`}
-                    style={currentHandTags.includes(tag) ? {
-                      background: 'rgba(212,175,55,0.2)',
-                      borderColor: 'rgba(212,175,55,0.6)',
-                      color: '#d4b896',
-                    } : {
-                      background: 'rgba(255,255,255,0.05)',
-                      borderColor: 'rgba(255,255,255,0.1)',
-                      color: '#6e7681',
-                    }}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-              {currentHandTags.length > 0 && (
-                <div className="flex items-center justify-between">
-                  <span
-                    style={{ fontSize: '10px', color: '#6e7681' }}
-                  >
-                    {currentHandTags.length} tag{currentHandTags.length > 1 ? 's' : ''} applied
-                  </span>
-                  {handTagsSaved && (
-                    <span style={{ fontSize: '9px', color: '#3fb950', letterSpacing: '0.06em' }}>
-                      ✓ Saved
-                    </span>
-                  )}
-                  <button
-                    onClick={() => setCurrentHandTags([])}
-                    style={{ fontSize: '10px', color: 'rgba(248,81,73,0.7)', background: 'none', border: 'none', cursor: 'pointer' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = '#f85149'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(248,81,73,0.7)'; }}
-                  >
-                    Clear
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-          <Divider />
-
-          {/* ─── Section 9: Playlist Manager ──────────────────────── */}
-          <div className="coach-panel mt-3">
-            <SectionHeader>PLAYLISTS</SectionHeader>
-            <div className="px-3 pb-3 space-y-2">
+          {/* ── 8: PLAYLISTS ──────────────────────────────────────────────── */}
+          <CollapsibleSection title="PLAYLISTS" defaultOpen={false}>
+            <div className="space-y-2">
               {/* Create new playlist */}
               <div className="flex gap-1.5">
                 <input
@@ -1572,7 +1122,7 @@ export default function CoachSidebar({
                   value={newPlaylistName}
                   onChange={e => setNewPlaylistName(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleCreatePlaylist()}
-                  className="flex-1 rounded px-2 py-1 text-xs text-white placeholder-gray-600 outline-none"
+                  className="flex-1 min-w-0 rounded px-2 py-1 text-xs text-white placeholder-gray-600 outline-none"
                   style={{
                     background: '#161b22',
                     border: '1px solid #30363d',
@@ -1691,14 +1241,108 @@ export default function CoachSidebar({
                   ))}
                 </div>
               )}
-            </div>
-          </div>
-          <Divider />
 
-          {/* ─── Section 10: Scenario Loader ──────────────────────── */}
-          <div className="coach-panel mt-3">
-            <SectionHeader>SCENARIO LOADER</SectionHeader>
-            <div className="px-3 pb-3 space-y-2">
+              {/* Coach participation mode (only shown when a playlist is active) */}
+              {gameState?.playlist_mode?.active && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: '0.08em', marginBottom: 4 }}>
+                    COACH ROLE
+                  </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {['play', 'monitor'].map(m => (
+                      <button
+                        key={m}
+                        onClick={() => {
+                          setCoachPlaylistMode(m);
+                          // Apply immediately to current hand if active
+                          if (myId && emit.setPlayerInHand) {
+                            emit.setPlayerInHand(myId, m === 'play');
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '4px 0',
+                          fontSize: 10,
+                          fontWeight: 600,
+                          letterSpacing: '0.06em',
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          border: coachPlaylistMode === m
+                            ? '1px solid rgba(212,175,55,0.5)'
+                            : '1px solid rgba(255,255,255,0.08)',
+                          background: coachPlaylistMode === m
+                            ? 'rgba(212,175,55,0.12)'
+                            : 'transparent',
+                          color: coachPlaylistMode === m ? '#d4af37' : '#6e7681',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {m === 'play' ? '▶ Play' : '👁 Monitor'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Auto-start countdown */}
+                  {autoStartCountdown !== null && (
+                    <div style={{
+                      marginTop: 8,
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      background: 'rgba(212,175,55,0.08)',
+                      border: '1px solid rgba(212,175,55,0.25)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}>
+                      <span style={{ fontSize: 11, color: '#d4af37' }}>
+                        Starting in {autoStartCountdown}s…
+                      </span>
+                      <button
+                        onClick={() => setAutoStartCountdown(null)}
+                        style={{
+                          fontSize: 9,
+                          color: '#6e7681',
+                          background: 'none',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: 3,
+                          padding: '2px 6px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Resume button after cancel */}
+                  {autoStartCountdown === null && gameState?.config_phase && gameState?.playlist_mode?.active && (
+                    <button
+                      onClick={() => setAutoStartCountdown(5)}
+                      style={{
+                        marginTop: 6,
+                        width: '100%',
+                        padding: '5px 0',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        letterSpacing: '0.06em',
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        border: '1px solid rgba(212,175,55,0.3)',
+                        background: 'transparent',
+                        color: '#d4af37',
+                      }}
+                    >
+                      ▶ Resume Playlist
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </CollapsibleSection>
+
+          {/* ── 9: HAND LIBRARY ───────────────────────────────────────────── */}
+          <CollapsibleSection title="HAND LIBRARY" defaultOpen={false}>
+            <div className="space-y-2">
               {/* Stack mode toggle */}
               <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
                 {['keep', 'historical'].map(m => (
@@ -1718,57 +1362,6 @@ export default function CoachSidebar({
                   </button>
                 ))}
               </div>
-              {/* Tag filter chips */}
-              {(() => {
-                const FILTER_TAGS = [
-                  '3BET_POT','FOUR_BET_POT','SQUEEZE_POT','BLIND_DEFENSE','BTN_OPEN',
-                  'MULTIWAY','ALL_IN_PREFLOP','SAW_RIVER','WENT_TO_SHOWDOWN',
-                  'CHECK_RAISE','BLUFF_CATCH','DONK_BET','RIVER_RAISE','OVERBET',
-                  'MONOTONE_BOARD','PAIRED_BOARD','WHALE_POT','SHORT_STACK','DEEP_STACK',
-                  'LIMPED_POT','WALK',
-                ];
-                const toggleTag = (tag) => setScenarioTagFilter(prev =>
-                  prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-                );
-                return (
-                  <div>
-                    <div style={{ fontSize: '8px', color: '#6e7681', marginBottom: 3, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                      Filter by tag {scenarioTagFilter.length > 0 && (
-                        <span
-                          onClick={() => setScenarioTagFilter([])}
-                          style={{ color: '#d4af37', cursor: 'pointer', marginLeft: 4 }}
-                        >
-                          clear
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-                      {FILTER_TAGS.map(tag => {
-                        const active = scenarioTagFilter.includes(tag);
-                        return (
-                          <span
-                            key={tag}
-                            onClick={() => toggleTag(tag)}
-                            style={{
-                              fontSize: '8px',
-                              padding: '1px 5px',
-                              borderRadius: '999px',
-                              cursor: 'pointer',
-                              userSelect: 'none',
-                              border: active ? '1px solid rgba(212,175,55,0.6)' : '1px solid rgba(255,255,255,0.1)',
-                              background: active ? 'rgba(212,175,55,0.18)' : 'rgba(255,255,255,0.04)',
-                              color: active ? '#d4af37' : '#6e7681',
-                              transition: 'all 0.1s',
-                            }}
-                          >
-                            {tag}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* Search filter */}
               <input
@@ -1793,14 +1386,6 @@ export default function CoachSidebar({
                 ) : (
                   scenarioHands
                     .filter(h => {
-                      // Tag chip filter (OR — show hand if it has ANY of the selected tags)
-                      if (scenarioTagFilter.length > 0) {
-                        const handTags = h.auto_tags
-                          ? (Array.isArray(h.auto_tags) ? h.auto_tags : JSON.parse(h.auto_tags))
-                          : [];
-                        if (!scenarioTagFilter.some(t => handTags.includes(t))) return false;
-                      }
-                      // Text search
                       if (!scenarioSearch.trim()) return true;
                       const q = scenarioSearch.toLowerCase();
                       return (
@@ -1810,7 +1395,7 @@ export default function CoachSidebar({
                         (h.auto_tags ? JSON.stringify(h.auto_tags).toLowerCase().includes(q) : false)
                       );
                     })
-                    .slice(0, 20)
+                    .slice(0, 10)
                     .map(h => (
                       <div
                         key={h.hand_id}
@@ -1832,7 +1417,7 @@ export default function CoachSidebar({
                             </span>
                           </div>
                           <div className="flex gap-1 mt-0.5 flex-wrap items-center">
-                            {h.auto_tags && JSON.parse(h.auto_tags || '[]').map(tag => (
+                            {h.auto_tags && (Array.isArray(h.auto_tags) ? h.auto_tags : JSON.parse(h.auto_tags || '[]')).map(tag => (
                               <span
                                 key={tag}
                                 style={{
@@ -1923,14 +1508,8 @@ export default function CoachSidebar({
                   <select
                     value={selectedPlaylistForAdd}
                     onChange={e => setSelectedPlaylistForAdd(e.target.value)}
-                    className="flex-1 rounded outline-none"
-                    style={{
-                      background: '#161b22',
-                      border: '1px solid #30363d',
-                      padding: '2px 6px',
-                      fontSize: '10px',
-                      color: '#c9c3b8',
-                    }}
+                    className="flex-1 min-w-0 rounded outline-none"
+                    style={{ background: '#161b22', border: '1px solid #30363d', padding: '2px 6px', fontSize: '10px', color: '#c9c3b8' }}
                   >
                     <option value="">— select playlist —</option>
                     {playlists.map(pl => (
@@ -1940,187 +1519,96 @@ export default function CoachSidebar({
                 </div>
               )}
             </div>
-          </div>
-          <Divider />
+          </CollapsibleSection>
 
-          {/* ── SECTION 7: History ────────────────────────────────────── */}
-          {isOpen && (
-            <div className="coach-panel mt-3">
-              {/* Header row */}
-              <div className="flex items-center justify-between mb-2">
-                <button
-                  onClick={() => setHistoryOpen((v) => !v)}
-                  className="flex items-center gap-1.5 flex-1 min-w-0"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  <span
-                    className="label-sm"
-                    style={{ color: '#d4af37', letterSpacing: '0.12em' }}
-                  >
-                    HISTORY
-                  </span>
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 10 10"
-                    fill="none"
-                    style={{
-                      color: '#6e7681',
-                      transform: historyOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.15s',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <path
-                      d="M3 2l4 3-4 3"
-                      stroke="currentColor"
-                      strokeWidth="1.4"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => fetchHands()}
-                  title="Refresh history"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '2px 4px',
-                    color: '#6e7681',
-                    flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = '#d4af37'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <path
-                      d="M1.5 6a4.5 4.5 0 1 1 1.3 3.2M1.5 9.5V6.5h3"
-                      stroke="currentColor"
-                      strokeWidth="1.4"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              {historyOpen && (
-                <>
-                  {/* Detail panel */}
-                  {handDetail && (
-                    <HandDetailPanel detail={handDetail} onClose={clearDetail} />
-                  )}
-
-                  {!handDetail && (
-                    <>
-                      {historyLoading && (
-                        <div className="text-xs text-center py-3" style={{ color: '#6e7681' }}>
-                          Loading…
-                        </div>
-                      )}
-
-                      {!historyLoading && hands.length === 0 && (
-                        <div className="text-xs text-center py-3" style={{ color: '#444' }}>
-                          No completed hands yet
-                        </div>
-                      )}
-
-                      {!historyLoading && hands.length > 0 && (
-                        <div className="flex flex-col gap-1">
-                          {hands.map((hand, idx) => (
-                            <HandHistoryRow
-                              key={hand.hand_id}
-                              hand={hand}
-                              index={idx + 1}
-                              onExpand={() => fetchHandDetail(hand.hand_id)}
-                              onReplay={emit.loadReplay}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* ── SECTION 11: Replay Controls ───────────────────────────── */}
-          {gameState.replay_mode?.active && (
-            <div className="mt-3 p-3 bg-gray-800 rounded-lg border border-purple-700">
-              <h3 className="text-purple-400 font-semibold text-sm uppercase tracking-wide mb-2">
-                Replay Controls
-              </h3>
-
-              {/* Progress */}
-              <div className="text-gray-300 text-xs mb-2">
-                {gameState.replay_mode.cursor === -1
-                  ? `Start — ${gameState.replay_mode.total_actions} actions`
-                  : `Action ${gameState.replay_mode.cursor + 1} / ${gameState.replay_mode.total_actions}`}
-                {gameState.replay_mode.current_action && (
-                  <span className="ml-2 text-purple-300">
-                    {gameState.replay_mode.current_action.player_name} — {gameState.replay_mode.current_action.street}: {gameState.replay_mode.current_action.action}
-                    {gameState.replay_mode.current_action.amount > 0 && ` $${gameState.replay_mode.current_action.amount}`}
-                  </span>
-                )}
-              </div>
-
-              {/* Scrubber */}
+          {/* ── 10: ADJUST STACKS ─────────────────────────────────────────── */}
+          <CollapsibleSection title="ADJUST STACKS" defaultOpen={false}>
+            <select
+              value={stackAdjustTarget}
+              onChange={(e) => setStackAdjustTarget(e.target.value)}
+              className="w-full rounded text-xs py-1.5 px-2 mb-2"
+              style={{ background: '#161b22', border: '1px solid #30363d', color: stackAdjustTarget ? '#f0ece3' : '#6e7681', outline: 'none' }}
+            >
+              <option value="" disabled>Select player…</option>
+              {seatedPlayers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name || `Seat ${p.seat}`}
+                  {p.stack !== undefined ? ` — $${Number(p.stack).toLocaleString()}` : ''}
+                </option>
+              ))}
+            </select>
+            <div className="flex gap-2">
               <input
-                type="range"
-                min={-1}
-                max={gameState.replay_mode.total_actions - 1}
-                value={gameState.replay_mode.cursor}
-                onChange={(e) => emit.replayJumpTo?.(parseInt(e.target.value))}
-                className="w-full mb-2 accent-purple-500"
+                type="number"
+                min="0"
+                step="50"
+                placeholder="New stack…"
+                value={stackAdjustValue}
+                onChange={(e) => setStackAdjustValue(e.target.value)}
+                className="flex-1 rounded text-xs py-1.5 px-2 min-w-0 font-mono"
+                style={{ background: '#161b22', border: '1px solid #30363d', color: '#f0ece3', outline: 'none' }}
+                onFocus={(e) => (e.target.style.borderColor = '#d4af37')}
+                onBlur={(e) => (e.target.style.borderColor = '#30363d')}
               />
-
-              {/* Step buttons */}
-              <div className="flex gap-2 mb-2">
-                <button
-                  onClick={() => emit.replayStepBack?.()}
-                  disabled={gameState.replay_mode.cursor <= -1}
-                  className="flex-1 py-1 text-sm rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white"
-                >
-                  ◀ Back
-                </button>
-                <button
-                  onClick={() => emit.replayStepFwd?.()}
-                  disabled={gameState.replay_mode.cursor >= gameState.replay_mode.total_actions - 1}
-                  className="flex-1 py-1 text-sm rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed text-white"
-                >
-                  Fwd ▶
-                </button>
-              </div>
-
-              {/* Branch / Unbranch */}
-              {!gameState.replay_mode.branched ? (
-                <button
-                  onClick={() => emit.replayBranch?.()}
-                  className="w-full py-1 text-sm rounded bg-amber-600 hover:bg-amber-500 text-white mb-2"
-                >
-                  Branch to Live from Here
-                </button>
-              ) : (
-                <button
-                  onClick={() => emit.replayUnbranch?.()}
-                  className="w-full py-1 text-sm rounded bg-amber-700 hover:bg-amber-600 text-white mb-2"
-                >
-                  Return to Replay
-                </button>
-              )}
-
-              {/* Exit */}
               <button
-                onClick={() => emit.replayExit?.()}
-                className="w-full py-1 text-sm rounded bg-red-800 hover:bg-red-700 text-white"
+                onClick={handleSetStack}
+                disabled={!stackAdjustTarget || stackAdjustValue === ''}
+                className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ padding: '6px 12px', whiteSpace: 'nowrap' }}
               >
-                Exit Replay
+                Set
               </button>
             </div>
-          )}
+          </CollapsibleSection>
+
+          {/* ── 11: HISTORY ───────────────────────────────────────────────── */}
+          <CollapsibleSection
+            title="HISTORY"
+            defaultOpen={false}
+            onToggle={(isOpen) => { if (isOpen) fetchHands(); }}
+            headerExtra={
+              <button
+                onClick={(e) => { e.stopPropagation(); fetchHands(); }}
+                title="Refresh history"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#6e7681', flexShrink: 0 }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#d4af37'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M1.5 6a4.5 4.5 0 1 1 1.3 3.2M1.5 9.5V6.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            }
+          >
+            {/* Detail panel */}
+            {handDetail && (
+              <HandDetailPanel detail={handDetail} onClose={clearDetail} />
+            )}
+
+            {!handDetail && (
+              <>
+                {historyLoading && (
+                  <div className="text-xs text-center py-3" style={{ color: '#6e7681' }}>Loading…</div>
+                )}
+                {!historyLoading && hands.length === 0 && (
+                  <div className="text-xs text-center py-3" style={{ color: '#444' }}>No completed hands yet</div>
+                )}
+                {!historyLoading && hands.length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    {hands.map((hand, idx) => (
+                      <HandHistoryRow
+                        key={hand.hand_id}
+                        hand={hand}
+                        index={idx + 1}
+                        onExpand={() => fetchHandDetail(hand.hand_id)}
+                        onReplay={emit.loadReplay}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </CollapsibleSection>
 
           {/* Bottom spacer */}
           <div style={{ height: '8px' }} />
