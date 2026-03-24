@@ -97,11 +97,9 @@ async function startHand({ handId, sessionId, tableId, players, allPlayers, deal
     ignoreDuplicates: true,
   }));
 
-  // Use allPlayers (including coach) for position computation so the coach's seat
-  // is counted in the rotation. Only non-coach players get rows in hand_players.
   const positionMap = _computePositions(allPlayers || players, dealerSeat);
 
-  const playerRows = players.map(p => ({
+  const playerRows = (allPlayers || players).map(p => ({
     hand_id:     handId,
     player_id:   p.id,
     player_name: p.name,
@@ -178,7 +176,7 @@ async function endHand({ handId, state, socketToStable = {} }) {
   }
 
   const winnerId = state.winner ? resolveId(state.winner) : null;
-  // Only store winner_id if it's a valid UUID (not a coach key or socket.id)
+  // Only store winner_id if it's a valid UUID (guards against socket.id fallback)
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const winnerIdForDb = winnerId && uuidRe.test(winnerId) ? winnerId : null;
 
@@ -195,7 +193,6 @@ async function endHand({ handId, state, socketToStable = {} }) {
 
   // Update each hand_players row
   const updatePromises = (state.players || [])
-    .filter(p => !p.is_coach)
     .map(p => {
       const stableId = resolveId(p.id);
       const pf = preflopByPlayer[stableId] || { vpip: false, pfr: false, three_bet: false };
@@ -229,7 +226,7 @@ async function markIncomplete(handId, state = null) {
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     await Promise.all(
       (state.players || [])
-        .filter(p => !p.is_coach && p.hole_cards?.length > 0 && uuidRe.test(p.stableId || p.id))
+        .filter(p => p.hole_cards?.length > 0 && uuidRe.test(p.stableId || p.id))
         .map(p => q(supabase.from('hand_players')
           .update({ hole_cards: p.hole_cards })
           .eq('hand_id', handId)

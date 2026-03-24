@@ -448,20 +448,13 @@ io.on('connection', socket => {
 
     const gm = getOrCreateTable(tableId);
 
-    // Resolve stable identity:
-    // - coaches get a deterministic per-table key so it survives reconnects (DB-09)
-    // - registered players use their client-provided UUID
-    // - fallback is socket.id (should not occur for registered players)
-    const resolvedStableId = isCoach
-      ? `coach_${tableId}`
-      : (stableId && typeof stableId === 'string' && stableId.length > 0)
-        ? stableId
-        : socket.id;
+    // Resolve stable identity — use the UUID from the JWT for everyone (coaches included).
+    // Fallback is socket.id only if no stableId was issued (should not occur for roster players).
+    const resolvedStableId = (stableId && typeof stableId === 'string' && stableId.length > 0)
+      ? stableId
+      : socket.id;
     stableIdMap.set(socket.id, resolvedStableId);
-    // Coaches use a non-UUID key (coach_<tableId>) — skip player_profiles upsert
-    if (!isCoach) {
-      HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName).catch(err => log.error('db', 'upsert_identity_failed', '[HandLogger] upsertPlayerIdentity', { err, tableId, playerId: resolvedStableId }));
-    }
+    HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName).catch(err => log.error('db', 'upsert_identity_failed', '[HandLogger] upsertPlayerIdentity', { err, tableId, playerId: resolvedStableId }));
 
     // Check if a previous session for this player name is pending TTL (reconnect path)
     let isReconnect = false;
@@ -523,8 +516,10 @@ io.on('connection', socket => {
     if (isCoach && !isReconnect) {
       const existingCoach = gm.state.players.find(p => p.is_coach);
       if (existingCoach) {
-        joinAsSpectator(`Session is managed by ${existingCoach.name} — you are watching as a spectator`);
-        return;
+        // Another coach is already running this session — demote to regular player.
+        // Their UUID is real so they will be tracked like any student.
+        isCoach = false;
+        socket.emit('notification', { type: 'info', message: `Session is managed by ${existingCoach.name} — you are joining as a player` });
       }
     }
 
@@ -584,17 +579,14 @@ io.on('connection', socket => {
     if (!gm.state.is_replay_branch) {
       // Log hand start to DB
       const handId = uuidv4();
-      // allSeatedPlayers (incl. coach) used for position computation — coach occupies a real seat
-      // in the blind rotation, so positions must account for their seat.
       const allSeatedPlayers = gm.state.players
         .filter(p => !p.is_shadow && !p.is_observer)
         .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
-      const nonCoachPlayers = allSeatedPlayers.filter(p => !p.is_coach);
       await HandLogger.startHand({
         handId,
         sessionId: gm.sessionId,
         tableId,
-        players: nonCoachPlayers,
+        players: allSeatedPlayers,
         allPlayers: allSeatedPlayers,
         dealerSeat: gm.state.dealer_seat,
         smallBlind: gm.state.small_blind,
@@ -665,9 +657,8 @@ io.on('connection', socket => {
     }
 
     // Log action to DB — skip for branched replay hands (exploratory, not recorded)
-    // Also skip coach actions — coach stableId is not a UUID and coach is not in hand_players
     const handInfo = activeHands.get(tableId);
-    if (handInfo && !socket.data.isCoach && !isBranchedCoach) {
+    if (handInfo && !isBranchedCoach) {
       const player = gm.state.players.find(p => p.id === effectivePlayerId);
       // Compute position using game state (socket.id keys) then look up by effectivePlayerId
       const seatedForPos = gm.state.players
@@ -972,12 +963,11 @@ io.on('connection', socket => {
     const handId = uuidv4();
     const allSeatedPlayers = gm.state.players
       .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
-    const nonCoachPlayers = allSeatedPlayers.filter(p => !p.is_coach);
     await HandLogger.startHand({
       handId,
       sessionId: gm.sessionId,
       tableId,
-      players: nonCoachPlayers,
+      players: allSeatedPlayers,
       allPlayers: allSeatedPlayers,
       dealerSeat: gm.state.dealer_seat,
       smallBlind: gm.state.small_blind,

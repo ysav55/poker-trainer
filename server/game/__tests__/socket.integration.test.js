@@ -313,14 +313,14 @@ describe('join_room — registered player', () => {
 });
 
 // ─────────────────────────────────────────────
-//  Suite 5 — duplicate coach → spectator downgrade
+//  Suite 5 — duplicate coach → demoted to player
 // ─────────────────────────────────────────────
 
 describe('join_room — second coach attempt', () => {
   let coach1, coach2;
   afterEach(() => { coach1?.disconnect(); coach2?.disconnect(); });
 
-  it('second coach attempt is downgraded to spectator', async () => {
+  it('second coach is demoted to regular player (not spectator)', async () => {
     coach1 = trackClient(createClient(serverPort));
     await joinRoom(coach1, { name: 'CoachPrimary', token: 'coach-primary-token', tableId: 'dual-coach-table' });
 
@@ -331,7 +331,8 @@ describe('join_room — second coach attempt', () => {
       tableId: 'dual-coach-table',
     });
     expect(result.type).toBe('room_joined');
-    expect(result.data.isSpectator).toBe(true);
+    expect(result.data.isCoach).toBe(false);
+    expect(result.data.isSpectator).toBe(false);
   });
 });
 
