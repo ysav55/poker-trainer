@@ -24,6 +24,7 @@ const { createDeck, shuffleDeck, isValidCard, getUsedCards } = require('./Deck')
 const { generateHand } = require('./HandGenerator');
 const { evaluate, compareHands } = require('./HandEvaluator');
 const { buildSidePots } = require('./SidePotCalculator');
+const { isBettingRoundOver, findNextActingPlayer } = require('./bettingRound');
 
 class GameManager {
   constructor(tableId) {
@@ -760,25 +761,17 @@ class GameManager {
 
   _isBettingRoundOver() {
     const active = this._gamePlayers().filter(p => p.is_active && !p.is_all_in);
-    if (active.length === 0) return true;
-    return active.every(
-      p => p.action !== 'waiting' && p.total_bet_this_round >= this.state.current_bet
-    );
+    return isBettingRoundOver(active, this.state.current_bet);
   }
 
   _nextTurn(fromId) {
-    const players = this._gamePlayers();
-    const currentIdx = players.findIndex(p => p.id === fromId);
-    const n = players.length;
-    for (let i = 1; i <= n; i++) {
-      const p = players[(currentIdx + i) % n];
-      if (p.is_active && !p.is_all_in) {
-        this.state.current_turn = p.id;
-        return;
-      }
+    const nextId = findNextActingPlayer(this._gamePlayers(), fromId);
+    if (nextId) {
+      this.state.current_turn = nextId;
+    } else {
+      // Everyone all-in or folded — advance street
+      this._advanceStreet();
     }
-    // Everyone all-in or folded — advance street
-    this._advanceStreet();
   }
 
   _resolveShowdown() {
