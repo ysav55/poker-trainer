@@ -44,7 +44,8 @@ if (!SESSION_SECRET) {
   process.exit(1);
 }
 
-const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '';
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN ||
+  (process.env.NODE_ENV !== 'production' ? 'http://localhost:5173' : '');
 if (!ALLOWED_ORIGIN && process.env.NODE_ENV === 'production') {
   console.warn('[startup] WARNING: CORS_ORIGIN is not set. Cross-origin requests will be blocked.');
   console.warn('[startup] Set CORS_ORIGIN=https://your-domain.com in your production .env file.');

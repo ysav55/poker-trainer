@@ -75,7 +75,7 @@ async function getPlayerHands(stableId, { limit = 20, offset = 0 } = {}) {
     supabase.from('hand_players')
       .select('*, hands(hand_id, started_at, ended_at, final_pot, winner_id, winner_name, phase_ended, board, table_id, hand_tags(tag, tag_type))')
       .eq('player_id', stableId)
-      .order('hand_id', { ascending: false })
+      .order('started_at', { foreignTable: 'hands', ascending: false })
       .range(offset, offset + limit - 1)
   );
 
