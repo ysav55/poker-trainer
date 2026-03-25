@@ -20,6 +20,11 @@
  *   GET  /api/sessions/:sessionId/report  (requires auth, 404 path)
  *   POST /api/auth/register               (disabled → 410)
  *   POST /api/auth/login                  (roster-based, returns JWT)
+ *   GET  /api/playlists                   (requires auth)
+ *   POST /api/playlists                   (requires coach role)
+ *   DELETE /api/playlists/:id             (requires coach role)
+ *   POST /api/playlists/:id/hands         (requires coach role)
+ *   DELETE /api/playlists/:id/hands/:hid  (requires coach role)
  */
 
 // ── Mock HandLoggerSupabase ───────────────────────────────────────────────────
@@ -67,6 +72,7 @@ jest.mock('../../auth/JwtService', () => ({
   sign: jest.fn(() => 'mock-jwt-token'),
   verify: jest.fn((token) => {
     if (!token || token === 'invalid-token') return null;
+    if (token === 'coach-test-token') return { stableId: 'coach-stable-id', name: 'CoachUser', role: 'coach' };
     return { stableId: 'test-stable-id', name: 'TestUser', role: 'student' };
   }),
 }));
@@ -106,8 +112,9 @@ process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-for-jest
 const request = require('supertest');
 const { app }  = require('../../index');
 
-// Valid auth header used by all protected endpoints
-const AUTH_HEADER = 'Bearer valid-test-token';
+// Valid auth headers
+const AUTH_HEADER       = 'Bearer valid-test-token';   // role: student
+const COACH_AUTH_HEADER = 'Bearer coach-test-token';   // role: coach
 
 // ─────────────────────────────────────────────
 //  /health
@@ -408,5 +415,110 @@ describe('POST /api/auth/login', () => {
       .post('/api/auth/login')
       .send({ name: 'ValidPlayer', password: 'validpass' });
     expect(res.body.token.length).toBeGreaterThan(10);
+  });
+});
+
+// ─────────────────────────────────────────────
+//  Playlist routes — auth + role gates
+// ─────────────────────────────────────────────
+
+describe('GET /api/playlists', () => {
+  it('returns 401 without auth', async () => {
+    const res = await request(app).get('/api/playlists');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 for authenticated student', async () => {
+    const res = await request(app)
+      .get('/api/playlists')
+      .set('Authorization', AUTH_HEADER);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('playlists');
+  });
+});
+
+describe('POST /api/playlists (coach only)', () => {
+  it('returns 401 without auth', async () => {
+    const res = await request(app).post('/api/playlists').send({ name: 'Test' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for student role', async () => {
+    const res = await request(app)
+      .post('/api/playlists')
+      .set('Authorization', AUTH_HEADER)
+      .send({ name: 'Test' });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 201 for coach role', async () => {
+    const res = await request(app)
+      .post('/api/playlists')
+      .set('Authorization', COACH_AUTH_HEADER)
+      .send({ name: 'Test Playlist' });
+    expect(res.status).toBe(201);
+  });
+
+  it('returns 400 when name is missing', async () => {
+    const res = await request(app)
+      .post('/api/playlists')
+      .set('Authorization', COACH_AUTH_HEADER)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('DELETE /api/playlists/:playlistId (coach only)', () => {
+  it('returns 401 without auth', async () => {
+    const res = await request(app).delete('/api/playlists/pl1');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for student role', async () => {
+    const res = await request(app)
+      .delete('/api/playlists/pl1')
+      .set('Authorization', AUTH_HEADER);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 200 for coach role', async () => {
+    const res = await request(app)
+      .delete('/api/playlists/pl1')
+      .set('Authorization', COACH_AUTH_HEADER);
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('POST /api/playlists/:playlistId/hands (coach only)', () => {
+  it('returns 403 for student role', async () => {
+    const res = await request(app)
+      .post('/api/playlists/pl1/hands')
+      .set('Authorization', AUTH_HEADER)
+      .send({ handId: 'h1' });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 201 for coach role', async () => {
+    const res = await request(app)
+      .post('/api/playlists/pl1/hands')
+      .set('Authorization', COACH_AUTH_HEADER)
+      .send({ handId: 'h1' });
+    expect(res.status).toBe(201);
+  });
+});
+
+describe('DELETE /api/playlists/:playlistId/hands/:handId (coach only)', () => {
+  it('returns 403 for student role', async () => {
+    const res = await request(app)
+      .delete('/api/playlists/pl1/hands/h1')
+      .set('Authorization', AUTH_HEADER);
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 200 for coach role', async () => {
+    const res = await request(app)
+      .delete('/api/playlists/pl1/hands/h1')
+      .set('Authorization', COACH_AUTH_HEADER);
+    expect(res.status).toBe(200);
   });
 });

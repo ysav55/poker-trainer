@@ -1,6 +1,7 @@
 'use strict';
 
-module.exports = function registerPlaylistRoutes(app, { requireAuth, HandLogger }) {
+module.exports = function registerPlaylistRoutes(app, { requireAuth, requireRole, HandLogger }) {
+  const requireCoachRole = requireRole('coach');
 
   // GET /api/playlists
   app.get('/api/playlists', requireAuth, async (req, res) => {
@@ -12,8 +13,8 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, HandLogger 
     }
   });
 
-  // POST /api/playlists
-  app.post('/api/playlists', requireAuth, async (req, res) => {
+  // POST /api/playlists  (coach only)
+  app.post('/api/playlists', requireAuth, requireCoachRole, async (req, res) => {
     try {
       const { name, description = '', tableId = null } = req.body || {};
       if (!name) return res.status(400).json({ error: 'name is required' });
@@ -34,8 +35,8 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, HandLogger 
     }
   });
 
-  // POST /api/playlists/:playlistId/hands
-  app.post('/api/playlists/:playlistId/hands', requireAuth, async (req, res) => {
+  // POST /api/playlists/:playlistId/hands  (coach only)
+  app.post('/api/playlists/:playlistId/hands', requireAuth, requireCoachRole, async (req, res) => {
     try {
       const { handId } = req.body || {};
       if (!handId) return res.status(400).json({ error: 'handId is required' });
@@ -46,8 +47,8 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, HandLogger 
     }
   });
 
-  // DELETE /api/playlists/:playlistId/hands/:handId
-  app.delete('/api/playlists/:playlistId/hands/:handId', requireAuth, async (req, res) => {
+  // DELETE /api/playlists/:playlistId/hands/:handId  (coach only)
+  app.delete('/api/playlists/:playlistId/hands/:handId', requireAuth, requireCoachRole, async (req, res) => {
     try {
       await HandLogger.removeHandFromPlaylist(req.params.playlistId, req.params.handId);
       res.json({ success: true });
@@ -56,8 +57,8 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, HandLogger 
     }
   });
 
-  // DELETE /api/playlists/:playlistId
-  app.delete('/api/playlists/:playlistId', requireAuth, async (req, res) => {
+  // DELETE /api/playlists/:playlistId  (coach only)
+  app.delete('/api/playlists/:playlistId', requireAuth, requireCoachRole, async (req, res) => {
     try {
       await HandLogger.deletePlaylist(req.params.playlistId);
       res.json({ success: true });
