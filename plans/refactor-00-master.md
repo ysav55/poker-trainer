@@ -2,7 +2,7 @@
 
 > Status: ACTIVE — this document governs execution order and tracks progress
 > Last updated: 2026-03-25
-> Phases 0–5 DONE. Next: Phase 6.
+> Phases 0–6 DONE. Next: Phase 7.
 > How to use: Update checkboxes as work lands. The *how* lives in Plans 01–06. This plan records *why*, *what*, and *when*.
 
 ---
@@ -372,14 +372,15 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 - [x] Updated `REST.api.test.js`: coach-test-token mock, 13 new playlist route tests
 - [x] All tests pass after Phase 5 (956/956)
 
-### Phase 6 — Game Engine
-- [ ] Audit and fix internal vs display key naming (`_full_board` consistency) (Plan 02 §1.2)
-- [ ] Resolve `is_replay_branch` / `replay_mode.branched` duplication (Plan 02 §1.2)
-- [ ] Extract `ReplayManager` from `GameManager` (Plan 02)
-- [ ] Extract `BettingRound` logic from `GameManager` (Plan 02)
-- [ ] Extract `ShowdownResolver` from `GameManager` (Plan 02)
-- [ ] Review `SessionManager` coupling after extraction (Plan 02)
-- [ ] All 918+ tests pass after Phase 6
+### Phase 6 — Game Engine ✅ DONE (commits 8dced87–733d658)
+- [x] Audit: `_full_board` naming already consistent; `last_raise_was_full`/`last_aggressor` are internal-only fields not exposed in getPublicState (Plan 02 §1.2)
+- [x] Resolve `is_replay_branch` / `replay_mode.branched` duplication — removed flag from raw state, computed in getPublicState() from replay_mode.branched (commit 8dced87)
+- [x] Fix getPublicState() hole-card mutation bug — players[i] = { ...p, hole_cards } instead of p.hole_cards = (commit 8dced87)
+- [x] Extract BettingRound pure functions to server/game/bettingRound.js (commit d007113)
+- [x] Extract ShowdownResolver to server/game/ShowdownResolver.js (commit 0ba5c2d)
+- [x] Extract ReplayEngine to server/game/ReplayEngine.js (commit 733d658)
+- [x] Add GameManager.getHandSummary() + getSeatedPlayers() to decouple SessionManager (commit 733d658)
+- [x] All 956 tests pass after Phase 6
 
 ### Phase 7 — Test Coverage
 - [ ] Write `MistakeAnalyzer.test.js` (Plan 06 §11)
