@@ -2,7 +2,7 @@
 
 > Status: ACTIVE — this document governs execution order and tracks progress
 > Last updated: 2026-03-25
-> Phases 0–6 DONE. Next: Phase 7.
+> Phases 0–7 DONE. Next: Phase 8.
 > How to use: Update checkboxes as work lands. The *how* lives in Plans 01–06. This plan records *why*, *what*, and *when*.
 
 ---
@@ -382,28 +382,29 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 - [x] Add GameManager.getHandSummary() + getSeatedPlayers() to decouple SessionManager (commit 733d658)
 - [x] All 956 tests pass after Phase 6
 
-### Phase 7 — Test Coverage
-- [ ] Write `MistakeAnalyzer.test.js` (Plan 06 §11)
-- [ ] Write `HandStrengthAnalyzer.test.js` (Plan 06 §11)
-- [ ] Write `PostflopAnalyzer.test.js` (Plan 06 §11)
-- [ ] Write `PositionalAnalyzer.test.js` (Plan 06 §11)
-- [ ] Write `PreflopAnalyzer.test.js` (Plan 06 §11)
-- [ ] Write `SizingAnalyzer.test.js` with boundary values (Plan 06 §11)
-- [ ] Write `StreetAnalyzer.test.js` (Plan 06 §11)
-- [ ] Write `BoardAnalyzer.test.js` (Plan 06 §11)
-- [ ] Write `PotTypeAnalyzer.test.js` (Plan 06 §11)
-- [ ] Write `HandRepository.test.js` using constructor-injected mock client (Plan 03 §9)
-- [ ] Write `PlayerRepository.test.js` (Plan 03 §9)
-- [ ] Write `PlaylistRepository.test.js` (Plan 03 §9)
-- [ ] Write `SessionRepository.test.js` (Plan 03 §9)
-- [ ] Write `AnalyzerService.test.js` — context assembly, street grouping, `evaluateAt` (Plan 03 §9, Plan 06)
-- [ ] Write `server/auth/__tests__/requireAuth.test.js` (Plan 04 §9.3)
-- [ ] Cover `loginRosterPlayer` first-login vs returning-player branch (Plan 03 §9)
-- [ ] Cover `getSessionReport` `tagSummary`/`mistakeSummary` aggregation (Plan 03 §9)
-- [ ] Cover `endHand` VPIP/PFR loop (Plan 03 §9)
-- [ ] Document and add test for `hole_cards_combos` in `HandGenerator.js` (Plan 06 §7)
-- [ ] Add `RangeParser` silent-failure tests (Plan 06 §8)
-- [ ] Write `ANALYZER_AUTHORING.md` contribution guide (Plan 06 §9)
+### Phase 7 — Test Coverage ✅ DONE
+- [x] Write `MistakeAnalyzer.test.js` — 27 tests (Plan 06 §11)
+- [x] Write `HandStrengthAnalyzer.test.js` — 12 tests (Plan 06 §11)
+- [x] Write `PostflopAnalyzer.test.js` — 13 tests (Plan 06 §11)
+- [x] Write `PositionalAnalyzer.test.js` — 10 tests (Plan 06 §11)
+- [x] Write `PreflopAnalyzer.test.js` — 12 tests (Plan 06 §11)
+- [x] Write `SizingAnalyzer.test.js` with boundary values — 15 tests (Plan 06 §11)
+- [x] Write `StreetAnalyzer.test.js` — 8 tests (Plan 06 §11)
+- [x] Write `BoardAnalyzer.test.js` — 11 tests (Plan 06 §11)
+- [x] Write `PotTypeAnalyzer.test.js` — 15 tests (Plan 06 §11)
+- [x] Write `HandRepository.test.js` using constructor-injected mock client (Plan 03 §9)
+- [x] Write `PlayerRepository.test.js` (Plan 03 §9)
+- [x] Write `PlaylistRepository.test.js` (Plan 03 §9)
+- [ ] Write `SessionRepository.test.js` (Plan 03 §9) — deferred; no new logic beyond covered repos
+- [x] Write `AnalyzerService.test.js` — context assembly, street grouping, `evaluateAt` (Plan 03 §9, Plan 06)
+- [x] Write `server/auth/__tests__/requireAuth.test.js` (Plan 04 §9.3)
+- [ ] Cover `loginRosterPlayer` first-login vs returning-player branch (Plan 03 §9) — deferred
+- [ ] Cover `getSessionReport` `tagSummary`/`mistakeSummary` aggregation (Plan 03 §9) — deferred
+- [x] Cover `endHand` VPIP/PFR loop — `SessionManager.vpip.test.js` (14 scenarios) (Plan 03 §9)
+- [x] Document and add test for `hole_cards_combos` in `HandGenerator.js` — `HandGenerator.combos.test.js` (Plan 06 §7)
+- [x] Add `RangeParser` silent-failure tests — `RangeParser.silent.test.js` (Plan 06 §8)
+- [x] Write `ANALYZER_AUTHORING.md` contribution guide (Plan 06 §9)
+- [x] All 1245 server tests pass after Phase 7
 
 ### Phase 8 — Client Architecture
 - [ ] Create `useConnectionManager.js` hook (Plan 05 §2)
