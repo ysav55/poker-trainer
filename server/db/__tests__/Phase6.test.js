@@ -1,53 +1,28 @@
 'use strict';
 
 /**
- * Phase 6 — New Data Collection Tests
+ * Phase 6 — Position Labelling Tests
  *
- * Tests _computePositions (position labelling) and the Phase 6 call-site
- * changes in index.js (stack_at_action, pot_at_action, decision_time_ms,
- * session_type) via mocked Supabase.
+ * Tests buildPositionMap (position labelling) from server/game/positions.js.
+ * Previously tested the now-deleted _computePositions helper from
+ * HandLoggerSupabase.js, which was a duplicate of the same logic.
  */
 
-// ── Mock Supabase so HandLoggerSupabase can be required without a real connection ──
-const insertedActions = [];
-const upsertedHandPlayers = [];
-const upsertedHands = [];
+const { buildPositionMap } = require('../../game/positions');
 
-jest.mock('../supabase', () => {
-  function makeChain(store) {
-    const chain = {
-      _filters: {},
-      select() { return this; },
-      insert(data) { store.push(data); return Promise.resolve({ data, error: null }); },
-      upsert(data) { store.push(data); return Promise.resolve({ data, error: null }); },
-      update() { return this; },
-      delete() { return this; },
-      eq() { return this; },
-      in() { return this; },
-      order() { return this; },
-      limit() { return this; },
-      range() { return this; },
-      maybeSingle() { return Promise.resolve({ data: null, error: null }); },
-      then(resolve) { return Promise.resolve({ data: null, error: null }).then(resolve); },
-    };
-    return chain;
-  }
+// Wrap buildPositionMap with the same pre-processing that startHand applies:
+// filter out unseated players (seat < 0), sort by seat asc, remap id → player_id.
+function computePositions(players, dealerSeat) {
+  const seated = players
+    .filter(p => p.seat >= 0)
+    .sort((a, b) => a.seat - b.seat)
+    .map(p => ({ player_id: p.id, seat: p.seat }));
+  return buildPositionMap(seated, dealerSeat);
+}
 
-  return {
-    from(table) {
-      if (table === 'hand_actions')  return makeChain(insertedActions);
-      if (table === 'hand_players')  return makeChain(upsertedHandPlayers);
-      if (table === 'hands')         return makeChain(upsertedHands);
-      return makeChain([]);
-    },
-  };
-});
+// ─── buildPositionMap (via computePositions wrapper) ──────────────────────────
 
-const { _computePositions } = require('../HandLoggerSupabase');
-
-// ─── _computePositions ────────────────────────────────────────────────────────
-
-describe('_computePositions', () => {
+describe('buildPositionMap', () => {
 
   // Helper: build a simple player array from a seat list
   function makePlayers(seats) {
@@ -56,20 +31,19 @@ describe('_computePositions', () => {
 
   // ── 2 players (heads-up) ─────────────────────────────────────────────────
   describe('2 players (heads-up)', () => {
-    // HU rules: BTN = dealer = SB (acts first preflop, last postflop)
-    // Seats: 0=dealer, 1=BB
-    test('dealer at seat 0 → p1=BTN, p2=SB', () => {
+    // HU rules: BTN = dealer (acts first preflop, last postflop); offset 1 = BB
+    test('dealer at seat 0 → p1=BTN, p2=BB', () => {
       const players = makePlayers([0, 1]);
-      const map = _computePositions(players, 0);
-      expect(map.get('p1')).toBe('BTN');
-      expect(map.get('p2')).toBe('SB');
+      const map = computePositions(players, 0);
+      expect(map['p1']).toBe('BTN');
+      expect(map['p2']).toBe('BB');
     });
 
-    test('dealer at seat 1 → p2=BTN, p1=SB', () => {
+    test('dealer at seat 1 → p2=BTN, p1=BB', () => {
       const players = makePlayers([0, 1]);
-      const map = _computePositions(players, 1);
-      expect(map.get('p2')).toBe('BTN');
-      expect(map.get('p1')).toBe('SB');
+      const map = computePositions(players, 1);
+      expect(map['p2']).toBe('BTN');
+      expect(map['p1']).toBe('BB');
     });
   });
 
@@ -78,26 +52,26 @@ describe('_computePositions', () => {
     // seats 0,1,2 — dealer=0 → BTN=0, SB=1, BB=2
     test('dealer seat 0 → correct BTN/SB/BB', () => {
       const players = makePlayers([0, 1, 2]);
-      const map = _computePositions(players, 0);
-      expect(map.get('p1')).toBe('BTN');
-      expect(map.get('p2')).toBe('SB');
-      expect(map.get('p3')).toBe('BB');
+      const map = computePositions(players, 0);
+      expect(map['p1']).toBe('BTN');
+      expect(map['p2']).toBe('SB');
+      expect(map['p3']).toBe('BB');
     });
 
     test('dealer seat 2 → BTN=p3, SB=p1, BB=p2', () => {
       const players = makePlayers([0, 1, 2]);
-      const map = _computePositions(players, 2);
-      expect(map.get('p3')).toBe('BTN');
-      expect(map.get('p1')).toBe('SB');
-      expect(map.get('p2')).toBe('BB');
+      const map = computePositions(players, 2);
+      expect(map['p3']).toBe('BTN');
+      expect(map['p1']).toBe('SB');
+      expect(map['p2']).toBe('BB');
     });
 
     test('dealer seat 1 → BTN=p2, SB=p3, BB=p1', () => {
       const players = makePlayers([0, 1, 2]);
-      const map = _computePositions(players, 1);
-      expect(map.get('p2')).toBe('BTN');
-      expect(map.get('p3')).toBe('SB');
-      expect(map.get('p1')).toBe('BB');
+      const map = computePositions(players, 1);
+      expect(map['p2']).toBe('BTN');
+      expect(map['p3']).toBe('SB');
+      expect(map['p1']).toBe('BB');
     });
   });
 
@@ -106,26 +80,26 @@ describe('_computePositions', () => {
     // dealer=0 → BTN=p1(s0), SB=p2(s1), BB=p3(s2), UTG=p4(s3)
     test('dealer seat 0 → all four positions assigned', () => {
       const players = makePlayers([0, 1, 2, 3]);
-      const map = _computePositions(players, 0);
-      expect(map.get('p1')).toBe('BTN');
-      expect(map.get('p2')).toBe('SB');
-      expect(map.get('p3')).toBe('BB');
-      expect(map.get('p4')).toBe('UTG');
+      const map = computePositions(players, 0);
+      expect(map['p1']).toBe('BTN');
+      expect(map['p2']).toBe('SB');
+      expect(map['p3']).toBe('BB');
+      expect(map['p4']).toBe('UTG');
     });
   });
 
   // ── 6 players ────────────────────────────────────────────────────────────
   describe('6 players', () => {
-    // dealer=0 → BTN SB BB UTG UTG+1 HJ
+    // POSITION_NAMES[6] = ['BTN','SB','BB','UTG','HJ','CO']
     test('dealer seat 0 → full 6-handed position set', () => {
       const players = makePlayers([0, 1, 2, 3, 4, 5]);
-      const map = _computePositions(players, 0);
-      expect(map.get('p1')).toBe('BTN');
-      expect(map.get('p2')).toBe('SB');
-      expect(map.get('p3')).toBe('BB');
-      expect(map.get('p4')).toBe('UTG');
-      expect(map.get('p5')).toBe('UTG+1');
-      expect(map.get('p6')).toBe('HJ');
+      const map = computePositions(players, 0);
+      expect(map['p1']).toBe('BTN');
+      expect(map['p2']).toBe('SB');
+      expect(map['p3']).toBe('BB');
+      expect(map['p4']).toBe('UTG');
+      expect(map['p5']).toBe('HJ');
+      expect(map['p6']).toBe('CO');
     });
   });
 
@@ -138,10 +112,10 @@ describe('_computePositions', () => {
         { id: 'p1',    seat: 1 },
         { id: 'p2',    seat: 2 },
       ];
-      const map = _computePositions(players, 0);
-      expect(map.get('coach')).toBe('BTN');
-      expect(map.get('p1')).toBe('SB');
-      expect(map.get('p2')).toBe('BB');
+      const map = computePositions(players, 0);
+      expect(map['coach']).toBe('BTN');
+      expect(map['p1']).toBe('SB');
+      expect(map['p2']).toBe('BB');
     });
 
     test('coach at SB seat — students get BTN and BB', () => {
@@ -151,10 +125,10 @@ describe('_computePositions', () => {
         { id: 'coach', seat: 0, is_coach: true },
         { id: 'p2',    seat: 2 },
       ];
-      const map = _computePositions(players, 2);
-      expect(map.get('p2')).toBe('BTN');
-      expect(map.get('coach')).toBe('SB');
-      expect(map.get('p1')).toBe('BB');
+      const map = computePositions(players, 2);
+      expect(map['p2']).toBe('BTN');
+      expect(map['coach']).toBe('SB');
+      expect(map['p1']).toBe('BB');
     });
 
     test('4-way with coach: positions account for coach seat', () => {
@@ -166,11 +140,11 @@ describe('_computePositions', () => {
         { id: 'p2',    seat: 2 },
         { id: 'p3',    seat: 3 },
       ];
-      const map = _computePositions(players, 0);
-      expect(map.get('p1')).toBe('BTN');
-      expect(map.get('coach')).toBe('SB');
-      expect(map.get('p2')).toBe('BB');
-      expect(map.get('p3')).toBe('UTG');
+      const map = computePositions(players, 0);
+      expect(map['p1']).toBe('BTN');
+      expect(map['coach']).toBe('SB');
+      expect(map['p2']).toBe('BB');
+      expect(map['p3']).toBe('UTG');
     });
 
     test('without allPlayers (coach absent): student gets wrong position', () => {
@@ -185,36 +159,36 @@ describe('_computePositions', () => {
         { id: 'p1', seat: 0 },  // dealer → BTN
         { id: 'p2', seat: 2 },  // skips seat 1 — coach's gap ignored
       ];
-      const withCoach    = _computePositions(playersWithCoach,    0);
-      const withoutCoach = _computePositions(playersWithoutCoach, 0);
+      const withCoach    = computePositions(playersWithCoach,    0);
+      const withoutCoach = computePositions(playersWithoutCoach, 0);
 
       // With coach: p2 correctly gets BB (coach is between them as SB)
-      expect(withCoach.get('p1')).toBe('BTN');
-      expect(withCoach.get('coach')).toBe('SB');
-      expect(withCoach.get('p2')).toBe('BB');
+      expect(withCoach['p1']).toBe('BTN');
+      expect(withCoach['coach']).toBe('SB');
+      expect(withCoach['p2']).toBe('BB');
 
-      // Without coach: p2 incorrectly gets SB (coach's seat gap is invisible)
-      expect(withoutCoach.get('p1')).toBe('BTN');
-      expect(withoutCoach.get('p2')).toBe('SB'); // wrong — should be BB
+      // Without coach: p2 incorrectly gets BB (only 2 players → POSITION_NAMES[2])
+      expect(withoutCoach['p1']).toBe('BTN');
+      expect(withoutCoach['p2']).toBe('BB'); // gets BB label, but wrong seat context
     });
   });
 
   // ── Edge cases ────────────────────────────────────────────────────────────
   describe('edge cases', () => {
-    test('returns empty Map for 1 player', () => {
-      const map = _computePositions([{ id: 'p1', seat: 0 }], 0);
-      expect(map.size).toBe(0);
+    test('returns empty object for 1 player', () => {
+      const map = computePositions([{ id: 'p1', seat: 0 }], 0);
+      expect(Object.keys(map).length).toBe(0);
     });
 
-    test('returns empty Map for no players', () => {
-      const map = _computePositions([], 0);
-      expect(map.size).toBe(0);
+    test('returns empty object for no players', () => {
+      const map = computePositions([], 0);
+      expect(Object.keys(map).length).toBe(0);
     });
 
-    test('returns empty Map when dealer seat not found', () => {
+    test('returns empty object when dealer seat not found', () => {
       const players = makePlayers([0, 1, 2]);
-      const map = _computePositions(players, 9); // seat 9 doesn't exist
-      expect(map.size).toBe(0);
+      const map = computePositions(players, 9); // seat 9 doesn't exist
+      expect(Object.keys(map).length).toBe(0);
     });
 
     test('players with negative seats are excluded', () => {
@@ -224,10 +198,10 @@ describe('_computePositions', () => {
         { id: 'p2', seat: 0 },
         { id: 'p3', seat: 1 },
       ];
-      const map = _computePositions(players, 0);
-      expect(map.get('p1')).toBeUndefined(); // seat=-1 excluded
-      expect(map.get('p2')).toBe('BTN');
-      expect(map.get('p3')).toBe('SB');
+      const map = computePositions(players, 0);
+      expect(map['p1']).toBeUndefined(); // seat=-1 excluded
+      expect(map['p2']).toBe('BTN');
+      expect(map['p3']).toBe('BB'); // 2 players → POSITION_NAMES[2] = ['BTN','BB']
     });
 
     test('non-consecutive seat numbers — rotates correctly', () => {
@@ -238,17 +212,18 @@ describe('_computePositions', () => {
         { id: 'pC', seat: 7 },
       ];
       // dealer=seat 5 → sorted [s2,s5,s7]; dealerIdx=1 → BTN=pB(s5), SB=pC(s7), BB=pA(s2)
-      const map = _computePositions(players, 5);
-      expect(map.get('pB')).toBe('BTN');
-      expect(map.get('pC')).toBe('SB');
-      expect(map.get('pA')).toBe('BB');
+      const map = computePositions(players, 5);
+      expect(map['pB']).toBe('BTN');
+      expect(map['pC']).toBe('SB');
+      expect(map['pA']).toBe('BB');
     });
 
     test('7 players uses CO label', () => {
+      // POSITION_NAMES[7] = ['BTN','SB','BB','UTG','MP','HJ','CO']
       const players = makePlayers([0, 1, 2, 3, 4, 5, 6]);
-      const map = _computePositions(players, 0);
-      expect(map.get('p1')).toBe('BTN');
-      expect(map.get('p7')).toBe('CO'); // last label before BTN
+      const map = computePositions(players, 0);
+      expect(map['p1']).toBe('BTN');
+      expect(map['p7']).toBe('CO'); // last label (offset 6)
     });
   });
 });

@@ -47,7 +47,6 @@ jest.mock('../../db/HandLoggerSupabase', () => {
     deletePlaylist:        jest.fn().mockResolvedValue(undefined),
     registerPlayerAccount: jest.fn().mockResolvedValue({ error: 'registration_disabled' }),
     loginPlayerAccount:    jest.fn().mockResolvedValue({ error: 'registration_disabled' }),
-    _computePositions:     jest.fn().mockReturnValue(new Map()),
     loginRosterPlayer: jest.fn(async (name) => {
       const trimmed = name.trim();
       // Find existing by display_name
@@ -64,17 +63,20 @@ jest.mock('../../db/HandLoggerSupabase', () => {
     isRegisteredPlayer: jest.fn(async (stableId) => {
       return _players.has(stableId);
     }),
-    authenticateToken: jest.fn((token) => {
-      if (!token || token === 'invalid-token') return null;
-      // coach- prefix → coach role; anything else → student
-      const stableId = token.startsWith('coach-') ? 'coach-uuid' : token;
-      const role = token.startsWith('coach-') ? 'coach' : 'student';
-      return { stableId, name: 'TestPlayer', role };
-    }),
   };
 });
 
-// ── PlayerRoster mock removed — auth is now handled via authenticateToken ────
+// ── Mock JwtService — join_room calls JwtService.verify(token) ───────────────
+jest.mock('../../auth/JwtService', () => ({
+  sign: jest.fn(() => 'mock-jwt-token'),
+  verify: jest.fn((token) => {
+    if (!token || token === 'invalid-token') return null;
+    // coach- prefix → coach role; anything else → student
+    const stableId = token.startsWith('coach-') ? 'coach-uuid' : token;
+    const role = token.startsWith('coach-') ? 'coach' : 'student';
+    return { stableId, name: 'TestPlayer', role };
+  }),
+}));
 
 const { createClient, waitForEvent, joinRoom } = (() => {
   // Helpers defined here to be reused across suites

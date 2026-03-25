@@ -146,11 +146,10 @@ export default function PlayerSeat({
     setIsHovered(true);
     const sid = player.stableId;
     if (!sid || isCoachSeat || fetchedRef.current) return;
-    fetchedRef.current = true;
     setStatsLoading(true);
     const params = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
     apiFetch(`/api/players/${encodeURIComponent(sid)}/hover-stats${params}`)
-      .then(data => { setStats(data); setStatsLoading(false); })
+      .then(data => { fetchedRef.current = true; setStats(data); setStatsLoading(false); })
       .catch(() => { setStatsLoading(false); });
   }
 
@@ -178,7 +177,7 @@ export default function PlayerSeat({
 
   // Show cards face-up only for the local player (or at showdown).
   // Server now controls visibility: opponents arrive as 'HIDDEN' in live play.
-  const showCards = isCoach || isMe;
+  const showCards = isCoach || isMe || (isShowdown && !isFolded);
 
   // Hole cards (up to 2)
   const holeCards = player.hole_cards ?? [];

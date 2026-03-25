@@ -112,6 +112,9 @@ export default function PokerTable({
   const phase          = gameState?.phase ?? 'waiting';
   const pot            = gameState?.pot ?? 0;
   const sidePots       = gameState?.side_pots ?? [];
+  // centerPot = committed pot from completed streets only.
+  // Current-street bets live near each player (via BetChip) until the street closes.
+  const centerPot = Math.max(0, pot - players.reduce((s, p) => s + (p.total_bet_this_round ?? 0), 0));
   const isPaused       = gameState?.paused === true;
   const winner         = gameState?.winner ?? null;   // socket ID string or null
   const winnerPlayer   = players?.find(p => p.id === winner);
@@ -231,7 +234,7 @@ export default function PokerTable({
           {/* ── Pot / Winner — sits between board and center of oval ─────── */}
           <div
             className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none"
-            style={{ top: '36%', transform: 'translate(-50%, -50%)', zIndex: 2 }}
+            style={{ top: '28%', transform: 'translate(-50%, -50%)', zIndex: 2 }}
           >
             {isShowdown ? (
               /* Winner block replaces pot at showdown */
@@ -274,7 +277,7 @@ export default function PokerTable({
                   </button>
                 )}
               </div>
-            ) : pot > 0 ? (
+            ) : centerPot > 0 ? (
               <div className="flex flex-col items-center gap-0.5">
                 <span
                   className="text-[10px] font-semibold tracking-[0.25em] uppercase"
@@ -286,7 +289,7 @@ export default function PokerTable({
                   className="text-base font-bold font-mono leading-none"
                   style={{ color: '#d4af37', textShadow: '0 0 10px rgba(212,175,55,0.4)' }}
                 >
-                  {fmtChips(pot, bigBlind, bbView)}
+                  {fmtChips(centerPot, bigBlind, bbView)}
                 </span>
                 {sidePots.length > 0 && (
                   <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
@@ -418,7 +421,7 @@ export default function PokerTable({
                   {/* Ghost seats for each recorded player */}
                   {ghostPlayers.map((ghost, idx) => {
                     const isCurrentAction = currentAction?.player_id === ghost.stableId;
-                    const isCoachSlot = String(ghost.stableId).startsWith('coach_');
+                    const isCoachSlot = ghost.is_coach === true || String(ghost.stableId).startsWith('coach_');
                     const holeCards = originalHoleCards[ghost.stableId] ?? [];
                     return (
                       <GhostSeat

@@ -10,17 +10,19 @@ const BOARD_SHORT  = ['F1', 'F2', 'F3', 'TN', 'RV'];
 const MODES = ['rng', 'manual', 'hybrid'];
 
 const TEXTURE_GROUPS = [
-  { label: 'SUIT',    tags: ['rainbow', 'flush_draw', 'monotone'] },
-  { label: 'PAIR',    tags: ['unpaired', 'paired', 'trips'] },
-  { label: 'CONNECT', tags: ['connected', 'disconnected'] },
-  { label: 'HIGH',    tags: ['broadway', 'low', 'ace_high'] },
+  { label: 'SUIT',      tags: ['rainbow', 'flush_draw', 'monotone'] },
+  { label: 'PAIR',      tags: ['unpaired', 'paired', 'trips'] },
+  { label: 'CONNECT',   tags: ['connected', 'one_gap', 'disconnected'] },
+  { label: 'HIGH',      tags: ['broadway', 'mid', 'low', 'ace_high'] },
+  { label: 'FEEL',      tags: ['wet', 'dry'] },
 ];
 
 const TEXTURE_LABELS = {
   rainbow: 'Rainbow', flush_draw: 'Flush Draw', monotone: 'Monotone',
   unpaired: 'Unpaired', paired: 'Paired', trips: 'Trips',
-  connected: 'Connected', disconnected: 'Disconnected',
-  broadway: 'Broadway', low: 'Low', ace_high: 'Ace High',
+  connected: 'Connected', one_gap: 'One Gap', disconnected: 'Disconnected',
+  broadway: 'Broadway', mid: 'Mid', low: 'Low', ace_high: 'Ace High',
+  wet: 'Wet', dry: 'Dry',
 };
 
 // Map each tag to its group index (for radio-within-group behaviour)
@@ -105,16 +107,16 @@ function Divider() {
   );
 }
 
-function ConfigCardSlot({ card, label, onClick }) {
+function ConfigCardSlot({ card, label, onClick, compact = false }) {
   const isEmpty = card === null || card === undefined;
   return (
     <button
       onClick={onClick}
       title={label}
       aria-label={isEmpty ? `${label} — click to assign card` : `${label} — ${card} (click to change)`}
-      className="flex items-center justify-center rounded transition-all duration-150 relative group"
+      className="flex items-center justify-center rounded transition-all duration-150 relative group w-full"
       style={{
-        width: '2.75rem', height: '3.75rem',
+        width: compact ? '100%' : '2.75rem', height: compact ? '3.25rem' : '3.75rem',
         background: isEmpty ? 'rgba(255,255,255,0.03)' : 'transparent',
         border: isEmpty ? '1.5px dashed #30363d' : '1.5px solid transparent',
         cursor: 'pointer', padding: 0, flexShrink: 0,
@@ -627,13 +629,14 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
         <div className="coach-panel mb-3">
           <SectionHeader>BOARD CARDS</SectionHeader>
 
-          <div className="flex gap-2 justify-between">
+          <div className="flex gap-1 justify-between">
             {config.board.map((card, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-1">
+              <div key={idx} className="flex flex-col items-center gap-1" style={{ flex: '1 1 0', minWidth: 0 }}>
                 <ConfigCardSlot
                   card={card}
                   label={BOARD_LABELS[idx]}
                   onClick={() => handleBoardSlotClick(idx)}
+                  compact
                 />
                 <span
                   className="text-center"
@@ -715,7 +718,7 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
                   </div>
                 ))}
                 <div className="text-xs" style={{ color: '#555', fontSize: '9px', marginTop: '2px' }}>
-                  Applied to flop only. One constraint per group.
+                  Applied to flop only. One per group. FEEL shortcuts imply suit+connect.
                 </div>
               </div>
             )}

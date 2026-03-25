@@ -116,9 +116,9 @@ export default function GhostSeat({
         )}
 
         {/* Hole cards */}
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
           {[0, 1].map(i => (
-            <Card key={i} card={holeCards[i] ?? null} hidden={!holeCards[i]} />
+            <Card key={i} card={holeCards[i] ?? null} hidden={!holeCards[i]} small />
           ))}
         </div>
       </div>

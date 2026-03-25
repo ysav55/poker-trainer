@@ -49,28 +49,6 @@ async function ensureSession(sessionId, tableId) {
 
 // ─── Hand Lifecycle ───────────────────────────────────────────────────────────
 
-/**
- * Compute position labels for all players given their seats and the dealer seat.
- * Returns a Map from player_id → position label string.
- */
-function _computePositions(players, dealerSeat) {
-  const POSITION_LABELS = ['BTN', 'SB', 'BB', 'UTG', 'UTG+1', 'HJ', 'CO'];
-  const seated = [...players].filter(p => p.seat >= 0).sort((a, b) => a.seat - b.seat);
-  const n = seated.length;
-  if (n < 2) return new Map();
-
-  const dealerIdx = seated.findIndex(p => p.seat === dealerSeat);
-  if (dealerIdx === -1) return new Map();
-
-  const posMap = new Map();
-  for (let i = 0; i < n; i++) {
-    const offset = (dealerIdx + i) % n; // 0 = BTN, 1 = SB, 2 = BB, ...
-    const label = i < POSITION_LABELS.length ? POSITION_LABELS[i] : `EP${i - 3}`;
-    posMap.set(seated[offset].id, label);
-  }
-  return posMap;
-}
-
 async function startHand({ handId, sessionId, tableId, players, allPlayers, dealerSeat = 0, isScenario = false, smallBlind = 0, bigBlind = 0, sessionType = null }) {
   await ensureSession(sessionId, tableId);
 
@@ -97,14 +75,18 @@ async function startHand({ handId, sessionId, tableId, players, allPlayers, deal
     ignoreDuplicates: true,
   }));
 
-  const positionMap = _computePositions(allPlayers || players, dealerSeat);
+  const seatedForPositions = (allPlayers || players)
+    .filter(p => p.seat >= 0)
+    .sort((a, b) => a.seat - b.seat)
+    .map(p => ({ player_id: p.id, seat: p.seat }));
+  const positionMap = buildPositionMap(seatedForPositions, dealerSeat);
 
   const playerRows = (allPlayers || players).map(p => ({
     hand_id:     handId,
     player_id:   p.id,
     player_name: p.name,
     seat:        p.seat ?? -1,
-    position:    positionMap.get(p.id) ?? null,
+    position:    positionMap[p.id] ?? null,
     stack_start: p.stack ?? 0,
   }));
   await q(supabase.from('hand_players').upsert(playerRows, {
@@ -137,7 +119,8 @@ async function endHand({ handId, state, socketToStable = {} }) {
   const resolveId = (socketId) => socketToStable[socketId] || socketId;
 
   const completedNormally = ['showdown', 'waiting'].includes(state.phase) || state.winner != null;
-  const phaseEnded = state.phase === 'showdown'
+  const isFoldWin = state.showdown_result?.foldWin === true;
+  const phaseEnded = (state.phase === 'showdown' && !isFoldWin)
     ? 'showdown'
     : state.winner != null ? 'fold_to_one' : state.phase;
 
@@ -184,7 +167,7 @@ async function endHand({ handId, state, socketToStable = {} }) {
   await q(supabase.from('hands').update({
     ended_at:           now,
     board:              state.board || [],
-    final_pot:          state.pot || 0,
+    final_pot:          state.showdown_result?.potAwarded ?? state.pot ?? 0,
     winner_id:          winnerIdForDb,
     winner_name:        state.winner_name || null,
     phase_ended:        phaseEnded,
@@ -533,26 +516,6 @@ async function buildAnalyzerContext(handId) {
   };
 }
 
-/**
- * Normalize DB action strings to present-tense canonical forms.
- * The DB stores past-tense ('raised', 'folded', 'called', 'checked') from
- * older records and present-tense ('raise', 'fold', 'call', 'check') from
- * newer ones. All analyzer logic uses the canonical present-tense form.
- */
-function normalizeAction(action) {
-  const MAP = { raised: 'raise', folded: 'fold', called: 'call', checked: 'check' };
-  return MAP[action] ?? action;
-}
-
-/** Given players sorted by seat and the dealer seat, return the BB player_id. */
-function _findBBPlayerId(seatedPlayers, dealerSeat) {
-  if (seatedPlayers.length < 2) return null;
-  const dealerIdx = seatedPlayers.findIndex(p => p.seat === dealerSeat);
-  if (dealerIdx === -1) return null;
-  const bbOffset = seatedPlayers.length === 2 ? 1 : 2;
-  return seatedPlayers[(dealerIdx + bbOffset) % seatedPlayers.length].player_id;
-}
-
 async function analyzeAndTagHand(handId) {
   const ctx = await buildAnalyzerContext(handId);
   if (!ctx) return;
@@ -567,13 +530,17 @@ async function analyzeAndTagHand(handId) {
     }
   }
 
-  // Deduplicate hand-level tags (player_id IS NULL) — same tag+type can only appear once.
-  // Player/action-level tags are allowed to repeat for different player_ids.
+  // Deduplicate tags:
+  //   hand-level (player_id IS NULL): keyed on "tag_type::tag"
+  //   player-level: keyed on "tag_type::tag::player_id" — prevents same tag twice for same player
+  //   action-level tags (action_id present) are never deduplicated — each action is unique
   const seen   = new Set();
   const tagRows = [];
   for (const r of rawResults) {
-    if (!r.player_id) {
-      const key = `${r.tag_type}::${r.tag}`;
+    if (r.action_id == null) {
+      const key = r.player_id
+        ? `${r.tag_type}::${r.tag}::${r.player_id}`
+        : `${r.tag_type}::${r.tag}`;
       if (seen.has(key)) continue;
       seen.add(key);
     }
@@ -826,25 +793,9 @@ async function getSessionReport(sessionId) {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
-const jwt = require('jsonwebtoken');
-
-/**
- * Validate a server-signed JWT and return the payload.
- * Returns { stableId, name, role } or null if invalid/expired.
- */
-function authenticateToken(token) {
-  if (!token) return null;
-  try {
-    return jwt.verify(token, process.env.SESSION_SECRET);
-  } catch {
-    return null;
-  }
-}
-
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
-  _computePositions,  // exported for unit testing
   ensureSession, startHand, recordAction, endHand, markIncomplete, logStackAdjustment, updateCoachTags,
   getHands, getHandDetail, getSessionStats,
   upsertPlayerIdentity, getPlayerStats, getAllPlayersWithStats, getPlayerHands, getPlayerHoverStats,
@@ -854,5 +805,4 @@ module.exports = {
   loginRosterPlayer, isRegisteredPlayer,
   registerPlayerAccount, loginPlayerAccount,
   getSessionReport,
-  authenticateToken,
 };

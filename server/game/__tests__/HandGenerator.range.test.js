@@ -144,14 +144,24 @@ describe('flopSatisfiesTexture', () => {
   });
 
   describe('connectedness textures', () => {
-    test('connected: at least 2 cards within 1 rank', () => {
-      expect(flopSatisfiesTexture(['Jh', 'Td', 'Qc'], ['connected'])).toBe(true);
-      expect(flopSatisfiesTexture(['Ah', '2d', '7c'], ['connected'])).toBe(false);
+    test('connected: all 3 cards span ≤ 2 (truly consecutive)', () => {
+      expect(flopSatisfiesTexture(['Jh', 'Td', 'Qc'], ['connected'])).toBe(true);   // JTQ span=2
+      expect(flopSatisfiesTexture(['Ah', '2d', '3c'], ['connected'])).toBe(true);   // A23 ace-low span=2
+      expect(flopSatisfiesTexture(['Qh', '2d', '3c'], ['connected'])).toBe(false);  // Q23 span=10
+      expect(flopSatisfiesTexture(['Ah', '2d', '7c'], ['connected'])).toBe(false);  // A27 span=6
     });
 
-    test('disconnected: no two within 1 rank', () => {
-      expect(flopSatisfiesTexture(['Ah', '5d', '2c'], ['disconnected'])).toBe(true);
-      expect(flopSatisfiesTexture(['Jh', 'Td', 'Qc'], ['disconnected'])).toBe(false);
+    test('one_gap: span 3-4', () => {
+      expect(flopSatisfiesTexture(['6h', '7d', '9c'], ['one_gap'])).toBe(true);   // 679 span=3
+      expect(flopSatisfiesTexture(['Ah', '2d', '5c'], ['one_gap'])).toBe(true);   // A25 ace-low span=4
+      expect(flopSatisfiesTexture(['Jh', 'Td', 'Qc'], ['one_gap'])).toBe(false);  // JTQ span=2
+      expect(flopSatisfiesTexture(['Ah', '7d', '2c'], ['one_gap'])).toBe(false);  // A72 span=6
+    });
+
+    test('disconnected: span > 4', () => {
+      expect(flopSatisfiesTexture(['Ah', '7d', '2c'], ['disconnected'])).toBe(true);   // A72 span=6
+      expect(flopSatisfiesTexture(['Qh', '2d', '3c'], ['disconnected'])).toBe(true);   // Q23 span=10
+      expect(flopSatisfiesTexture(['Jh', 'Td', 'Qc'], ['disconnected'])).toBe(false);  // JTQ span=2
     });
   });
 

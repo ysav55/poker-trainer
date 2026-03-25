@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase 1 — Auth Layer Consolidation</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 40px 24px;
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    text-align: center;
+    color: #f8fafc;
+    margin-bottom: 6px;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 1rem;
+    margin-bottom: 48px;
+  }
+
+  /* ── Section headers ── */
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 16px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: #1e2330;
+    border: 1px solid #2d3748;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 32px;
+  }
+
+  .card h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #f1f5f9;
+  }
+
+  .card p {
+    color: #94a3b8;
+    line-height: 1.6;
+    font-size: 0.95rem;
+  }
+
+  /* ── Two-column layout ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+  }
+
+  @media (max-width: 760px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  /* ── Before / After panels ── */
+  .before, .after {
+    border-radius: 12px;
+    padding: 24px;
+    position: relative;
+  }
+
+  .before {
+    background: #1a1010;
+    border: 1px solid #5c2626;
+  }
+
+  .after {
+    background: #0f1a12;
+    border: 1px solid #1e5c2f;
+  }
+
+  .before h3, .after h3 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .before h3 { color: #f87171; }
+  .after h3  { color: #4ade80; }
+
+  /* ── Architecture diagrams ── */
+  .diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 0.85rem;
+  }
+
+  .module {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-weight: 500;
+  }
+
+  .module-icon { font-size: 1.1rem; flex-shrink: 0; }
+  .module-name { flex: 1; }
+  .module-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* Module colours */
+  .mod-server   { background: #1e293b; border: 1px solid #334155; color: #cbd5e1; }
+  .mod-db       { background: #1c1b2e; border: 1px solid #3d3765; color: #c4b5fd; }
+  .mod-auth     { background: #1c2b1e; border: 1px solid #2d5f39; color: #86efac; }
+  .mod-new      { background: #0f2337; border: 1px solid #1e5580; color: #7dd3fc; }
+  .mod-deleted  { background: #2b0f0f; border: 1px solid #7f1d1d; color: #fca5a5; text-decoration: line-through; opacity: 0.7; }
+
+  .badge-problem  { background: #7f1d1d; color: #fca5a5; }
+  .badge-fixed    { background: #14532d; color: #86efac; }
+  .badge-new      { background: #0c4a6e; color: #7dd3fc; }
+  .badge-deleted  { background: #431407; color: #fdba74; }
+
+  /* ── Arrows ── */
+  .arrow {
+    text-align: center;
+    color: #475569;
+    font-size: 1.2rem;
+    line-height: 1;
+    margin: 2px 0;
+  }
+
+  .arrow-good { color: #22c55e; }
+
+  /* ── Problem callout ── */
+  .callout {
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .callout-problem {
+    background: #2d1111;
+    border: 1px solid #7f1d1d;
+    color: #fca5a5;
+  }
+
+  .callout-solution {
+    background: #0d1f10;
+    border: 1px solid #166534;
+    color: #86efac;
+  }
+
+  .callout-neutral {
+    background: #1a1f2e;
+    border: 1px solid #374151;
+    color: #94a3b8;
+  }
+
+  .callout-icon { flex-shrink: 0; font-size: 1rem; }
+
+  /* ── File change list ── */
+  .file-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .file-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: #161b27;
+    border: 1px solid #2d3748;
+  }
+
+  .file-action {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+
+  .action-create  { background: #0c4a6e; color: #7dd3fc; }
+  .action-modify  { background: #1c1b00; color: #fde047; border: 1px solid #713f12; }
+  .action-delete  { background: #431407; color: #fdba74; }
+  .action-test    { background: #1a1b2e; color: #a5b4fc; border: 1px solid #312e81; }
+
+  .file-info { flex: 1; }
+  .file-path { font-family: 'Consolas', monospace; font-size: 0.82rem; color: #e2e8f0; margin-bottom: 4px; }
+  .file-desc { font-size: 0.82rem; color: #64748b; line-height: 1.4; }
+
+  /* ── Step tracker ── */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+
+  .step {
+    display: flex;
+    gap: 16px;
+    position: relative;
+  }
+
+  .step:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 18px;
+    top: 40px;
+    bottom: 0;
+    width: 2px;
+    background: #2d3748;
+  }
+
+  .step-num {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #1e293b;
+    border: 2px solid #334155;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    z-index: 1;
+  }
+
+  .step-body {
+    padding-bottom: 28px;
+    flex: 1;
+  }
+
+  .step-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #f1f5f9;
+    margin-bottom: 4px;
+    padding-top: 6px;
+  }
+
+  .step-detail {
+    font-size: 0.85rem;
+    color: #64748b;
+    line-height: 1.5;
+  }
+
+  code {
+    font-family: 'Consolas', monospace;
+    font-size: 0.82em;
+    background: #0f1117;
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #7dd3fc;
+  }
+
+  /* ── Why it matters ── */
+  .why-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .why-item {
+    background: #161b27;
+    border: 1px solid #2d3748;
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .why-item .icon { font-size: 1.4rem; margin-bottom: 8px; }
+  .why-item h4 { font-size: 0.88rem; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+  .why-item p  { font-size: 0.8rem; color: #64748b; line-height: 1.4; }
+
+  /* ── Risk indicator ── */
+  .risk-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .risk-label { font-size: 0.8rem; color: #64748b; width: 80px; }
+  .risk-dots  { display: flex; gap: 4px; }
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #2d3748;
+  }
+
+  .dot.filled-green  { background: #22c55e; }
+  .dot.filled-yellow { background: #eab308; }
+  .dot.filled-red    { background: #ef4444; }
+
+  hr {
+    border: none;
+    border-top: 1px solid #2d3748;
+    margin: 40px 0;
+  }
+
+  .max-w { max-width: 900px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<div class="max-w">
+
+  <h1>Phase 1 — Auth Layer Consolidation</h1>
+  <p class="subtitle">What's changing, why it matters, and what we're touching</p>
+
+  <!-- ── THE PLAIN-ENGLISH PROBLEM ── -->
+  <div class="card">
+    <h2>🔑 The Problem in Plain English</h2>
+    <p>
+      Right now, the server uses a <strong style="color:#f1f5f9">secret key</strong> to sign and verify login tokens (like a wax seal on an envelope).
+      The code that does this verification is <em>buried inside the database module</em> —
+      which is like asking your filing clerk to also be the bouncer.
+      That creates two problems:
+    </p>
+    <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px;">
+      <div class="callout callout-problem">
+        <span class="callout-icon">⚠️</span>
+        <span>Any test that touches the database also has to pretend to be the auth system. They're tangled together.</span>
+      </div>
+      <div class="callout callout-problem">
+        <span class="callout-icon">⚠️</span>
+        <span>There's no single place that "owns" the login token logic — it's split across two unrelated files.</span>
+      </div>
+      <div class="callout callout-solution">
+        <span class="callout-icon">✅</span>
+        <span>After Phase 1: one dedicated file (<code>JwtService.js</code>) handles all token signing and verification. Everything else just calls it.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── BEFORE / AFTER DIAGRAMS ── -->
+  <div class="section-label">Before vs After — How the token flows</div>
+  <div class="two-col">
+
+    <div class="before">
+      <h3>❌ Before — Scattered Auth</h3>
+      <div class="diagram">
+
+        <div class="module mod-server">
+          <span class="module-icon">🖥️</span>
+          <span class="module-name">index.js — Login Handler</span>
+          <span class="module-badge badge-problem">calls jwt directly</span>
+        </div>
+        <div class="arrow">↓ jwt.sign() lives here</div>
+
+        <div class="module mod-db">
+          <span class="module-icon">🗄️</span>
+          <span class="module-name">HandLoggerSupabase.js</span>
+          <span class="module-badge badge-problem">also has jwt.verify</span>
+        </div>
+        <div class="arrow">↓ called by</div>
+
+        <div class="module mod-server">
+          <span class="module-icon">🖥️</span>
+          <span class="module-name">index.js — requireAuth</span>
+          <span class="module-badge badge-problem">imports from DB layer</span>
+        </div>
+
+        <div class="callout callout-problem" style="margin-top:8px">
+          <span class="callout-icon">🔴</span>
+          <span>3 different places that touch JWT. To change how auth works, you need to edit multiple files.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="after">
+      <h3>✅ After — Single Source of Truth</h3>
+      <div class="diagram">
+
+        <div class="module mod-new">
+          <span class="module-icon">🔐</span>
+          <span class="module-name">JwtService.js</span>
+          <span class="module-badge badge-new">new — owns jwt</span>
+        </div>
+        <div class="arrow arrow-good">↓ imported by</div>
+
+        <div class="module mod-auth">
+          <span class="module-icon">🛡️</span>
+          <span class="module-name">requireAuth.js</span>
+          <span class="module-badge badge-new">new — middleware</span>
+        </div>
+        <div class="arrow arrow-good">↓ used by</div>
+
+        <div class="module mod-server">
+          <span class="module-icon">🖥️</span>
+          <span class="module-name">index.js — Login Handler</span>
+          <span class="module-badge badge-fixed">uses JwtService.sign()</span>
+        </div>
+
+        <div class="callout callout-solution" style="margin-top:8px">
+          <span class="callout-icon">🟢</span>
+          <span>One file owns JWT. Everything else just calls it. Database layer has no auth knowledge.</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── FILE CHANGES ── -->
+  <div class="section-label">Files Being Changed</div>
+  <div class="card" style="padding:20px;">
+    <div class="file-list">
+
+      <div class="file-item">
+        <span class="file-action action-create">Create</span>
+        <div class="file-info">
+          <div class="file-path">server/auth/JwtService.js</div>
+          <div class="file-desc">New file. The only place in the entire codebase that imports <code>jsonwebtoken</code>. Exposes two functions: <code>sign(payload)</code> to create a token, and <code>verify(token)</code> to validate one.</div>
+        </div>
+      </div>
+
+      <div class="file-item">
+        <span class="file-action action-create">Create</span>
+        <div class="file-info">
+          <div class="file-path">server/auth/requireAuth.js</div>
+          <div class="file-desc">New file. Express middleware that checks if a request has a valid token. Replaces the inline version currently living in <code>index.js</code>. Only imports from <code>JwtService</code>.</div>
+        </div>
+      </div>
+
+      <div class="file-item">
+        <span class="file-action action-create">Create</span>
+        <div class="file-info">
+          <div class="file-path">server/auth/requireRole.js</div>
+          <div class="file-desc">New file. A factory that creates role-checking middleware — e.g. <code>requireRole('coach')</code> blocks non-coaches from sensitive endpoints.</div>
+        </div>
+      </div>
+
+      <div class="file-item">
+        <span class="file-action action-modify">Modify</span>
+        <div class="file-info">
+          <div class="file-path">server/index.js</div>
+          <div class="file-desc">Login handler swaps <code>jwt.sign()</code> → <code>JwtService.sign()</code>. The inline <code>requireAuth</code> function is replaced with an import from the new module. No logic changes — just wiring.</div>
+        </div>
+      </div>
+
+      <div class="file-item">
+        <span class="file-action action-delete">Delete</span>
+        <div class="file-info">
+          <div class="file-path">server/db/HandLoggerSupabase.js — authenticateToken()</div>
+          <div class="file-desc">The <code>authenticateToken</code> function is removed entirely from the database layer where it never belonged. The DB module stops importing <code>jsonwebtoken</code>.</div>
+        </div>
+      </div>
+
+      <div class="file-item">
+        <span class="file-action action-modify">Modify</span>
+        <div class="file-info">
+          <div class="file-path">server/db/__tests__/REST.api.test.js</div>
+          <div class="file-desc">Remove the <code>authenticateToken</code> stub from the HandLoggerSupabase mock — it no longer exists there. Done once here, never again.</div>
+        </div>
+      </div>
+
+      <div class="file-item">
+        <span class="file-action action-modify">Modify</span>
+        <div class="file-info">
+          <div class="file-path">server/game/__tests__/socket.integration.test.js</div>
+          <div class="file-desc">Same — remove <code>authenticateToken</code> stub. This was the only reason these integration tests had to know about JWT at all.</div>
+        </div>
+      </div>
+
+      <div class="file-item">
+        <span class="file-action action-test">Test</span>
+        <div class="file-info">
+          <div class="file-path">server/auth/__tests__/JwtService.test.js</div>
+          <div class="file-desc">New tests for the new module. Covers: valid tokens pass, expired tokens fail, tampered tokens fail, missing secret exits the process.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── STEP BY STEP ── -->
+  <div class="section-label">Step-by-Step Execution Order</div>
+  <div class="card" style="padding:24px 20px 8px;">
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Create <code>server/auth/</code> directory and <code>JwtService.js</code></div>
+          <div class="step-detail">Write <code>sign()</code> and <code>verify()</code> backed by the <code>SESSION_SECRET</code> env var. If the secret is missing, <code>verify()</code> throws — fail-fast behaviour is preserved.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Create <code>requireAuth.js</code> and <code>requireRole.js</code></div>
+          <div class="step-detail">Pure Express middleware files. <code>requireAuth</code> calls <code>JwtService.verify()</code> and puts the decoded payload on <code>req.user</code>. <code>requireRole('coach')</code> checks <code>req.user.role</code>.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Update <code>index.js</code> — swap login to use <code>JwtService.sign()</code></div>
+          <div class="step-detail">One-line change in the login handler. The <code>requireAuth</code> function at the top of <code>index.js</code> is replaced with <code>const requireAuth = require('./auth/requireAuth')</code>.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Delete <code>authenticateToken</code> from <code>HandLoggerSupabase.js</code></div>
+          <div class="step-detail">Remove the function body, the <code>jwt</code> import, and the export. The DB module is now pure data — no auth knowledge.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Clean up both test mocks</div>
+          <div class="step-detail">Remove <code>authenticateToken: jest.fn()</code> from <code>REST.api.test.js</code> and <code>socket.integration.test.js</code>. This is the last time we touch these mocks for auth reasons.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-body">
+          <div class="step-title">Write <code>JwtService.test.js</code> and run full suite</div>
+          <div class="step-detail">Confirm all 900+ existing tests still pass, plus the new auth unit tests.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── WHY IT MATTERS ── -->
+  <div class="section-label">Why This Unlocks Everything Else</div>
+  <div class="why-grid">
+    <div class="why-item">
+      <div class="icon">🔓</div>
+      <h4>Unblocks Phase 3</h4>
+      <p>Splitting the database layer (Plan 03) is blocked until <code>authenticateToken</code> moves out — otherwise the DB module carries auth baggage into the new repos.</p>
+    </div>
+    <div class="why-item">
+      <div class="icon">🧪</div>
+      <h4>Cleaner Tests</h4>
+      <p>Tests that mock the DB no longer need to also stub auth functions. Each mock is now smaller and easier to read.</p>
+    </div>
+    <div class="why-item">
+      <div class="icon">🛡️</div>
+      <h4>Easier to Audit</h4>
+      <p>When something goes wrong with tokens, you look in one place: <code>server/auth/</code>. Not across two unrelated modules.</p>
+    </div>
+    <div class="why-item">
+      <div class="icon">🔧</div>
+      <h4>Future-Proof</h4>
+      <p>Want to change token expiry, add refresh tokens, or switch JWT libraries? Change one file. Nothing else breaks.</p>
+    </div>
+  </div>
+
+  <hr>
+
+  <!-- ── RISK ── -->
+  <div class="card">
+    <h2>🧯 Risk Assessment</h2>
+    <p style="margin-bottom:16px;">This is a <strong style="color:#4ade80">low-risk refactor</strong>. No game logic changes. No database schema changes. No client changes. Just moving where auth code lives.</p>
+
+    <div class="risk-bar">
+      <span class="risk-label">Risk level</span>
+      <div class="risk-dots">
+        <div class="dot filled-green"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+      <span style="font-size:0.82rem; color:#4ade80;">Very Low</span>
+    </div>
+
+    <div class="risk-bar" style="margin-top:8px;">
+      <span class="risk-label">Test coverage</span>
+      <div class="risk-dots">
+        <div class="dot filled-green"></div>
+        <div class="dot filled-green"></div>
+        <div class="dot filled-green"></div>
+        <div class="dot filled-green"></div>
+        <div class="dot"></div>
+      </div>
+      <span style="font-size:0.82rem; color:#4ade80;">Strong — 900+ tests catch any regression</span>
+    </div>
+
+    <div class="callout callout-neutral" style="margin-top:16px;">
+      <span class="callout-icon">ℹ️</span>
+      <span>The login flow and token verification behave <strong style="color:#e2e8f0">identically</strong> after this change — we're only moving the code, not changing what it does. Players won't notice anything.</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

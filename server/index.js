@@ -67,7 +67,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const jwt = require('jsonwebtoken');
+const JwtService = require('./auth/JwtService');
 const SessionManager = require('./game/SessionManager');
 const HandLogger = require('./db/HandLoggerSupabase');
 const { getPosition } = require('./game/positions');
@@ -113,18 +113,7 @@ const io = new Server(httpServer, {
 
 // ─── Auth middleware ───────────────────────────────────────────────────────────
 
-function requireAuth(req, res, next) {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'auth_required', message: 'Login required' });
-  }
-  const payload = HandLogger.authenticateToken(auth.slice(7));
-  if (!payload) {
-    return res.status(401).json({ error: 'invalid_token', message: 'Session expired — please log in again' });
-  }
-  req.user = payload;
-  next();
-}
+const requireAuth = require('./auth/requireAuth');
 
 // ─── Rate limiter for auth endpoint ───────────────────────────────────────────
 
@@ -245,14 +234,16 @@ function startActionTimer(tableId, { resumeRemaining = false } = {}) {
     const activeBetting = ['preflop', 'flop', 'turn', 'river'];
     if (!activeBetting.includes(currentGm.state.phase)) return;
     if (currentGm.state.current_turn !== playerId) return; // turn moved on (e.g. action already taken)
-    // Auto-fold the timed-out player
-    const result = currentGm.placeBet(playerId, 'fold');
+    // Auto-check if nothing to call, otherwise auto-fold
+    const timerPlayer = currentGm.state.players.find(p => p.id === playerId);
+    const toCall = (currentGm.state.current_bet ?? 0) - (timerPlayer?.total_bet_this_round ?? 0);
+    const autoAction = toCall <= 0 ? 'check' : 'fold';
+    const result = currentGm.placeBet(playerId, autoAction);
     if (!result.error) {
-      const timedOutPlayer = currentGm.state.players.find(p => p.id === playerId)
-        || { name: player.name };
+      const timedOutPlayer = timerPlayer || { name: player.name };
       broadcastState(tableId, {
-        type: 'auto_fold',
-        message: `${timedOutPlayer.name || 'Player'} timed out — auto-folded`
+        type: autoAction === 'check' ? 'auto_check' : 'auto_fold',
+        message: `${timedOutPlayer.name || 'Player'} timed out — auto-${autoAction}ed`
       });
       startActionTimer(tableId);
     }
@@ -437,7 +428,7 @@ io.on('connection', socket => {
 
     // Spectators skip auth — they cannot act, just observe
     if (!payloadSpectator) {
-      const authResult = HandLogger.authenticateToken(token);
+      const authResult = JwtService.verify(token);
       if (!authResult) {
         return sendError(socket, 'Authentication required — please log in');
       }
@@ -455,6 +446,20 @@ io.on('connection', socket => {
       : socket.id;
     stableIdMap.set(socket.id, resolvedStableId);
     HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName).catch(err => log.error('db', 'upsert_identity_failed', '[HandLogger] upsertPlayerIdentity', { err, tableId, playerId: resolvedStableId }));
+
+    // Kick any other active socket already mapped to this stableId (duplicate tab / double login)
+    for (const [existingSocketId, existingStableId] of stableIdMap.entries()) {
+      if (existingSocketId !== socket.id && existingStableId === resolvedStableId) {
+        const oldSocket = io.sockets.sockets.get(existingSocketId);
+        if (oldSocket) {
+          oldSocket.emit('error', { message: 'Logged in from another window — disconnecting this session.' });
+          oldSocket.disconnect(true);
+        }
+        stableIdMap.delete(existingSocketId);
+        log.warn('socket', 'duplicate_login', `${trimmedName} joined from second window — old socket kicked`, { tableId, stableId: resolvedStableId });
+        break;
+      }
+    }
 
     // Check if a previous session for this player name is pending TTL (reconnect path)
     let isReconnect = false;
@@ -569,6 +574,10 @@ io.on('connection', socket => {
     if (!socket.data.isCoach) return sendError(socket, 'Only the coach can start the game');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
+
+    if (_activeNonCoachCount(gm) < 1) {
+      return sendError(socket, 'Need at least one player seated to start');
+    }
 
     const result = gm.startGame(mode);
     if (result.error) return sendError(socket, result.error);
@@ -1295,7 +1304,10 @@ io.on('connection', socket => {
       }
     } else {
       // Regular player disconnect: pause timer if it was their turn, mark as disconnected
-      if (gm.state.current_turn === socket.id) {
+      const disconnectingStableId = socket.data.stableId;
+      const isCurrentTurn = gm.state.current_turn === socket.id ||
+        (disconnectingStableId && stableIdMap.get(gm.state.current_turn) === disconnectingStableId);
+      if (isCurrentTurn) {
         clearActionTimer(tableId, { saving: true });
       }
       gm.setPlayerDisconnected(socket.id, true);
@@ -1555,11 +1567,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     return res.status(500).json({ error: 'db_error', message: 'Could not resolve player identity.' });
   }
 
-  const token = jwt.sign(
-    { stableId, name: entry.name, role: entry.role },
-    SESSION_SECRET,
-    { expiresIn: '7d' }
-  );
+  const token = JwtService.sign({ stableId, name: entry.name, role: entry.role });
 
   log.info('auth', 'login_ok', `${entry.name} logged in`, { name: entry.name, role: entry.role, playerId: stableId });
   res.json({ stableId, name: entry.name, role: entry.role, token });

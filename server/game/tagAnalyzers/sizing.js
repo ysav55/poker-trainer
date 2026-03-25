@@ -28,6 +28,7 @@ const SizingAnalyzer = {
   analyze({ actions }) {
     const results = [];
     for (const a of actions) {
+      if (a.street === 'preflop') continue;
       if (!['bet', 'raise'].includes(norm(a))) continue;
       if (a.sizingRatio === null || a.sizingRatio === undefined) continue;
       results.push({

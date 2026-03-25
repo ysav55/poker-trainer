@@ -53,20 +53,23 @@ jest.mock('../HandLoggerSupabase', () => {
     deletePlaylist:        jest.fn().mockResolvedValue(undefined),
     registerPlayerAccount: jest.fn().mockResolvedValue({ error: 'registration_disabled' }),
     loginPlayerAccount:    jest.fn().mockResolvedValue({ error: 'registration_disabled' }),
-    _computePositions:     jest.fn().mockReturnValue(new Map()),
     isRegisteredPlayer:    jest.fn().mockResolvedValue(true),
     loginRosterPlayer: jest.fn(async (name) => {
       const trimmed = name.trim();
       if (!_players.has(trimmed)) _players.set(trimmed, uuidv4());
       return { stableId: _players.get(trimmed), name: trimmed };
     }),
-    // Sync JWT verification — returns payload if token is non-empty and not 'invalid-token'
-    authenticateToken: jest.fn((token) => {
-      if (!token || token === 'invalid-token') return null;
-      return { stableId: 'test-stable-id', name: 'TestUser', role: 'student' };
-    }),
   };
 });
+
+// ── Mock JwtService (decoupled from HandLoggerSupabase) ───────────────────────
+jest.mock('../../auth/JwtService', () => ({
+  sign: jest.fn(() => 'mock-jwt-token'),
+  verify: jest.fn((token) => {
+    if (!token || token === 'invalid-token') return null;
+    return { stableId: 'test-stable-id', name: 'TestUser', role: 'student' };
+  }),
+}));
 
 // ── Mock PlayerRoster (used by POST /api/auth/login) ─────────────────────────
 jest.mock('../../auth/PlayerRoster', () => ({

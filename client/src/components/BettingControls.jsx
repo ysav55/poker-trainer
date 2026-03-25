@@ -98,9 +98,10 @@ export default function BettingControls({
   const isAllIn = raiseAmount >= raiseMax;
   const raiseValid = raiseAmount >= effectiveRaiseMin && raiseAmount <= raiseMax;
 
-  const halfPot = pot * 0.5;
-  const onePot = pot;
-  const twoPot = pot * 2;
+  const thirdPot = Math.round(pot / 3);
+  const halfPot  = Math.round(pot / 2);
+  const onePot   = pot;
+  const twoPot   = pot * 2;
 
   return (
     <div
@@ -149,6 +150,15 @@ export default function BettingControls({
           <div className="px-4 pt-3 pb-2 border-b border-white/5">
             {/* Quick raise buttons */}
             <div className="flex gap-1.5 mb-3">
+              {thirdPot >= effectiveRaiseMin && thirdPot <= raiseMax && (
+                <button
+                  className="flex-1 px-2 py-1 text-xs rounded border border-gold-600/40 text-gold-400 hover:border-gold-500 hover:bg-gold-500/10 transition-all duration-100"
+                  onClick={() => handleQuickRaise(thirdPot)}
+                >
+                  ⅓ Pot
+                  <span className="block text-[10px] text-gray-500">{fmt(thirdPot)}</span>
+                </button>
+              )}
               {halfPot >= effectiveRaiseMin && halfPot <= raiseMax && (
                 <button
                   className="flex-1 px-2 py-1 text-xs rounded border border-gold-600/40 text-gold-400 hover:border-gold-500 hover:bg-gold-500/10 transition-all duration-100"

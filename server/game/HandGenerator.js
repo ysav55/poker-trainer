@@ -43,6 +43,29 @@ const RANK_INDEX = Object.fromEntries(RANKS.map((r, i) => [r, i]));
 // ─────────────────────────────────────────────
 
 /**
+ * Best span of a 3-card flop, considering ace duality (high OR low).
+ * Span = sorted[2] - sorted[0].
+ * When an ace is present, also try ace as low (index -1, below '2') and
+ * return the smaller of the two spans.
+ *
+ * Examples:
+ *   789  → span 2 (connected)
+ *   Q23  → span 10 (disconnected — 2-3 adjacency is irrelevant)
+ *   A23  → min(12, 2) = 2 (connected — wheel draw A-2-3-4-5)
+ *   A52  → min(12, 4) = 4 (one-gap — wheel draw possible with 3-4)
+ *   AKQ  → span 2 (connected broadway)
+ */
+function flopBestSpan(flop) {
+  const ranks  = flop.map(c => c[0]);
+  const idxs   = ranks.map(r => RANK_INDEX[r]).sort((a, b) => a - b);
+  const normal = idxs[2] - idxs[0];
+  if (!ranks.includes('A')) return normal;
+  // Ace-low: treat A as -1 (below 2)
+  const low = idxs.map(i => i === 12 ? -1 : i).sort((a, b) => a - b);
+  return Math.min(normal, low[2] - low[0]);
+}
+
+/**
  * Check if a 3-card flop satisfies all requested texture constraints.
  * textures: string[] from the plan's supported set.
  */
@@ -52,7 +75,6 @@ function flopSatisfiesTexture(flop, textures) {
   const [c1, c2, c3] = flop;
   const suits = [c1[1], c2[1], c3[1]];
   const ranks = [c1[0], c2[0], c3[0]];
-  const rankIdxs = ranks.map(r => RANK_INDEX[r]).sort((a, b) => a - b);
 
   for (const t of textures) {
     switch (t) {
@@ -90,23 +112,21 @@ function flopSatisfiesTexture(flop, textures) {
         break;
       }
 
-      // ── Connectedness ─────────────────────────────────────────────────────
+      // ── Connectedness (span-based, ace counts high OR low) ───────────────
+      // span ≤ 2 → connected (e.g. 7-8-9, A-2-3 via ace-low)
+      // span 3-4 → one-gap   (e.g. 6-7-9, A-2-5 via ace-low)
+      // span > 4 → disconnected (e.g. Q-2-3 — pair adjacency is irrelevant)
       case 'connected': {
-        // at least 2 cards within 1 rank of each other
-        const diffs = [
-          rankIdxs[1] - rankIdxs[0],
-          rankIdxs[2] - rankIdxs[1],
-        ];
-        if (!diffs.some(d => d <= 1)) return false;
+        if (flopBestSpan(flop) > 2) return false;
+        break;
+      }
+      case 'one_gap': {
+        const span1 = flopBestSpan(flop);
+        if (span1 < 3 || span1 > 4) return false;
         break;
       }
       case 'disconnected': {
-        // no two cards within 1 rank
-        const diffs2 = [
-          rankIdxs[1] - rankIdxs[0],
-          rankIdxs[2] - rankIdxs[1],
-        ];
-        if (diffs2.some(d => d <= 1)) return false;
+        if (flopBestSpan(flop) <= 4) return false;
         break;
       }
 
@@ -116,13 +136,33 @@ function flopSatisfiesTexture(flop, textures) {
         if (!ranks.some(r => broadwayRanks.has(r))) return false;
         break;
       }
+      case 'mid': {
+        // all 3 cards 8-J (index 6-9), no T+ gap to broadway, no ace
+        if (!ranks.every(r => RANK_INDEX[r] >= 6 && RANK_INDEX[r] <= 9)) return false;
+        break;
+      }
       case 'low': {
-        // all 3 cards rank 9 or lower (index ≤ 7, which is '9' at index 7)
+        // all 3 cards 9 or lower (index ≤ 7)
         if (!ranks.every(r => RANK_INDEX[r] <= 7)) return false;
         break;
       }
       case 'ace_high': {
         if (!ranks.includes('A')) return false;
+        break;
+      }
+
+      // ── Composite ─────────────────────────────────────────────────────────
+      case 'wet': {
+        // flush draw (2+ same suit) AND connected/one-gap (span ≤ 4)
+        const sc = suits.reduce((m, s) => { m[s] = (m[s] || 0) + 1; return m; }, {});
+        if (Math.max(...Object.values(sc)) < 2) return false;
+        if (flopBestSpan(flop) > 4) return false;
+        break;
+      }
+      case 'dry': {
+        // rainbow AND disconnected (span > 4)
+        if (new Set(suits).size !== 3) return false;
+        if (flopBestSpan(flop) <= 4) return false;
         break;
       }
 
@@ -141,36 +181,43 @@ function flopSatisfiesTexture(flop, textures) {
 function validateBoardTexture(textures) {
   if (!textures || textures.length === 0) return { valid: true };
 
-  const suitGroup = ['rainbow', 'flush_draw', 'monotone'];
-  const pairGroup = ['unpaired', 'paired', 'trips'];
-  const connGroup = ['connected', 'disconnected'];
-  const highGroup = ['broadway', 'low', 'ace_high'];
+  const suitGroup      = ['rainbow', 'flush_draw', 'monotone'];
+  const pairGroup      = ['unpaired', 'paired', 'trips'];
+  const connGroup      = ['connected', 'one_gap', 'disconnected'];
+  const highGroup      = ['broadway', 'mid', 'low', 'ace_high'];
+  const compositeGroup = ['wet', 'dry'];
 
   // At most one from each group (mutually exclusive within group)
-  for (const group of [suitGroup, pairGroup, connGroup]) {
+  for (const group of [suitGroup, pairGroup, connGroup, highGroup, compositeGroup]) {
     const active = textures.filter(t => group.includes(t));
     if (active.length > 1) {
       return { valid: false, error: `Incompatible board textures: ${active.join(' + ')}` };
     }
   }
 
-  // broadway and low are mutually exclusive (broadway requires T+; low requires ≤9)
+  // Composite conflicts
+  if (textures.includes('wet') && textures.includes('rainbow'))
+    return { valid: false, error: 'wet requires a flush draw — incompatible with rainbow' };
+  if (textures.includes('wet') && textures.includes('disconnected'))
+    return { valid: false, error: 'wet requires a connected/one-gap board — incompatible with disconnected' };
+  if (textures.includes('dry') && (textures.includes('flush_draw') || textures.includes('monotone')))
+    return { valid: false, error: 'dry requires rainbow — incompatible with flush_draw/monotone' };
+  if (textures.includes('dry') && (textures.includes('connected') || textures.includes('one_gap')))
+    return { valid: false, error: 'dry requires disconnected — incompatible with connected/one_gap' };
+
+  // Height conflicts
   if (textures.includes('broadway') && textures.includes('low'))
-    return { valid: false, error: 'broadway and low are incompatible (broadway requires T+ card; low requires all cards ≤9)' };
-  // ace_high and low are mutually exclusive (ace is broadway)
+    return { valid: false, error: 'broadway and low are incompatible' };
   if (textures.includes('ace_high') && textures.includes('low'))
     return { valid: false, error: 'ace_high and low are incompatible' };
-  // trips + unpaired, trips + paired are both covered by pairGroup mutual exclusion
+  if (textures.includes('ace_high') && textures.includes('mid'))
+    return { valid: false, error: 'ace_high and mid are incompatible' };
 
   return { valid: true };
 }
 
-// ─────────────────────────────────────────────
-//  generateHand
-// ─────────────────────────────────────────────
-
 /**
- * generateHand
+ * generateHand — Fill-the-Gaps algorithm.
  *
  * @param {Object|null} config   - HandConfiguration (see schema above).
  *                                 If null/undefined, treats every slot as null (full RNG).
@@ -178,190 +225,6 @@ function validateBoardTexture(textures) {
  * @param {Array} [_deck]        - Ignored; accepted for API compatibility.
  * @returns {{ hand: { playerCards, board, deck } } | { error: string }}
  */
-function generateHand(config, players, _deck) {
-  // Normalise players: accept string IDs or player objects
-  const normPlayers = (players || []).map(p =>
-    typeof p === 'string' ? { id: p } : p
-  );
-
-  // Normalise config: accept both snake_case (hole_cards) and camelCase (holeCards)
-  const normConfig = config ? {
-    ...config,
-    holeCards:        config.holeCards || config.hole_cards || {},
-    holeCardsRange:   config.holeCardsRange || config.hole_cards_range || {},
-    boardTexture:     config.boardTexture || config.board_texture || [],
-  } : null;
-
-  // ── Validate board_texture before doing any work ──────────────────────────
-  if (normConfig?.boardTexture?.length > 0) {
-    const tvResult = validateBoardTexture(normConfig.boardTexture);
-    if (!tvResult.valid) return { error: tvResult.error };
-  }
-
-  // ── Step 0: Resolve player ranges into specific hole cards ────────────────
-  //    Range entries are expanded before the Fill-the-Gaps algorithm runs.
-  //    Specific hole_cards take precedence over hole_cards_range for a player.
-  if (normConfig?.holeCardsRange) {
-    // Validate all ranges first
-    for (const [playerId, rangeStr] of Object.entries(normConfig.holeCardsRange)) {
-      if (!rangeStr) continue;
-      const vr = validateRange(rangeStr);
-      if (!vr.valid) {
-        return { error: `Invalid range for player ${playerId}: ${vr.error}` };
-      }
-    }
-
-    // Build used-cards set from explicitly pinned hole cards + board
-    const earlyUsed = new Set();
-    for (const player of normPlayers) {
-      const configKey = player.stableId || player.id;
-      const slots = normConfig.holeCards[configKey] ?? normConfig.holeCards[player.id];
-      if (Array.isArray(slots)) slots.forEach(c => { if (c) earlyUsed.add(c); });
-    }
-    if (Array.isArray(normConfig.board)) {
-      normConfig.board.forEach(c => { if (c) earlyUsed.add(c); });
-    }
-
-    // Resolve ranges player-by-player, adding picked cards to usedSet
-    for (const player of normPlayers) {
-      const configKey = player.stableId || player.id;
-      // Skip if player already has specific cards pinned
-      const existingSlots = normConfig.holeCards[configKey] ?? normConfig.holeCards[player.id];
-      const hasPinned = Array.isArray(existingSlots) &&
-        existingSlots.some(c => c !== null && c !== undefined);
-      if (hasPinned) continue;
-
-      const rangeStr = normConfig.holeCardsRange[configKey] ?? normConfig.holeCardsRange[player.id];
-      if (!rangeStr) continue;
-
-      const picked = pickFromRange(rangeStr, earlyUsed);
-      if (!picked) {
-        return { error: `Could not find a valid combo from range "${rangeStr}" — all combos conflict with other assigned cards.` };
-      }
-
-      // Store as specific hole cards so the normal Fill-the-Gaps uses them
-      normConfig.holeCards[configKey] = picked;
-      picked.forEach(c => earlyUsed.add(c));
-    }
-  }
-
-  // ── Step 1: Normalise slots ────────────────────────────────────────────────
-  const normalised = _normaliseConfig(normConfig, normPlayers);
-
-  // ── Step 2: Collect all explicitly specified (non-null) cards ─────────────
-  const specifiedCards = _collectSpecifiedCards(normalised, normPlayers);
-
-  // ── Step 3: Validate each specified card ──────────────────────────────────
-  for (const card of specifiedCards) {
-    if (!isValidCard(card)) {
-      return {
-        error:
-          `"${card}" is not a valid card. ` +
-          `Cards must be a rank (2-9, T, J, Q, K, A) followed by a suit (h, d, c, s).`
-      };
-    }
-  }
-
-  // ── Step 4: Check for duplicates among specified cards ────────────────────
-  const seen = new Set();
-  for (const card of specifiedCards) {
-    if (seen.has(card)) {
-      return {
-        error:
-          `Card "${card}" appears more than once in the hand configuration. ` +
-          `Each card can only be assigned to one slot.`
-      };
-    }
-    seen.add(card);
-  }
-
-  // ── Step 5: Build a shuffled deck excluding the specified cards ───────────
-  const fullDeck = createDeck(); // 52 cards, deterministic order
-  const remainingDeck = shuffleDeck(
-    fullDeck.filter(card => !seen.has(card))
-  );
-
-  // ── Step 6: Assign hole cards (null slots → draw) ─────────────────────────
-  const playerCards = {};
-  for (const player of normPlayers) {
-    const configKey = player.stableId || player.id;
-    const slots = normalised.holeCards[configKey] ?? normalised.holeCards[player.id] ?? [null, null];
-    playerCards[configKey] = [
-      slots[0] !== null ? slots[0] : remainingDeck[_nextDraw()],
-      slots[1] !== null ? slots[1] : remainingDeck[_nextDraw()],
-    ];
-  }
-
-  // ── Step 7: Assign board cards with optional texture constraint ───────────
-  //    If board_texture is requested, attempt up to 100 times to satisfy it.
-  const textures = normConfig?.boardTexture ?? [];
-  const pinnedBoard = normalised.board; // may have nulls for flop slots
-
-  // Count how many flop slots are pinned
-  const flopPinned = [pinnedBoard[0], pinnedBoard[1], pinnedBoard[2]].filter(c => c !== null);
-  const needTexture = textures.length > 0 && flopPinned.length < 3; // can only shuffle non-pinned slots
-
-  let board;
-  let drawIdx = _drawCount; // track where we are in remainingDeck
-
-  if (needTexture) {
-    // Save deck state before board draw so we can retry
-    const deckForBoard = remainingDeck.slice(drawIdx);
-    let found = false;
-
-    for (let attempt = 0; attempt < 100; attempt++) {
-      const shuffled = shuffleDeck(deckForBoard);
-      let si = 0;
-
-      const candidate = pinnedBoard.map(slot => slot !== null ? slot : shuffled[si++]);
-
-      // Extract flop (first 3 cards)
-      const flop = [candidate[0], candidate[1], candidate[2]];
-      if (flop.some(c => c === undefined)) continue; // deck too small? shouldn't happen
-
-      if (flopSatisfiesTexture(flop, textures)) {
-        board = candidate;
-        // Advance draw index by however many cards we actually drew from deckForBoard
-        _drawCount += si;
-        found = true;
-        break;
-      }
-    }
-
-    if (!found) {
-      return { error: `Cannot satisfy board texture constraints [${textures.join(', ')}] with the remaining deck after ${flopPinned.length} pinned flop card(s).` };
-    }
-  } else {
-    board = pinnedBoard.map(slot => slot !== null ? slot : remainingDeck[_nextDraw()]);
-  }
-
-  // Guard: deck exhaustion (should not happen with a valid 52-card scenario)
-  const allDealt = Object.values(playerCards).flat().concat(board);
-  if (allDealt.includes(null) || allDealt.includes(undefined)) {
-    return { error: 'Ran out of cards — check that specified cards are correct.' };
-  }
-
-  // ── Step 8: Return result ─────────────────────────────────────────────────
-  const deck = remainingDeck.slice(_drawCount); // cards not drawn
-
-  // Return flat properties for backward compatibility with existing callers
-  // AND a nested `hand` property for the qa_checklist / new-style API.
-  return { playerCards, board, deck, hand: { playerCards, board, deck } };
-}
-
-// ─── Draw index (module-scoped per call; reset at start of each generateHand invocation) ───
-
-// We use a closure approach: rewrite generateHand to use a local counter
-// (the _nextDraw / _drawCount above are placeholders — see corrected impl below)
-
-// ─── Corrected implementation (replaces the placeholder above) ───────────────
-
-// Actually, let's refactor generateHand to use a proper local draw counter
-// instead of module-level state. The version above had _nextDraw references.
-// Below is the clean version:
-
-// (The export below points to a corrected closure-based version.)
-
 function generateHandClean(config, players, _deck) {
   const normPlayers = (players || []).map(p =>
     typeof p === 'string' ? { id: p } : p
