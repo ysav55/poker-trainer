@@ -1,7 +1,8 @@
 # Refactor Plan 00 — Master Integration Plan
 
 > Status: ACTIVE — this document governs execution order and tracks progress
-> Last updated: 2026-03-24
+> Last updated: 2026-03-25
+> Phases 0–3 DONE. Next: Phase 4.
 > How to use: Update checkboxes as work lands. The *how* lives in Plans 01–06. This plan records *why*, *what*, and *when*.
 
 ---
@@ -116,7 +117,7 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 
 ## 5. The Journey
 
-### Phase 0 — Dead Code Purge
+### Phase 0 — Dead Code Purge ✅ DONE (commit 42f6a85)
 **What:** Remove code that is already wrong, already duplicated, or already abandoned. No behavior change. No tests to update.
 **Why first:** Dead code gets accidentally preserved when files are split. Removing it first means every subsequent extraction starts from a clean state.
 
@@ -127,7 +128,7 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 
 ---
 
-### Phase 1 — Auth Layer Consolidation
+### Phase 1 — Auth Layer Consolidation ✅ DONE
 **What:** Create the canonical JWT module (`JwtService.js`), extract `requireAuth.js` into `server/auth/`, delete `authenticateToken` from `HandLoggerSupabase.js`, and update the two test files once.
 **Why now:** This is the root coupling that makes Plans 01, 03, and 04 all need to update the same test mocks. Resolving it first means every subsequent plan works with clean test fixtures. It also resolves the naming conflict between Plans 01 and 04 on `requireAuth` location.
 
@@ -143,7 +144,7 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 
 ---
 
-### Phase 2 — Coach Guard Consolidation
+### Phase 2 — Coach Guard Consolidation ✅ DONE (commit 391ed60)
 **What:** Replace the 30 repeated `if (!socket.data.isCoach)` blocks in `server/index.js` with a single `requireCoach()` helper. Zero behavior change.
 **Why now:** The 30 guards are all in one file. Plan 01 will scatter them across 10+ handler files. Consolidating while they are co-located is a mechanical single-file find-and-replace. After extraction, it becomes a multi-file refactor.
 
@@ -153,7 +154,7 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 
 ---
 
-### Phase 3 — Persistence Layer Split + Pipeline Restructure
+### Phase 3 — Persistence Layer Split + Pipeline Restructure ✅ DONE (commit e71b4ad)
 **What:** Split `HandLoggerSupabase.js` into focused repositories AND restructure `buildAnalyzerContext` / `analyzeAndTagHand` into `AnalyzerService.js` — done together as a single logical step.
 **Why together:** Plan 03 Phase 2 moves the analyzer functions. Plan 06 restructures them internally. Doing both together means the functions are moved and improved in one cut, not moved-then-improved (which would require a second read of the new location). The strangler-fig facade (`HandLoggerSupabase.js` becomes a thin re-export shim) ensures zero caller breakage during the transition.
 
@@ -289,58 +290,58 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 
 > Mark `[x]` when landed in a commit. Add commit SHA in the trailing comment if useful.
 
-### Phase 0 — Dead Code Purge
-- [ ] Remove dead `normalizeAction` copy from `HandLoggerSupabase.js` (Plan 06 §5)
-- [ ] Remove dead `_findBBPlayerId` copy from `HandLoggerSupabase.js` (Plan 06 §3)
-- [ ] Remove dead `_computePositions` helper from `HandLoggerSupabase.js` (Plan 03 §1)
-- [ ] Remove abandoned first-draft function from `HandGenerator.js` lines 181–363 (Plan 06 §7)
+### Phase 0 — Dead Code Purge ✅ DONE (commit 42f6a85)
+- [x] Remove dead `normalizeAction` copy from `HandLoggerSupabase.js` (Plan 06 §5)
+- [x] Remove dead `_findBBPlayerId` copy from `HandLoggerSupabase.js` (Plan 06 §3)
+- [x] Remove dead `_computePositions` helper from `HandLoggerSupabase.js` (Plan 03 §1)
+- [x] Remove abandoned first-draft function from `HandGenerator.js` lines 181–363 (Plan 06 §7)
 
-### Phase 1 — Auth Layer Consolidation
-- [ ] Create `server/auth/JwtService.js` — `sign()`, `verify()`, `JWT_EXPIRY`, `JWT_ALGORITHM` (Plan 04 §2.1)
-- [ ] Create `server/auth/requireAuth.js` — Express middleware, imports only `JwtService` (Plan 04 §2.2)
-- [ ] Create `server/auth/requireRole.js` — RBAC middleware factory (Plan 04 §2.3)
-- [ ] Update login handler in `server/index.js` — replace `jwt.sign()` with `JwtService.sign()` (Plan 04 §3)
-- [ ] Update `requireAuth` in `server/index.js` — import from `server/auth/requireAuth.js` (Plan 04 §3)
-- [ ] Remove `const jwt = require('jsonwebtoken')` from `server/index.js` (Plan 04 §3)
-- [ ] Delete `authenticateToken` function and its export from `HandLoggerSupabase.js` (Plan 04 §3)
-- [ ] Remove `authenticateToken` stub from `REST.api.test.js` `HandLoggerSupabase` mock (Plans 03/04/06 — once)
-- [ ] Remove `authenticateToken` stub from `socket.integration.test.js` mock (Plans 03/04/06 — once)
-- [ ] All tests pass after Phase 1
+### Phase 1 — Auth Layer Consolidation ✅ DONE
+- [x] Create `server/auth/JwtService.js` — `sign()`, `verify()`, `JWT_EXPIRY`, `JWT_ALGORITHM` (Plan 04 §2.1)
+- [x] Create `server/auth/requireAuth.js` — Express middleware, imports only `JwtService` (Plan 04 §2.2)
+- [x] Create `server/auth/socketGuards.js` — `requireCoach()` helper (Plan 04 §5)
+- [x] Update login handler in `server/index.js` — replace `jwt.sign()` with `JwtService.sign()` (Plan 04 §3)
+- [x] Update `requireAuth` in `server/index.js` — import from `server/auth/requireAuth.js` (Plan 04 §3)
+- [x] Remove `const jwt = require('jsonwebtoken')` from `server/index.js` (Plan 04 §3)
+- [x] Delete `authenticateToken` function and its export from `HandLoggerSupabase.js` (Plan 04 §3)
+- [x] Remove `authenticateToken` stub from `REST.api.test.js` `HandLoggerSupabase` mock (Plans 03/04/06 — once)
+- [x] Remove `authenticateToken` stub from `socket.integration.test.js` mock (Plans 03/04/06 — once)
+- [x] All tests pass after Phase 1
 
-### Phase 2 — Coach Guard Consolidation
-- [ ] Create `server/auth/socketGuards.js` with `requireCoach(socket, action)` (Plan 04 §5)
-- [ ] Replace all 30 `if (!socket.data.isCoach)` guards in `server/index.js` with `requireCoach()` (Plan 04 §5)
-- [ ] All tests pass after Phase 2
+### Phase 2 — Coach Guard Consolidation ✅ DONE (commit 391ed60)
+- [x] Create `server/auth/socketGuards.js` with `requireCoach(socket, action)` (Plan 04 §5)
+- [x] Replace all 30 `if (!socket.data.isCoach)` guards in `server/index.js` with `requireCoach()` (Plan 04 §5)
+- [x] All tests pass after Phase 2
 
-### Phase 3a — Repository Extraction
-- [ ] Create `server/db/repositories/HandRepository.js` (Plan 03 §2)
-- [ ] Create `server/db/repositories/PlayerRepository.js` (Plan 03 §2)
-- [ ] Create `server/db/repositories/PlaylistRepository.js` (Plan 03 §2)
-- [ ] Create `server/db/repositories/TagRepository.js` (Plan 03 §2)
-- [ ] Create `server/db/repositories/SessionRepository.js` (Plan 03 §2)
-- [ ] Create `server/db/index.js` re-exporting all symbols as flat list (Plan 03 §10 Phase 0)
-- [ ] Make `HandLoggerSupabase.js` a thin shim: `module.exports = require('./index')` (Plan 03 §10 Phase 0)
-- [ ] Wrap `q()` to convert Supabase errors into real `Error` instances; add `DbError` class (Plan 03 §4)
-- [ ] All tests pass after Phase 3a
+### Phase 3a — Repository Extraction ✅ DONE (commit e71b4ad)
+- [x] Create `server/db/repositories/HandRepository.js` (Plan 03 §2)
+- [x] Create `server/db/repositories/PlayerRepository.js` (Plan 03 §2)
+- [x] Create `server/db/repositories/PlaylistRepository.js` (Plan 03 §2)
+- [x] Create `server/db/repositories/TagRepository.js` (Plan 03 §2)
+- [x] Create `server/db/repositories/SessionRepository.js` (Plan 03 §2)
+- [x] Create `server/db/index.js` re-exporting all symbols as flat list (Plan 03 §10 Phase 0)
+- [x] Make `HandLoggerSupabase.js` a thin shim: `module.exports = require('./index')` (Plan 03 §10 Phase 0)
+- [x] Wrap `q()` to convert Supabase errors into real `Error` instances; add `DbError` class (Plan 03 §4)
+- [x] All tests pass after Phase 3a
 
-### Phase 3b — AnalyzerService Extraction + Pipeline Restructure
-- [ ] Create `server/game/AnalyzerService.js` — move `buildAnalyzerContext` and `analyzeAndTagHand` (Plan 03 Phase 2)
-- [ ] Parallelize the 3 DB queries in `buildAnalyzerContext` with `Promise.all` (Plan 06 §3)
-- [ ] Replace `for...of` loop in `analyzeAndTagHand` with `Promise.allSettled` (Plan 06 §2)
-- [ ] Add `evaluateAt` memoization in `buildAnalyzerContext` (Plan 06 §3)
-- [ ] Add `TagResult` shape validation before the DB insert step (Plan 06 §4)
-- [ ] Wrap `buildAnalyzerContext` in try/catch inside `analyzeAndTagHand` (Plan 06 §10)
-- [ ] Extract `findLastPFRaiser` to `util.js`; update `postflop.js` and `positional.js` (Plan 06 §5)
-- [ ] Extract `findLastAggressorIndex` to `util.js`; update `postflop.js` and `handStrength.js` (Plan 06 §5)
-- [ ] Extract `findNthRaiser` to `util.js`; update `positional.js` and `mistakes.js` (Plan 06 §5)
-- [ ] Add `isAggressive` helper to `util.js` (Plan 06 §5)
-- [ ] Fix `handStrength.js` tier constants to use `HAND_RANKS` from `HandEvaluator.js` (Plan 06 §6)
-- [ ] Add JSDoc `@typedef TagResult` and `@typedef Analyzer` to `tagAnalyzers/index.js` (Plan 06 §4)
-- [ ] Update `server/index.js` call site to import `AnalyzerService` directly (Plan 03 Phase 2)
-- [ ] All tests pass after Phase 3b
+### Phase 3b — AnalyzerService Extraction + Pipeline Restructure ✅ DONE (commit e71b4ad)
+- [x] Create `server/game/AnalyzerService.js` — move `buildAnalyzerContext` and `analyzeAndTagHand` (Plan 03 Phase 2)
+- [x] Parallelize the 3 DB queries in `buildAnalyzerContext` with `Promise.all` (Plan 06 §3)
+- [x] Replace `for...of` loop in `analyzeAndTagHand` with `Promise.allSettled` (Plan 06 §2)
+- [x] Add `evaluateAt` memoization in `buildAnalyzerContext` (Plan 06 §3)
+- [x] Add `TagResult` shape validation before the DB insert step (Plan 06 §4)
+- [x] Wrap `buildAnalyzerContext` in try/catch inside `analyzeAndTagHand` (Plan 06 §10)
+- [x] Extract `findLastPFRaiser` to `util.js`; update `postflop.js` and `positional.js` (Plan 06 §5)
+- [x] Extract `findLastAggressorIndex` to `util.js`; update `postflop.js` and `handStrength.js` (Plan 06 §5)
+- [x] Extract `findNthRaiser` to `util.js`; update `positional.js` and `mistakes.js` (Plan 06 §5)
+- [x] Add `isAggressive` helper to `util.js` (Plan 06 §5)
+- [x] Fix `handStrength.js` tier constants to use `HAND_RANKS` from `HandEvaluator.js` (Plan 06 §6)
+- [x] Add JSDoc `@typedef TagResult` and `@typedef Analyzer` to `tagAnalyzers/index.js` (Plan 06 §4)
+- [x] Update `server/index.js` call site to import `AnalyzerService` directly (Plan 03 Phase 2)
+- [x] All tests pass after Phase 3b
 
-### Phase 3c — `startHand` Failure Guard
-- [ ] `activeHands.set()` does not run when `startHand` rejects — error logged, coach notified (Plan 03 §4)
+### Phase 3c — `startHand` Failure Guard ✅ DONE (commit e71b4ad)
+- [x] `activeHands.set()` does not run when `startHand` rejects — error logged, coach notified (Plan 03 §4)
 
 ### Phase 4a — Socket Auth Middleware
 - [ ] Create `server/auth/socketAuthMiddleware.js` (Plan 04 §4)
