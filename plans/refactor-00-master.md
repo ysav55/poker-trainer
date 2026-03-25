@@ -2,7 +2,7 @@
 
 > Status: ACTIVE — this document governs execution order and tracks progress
 > Last updated: 2026-03-25
-> Phases 0–7 DONE. Next: Phase 8.
+> Phases 0–8 DONE. Next: Phase 9.
 > How to use: Update checkboxes as work lands. The *how* lives in Plans 01–06. This plan records *why*, *what*, and *when*.
 
 ---
@@ -406,19 +406,20 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 - [x] Write `ANALYZER_AUTHORING.md` contribution guide (Plan 06 §9)
 - [x] All 1245 server tests pass after Phase 7
 
-### Phase 8 — Client Architecture
-- [ ] Create `useConnectionManager.js` hook (Plan 05 §2)
-- [ ] Create `useGameState.js` hook (Plan 05 §2)
-- [ ] Create `useReplay.js` hook (Plan 05 §2)
-- [ ] Create `usePlaylistManager.js` hook — verify uses `apiFetch` (Plan 05 §2 + Plan 04/05 coordination)
-- [ ] Create `useCoachActions.js` hook (Plan 05 §2)
-- [ ] Make `useSocket.js` a thin composition layer over the 5 hooks (Plan 05 §2)
-- [ ] Extract `JoinScreen` from `App.jsx` (Plan 05)
-- [ ] Extract `TopBar`, `TagHandPill`, `ErrorToast`, `NotificationToast` from `App.jsx` (Plan 05)
-- [ ] Replace `emit` bundle object with stable callbacks (Plan 05 §1)
-- [ ] Split `CoachSidebar.jsx` into `GameControls`, `BlindControls`, `PlayerList`, `PlaylistPanel`, `HandLibrary`, `HistoryPanel`, `SessionStats` (Plan 05)
-- [ ] Eliminate duplicate `/api/hands` fetches — single shared data source (Plan 05 §1)
-- [ ] Manual regression test: full game flow (join → play → end hand → replay) (Plan 05)
+### Phase 8 — Client Architecture ✅ DONE (commits 78354ab–d2f4542)
+- [x] Create `useConnectionManager.js` hook (Plan 05 §2)
+- [x] Create `useGameState.js` hook (Plan 05 §2)
+- [x] Create `useReplay.js` hook (Plan 05 §2)
+- [x] Create `usePlaylistManager.js` hook — playlist calls go through socket events, not REST; apiFetch not used (Plan 05 §2 + Plan 04/05 coordination)
+- [x] Create `useNotifications.js` hook — errors/notifications with TTL timers (Plan 05 §2)
+- [x] Create `usePreferences.js` hook — bbView localStorage, zero socket dependency (Plan 05 §2)
+- [x] Make `useSocket.js` a thin 110-line composition layer over the 6 hooks (Plan 05 §2)
+- [x] Extract `JoinScreen`, `TopBar`, `TagHandPill`, `ErrorToast`, `NotificationToast`, `ConnectionDot` from `App.jsx` (Plan 05)
+- [x] Stabilize `emit` bundle with `useMemo` — stable reference across renders (Plan 05 §1)
+- [x] Split `CoachSidebar.jsx` into `GameControlsSection`, `BlindLevelsSection`, `UndoControlsSection`, `AdjustStacksSection`, `PlayersSection`, `PlaylistsSection`, `HandLibrarySection`, `HistorySection` (Plan 05)
+- [x] Extract `CollapsibleSection` as shared component
+- [x] Eliminate duplicate `/api/hands` fetch in CoachSidebar — `useHistory()` called once, shared (Plan 05 §1)
+- [ ] Manual regression test: full game flow (join → play → end hand → replay) (Plan 05) — pending deploy
 
 ### Phase 9 — DB Optimizations
 - [ ] Replace `removeHandFromPlaylist` compaction loop with PostgreSQL RPC `compact_playlist_order` — migration 008 (Plan 03 §3)
