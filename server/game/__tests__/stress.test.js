@@ -182,6 +182,11 @@ describe('Stress test — 1000 random hands', () => {
 
       // After reset, phase is waiting
       expect(sm.state.phase).toBe('waiting');
+
+      // Top up any player who ran out of chips so subsequent hands can start
+      for (const p of sm.gm._gamePlayers()) {
+        if (p.stack === 0) sm.adjustStack(p.id, 1000);
+      }
     }
 
     // After all hands, handsDealt must equal HAND_COUNT

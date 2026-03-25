@@ -15,7 +15,7 @@
  *   GET  /api/players/:stableId/stats     (requires auth, 404 path)
  *   GET  /api/players/:stableId/hands     (requires auth)
  *   GET  /api/players/:stableId/hover-stats (no auth required)
- *   GET  /api/sessions/current            (no auth required)
+ *   GET  /api/sessions/current            (requires auth)
  *   GET  /api/sessions/:sessionId/stats   (requires auth)
  *   GET  /api/sessions/:sessionId/report  (requires auth, 404 path)
  *   POST /api/auth/register               (disabled → 410)
@@ -287,8 +287,13 @@ describe('GET /api/players/:stableId/hover-stats', () => {
 // ─────────────────────────────────────────────
 
 describe('GET /api/sessions/current', () => {
-  it('returns 200 with players array when no game is running', async () => {
+  it('returns 401 without auth header', async () => {
     const res = await request(app).get('/api/sessions/current');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 200 with players array when no game is running', async () => {
+    const res = await request(app).get('/api/sessions/current').set('Authorization', AUTH_HEADER);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.players)).toBe(true);
   });

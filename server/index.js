@@ -68,7 +68,8 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const JwtService = require('./auth/JwtService');
-const { requireCoach } = require('./auth/socketGuards');
+const { requireCoach }       = require('./auth/socketGuards');
+const socketAuthMiddleware   = require('./auth/socketAuthMiddleware');
 const AnalyzerService = require('./game/AnalyzerService');
 const SessionManager = require('./game/SessionManager');
 const HandLogger = require('./db/HandLoggerSupabase');
@@ -116,6 +117,9 @@ const io = new Server(httpServer, {
 // ─── Auth middleware ───────────────────────────────────────────────────────────
 
 const requireAuth = require('./auth/requireAuth');
+
+// Socket.IO connection-level auth — populates socket.data.{authenticated,stableId,role,isCoach,jwtName}
+io.use(socketAuthMiddleware);
 
 // ─── Rate limiter for auth endpoint ───────────────────────────────────────────
 
@@ -421,7 +425,7 @@ io.on('connection', socket => {
   console.log(`[connect] ${socket.id}`);
 
   // ── join_room ─────────────────────────────
-  socket.on('join_room', async ({ name, isCoach = false, isSpectator: payloadSpectator = false, tableId = 'main-table', stableId, token = '' } = {}) => {
+  socket.on('join_room', async ({ name, isSpectator: payloadSpectator = false, tableId = 'main-table' } = {}) => {
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return sendError(socket, 'Name is required');
     }
@@ -430,14 +434,14 @@ io.on('connection', socket => {
 
     // Spectators skip auth — they cannot act, just observe
     if (!payloadSpectator) {
-      const authResult = JwtService.verify(token);
-      if (!authResult) {
+      if (!socket.data.authenticated) {
         return sendError(socket, 'Authentication required — please log in');
       }
-      // Use server-verified identity (ignore client-supplied flags)
-      isCoach = authResult.role === 'coach';
-      stableId = authResult.stableId;
     }
+
+    // Use server-verified identity from socketAuthMiddleware (ignore client-supplied flags)
+    let isCoach  = socket.data.isCoach  || false;
+    let stableId = socket.data.stableId || '';
 
     const gm = getOrCreateTable(tableId);
 
@@ -1457,7 +1461,7 @@ app.get('/api/sessions/:sessionId/report', requireAuth, async (req, res) => {
 });
 
 // GET /api/sessions/current — returns stats for the current in-memory session of main-table
-app.get('/api/sessions/current', (req, res) => {
+app.get('/api/sessions/current', requireAuth, (req, res) => {
   try {
     const gm = tables.get('main-table');
     if (!gm) return res.json({ players: [] });
@@ -1473,7 +1477,7 @@ app.get('/api/sessions/current', (req, res) => {
 // ─────────────────────────────────────────────
 
 // GET /api/playlists?tableId=main-table
-app.get('/api/playlists', async (req, res) => {
+app.get('/api/playlists', requireAuth, async (req, res) => {
   try {
     const playlists = await HandLogger.getPlaylists({ tableId: req.query.tableId || null });
     res.json({ playlists });
@@ -1483,7 +1487,7 @@ app.get('/api/playlists', async (req, res) => {
 });
 
 // POST /api/playlists — body: { name, description?, tableId? }
-app.post('/api/playlists', async (req, res) => {
+app.post('/api/playlists', requireAuth, async (req, res) => {
   try {
     const { name, description = '', tableId = null } = req.body || {};
     if (!name) return res.status(400).json({ error: 'name is required' });
@@ -1495,7 +1499,7 @@ app.post('/api/playlists', async (req, res) => {
 });
 
 // GET /api/playlists/:playlistId/hands
-app.get('/api/playlists/:playlistId/hands', async (req, res) => {
+app.get('/api/playlists/:playlistId/hands', requireAuth, async (req, res) => {
   try {
     const hands = await HandLogger.getPlaylistHands(req.params.playlistId);
     res.json({ hands });
@@ -1505,7 +1509,7 @@ app.get('/api/playlists/:playlistId/hands', async (req, res) => {
 });
 
 // POST /api/playlists/:playlistId/hands — body: { handId }
-app.post('/api/playlists/:playlistId/hands', async (req, res) => {
+app.post('/api/playlists/:playlistId/hands', requireAuth, async (req, res) => {
   try {
     const { handId } = req.body || {};
     if (!handId) return res.status(400).json({ error: 'handId is required' });
@@ -1517,7 +1521,7 @@ app.post('/api/playlists/:playlistId/hands', async (req, res) => {
 });
 
 // DELETE /api/playlists/:playlistId/hands/:handId
-app.delete('/api/playlists/:playlistId/hands/:handId', async (req, res) => {
+app.delete('/api/playlists/:playlistId/hands/:handId', requireAuth, async (req, res) => {
   try {
     await HandLogger.removeHandFromPlaylist(req.params.playlistId, req.params.handId);
     res.json({ success: true });
@@ -1527,7 +1531,7 @@ app.delete('/api/playlists/:playlistId/hands/:handId', async (req, res) => {
 });
 
 // DELETE /api/playlists/:playlistId
-app.delete('/api/playlists/:playlistId', async (req, res) => {
+app.delete('/api/playlists/:playlistId', requireAuth, async (req, res) => {
   try {
     await HandLogger.deletePlaylist(req.params.playlistId);
     res.json({ success: true });

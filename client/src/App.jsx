@@ -78,7 +78,7 @@ function JoinScreen({ joinRoom, connected }) {
 
     if (mode === 'spectate') {
       if (!name.trim() || name.trim().length < 2) { setError('Name must be at least 2 characters.'); return; }
-      joinRoom(name.trim(), 'spectator', '');
+      joinRoom(name.trim(), 'spectator');
       return;
     }
 
@@ -101,7 +101,7 @@ function JoinScreen({ joinRoom, connected }) {
       // Store JWT and stableId for reconnects
       localStorage.setItem('poker_trainer_jwt', data.token);
       localStorage.setItem('poker_trainer_player_id', data.stableId);
-      joinRoom(data.name, data.role === 'coach' ? 'coach' : 'player', data.token);
+      joinRoom(data.name, data.role === 'coach' ? 'coach' : 'player');
     } catch {
       setError('Network error — is the server running?');
     }

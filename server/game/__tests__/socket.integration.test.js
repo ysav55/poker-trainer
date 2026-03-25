@@ -179,7 +179,6 @@ describe('join_room — validation', () => {
       name: 'UnregisteredUser',
       isCoach: false,
       isSpectator: false,
-      token: '',
       tableId: 'test-table',
     });
     expect(result.type).toBe('error');
@@ -187,12 +186,11 @@ describe('join_room — validation', () => {
   });
 
   it('emits error when token is invalid (non-spectator, non-coach)', async () => {
-    client = trackClient(createClient(serverPort));
+    client = trackClient(createClient(serverPort, { auth: { token: 'invalid-token' } }));
     const result = await joinRoom(client, {
       name: 'SomeUser',
       isCoach: false,
       isSpectator: false,
-      token: 'invalid-token',
       tableId: 'test-table',
     });
     expect(result.type).toBe('error');
@@ -244,10 +242,9 @@ describe('join_room — coach (Supabase auth)', () => {
 
   it('coach joins successfully when token identifies role as coach', async () => {
     // authenticateToken mock: tokens starting with 'coach-' → isCoach=true
-    client = trackClient(createClient(serverPort));
+    client = trackClient(createClient(serverPort, { auth: { token: 'coach-token-1' } }));
     const result = await joinRoom(client, {
       name: 'Coach',
-      token: 'coach-token-1',
       tableId: 'coach-table-1',
     });
     expect(result.type).toBe('room_joined');
@@ -255,10 +252,9 @@ describe('join_room — coach (Supabase auth)', () => {
   });
 
   it('coach room_joined includes playerId', async () => {
-    client = trackClient(createClient(serverPort));
+    client = trackClient(createClient(serverPort, { auth: { token: 'coach-token-2' } }));
     const result = await joinRoom(client, {
       name: 'CoachB',
-      token: 'coach-token-2',
       tableId: 'coach-table-2',
     });
     expect(result.data.playerId).toBeDefined();
@@ -266,10 +262,9 @@ describe('join_room — coach (Supabase auth)', () => {
   });
 
   it('coach is NOT marked as spectator', async () => {
-    client = trackClient(createClient(serverPort));
+    client = trackClient(createClient(serverPort, { auth: { token: 'coach-token-3' } }));
     const result = await joinRoom(client, {
       name: 'CoachC',
-      token: 'coach-token-3',
       tableId: 'coach-table-3',
     });
     expect(result.data.isSpectator).toBe(false);
@@ -286,12 +281,11 @@ describe('join_room — registered player', () => {
 
   it('registered player gets room_joined', async () => {
     const { name, token } = await registerPlayer('Reg');
-    client = trackClient(createClient(serverPort));
+    client = trackClient(createClient(serverPort, { auth: { token } }));
     const result = await joinRoom(client, {
       name,
       isCoach: false,
       isSpectator: false,
-      token,
       tableId: 'reg-table',
     });
     expect(result.type).toBe('room_joined');
@@ -300,12 +294,11 @@ describe('join_room — registered player', () => {
 
   it('registered player playerId in room_joined matches their stableId', async () => {
     const { name, token } = await registerPlayer('Reg');
-    client = trackClient(createClient(serverPort));
+    client = trackClient(createClient(serverPort, { auth: { token } }));
     const result = await joinRoom(client, {
       name,
       isCoach: false,
       isSpectator: false,
-      token,
       tableId: 'reg-table-2',
     });
     expect(result.type).toBe('room_joined');
@@ -323,13 +316,12 @@ describe('join_room — second coach attempt', () => {
   afterEach(() => { coach1?.disconnect(); coach2?.disconnect(); });
 
   it('second coach is demoted to regular player (not spectator)', async () => {
-    coach1 = trackClient(createClient(serverPort));
-    await joinRoom(coach1, { name: 'CoachPrimary', token: 'coach-primary-token', tableId: 'dual-coach-table' });
+    coach1 = trackClient(createClient(serverPort, { auth: { token: 'coach-primary-token' } }));
+    await joinRoom(coach1, { name: 'CoachPrimary', tableId: 'dual-coach-table' });
 
-    coach2 = trackClient(createClient(serverPort));
+    coach2 = trackClient(createClient(serverPort, { auth: { token: 'coach-secondary-token' } }));
     const result = await joinRoom(coach2, {
       name: 'CoachSecondary',
-      token: 'coach-secondary-token',
       tableId: 'dual-coach-table',
     });
     expect(result.type).toBe('room_joined');
@@ -360,8 +352,8 @@ describe('DB-04 — coach impersonation blocked by Supabase auth (FIXED)', () =>
   afterEach(() => { coach?.disconnect(); intruder?.disconnect(); });
 
   it('legitimate coach joins successfully with coach token', async () => {
-    coach = trackClient(createClient(serverPort));
-    const result = await joinRoom(coach, { name: COACH_NAME, token: 'coach-db04-token', tableId: TABLE });
+    coach = trackClient(createClient(serverPort, { auth: { token: 'coach-db04-token' } }));
+    const result = await joinRoom(coach, { name: COACH_NAME, tableId: TABLE });
     expect(result.type).toBe('room_joined');
     expect(result.data.isCoach).toBe(true);
   });
@@ -372,7 +364,6 @@ describe('DB-04 — coach impersonation blocked by Supabase auth (FIXED)', () =>
       name: INTRUDER_NAME,
       isCoach: true,
       tableId: TABLE,
-      token: '',
     });
     expect(result.type).toBe('error');
     expect(result.data.message).toMatch(/authentication|log in/i);
@@ -399,13 +390,13 @@ describe('Action timer — broadcast on game start', () => {
     const p1 = await registerPlayer('TimerP');
     const p2 = await registerPlayer('TimerP');
 
-    coach   = trackClient(createClient(serverPort));
-    player1 = trackClient(createClient(serverPort));
-    player2 = trackClient(createClient(serverPort));
+    coach   = trackClient(createClient(serverPort, { auth: { token: 'coach-timer-token' } }));
+    player1 = trackClient(createClient(serverPort, { auth: { token: p1.token } }));
+    player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
 
-    await joinRoom(coach,   { name: 'TimerCoach', token: 'coach-timer-token', tableId: TABLE });
-    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, token: p1.token, tableId: TABLE });
-    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, token: p2.token, tableId: TABLE });
+    await joinRoom(coach,   { name: 'TimerCoach', tableId: TABLE });
+    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE });
+    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE });
 
     // Capture action_timer event
     const timerPromise = waitForEvent(coach, 'action_timer', 3000);
@@ -422,13 +413,13 @@ describe('Action timer — broadcast on game start', () => {
     const p1 = await registerPlayer('TimerP');
     const p2 = await registerPlayer('TimerP');
 
-    coach   = trackClient(createClient(serverPort));
-    player1 = trackClient(createClient(serverPort));
-    player2 = trackClient(createClient(serverPort));
+    coach   = trackClient(createClient(serverPort, { auth: { token: 'coach-timerpause-token' } }));
+    player1 = trackClient(createClient(serverPort, { auth: { token: p1.token } }));
+    player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
 
-    await joinRoom(coach,   { name: 'TimerPauseCoach', token: 'coach-timerpause-token', tableId: TABLE + '-p' });
-    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, token: p1.token, tableId: TABLE + '-p' });
-    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, token: p2.token, tableId: TABLE + '-p' });
+    await joinRoom(coach,   { name: 'TimerPauseCoach', tableId: TABLE + '-p' });
+    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + '-p' });
+    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + '-p' });
 
     // Start and wait for first action_timer
     await new Promise(resolve => {
@@ -512,11 +503,11 @@ describe('Permission guards — non-coach events', () => {
   it('non-coach receives error when trying to start_game', async () => {
     const { name, token } = await registerPlayer('PermP');
 
-    coach  = trackClient(createClient(serverPort));
-    player = trackClient(createClient(serverPort));
+    coach  = trackClient(createClient(serverPort, { auth: { token: 'coach-perm-token' } }));
+    player = trackClient(createClient(serverPort, { auth: { token } }));
 
-    await joinRoom(coach,  { name: 'PermCoach', token: 'coach-perm-token', tableId: TABLE });
-    await joinRoom(player, { name, isCoach: false, isSpectator: false, token, tableId: TABLE });
+    await joinRoom(coach,  { name: 'PermCoach', tableId: TABLE });
+    await joinRoom(player, { name, isCoach: false, isSpectator: false, tableId: TABLE });
 
     const errPromise = waitForEvent(player, 'error');
     player.emit('start_game', { mode: 'rng' });
@@ -527,11 +518,11 @@ describe('Permission guards — non-coach events', () => {
   it('non-coach receives error when trying to reset_hand', async () => {
     const { name, token } = await registerPlayer('PermP');
 
-    coach  = trackClient(createClient(serverPort));
-    player = trackClient(createClient(serverPort));
+    coach  = trackClient(createClient(serverPort, { auth: { token: 'coach-perm2-token' } }));
+    player = trackClient(createClient(serverPort, { auth: { token } }));
 
-    await joinRoom(coach,  { name: 'PermCoach2', token: 'coach-perm2-token', tableId: TABLE + '2' });
-    await joinRoom(player, { name, isCoach: false, isSpectator: false, token, tableId: TABLE + '2' });
+    await joinRoom(coach,  { name: 'PermCoach2', tableId: TABLE + '2' });
+    await joinRoom(player, { name, isCoach: false, isSpectator: false, tableId: TABLE + '2' });
 
     const errPromise = waitForEvent(player, 'error');
     player.emit('reset_hand');
@@ -542,11 +533,11 @@ describe('Permission guards — non-coach events', () => {
   it('non-coach receives error when trying to load_replay', async () => {
     const { name, token } = await registerPlayer('PermP');
 
-    coach  = trackClient(createClient(serverPort));
-    player = trackClient(createClient(serverPort));
+    coach  = trackClient(createClient(serverPort, { auth: { token: 'coach-perm3-token' } }));
+    player = trackClient(createClient(serverPort, { auth: { token } }));
 
-    await joinRoom(coach,  { name: 'PermCoach3', token: 'coach-perm3-token', tableId: TABLE + '3' });
-    await joinRoom(player, { name, isCoach: false, isSpectator: false, token, tableId: TABLE + '3' });
+    await joinRoom(coach,  { name: 'PermCoach3', tableId: TABLE + '3' });
+    await joinRoom(player, { name, isCoach: false, isSpectator: false, tableId: TABLE + '3' });
 
     const errPromise = waitForEvent(player, 'error');
     player.emit('load_replay', { handId: 'fake-hand' });
@@ -573,13 +564,13 @@ describe('set_blind_levels socket event', () => {
     const p1 = await registerPlayer('BlindsP');
     const p2 = await registerPlayer('BlindsP');
 
-    coach   = trackClient(createClient(serverPort));
-    player1 = trackClient(createClient(serverPort));
-    player2 = trackClient(createClient(serverPort));
+    coach   = trackClient(createClient(serverPort, { auth: { token: 'coach-blinds-token' + tableSuffix } }));
+    player1 = trackClient(createClient(serverPort, { auth: { token: p1.token } }));
+    player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
 
-    await joinRoom(coach,   { name: 'BlindsCoach', token: 'coach-blinds-token' + tableSuffix, tableId: TABLE + tableSuffix });
-    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, token: p1.token, tableId: TABLE + tableSuffix });
-    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, token: p2.token, tableId: TABLE + tableSuffix });
+    await joinRoom(coach,   { name: 'BlindsCoach', tableId: TABLE + tableSuffix });
+    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
+    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
     // Drain the initial game_state broadcast so subsequent waitForEvent calls don't pick up stale state
     await waitForEvent(coach,   'game_state', 2000);
@@ -672,13 +663,13 @@ describe('adjust_stack socket event', () => {
     const p1 = await registerPlayer('StackP');
     const p2 = await registerPlayer('StackP');
 
-    coach   = trackClient(createClient(serverPort));
-    player1 = trackClient(createClient(serverPort));
-    player2 = trackClient(createClient(serverPort));
+    coach   = trackClient(createClient(serverPort, { auth: { token: 'coach-stack-token' + tableSuffix } }));
+    player1 = trackClient(createClient(serverPort, { auth: { token: p1.token } }));
+    player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
 
-    await joinRoom(coach,   { name: 'StackCoach', token: 'coach-stack-token' + tableSuffix, tableId: TABLE + tableSuffix });
-    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, token: p1.token, tableId: TABLE + tableSuffix });
-    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, token: p2.token, tableId: TABLE + tableSuffix });
+    await joinRoom(coach,   { name: 'StackCoach', tableId: TABLE + tableSuffix });
+    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
+    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
     // Drain the initial game_state broadcast; also capture player IDs for the coach
     const state = await waitForEvent(coach, 'game_state', 2000);

@@ -75,6 +75,7 @@ export function useSocket() {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      auth: (cb) => cb({ token: localStorage.getItem('poker_trainer_jwt') || '' }),
     })
 
     socketRef.current = socket
@@ -107,8 +108,7 @@ export function useSocket() {
         const { name, role, stableId } = joinParamsRef.current
         const isCoach = role === 'coach'
         const isSpectator = role === 'spectator'
-        const freshToken = localStorage.getItem('poker_trainer_jwt') || ''
-        socket.emit('join_room', { name, isCoach, isSpectator, stableId, token: freshToken })
+        socket.emit('join_room', { name, isCoach, isSpectator, stableId })
       }
     })
 
@@ -200,12 +200,12 @@ export function useSocket() {
 
   // ---------- emit helpers ----------
 
-  const joinRoom = useCallback((name, role = 'player', token = '') => {
+  const joinRoom = useCallback((name, role = 'player') => {
     const stableId = role === 'spectator' ? `spectator_${Date.now()}` : null
     const isCoach = role === 'coach'
     const isSpectator = role === 'spectator'
-    joinParamsRef.current = { name, role, stableId, token }
-    socketRef.current?.emit('join_room', { name, isCoach, isSpectator, stableId, token })
+    joinParamsRef.current = { name, role, stableId }
+    socketRef.current?.emit('join_room', { name, isCoach, isSpectator, stableId })
   }, [])
 
   const leaveRoom = useCallback(() => {
