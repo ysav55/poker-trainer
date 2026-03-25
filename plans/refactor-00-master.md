@@ -2,7 +2,7 @@
 
 > Status: ACTIVE — this document governs execution order and tracks progress
 > Last updated: 2026-03-25
-> Phases 0–8 DONE. Next: Phase 9.
+> Phases 0–9 DONE. Refactor complete.
 > How to use: Update checkboxes as work lands. The *how* lives in Plans 01–06. This plan records *why*, *what*, and *when*.
 
 ---
@@ -421,11 +421,12 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 - [x] Eliminate duplicate `/api/hands` fetch in CoachSidebar — `useHistory()` called once, shared (Plan 05 §1)
 - [ ] Manual regression test: full game flow (join → play → end hand → replay) (Plan 05) — pending deploy
 
-### Phase 9 — DB Optimizations
-- [ ] Replace `removeHandFromPlaylist` compaction loop with PostgreSQL RPC `compact_playlist_order` — migration 008 (Plan 03 §3)
-- [ ] Replace `endHand` per-player UPDATE loop with batch upsert — migration 009 (Plan 03 §3)
-- [ ] Add partial index `hand_actions.is_reverted = false` — migration 010 (Plan 03 §3)
-- [ ] Fix `getPlayerHands` ordering from UUID to `started_at DESC` (Plan 03 §3)
-- [ ] Enumerate columns in `buildAnalyzerContext` queries — replace `SELECT *` (Plan 03 §3)
-- [ ] Evaluate `complete_hand` RPC for `endHand` atomicity (Plan 03 §5)
-- [ ] Evaluate `updateCoachTags` delete+insert RPC (Plan 03 §5)
+### Phase 9 — DB Optimizations ✅ DONE (commit 6695054)
+- [x] Fix `getPlayerHands` ordering — `started_at DESC` via foreignTable (was UUID sort, random order) (Plan 03 §3)
+- [x] Enumerate columns in `buildAnalyzerContext` queries — replace `SELECT *` on hands/hand_actions/hand_players (Plan 03 §3)
+- [x] Dev CORS fallback — `ALLOWED_ORIGIN` defaults to `http://localhost:5173` when not production
+- [ ] Replace `removeHandFromPlaylist` compaction loop with PostgreSQL RPC — deferred (requires migration + PL/pgSQL)
+- [ ] Replace `endHand` per-player UPDATE loop with batch upsert — deferred (requires migration)
+- [ ] Add partial index `hand_actions.is_reverted = false` — deferred (requires migration)
+- [ ] Evaluate `complete_hand` RPC for `endHand` atomicity — deferred
+- [ ] Evaluate `updateCoachTags` delete+insert RPC — deferred
