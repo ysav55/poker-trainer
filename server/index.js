@@ -68,6 +68,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const JwtService = require('./auth/JwtService');
+const { requireCoach } = require('./auth/socketGuards');
 const SessionManager = require('./game/SessionManager');
 const HandLogger = require('./db/HandLoggerSupabase');
 const { getPosition } = require('./game/positions');
@@ -571,7 +572,7 @@ io.on('connection', socket => {
 
   // ── start_game ────────────────────────────
   socket.on('start_game', async ({ mode = 'rng' } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can start the game');
+    if (requireCoach(socket, 'start the game')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -704,7 +705,7 @@ io.on('connection', socket => {
 
   // ── manual_deal_card ──────────────────────
   socket.on('manual_deal_card', ({ targetType, targetId, position, card } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can deal cards manually');
+    if (requireCoach(socket, 'deal cards manually')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -723,7 +724,7 @@ io.on('connection', socket => {
 
   // ── undo_action ───────────────────────────
   socket.on('undo_action', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can undo');
+    if (requireCoach(socket, 'undo')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     if (gm.state.phase === 'waiting') return sendSyncError(socket, 'Nothing to undo between hands');
@@ -742,7 +743,7 @@ io.on('connection', socket => {
 
   // ── rollback_street ───────────────────────
   socket.on('rollback_street', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can roll back a street');
+    if (requireCoach(socket, 'roll back a street')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -761,7 +762,7 @@ io.on('connection', socket => {
 
   // ── set_player_in_hand ────────────────────
   socket.on('set_player_in_hand', ({ playerId, inHand } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can change in-hand status');
+    if (requireCoach(socket, 'change in-hand status')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -772,7 +773,7 @@ io.on('connection', socket => {
 
   // ── toggle_pause ──────────────────────────
   socket.on('toggle_pause', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can pause');
+    if (requireCoach(socket, 'pause')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -791,7 +792,7 @@ io.on('connection', socket => {
 
   // ── set_blind_levels ──────────────────────
   socket.on('set_blind_levels', ({ sb, bb } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can change blind levels');
+    if (requireCoach(socket, 'change blind levels')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     const result = gm.setBlindLevels(Number(sb), Number(bb));
@@ -804,7 +805,7 @@ io.on('connection', socket => {
 
   // ── set_mode ──────────────────────────────
   socket.on('set_mode', ({ mode } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can set mode');
+    if (requireCoach(socket, 'set mode')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     const ACTIVE_PHASES = new Set(['preflop', 'flop', 'turn', 'river', 'showdown', 'replay']);
@@ -821,7 +822,7 @@ io.on('connection', socket => {
 
   // ── force_next_street ─────────────────────
   socket.on('force_next_street', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can force a street');
+    if (requireCoach(socket, 'force a street')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -842,7 +843,7 @@ io.on('connection', socket => {
 
   // ── award_pot ─────────────────────────────
   socket.on('award_pot', ({ winnerId } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can award the pot');
+    if (requireCoach(socket, 'award the pot')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -864,7 +865,7 @@ io.on('connection', socket => {
 
   // ── reset_hand ────────────────────────────
   socket.on('reset_hand', async () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can reset');
+    if (requireCoach(socket, 'reset')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -909,7 +910,7 @@ io.on('connection', socket => {
 
   // ── adjust_stack ──────────────────────────
   socket.on('adjust_stack', ({ playerId, amount } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can adjust stacks');
+    if (requireCoach(socket, 'adjust stacks')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -928,7 +929,7 @@ io.on('connection', socket => {
 
   // ── open_config_phase ─────────────────────
   socket.on('open_config_phase', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can open the config phase');
+    if (requireCoach(socket, 'open the config phase')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     if (gm.state.phase === 'replay') return sendSyncError(socket, 'Cannot open config phase during replay — exit replay first');
@@ -943,7 +944,7 @@ io.on('connection', socket => {
 
   // ── update_hand_config ────────────────────
   socket.on('update_hand_config', ({ config } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can update hand config');
+    if (requireCoach(socket, 'update hand config')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
@@ -958,7 +959,7 @@ io.on('connection', socket => {
 
   // ── start_configured_hand ─────────────────
   socket.on('start_configured_hand', async () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can start a configured hand');
+    if (requireCoach(socket, 'start a configured hand')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     if (!gm.state.config_phase) return sendSyncError(socket, 'No active config phase — call open_config_phase first');
@@ -996,7 +997,7 @@ io.on('connection', socket => {
 
   // ── load_hand_scenario ─────────────────────────────────────────────────────
   socket.on('load_hand_scenario', async ({ handId, stackMode = 'keep' } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can load scenarios');
+    if (requireCoach(socket, 'load scenarios')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1024,7 +1025,7 @@ io.on('connection', socket => {
 
   // ── update_hand_tags ───────────────────────────────────────────────────────
   socket.on('update_hand_tags', async ({ handId, tags } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can tag hands');
+    if (requireCoach(socket, 'tag hands')) return;
     if (!handId || !Array.isArray(tags)) return sendError(socket, 'handId and tags[] are required');
     try {
       await HandLogger.updateCoachTags(handId, tags);
@@ -1062,7 +1063,7 @@ io.on('connection', socket => {
 
   // ── create_playlist ────────────────────────────────────────────────────────
   socket.on('create_playlist', async ({ name, description = '' } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can create playlists');
+    if (requireCoach(socket, 'create playlists')) return;
     if (!name || typeof name !== 'string' || !name.trim()) {
       return sendError(socket, 'Playlist name is required');
     }
@@ -1081,7 +1082,7 @@ io.on('connection', socket => {
 
   // ── add_to_playlist ────────────────────────────────────────────────────────
   socket.on('add_to_playlist', async ({ playlistId, handId } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can modify playlists');
+    if (requireCoach(socket, 'modify playlists')) return;
     if (!playlistId || !handId) return sendError(socket, 'playlistId and handId are required');
     try {
       await HandLogger.addHandToPlaylist(playlistId, handId);
@@ -1094,7 +1095,7 @@ io.on('connection', socket => {
 
   // ── remove_from_playlist ───────────────────────────────────────────────────
   socket.on('remove_from_playlist', async ({ playlistId, handId } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can modify playlists');
+    if (requireCoach(socket, 'modify playlists')) return;
     if (!playlistId || !handId) return sendError(socket, 'playlistId and handId are required');
     await HandLogger.removeHandFromPlaylist(playlistId, handId);
     const tableId = socket.data.tableId;
@@ -1103,7 +1104,7 @@ io.on('connection', socket => {
 
   // ── delete_playlist ────────────────────────────────────────────────────────
   socket.on('delete_playlist', async ({ playlistId } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can delete playlists');
+    if (requireCoach(socket, 'delete playlists')) return;
     if (!playlistId) return sendError(socket, 'playlistId is required');
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
@@ -1118,7 +1119,7 @@ io.on('connection', socket => {
 
   // ── activate_playlist ──────────────────────────────────────────────────────
   socket.on('activate_playlist', async ({ playlistId } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can activate playlists');
+    if (requireCoach(socket, 'activate playlists')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1161,7 +1162,7 @@ io.on('connection', socket => {
 
   // ── deactivate_playlist ────────────────────────────────────────────────────
   socket.on('deactivate_playlist', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can deactivate playlists');
+    if (requireCoach(socket, 'deactivate playlists')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1171,7 +1172,7 @@ io.on('connection', socket => {
 
   // ── load_replay ────────────────────────────────────────────────────────────
   socket.on('load_replay', async ({ handId } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can load replays');
+    if (requireCoach(socket, 'load replays')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1187,7 +1188,7 @@ io.on('connection', socket => {
 
   // ── replay_step_forward ────────────────────────────────────────────────────
   socket.on('replay_step_forward', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can control replay');
+    if (requireCoach(socket, 'control replay')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1198,7 +1199,7 @@ io.on('connection', socket => {
 
   // ── replay_step_back ───────────────────────────────────────────────────────
   socket.on('replay_step_back', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can control replay');
+    if (requireCoach(socket, 'control replay')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1209,7 +1210,7 @@ io.on('connection', socket => {
 
   // ── replay_jump_to ─────────────────────────────────────────────────────────
   socket.on('replay_jump_to', ({ cursor } = {}) => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can control replay');
+    if (requireCoach(socket, 'control replay')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1221,7 +1222,7 @@ io.on('connection', socket => {
 
   // ── replay_branch ──────────────────────────────────────────────────────────
   socket.on('replay_branch', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can branch replay');
+    if (requireCoach(socket, 'branch replay')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1232,7 +1233,7 @@ io.on('connection', socket => {
 
   // ── replay_unbranch ────────────────────────────────────────────────────────
   socket.on('replay_unbranch', () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can unbranch replay');
+    if (requireCoach(socket, 'unbranch replay')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -1243,7 +1244,7 @@ io.on('connection', socket => {
 
   // ── replay_exit ────────────────────────────────────────────────────────────
   socket.on('replay_exit', async () => {
-    if (!socket.data.isCoach) return sendError(socket, 'Only the coach can exit replay');
+    if (requireCoach(socket, 'exit replay')) return;
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
