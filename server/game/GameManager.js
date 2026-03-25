@@ -24,6 +24,7 @@ const { createDeck, shuffleDeck, isValidCard, getUsedCards } = require('./Deck')
 const { generateHand } = require('./HandGenerator');
 const { isBettingRoundOver, findNextActingPlayer } = require('./bettingRound');
 const { resolve: resolveShowdown, sortBySBProximity } = require('./ShowdownResolver');
+const ReplayEngine = require('./ReplayEngine');
 
 class GameManager {
   constructor(tableId) {
@@ -271,58 +272,10 @@ class GameManager {
   }
 
   // ─────────────────────────────────────────────
-  //  Replay helpers
+  //  Replay helpers — thin wrappers kept for test compatibility
   // ─────────────────────────────────────────────
-  _applyReplayAction(action) {
-    const player = this.state.players.find(p => p.stableId === action.player_id);
-    if (!player) return; // silently skip unknown players
-
-    if (/fold/i.test(action.action)) {
-      player.is_active = false;
-      player.action = 'folded';
-    } else if (/call|raise|bet|all.?in/i.test(action.action)) {
-      player.stack -= (action.amount || 0);
-      this.state.pot += (action.amount || 0);
-      player.action = action.action;
-    } else if (/check/i.test(action.action)) {
-      player.action = 'checked';
-    }
-
-    // Board reveal by street
-    const rm = this.state.replay_mode;
-    if (action.street === 'flop' && this.state.board.length < 3) {
-      this.state.board = rm.original_board.slice(0, 3);
-    } else if (action.street === 'turn' && this.state.board.length < 4) {
-      this.state.board = rm.original_board.slice(0, 4);
-    } else if (action.street === 'river' && this.state.board.length < 5) {
-      this.state.board = rm.original_board.slice(0, 5);
-    }
-
-    this.state.current_turn = action.player_id;
-  }
-
-  _buildReplayStateAtCursor(cursor) {
-    const rm = this.state.replay_mode;
-    // Reset each player to original state
-    this.state.players.forEach(p => {
-      if (rm.original_stacks[p.stableId] !== undefined) {
-        p.stack = rm.original_stacks[p.stableId];
-      }
-      p.is_active = true;
-      p.hole_cards = rm.original_hole_cards[p.stableId] ? [...rm.original_hole_cards[p.stableId]] : [];
-      p.action = 'waiting';
-      p.current_bet = 0;
-    });
-    this.state.board = [];
-    this.state.pot = 0;
-    this.state.current_bet = 0;
-    this.state.dealer_seat = rm.dealer_seat;
-    this.state.current_turn = null;
-    // Replay actions up to cursor
-    for (let i = 0; i <= cursor; i++) {
-      this._applyReplayAction(rm.actions[i]);
-    }
-  }
+  _applyReplayAction(action) { ReplayEngine._applyAction(this.state, action); }
+  _buildReplayStateAtCursor(cursor) { ReplayEngine._buildStateAtCursor(this.state, cursor); }
 
   // ─────────────────────────────────────────────
   //  History / Undo
@@ -1058,194 +1011,43 @@ class GameManager {
   }
 
   // ─────────────────────────────────────────────
-  //  Replay mode public API
+  //  Replay mode public API — delegates to ReplayEngine
   // ─────────────────────────────────────────────
-  loadReplay(handDetail) {
-    if (this.state.phase !== 'waiting') {
-      return { error: 'Can only load replay between hands' };
-    }
-    if (!handDetail) return { error: 'Hand not found' };
-
-    const rm = this.state.replay_mode;
-    rm.source_hand_id = handDetail.hand_id;
-    rm.actions = (handDetail.actions || []).filter(a => !a.is_reverted);
-    rm.cursor = -1;
-    rm.branched = false;
-    rm.pre_branch_snapshot = null;
-    // Remember if a playlist was active so exitReplay can resume it
-    rm.playlist_was_active = this.state.playlist_mode?.active ?? false;
-
-    // Build lookup maps from handDetail.players
-    rm.original_hole_cards = {};
-    rm.original_stacks = {};
-    rm.player_meta = {};
-    (handDetail.players || []).forEach(p => {
-      const key = p.player_id;
-      rm.original_hole_cards[key] = p.hole_cards || [];
-      rm.original_stacks[key] = p.stack_start;
-      rm.player_meta[key] = { name: p.player_name, seat: p.seat };
-    });
-
-    rm.original_board = handDetail.board || [];
-    rm.dealer_seat = handDetail.dealer_seat || 0;
-    rm.active = true;
-
-    this.state.phase = 'replay';
-    this._buildReplayStateAtCursor(-1);
-    return { success: true };
-  }
-
-  replayStepForward() {
-    if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
-    const rm = this.state.replay_mode;
-    if (rm.cursor >= rm.actions.length - 1) return { error: 'already_at_end' };
-    rm.cursor++;
-    this._applyReplayAction(rm.actions[rm.cursor]);
-    return { success: true };
-  }
-
-  replayStepBack() {
-    if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
-    const rm = this.state.replay_mode;
-    if (rm.cursor <= -1) return { error: 'already_at_start' };
-    rm.cursor--;
-    this._buildReplayStateAtCursor(rm.cursor);
-    return { success: true };
-  }
-
-  replayJumpTo(target) {
-    if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
-    const rm = this.state.replay_mode;
-    if (target < -1 || target >= rm.actions.length) return { error: 'Cursor out of range' };
-    rm.cursor = target;
-    this._buildReplayStateAtCursor(rm.cursor);
-    return { success: true };
-  }
-
-  branchFromReplay() {
-    if (this.state.phase !== 'replay') return { error: 'Not in replay mode' };
-    const rm = this.state.replay_mode;
-    if (rm.branched) return { error: 'Already branched' };
-
-    rm.pre_branch_snapshot = JSON.parse(JSON.stringify(this.state));
-    rm.branched = true;
-
-    // Mark all real seated players as observers — coach acts for shadow players
-    this.state.players.forEach(p => {
-      p.is_observer = true;
-      p.in_hand = false;
-    });
-
-    // Inject a shadow player for every recorded player in this hand.
-    // Shadow players use the recorded player_id as their `id` so current_turn
-    // (which carries player_id values during replay) resolves correctly.
-    Object.entries(rm.player_meta).forEach(([playerId, meta]) => {
-      const originalCards = rm.original_hole_cards[playerId] ?? [];
-      const stack = rm.original_stacks[playerId] ?? (this.state.big_blind * 100);
-      this.state.players.push({
-        id: playerId,
-        stableId: playerId,
-        name: meta.name,
-        seat: meta.seat ?? 0,
-        stack,
-        hole_cards: [],
-        // Stash for startGame — cleared by reset loop but preserved here for later
-        _original_hole_cards: originalCards,
-        current_bet: 0,
-        total_bet_this_round: 0,
-        total_contributed: 0,
-        action: 'waiting',
-        is_active: true,
-        is_dealer: false,
-        is_small_blind: false,
-        is_big_blind: false,
-        is_all_in: false,
-        is_coach: false,
-        is_shadow: true,
-        acted_this_street: false,
-        in_hand: true,
-        disconnected: false,
-      });
-    });
-
-    this.state.phase = 'waiting';
-    this.state.history = [];
-    this.state.street_snapshots = [];
-    this.state.current_turn = null;
-    return { success: true };
-  }
-
-  unBranchToReplay() {
-    const rm = this.state.replay_mode;
-    if (!rm.branched) return { error: 'Not branched' };
-    const snap = rm.pre_branch_snapshot;
-    const playlistHands = this.state.replay_mode.pre_branch_snapshot?.playlist_mode?.hands ?? [];
-    this.state = JSON.parse(JSON.stringify(snap));
-    // Restore hands array (stripped during snapshot to save space)
-    if (this.state.playlist_mode && playlistHands.length) {
-      this.state.playlist_mode.hands = playlistHands;
-    }
-    return { success: true };
-  }
-
-  exitReplay() {
-    let rm = this.state.replay_mode;
-    if (this.state.phase !== 'replay' && !rm.branched) {
-      return { error: 'Not in replay mode' };
-    }
-    // Capture playlist flag — may be on either current rm or the pre-branch snapshot
-    const playlistWasActive = rm.playlist_was_active
-      ?? rm.pre_branch_snapshot?.replay_mode?.playlist_was_active
-      ?? false;
-
-    // If currently branched, restore the pre-branch snapshot first.
-    // This removes shadow players and un-marks real players as observers.
-    if (rm.branched && rm.pre_branch_snapshot) {
-      const playlistHands = rm.pre_branch_snapshot.playlist_mode?.hands ?? [];
-      this.state = JSON.parse(JSON.stringify(rm.pre_branch_snapshot));
-      if (this.state.playlist_mode && playlistHands.length) {
-        this.state.playlist_mode.hands = playlistHands;
-      }
-      rm = this.state.replay_mode; // now points to pre-branch replay_mode
-    }
-
-    // Restore stacks to pre-replay values and clear hand state
-    this.state.players.forEach(p => {
-      if (rm.original_stacks[p.stableId] !== undefined) {
-        p.stack = rm.original_stacks[p.stableId];
-      }
-      p.hole_cards = [];
-      p.action = 'waiting';
-      p.is_active = true;
-      p.current_bet = 0;
-      p.is_observer = false;
-    });
-    this.state.board = [];
-    this.state.pot = 0;
-    this.state.current_bet = 0;
-    this.state.current_turn = null;
-    this.state.phase = 'waiting';
-    // Reset replay_mode
-    this.state.replay_mode = {
-      active: false,
-      source_hand_id: null,
-      actions: [],
-      cursor: -1,
-      original_hole_cards: {},
-      original_board: [],
-      original_stacks: {},
-      player_meta: {},
-      dealer_seat: 0,
-      branched: false,
-      pre_branch_snapshot: null,
-      playlist_was_active: false,
-    };
-    return { success: true, playlistWasActive };
-  }
+  loadReplay(handDetail) { return ReplayEngine.load(this.state, handDetail); }
+  replayStepForward() { return ReplayEngine.stepForward(this.state); }
+  replayStepBack() { return ReplayEngine.stepBack(this.state); }
+  replayJumpTo(target) { return ReplayEngine.jumpTo(this.state, target); }
+  branchFromReplay() { return ReplayEngine.branch(this.state); }
+  unBranchToReplay() { return ReplayEngine.unbranch(this.state); }
+  exitReplay() { return ReplayEngine.exit(this.state); }
 
   // Thin wrapper kept for backwards compatibility with existing tests.
   _sortWinnersBySBProximity(winners) {
     return sortBySBProximity(winners, this._gamePlayers());
+  }
+
+  /**
+   * Returns a summary of the completed hand for SessionManager.endHand().
+   * Avoids SessionManager reading gm.state directly.
+   */
+  getHandSummary() {
+    return {
+      winner: this.state.winner,
+      showdown_result: this.state.showdown_result,
+      players: this._gamePlayers().map(p => ({
+        id: p.id,
+        name: p.name,
+        stack: p.stack,
+        hole_cards: p.hole_cards,
+      })),
+    };
+  }
+
+  /**
+   * Public replacement for _gamePlayers() — returns all seated non-removed players.
+   */
+  getSeatedPlayers() {
+    return this._gamePlayers();
   }
 }
 

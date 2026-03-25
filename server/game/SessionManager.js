@@ -77,7 +77,7 @@ class SessionManager {
     const result = this.gm.startGame(mode);
     if (result.error) return result;
 
-    this.gm._gamePlayers().forEach(p => {
+    this.gm.getSeatedPlayers().forEach(p => {
       this._ensurePlayerStats(p);
       this._preflopTracking.set(p.id, { vpipThisHand: false, pfrThisHand: false, raiseCount: 0, callCount: 0 });
     });
@@ -106,12 +106,12 @@ class SessionManager {
    * Called automatically by resetForNextHand() before delegating the reset.
    */
   endHand() {
-    const state = this.gm.state;
-    const showdownResult = state.showdown_result;
+    const summary = this.gm.getHandSummary();
+    const showdownResult = summary.showdown_result;
 
     this.handsDealt++;
 
-    this.gm._gamePlayers().forEach(p => {
+    summary.players.forEach(p => {
       this._ensurePlayerStats(p);
       const stats = this._stats.get(p.id);
       stats.playerName = p.name;
@@ -154,7 +154,7 @@ class SessionManager {
         }
       } else {
         // Fold-to-one path: no showdown_result, winner set directly on state
-        if (state.winner === p.id) {
+        if (summary.winner === p.id) {
           stats.handsWon++;
         }
       }
