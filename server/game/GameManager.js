@@ -22,9 +22,8 @@
 
 const { createDeck, shuffleDeck, isValidCard, getUsedCards } = require('./Deck');
 const { generateHand } = require('./HandGenerator');
-const { evaluate, compareHands } = require('./HandEvaluator');
-const { buildSidePots } = require('./SidePotCalculator');
 const { isBettingRoundOver, findNextActingPlayer } = require('./bettingRound');
+const { resolve: resolveShowdown, sortBySBProximity } = require('./ShowdownResolver');
 
 class GameManager {
   constructor(tableId) {
@@ -776,121 +775,24 @@ class GameManager {
 
   _resolveShowdown() {
     const activePlayers = this._gamePlayers().filter(p => p.is_active);
-    const allPlayers = this._gamePlayers();
-
-    // Use the full board if available (config mode), otherwise use state.board
+    const allPlayers    = this._gamePlayers();
     const board = (this.state._full_board && this.state._full_board.length === 5)
       ? this.state._full_board
       : this.state.board;
 
-    // Evaluate each active player's hand once
-    const handMap = {};
-    activePlayers.forEach(p => {
-      handMap[p.id] = evaluate(p.hole_cards, board);
+    const result = resolveShowdown(activePlayers, allPlayers, board, this.state.pot);
+
+    // Apply stack deltas to in-memory player objects
+    result.stackDeltas.forEach((delta, playerId) => {
+      const p = allPlayers.find(pl => pl.id === playerId);
+      if (p) p.stack += delta;
     });
 
-    // Build all-hands list (sorted best → worst) for ShowdownResult
-    const evaluatedAll = activePlayers
-      .map(p => ({ player: p, handResult: handMap[p.id] }))
-      .sort((a, b) => compareHands(b.handResult, a.handResult));
-
-    const sidePots = buildSidePots(allPlayers);
-
-    if (sidePots.length > 0) {
-      // ── Multi-pot path ───────────────────────────────────────────────────────
-      const sidePotResults = [];
-      let totalAwarded = 0;
-
-      for (const pot of sidePots) {
-        const eligible = activePlayers.filter(p => pot.eligiblePlayerIds.includes(p.id) && handMap[p.id]);
-        if (eligible.length === 0) continue;
-
-        const ranked = eligible
-          .map(p => ({ player: p, handResult: handMap[p.id] }))
-          .sort((a, b) => compareHands(b.handResult, a.handResult));
-
-        const best = ranked[0].handResult;
-        const potWinners = ranked.filter(e => compareHands(e.handResult, best) === 0);
-
-        const share = Math.floor(pot.amount / potWinners.length);
-        const remainder = pot.amount - share * potWinners.length;
-        const sortedPotWinners = this._sortWinnersBySBProximity(potWinners);
-        sortedPotWinners.forEach((e, idx) => {
-          e.player.stack += share + (idx === 0 ? remainder : 0);
-        });
-        totalAwarded += pot.amount;
-
-        sidePotResults.push({
-          potAmount: pot.amount,
-          eligiblePlayerIds: pot.eligiblePlayerIds,
-          winners: sortedPotWinners.map((e, idx) => ({
-            playerId: e.player.id,
-            playerName: e.player.name,
-            handResult: e.handResult,
-            potAwarded: share + (idx === 0 ? remainder : 0)
-          }))
-        });
-      }
-
-      this.state.pot = 0;
-      this.state.side_pots = sidePots;
-
-      // Top-level winners = winners of the last (main) pot
-      const mainPotWinners = sidePotResults[sidePotResults.length - 1]?.winners ?? [];
-
-      this.state.showdown_result = {
-        winners: mainPotWinners.map(w => ({
-          playerId: w.playerId,
-          playerName: w.playerName,
-          handResult: w.handResult
-        })),
-        allHands: evaluatedAll.map(e => ({
-          playerId: e.player.id,
-          playerName: e.player.name,
-          handResult: e.handResult
-        })),
-        potAwarded: totalAwarded,
-        splitPot: mainPotWinners.length > 1,
-        sidePotResults
-      };
-
-      // Backwards-compat
-      this.state.winner = mainPotWinners[0]?.playerId ?? null;
-      this.state.winner_name = mainPotWinners[0]?.playerName ?? null;
-
-    } else {
-      // ── Single-pot path (no all-in players) ─────────────────────────────────
-      const totalPot = this.state.pot;
-
-      const best = evaluatedAll[0].handResult;
-      const winnerEntries = evaluatedAll.filter(e => compareHands(e.handResult, best) === 0);
-
-      const share = Math.floor(totalPot / winnerEntries.length);
-      const remainder = totalPot - share * winnerEntries.length;
-      const sortedWinners = this._sortWinnersBySBProximity(winnerEntries);
-      sortedWinners.forEach((e, idx) => {
-        e.player.stack += share + (idx === 0 ? remainder : 0);
-      });
-      this.state.pot = 0;
-
-      this.state.showdown_result = {
-        winners: winnerEntries.map(e => ({
-          playerId: e.player.id,
-          playerName: e.player.name,
-          handResult: e.handResult
-        })),
-        allHands: evaluatedAll.map(e => ({
-          playerId: e.player.id,
-          playerName: e.player.name,
-          handResult: e.handResult
-        })),
-        potAwarded: totalPot,
-        splitPot: winnerEntries.length > 1
-      };
-
-      this.state.winner = sortedWinners[0].player.id;
-      this.state.winner_name = sortedWinners[0].player.name;
-    }
+    this.state.pot           = result.pot;
+    this.state.side_pots     = result.side_pots;
+    this.state.showdown_result = result.showdown_result;
+    this.state.winner        = result.winner;
+    this.state.winner_name   = result.winner_name;
   }
 
   _advanceStreet() {
@@ -1341,16 +1243,9 @@ class GameManager {
     return { success: true, playlistWasActive };
   }
 
+  // Thin wrapper kept for backwards compatibility with existing tests.
   _sortWinnersBySBProximity(winners) {
-    const sbPlayer = this._gamePlayers().find(p => p.is_small_blind);
-    const sbSeat = sbPlayer ? sbPlayer.seat : 0;
-    const allSeats = this._gamePlayers().map(p => p.seat);
-    const numSeats = Math.max(...allSeats) + 1;
-    return [...winners].sort((a, b) => {
-      const distA = (a.player.seat - sbSeat + numSeats) % numSeats;
-      const distB = (b.player.seat - sbSeat + numSeats) % numSeats;
-      return distA - distB;
-    });
+    return sortBySBProximity(winners, this._gamePlayers());
   }
 }
 
