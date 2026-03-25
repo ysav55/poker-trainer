@@ -2,7 +2,7 @@
 
 > Status: ACTIVE — this document governs execution order and tracks progress
 > Last updated: 2026-03-25
-> Phases 0–4 DONE. Next: Phase 5.
+> Phases 0–5 DONE. Next: Phase 6.
 > How to use: Update checkboxes as work lands. The *how* lives in Plans 01–06. This plan records *why*, *what*, and *when*.
 
 ---
@@ -210,7 +210,7 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 
 ---
 
-### Phase 5 — Playlist Auth Gates
+### Phase 5 — Playlist Auth Gates ✅ DONE (commit 1fa1c1a)
 **What:** Add `requireAuth` and `requireRole('coach')` to the playlist and session REST endpoints that currently have no auth guard.
 **Why here:** The server decomposition in Phase 4 extracted the routes — now each route file is the right place to add middleware. Doing this before extraction would require editing `server/index.js` again.
 **Pre-condition:** Verify `client/src/lib/api.js` `apiFetch` is still the call path for all playlist and session fetches in Plan 05's `usePlaylistManager` hook (Plan 04/05 coordination).
@@ -362,14 +362,15 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 - [x] Reduce `server/index.js` to ~110-line bootstrap (Plan 01)
 - [x] All tests pass after Phase 4b (943/943)
 
-### Phase 5 — Playlist Auth Gates
-- [ ] Confirm all client playlist calls go through `apiFetch` (Plan 04/05 coordination check)
-- [ ] Add `requireAuth` to `GET /api/sessions/current` (Plan 04 §8.6)
-- [ ] Add `requireAuth + requireRole('coach')` to `POST /api/playlists` (Plan 04 §8.6)
-- [ ] Add `requireAuth + requireRole('coach')` to `DELETE /api/playlists/:id` (Plan 04 §8.6)
-- [ ] Add `requireAuth + requireRole('coach')` to playlist mutation endpoints (Plan 04 §8.6)
-- [ ] Update `REST.api.test.js` for new 401 paths (Plan 04 §9.2)
-- [ ] All tests pass after Phase 5
+### Phase 5 — Playlist Auth Gates ✅ DONE (commit 1fa1c1a)
+- [x] Confirmed client playlist calls go through socket events (not REST `apiFetch`) — no client changes needed
+- [x] `requireAuth` on `GET /api/sessions/current` — already done in Phase 4a
+- [x] `requireAuth + requireRole('coach')` on `POST /api/playlists`
+- [x] `requireAuth + requireRole('coach')` on `DELETE /api/playlists/:id`
+- [x] `requireAuth + requireRole('coach')` on `POST /api/playlists/:id/hands`
+- [x] `requireAuth + requireRole('coach')` on `DELETE /api/playlists/:id/hands/:handId`
+- [x] Updated `REST.api.test.js`: coach-test-token mock, 13 new playlist route tests
+- [x] All tests pass after Phase 5 (956/956)
 
 ### Phase 6 — Game Engine
 - [ ] Audit and fix internal vs display key naming (`_full_board` consistency) (Plan 02 §1.2)
