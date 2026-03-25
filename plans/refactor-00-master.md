@@ -2,7 +2,7 @@
 
 > Status: ACTIVE — this document governs execution order and tracks progress
 > Last updated: 2026-03-25
-> Phases 0–3 DONE. Next: Phase 4.
+> Phases 0–4 DONE. Next: Phase 5.
 > How to use: Update checkboxes as work lands. The *how* lives in Plans 01–06. This plan records *why*, *what*, and *when*.
 
 ---
@@ -186,7 +186,7 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 
 ---
 
-### Phase 4 — Socket Auth Middleware + Server Decomposition
+### Phase 4 — Socket Auth Middleware + Server Decomposition ✅ DONE (commit bb7d506)
 **What:** Establish connection-level auth via `io.use()`, then extract all socket handlers and shared state out of `server/index.js`. This is the largest structural change in the server.
 **Why together:** The socket auth middleware must exist before handlers are extracted — it sets `socket.data.isCoach`, `socket.data.stableId`, etc. that every extracted handler will read. Handlers can't safely be extracted until auth is guaranteed at connection time.
 
@@ -343,24 +343,24 @@ Plan 03 §5 proposes wrapping `endHand` writes in a PostgreSQL RPC for atomicity
 ### Phase 3c — `startHand` Failure Guard ✅ DONE (commit e71b4ad)
 - [x] `activeHands.set()` does not run when `startHand` rejects — error logged, coach notified (Plan 03 §4)
 
-### Phase 4a — Socket Auth Middleware
-- [ ] Create `server/auth/socketAuthMiddleware.js` (Plan 04 §4)
-- [ ] Register `io.use(socketAuthMiddleware)` before `io.on('connection', ...)` (Plan 04 §4)
-- [ ] Simplify `join_room` — remove inline `HandLogger.authenticateToken` call, trust `socket.data.*` (Plan 04 §4)
-- [ ] Update client `useSocket.js` socket constructor to pass `{ auth: { token } }` (Plan 04 §4)
-- [ ] Write `server/auth/__tests__/socketAuthMiddleware.test.js` (Plan 04 §9.3)
-- [ ] All tests pass after Phase 4a
+### Phase 4a — Socket Auth Middleware ✅ DONE (commit 2986398..66bb2ec)
+- [x] Create `server/auth/socketAuthMiddleware.js` (Plan 04 §4)
+- [x] Register `io.use(socketAuthMiddleware)` before `io.on('connection', ...)` (Plan 04 §4)
+- [x] Simplify `join_room` — remove inline `HandLogger.authenticateToken` call, trust `socket.data.*` (Plan 04 §4)
+- [x] Update client `useSocket.js` socket constructor to pass `{ auth: { token } }` (Plan 04 §4)
+- [x] Write `server/auth/__tests__/socketAuthMiddleware.test.js` (Plan 04 §9.3)
+- [x] All tests pass after Phase 4a
 
-### Phase 4b — Server Decomposition
-- [ ] Create `server/state/SharedState.js` — encapsulate all 7 Maps (Plan 01 §1)
-- [ ] Apply `activeHands` failure guard to `SharedState.js` (Plan 03 §4 + Plan 01 coordination)
-- [ ] Create `server/socket/helpers.js` — `broadcastState`, `sendError`, `sendSyncError`, `startActionTimer`, `clearActionTimer` (Plan 01 §2)
-- [ ] Extract socket handler groups to `server/socket/handlers/` (Plan 01 §2)
-- [ ] Create `server/socket/index.js` — registers middleware + all handler groups (Plan 01 §2)
-- [ ] Extract REST routes to `server/routes/` (Plan 01 §2)
-- [ ] Create `server/config/startup.js` — `SESSION_SECRET`/`CORS_ORIGIN` validation + idle shutdown (Plan 01 §2)
-- [ ] Reduce `server/index.js` to ~60-line bootstrap (Plan 01)
-- [ ] All tests pass after Phase 4b
+### Phase 4b — Server Decomposition ✅ DONE (commit bb7d506)
+- [x] Create `server/state/SharedState.js` — encapsulate all 7 Maps (Plan 01 §1)
+- [x] Apply `activeHands` failure guard to `SharedState.js` (Plan 03 §4 + Plan 01 coordination)
+- [x] Create `server/socket/helpers.js` — `broadcastState`, `sendError`, `sendSyncError`, `startActionTimer`, `clearActionTimer` (Plan 01 §2)
+- [x] Extract socket handler groups to `server/socket/handlers/` (Plan 01 §2)
+- [x] Create `server/socket/index.js` — registers middleware + all handler groups (Plan 01 §2)
+- [x] Extract REST routes to `server/routes/` (Plan 01 §2)
+- [x] Idle shutdown relocated to `server/lifecycle/idleTimer.js`; startup checks remain in `server/index.js` (Plan 01 §2)
+- [x] Reduce `server/index.js` to ~110-line bootstrap (Plan 01)
+- [x] All tests pass after Phase 4b (943/943)
 
 ### Phase 5 — Playlist Auth Gates
 - [ ] Confirm all client playlist calls go through `apiFetch` (Plan 04/05 coordination check)
