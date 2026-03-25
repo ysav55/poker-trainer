@@ -78,7 +78,6 @@ class GameManager {
         branched: false,
         pre_branch_snapshot: null,
       },
-      is_replay_branch: false,
     };
   }
 
@@ -102,10 +101,11 @@ class GameManager {
 
     // In non-branched replay restore original hole cards so all clients see the full hand.
     // Skip this in branched mode — shadow players already have their dealt cards.
+    // Fix: create a new player object to avoid mutating the mapped array's source.
     if (s.replay_mode.active && !s.replay_mode.branched) {
-      players.forEach(p => {
+      players.forEach((p, i) => {
         const cards = s.replay_mode.original_hole_cards[p.stableId];
-        if (cards && cards.length > 0) p.hole_cards = [...cards];
+        if (cards && cards.length > 0) players[i] = { ...p, hole_cards: [...cards] };
       });
     }
 
@@ -182,7 +182,7 @@ class GameManager {
         player_meta: s.replay_mode.active ? s.replay_mode.player_meta : {},
         original_hole_cards: s.replay_mode.active ? s.replay_mode.original_hole_cards : {},
       },
-      is_replay_branch: s.is_replay_branch ?? false,
+      is_replay_branch: s.replay_mode.branched ?? false,
     };
   }
 
@@ -485,10 +485,7 @@ class GameManager {
         playlist_was_active: false,
       };
     }
-    // Mark branched hands so DB logging and reset_hand can be skipped
-    if (this.state.replay_mode.branched) {
-      this.state.is_replay_branch = true;
-    }
+    // replay_mode.branched already tracks this — no separate flag needed
     const players = this._gamePlayers();
     if (players.length < 2) return { error: 'Need at least 2 seated players to start' };
 
@@ -1142,7 +1139,6 @@ class GameManager {
       player_meta: {}, dealer_seat: 0, branched: false, pre_branch_snapshot: null,
       playlist_was_active: false,
     };
-    this.state.is_replay_branch = false;
     return { success: true };
   }
 
@@ -1334,7 +1330,6 @@ class GameManager {
     this.state.current_bet = 0;
     this.state.current_turn = null;
     this.state.phase = 'waiting';
-    this.state.is_replay_branch = false;
     // Reset replay_mode
     this.state.replay_mode = {
       active: false,

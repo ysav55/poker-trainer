@@ -10,7 +10,7 @@ module.exports = function registerBetting(socket, ctx) {
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
 
-    const isBranchedCoach = gm.state.is_replay_branch && socket.data.isCoach;
+    const isBranchedCoach = gm.state.replay_mode.branched && socket.data.isCoach;
     const effectivePlayerId = isBranchedCoach ? gm.state.current_turn : socket.id;
     if (isBranchedCoach && !effectivePlayerId) return sendError(socket, 'No active shadow player to act for');
 

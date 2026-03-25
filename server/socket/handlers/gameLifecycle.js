@@ -19,7 +19,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
 
     const tableId = socket.data.tableId;
 
-    if (!gm.state.is_replay_branch) {
+    if (!gm.state.replay_mode.branched) {
       const handId = uuidv4();
       const allSeatedPlayers = gm.state.players
         .filter(p => !p.is_shadow && !p.is_observer)
@@ -56,7 +56,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
     clearActionTimer(tableId);
     pausedTimerRemainders.delete(tableId);
 
-    if (gm.state.is_replay_branch) {
+    if (gm.state.replay_mode.branched) {
       const result = gm.unBranchToReplay();
       if (result.error) return sendSyncError(socket, result.error);
       broadcastState(tableId, { type: 'replay_unbranced', message: 'Returned to replay' });
