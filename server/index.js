@@ -69,6 +69,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const JwtService = require('./auth/JwtService');
 const { requireCoach } = require('./auth/socketGuards');
+const AnalyzerService = require('./game/AnalyzerService');
 const SessionManager = require('./game/SessionManager');
 const HandLogger = require('./db/HandLoggerSupabase');
 const { getPosition } = require('./game/positions');
@@ -592,7 +593,8 @@ io.on('connection', socket => {
       const allSeatedPlayers = gm.state.players
         .filter(p => !p.is_shadow && !p.is_observer)
         .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
-      await HandLogger.startHand({
+      // Fire-and-forget — only populate activeHands if DB write succeeds
+      HandLogger.startHand({
         handId,
         sessionId: gm.sessionId,
         tableId,
@@ -603,9 +605,10 @@ io.on('connection', socket => {
         bigBlind: gm.state.big_blind,
         isScenario: false,
         sessionType: 'live',
+      }).then(() => {
+        activeHands.set(tableId, { handId, sessionId: gm.sessionId });
+        socket.emit('hand_started', { handId }); // notify coach of active handId for tagging
       }).catch(err => log.error('db', 'start_hand_failed', '[HandLogger] startHand', { err, tableId, sessionId: gm.sessionId }));
-      activeHands.set(tableId, { handId, sessionId: gm.sessionId });
-      socket.emit('hand_started', { handId }); // notify coach of active handId for tagging
     }
 
     broadcastState(tableId, {
@@ -890,7 +893,7 @@ io.on('connection', socket => {
     // Log completed hand to DB
     if (handInfo && stateCopy) {
       HandLogger.endHand({ handId: handInfo.handId, state: stateCopy, socketToStable: Object.fromEntries(stableIdMap) })
-        .then(() => HandLogger.analyzeAndTagHand(handInfo.handId))
+        .then(() => AnalyzerService.analyzeAndTagHand(handInfo.handId))
         .catch(err => log.error('db', 'end_hand_failed', '[HandLogger] endHand/analyzeAndTagHand', { err, tableId: socket.data.tableId }));
       activeHands.delete(tableId);
     }

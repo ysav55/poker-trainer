@@ -1,5 +1,5 @@
 'use strict';
-const { norm } = require('./util');
+const { norm, findLastPFRaiser, findLastAggressorIndex } = require('./util');
 
 /** Postflop action pattern tags. */
 const PostflopAnalyzer = {
@@ -12,7 +12,7 @@ const PostflopAnalyzer = {
 
     // C_BET: last preflop raiser is first to bet/raise on the flop
     if (flopActions.length > 0) {
-      const lastPFRaiser = [...pre].reverse().find(a => norm(a) === 'raise');
+      const lastPFRaiser = findLastPFRaiser(pre);
       if (lastPFRaiser) {
         const firstFlopAgg = flopActions.find(a => ['raise', 'bet'].includes(norm(a)));
         if (firstFlopAgg && firstFlopAgg.player_id === lastPFRaiser.player_id)
@@ -33,12 +33,8 @@ const PostflopAnalyzer = {
     }
 
     // BLUFF_CATCH: caller of the last river bet wins at showdown.
-    // Find the last bet/raise on the river, then find the first call *after* it.
     if (riverActions.length > 0 && hand.phase_ended === 'showdown') {
-      let lastBetIdx = -1;
-      for (let i = riverActions.length - 1; i >= 0; i--) {
-        if (['raise', 'bet'].includes(norm(riverActions[i]))) { lastBetIdx = i; break; }
-      }
+      const lastBetIdx = findLastAggressorIndex(riverActions);
       if (lastBetIdx >= 0) {
         const callerAfterBet = riverActions.slice(lastBetIdx + 1).find(a => norm(a) === 'call');
         if (callerAfterBet && callerAfterBet.player_id === hand.winner_id)
@@ -48,7 +44,7 @@ const PostflopAnalyzer = {
 
     // DONK_BET: non-preflop-raiser bets first on the flop
     if (flopActions.length > 0) {
-      const lastPFRaiser = [...pre].reverse().find(a => norm(a) === 'raise');
+      const lastPFRaiser = findLastPFRaiser(pre);
       if (lastPFRaiser) {
         const firstFlopBet = flopActions.find(a => norm(a) === 'bet');
         if (firstFlopBet && firstFlopBet.player_id !== lastPFRaiser.player_id)

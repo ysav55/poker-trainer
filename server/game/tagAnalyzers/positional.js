@@ -1,5 +1,5 @@
 'use strict';
-const { norm } = require('./util');
+const { norm, findLastPFRaiser, findNthRaiser } = require('./util');
 const { isInPosition } = require('../positions');
 
 /**
@@ -17,11 +17,10 @@ const PositionalAnalyzer = {
 
     // C_BET_IP / C_BET_OOP: C-bet with/without positional advantage
     if (flopActions.length > 0) {
-      const lastPFRaiser = [...pre].reverse().find(a => norm(a) === 'raise');
+      const lastPFRaiser = findLastPFRaiser(pre);
       if (lastPFRaiser) {
         const firstFlopAgg = flopActions.find(a => ['raise', 'bet'].includes(norm(a)));
         if (firstFlopAgg && firstFlopAgg.player_id === lastPFRaiser.player_id) {
-          // Find the first non-folder who isn't the raiser — that's the player being C-bet into
           const target = flopActions.find(
             a => a.player_id !== lastPFRaiser.player_id && norm(a) !== 'fold'
           );
@@ -39,7 +38,7 @@ const PositionalAnalyzer = {
 
     // DONK_BET_BB: donk bet specifically from BB position
     if (flopActions.length > 0) {
-      const lastPFRaiser = [...pre].reverse().find(a => norm(a) === 'raise');
+      const lastPFRaiser = findLastPFRaiser(pre);
       if (lastPFRaiser) {
         const firstFlopBet = flopActions.find(a => norm(a) === 'bet');
         if (firstFlopBet && firstFlopBet.player_id !== lastPFRaiser.player_id) {
@@ -51,17 +50,11 @@ const PositionalAnalyzer = {
 
     // 3BET_BTN / 3BET_SB: 3-bet from button or small blind
     {
-      let raiseCount = 0;
-      for (const a of pre) {
-        if (norm(a) === 'raise') {
-          raiseCount++;
-          if (raiseCount === 2) {
-            const pos = positions[a.player_id];
-            if (pos === 'BTN') results.push({ tag: '3BET_BTN', tag_type: 'auto', player_id: a.player_id });
-            if (pos === 'SB')  results.push({ tag: '3BET_SB',  tag_type: 'auto', player_id: a.player_id });
-            break;
-          }
-        }
+      const threeBettor = findNthRaiser(pre, 2);
+      if (threeBettor) {
+        const pos = positions[threeBettor.player_id];
+        if (pos === 'BTN') results.push({ tag: '3BET_BTN', tag_type: 'auto', player_id: threeBettor.player_id });
+        if (pos === 'SB')  results.push({ tag: '3BET_SB',  tag_type: 'auto', player_id: threeBettor.player_id });
       }
     }
 

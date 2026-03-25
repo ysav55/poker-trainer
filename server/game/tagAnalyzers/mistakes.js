@@ -1,5 +1,5 @@
 'use strict';
-const { norm } = require('./util');
+const { norm, findNthRaiser } = require('./util');
 
 /**
  * Mistake tags — potentially questionable decisions.
@@ -42,7 +42,7 @@ const MistakeAnalyzer = {
     {
       let limpCount = 0;
       for (const a of pre) {
-        if (norm(a) === 'raise') break; // stop at first raise — no overlimps after
+        if (norm(a) === 'raise') break;
         if (norm(a) === 'call') {
           if (limpCount >= 1 && a.player_id !== bbPlayerId)
             results.push({ tag: 'OVERLIMP', tag_type: 'mistake', player_id: a.player_id });
@@ -59,7 +59,6 @@ const MistakeAnalyzer = {
         if (!firstRaiseSeen && norm(a) === 'call') limpers.add(a.player_id);
         if (norm(a) === 'raise') {
           if (!firstRaiseSeen) { firstRaiseSeen = true; continue; }
-          // Second raise (3-bet) — if the raiser previously limped, it's a limp-reraise
           if (limpers.has(a.player_id))
             results.push({ tag: 'LIMP_RERAISE', tag_type: 'mistake', player_id: a.player_id });
         }
@@ -68,25 +67,20 @@ const MistakeAnalyzer = {
 
     // ── COLD_CALL_3BET: called a 3-bet with no prior investment ────────────
     {
-      let raiseCount = 0;
-      const invested = new Set(); // players who put chips in before the 3-bet
-      for (const a of pre) {
-        if (norm(a) === 'raise') {
-          raiseCount++;
-          invested.add(a.player_id);
-          if (raiseCount === 2) {
-            // 3-bet just happened — next caller with no prior investment is a cold-caller
-            // collect subsequent calls
-            const idx = pre.indexOf(a);
-            for (const b of pre.slice(idx + 1)) {
-              if (norm(b) === 'raise') break; // 4-bet — not a cold call anymore
-              if (norm(b) === 'call' && !invested.has(b.player_id))
-                results.push({ tag: 'COLD_CALL_3BET', tag_type: 'mistake', player_id: b.player_id });
-            }
-            break;
-          }
+      const threeBet = findNthRaiser(pre, 2);
+      if (threeBet) {
+        const threeBetIdx = pre.indexOf(threeBet);
+        // Everyone who voluntarily put chips in before the 3-bet is "invested"
+        const invested = new Set(
+          pre.slice(0, threeBetIdx)
+            .filter(a => ['raise', 'call', 'all-in'].includes(norm(a)))
+            .map(a => a.player_id)
+        );
+        for (const b of pre.slice(threeBetIdx + 1)) {
+          if (norm(b) === 'raise') break; // 4-bet — not a cold call
+          if (norm(b) === 'call' && !invested.has(b.player_id))
+            results.push({ tag: 'COLD_CALL_3BET', tag_type: 'mistake', player_id: b.player_id });
         }
-        if (norm(a) === 'call') invested.add(a.player_id);
       }
     }
 
@@ -96,9 +90,8 @@ const MistakeAnalyzer = {
       for (let i = 0; i < streetActions.length; i++) {
         const a = streetActions[i];
         if (norm(a) === 'bet' && a.sizingRatio !== null && a.sizingRatio < 0.25) {
-          // Find any fold that comes after this bet on the same street
           for (const b of streetActions.slice(i + 1)) {
-            if (norm(b) === 'raise') break; // raise intervenes
+            if (norm(b) === 'raise') break;
             if (norm(b) === 'fold')
               results.push({ tag: 'FOLD_TO_PROBE', tag_type: 'mistake', player_id: b.player_id, action_id: b.id });
           }
@@ -107,8 +100,6 @@ const MistakeAnalyzer = {
     }
 
     // ── MIN_RAISE: raised to ≤ 2× the previous bet amount ─────────────────
-    // amount is raise-to (confirmed: GameManager.placeBet uses amount as the total
-    // chips facing the table, not a delta).
     outer: for (const street of ['preflop', 'flop', 'turn', 'river']) {
       let lastBetAmount = street === 'preflop' ? bb : 0;
       for (const a of (byStreet[street] || [])) {

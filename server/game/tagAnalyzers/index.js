@@ -2,13 +2,24 @@
 
 /**
  * Tag analyzer registry.
- * Each entry is an analyzer object: { name, analyze(ctx) → TagResult[] }
- *
- * TagResult shape:
- *   { tag: string, tag_type: 'auto'|'mistake'|'sizing', player_id?: UUID, action_id?: number }
+ * Each entry satisfies the Analyzer interface below.
  *
  * Order matters only for readability — all analyzers receive the same ctx
- * and their results are collected independently.
+ * and their results are collected independently via Promise.allSettled.
+ */
+
+/**
+ * @typedef {Object} TagResult
+ * @property {string} tag                              - Unique identifier, SCREAMING_SNAKE_CASE
+ * @property {'auto'|'mistake'|'sizing'} tag_type      - Category
+ * @property {string|undefined} player_id             - UUID. Omit for hand-level tags.
+ * @property {number|undefined} action_id             - hand_actions.id. Omit unless per-action.
+ */
+
+/**
+ * @typedef {Object} Analyzer
+ * @property {string} name
+ * @property {function(object): TagResult[]} analyze   - Must not throw; returns [] on no match.
  */
 
 const StreetAnalyzer       = require('./street');
