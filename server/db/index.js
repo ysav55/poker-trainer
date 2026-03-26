@@ -31,6 +31,7 @@ module.exports = {
 
   // Hand lifecycle
   startHand:            HandRepo.startHand,
+  recordDeal:           HandRepo.recordDeal,
   recordAction:         HandRepo.recordAction,
   endHand:              HandRepo.endHand,
   markIncomplete:       HandRepo.markIncomplete,

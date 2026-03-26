@@ -24,6 +24,10 @@ module.exports = function registerGameLifecycle(socket, ctx) {
       const allSeatedPlayers = gm.state.players
         .filter(p => !p.is_shadow && !p.is_observer)
         .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
+      // Capture hole cards now — before any action can mutate state
+      const dealSnapshot = gm.state.players
+        .filter(p => !p.is_shadow && !p.is_observer && p.hole_cards?.length > 0)
+        .map(p => ({ id: stableIdMap.get(p.id) || p.id, hole_cards: [...p.hole_cards] }));
       HandLogger.startHand({
         handId,
         sessionId: gm.sessionId,
@@ -38,6 +42,8 @@ module.exports = function registerGameLifecycle(socket, ctx) {
       }).then(() => {
         activeHands.set(tableId, { handId, sessionId: gm.sessionId });
         socket.emit('hand_started', { handId });
+        HandLogger.recordDeal(handId, dealSnapshot)
+          .catch(err => log.error('db', 'record_deal_failed', '[HandLogger] recordDeal', { err, tableId }));
       }).catch(err => log.error('db', 'start_hand_failed', '[HandLogger] startHand', { err, tableId, sessionId: gm.sessionId }));
     }
 
@@ -98,6 +104,10 @@ module.exports = function registerGameLifecycle(socket, ctx) {
     const handId = uuidv4();
     const allSeatedPlayers = gm.state.players
       .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
+    // Capture hole cards now — before any action can mutate state
+    const dealSnapshot = gm.state.players
+      .filter(p => p.hole_cards?.length > 0)
+      .map(p => ({ id: stableIdMap.get(p.id) || p.id, hole_cards: [...p.hole_cards] }));
     await HandLogger.startHand({
       handId,
       sessionId: gm.sessionId,
@@ -112,6 +122,8 @@ module.exports = function registerGameLifecycle(socket, ctx) {
     }).catch(err => log.error('db', 'start_hand_configured_failed', '[HandLogger] startHand (configured)', { err, tableId }));
     activeHands.set(tableId, { handId, sessionId: gm.sessionId, isManualScenario: true });
     socket.emit('hand_started', { handId });
+    HandLogger.recordDeal(handId, dealSnapshot)
+      .catch(err => log.error('db', 'record_deal_failed', '[HandLogger] recordDeal (configured)', { err, tableId }));
 
     broadcastState(tableId, { type: 'game_start', message: 'Configured hand started' });
     startActionTimer(tableId);

@@ -147,6 +147,21 @@ async function endHand({ handId, state, socketToStable = {} }) {
   await Promise.all(updatePromises);
 }
 
+async function recordDeal(handId, players) {
+  if (!players?.length) return;
+  const rows = players.filter(p => p.hole_cards?.length > 0);
+  if (!rows.length) return;
+  await Promise.all(
+    rows.map(p =>
+      q(supabase.from('hand_players')
+        .update({ hole_cards: p.hole_cards })
+        .eq('hand_id', handId)
+        .eq('player_id', p.id)
+      )
+    )
+  );
+}
+
 async function markIncomplete(handId, state = null) {
   const update = { completed_normally: false };
   if (state) {
@@ -246,6 +261,6 @@ async function getHandDetail(handId) {
 }
 
 module.exports = {
-  startHand, recordAction, endHand, markIncomplete, logStackAdjustment,
+  startHand, recordDeal, recordAction, endHand, markIncomplete, logStackAdjustment,
   markLastActionReverted, getHands, getHandDetail,
 };

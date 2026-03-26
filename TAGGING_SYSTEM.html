@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hand Tagging System — Poker Trainer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    rgba(255,255,255,0.07);
+      --border2:   rgba(255,255,255,0.12);
+      --text:      #e6edf3;
+      --muted:     #7d8590;
+      --muted2:    #b1bac4;
+      --gold:      #d4af37;
+      --gold-dim:  rgba(212,175,55,0.18);
+      --gold-glow: rgba(212,175,55,0.08);
+      --rose:      #f85149;
+      --rose-dim:  rgba(248,81,73,0.14);
+      --teal:      #39d353;
+      --teal-dim:  rgba(57,211,83,0.12);
+      --blue:      #79c0ff;
+      --blue-dim:  rgba(121,192,255,0.12);
+      --purple:    #bc8cff;
+      --purple-dim:rgba(188,140,255,0.12);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SCROLLBAR ─────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+    /* ── NAV ───────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(13,17,23,0.9);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+    }
+    .nav-logo {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: var(--gold);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .nav-links {
+      display: flex;
+      gap: 0;
+      list-style: none;
+      flex: 1;
+      overflow-x: auto;
+    }
+    .nav-links a {
+      display: block;
+      padding: 0 1rem;
+      height: 52px;
+      line-height: 52px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      transition: color 0.2s;
+      border-bottom: 2px solid transparent;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+    /* ── LAYOUT ────────────────────────────────────── */
+    .wrapper {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    section {
+      padding: 5rem 0 4rem;
+      border-bottom: 1px solid var(--border);
+    }
+    section:last-child { border-bottom: none; }
+
+    /* ── HERO ──────────────────────────────────────── */
+    #hero {
+      padding: 6rem 0 5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+    .hero-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      color: var(--gold);
+      text-transform: uppercase;
+      margin-bottom: 1.25rem;
+    }
+    .hero-title {
+      font-size: clamp(2.4rem, 4vw, 3.8rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+    }
+    .hero-title em {
+      font-style: normal;
+      color: var(--gold);
+    }
+    .hero-desc {
+      font-size: 17px;
+      color: var(--muted2);
+      line-height: 1.7;
+      max-width: 52ch;
+    }
+    .hero-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .stat-cell {
+      background: var(--surface);
+      padding: 1.75rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .stat-num {
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--text);
+      line-height: 1;
+    }
+    .stat-num span { color: var(--gold); }
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ── SECTION HEADERS ──────────────────────────── */
+    .section-num {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 0.6rem;
+    }
+    h2 {
+      font-size: clamp(1.8rem, 3vw, 2.8rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 1rem;
+    }
+    .section-desc {
+      font-size: 16px;
+      color: var(--muted2);
+      max-width: 64ch;
+      line-height: 1.7;
+      margin-bottom: 3rem;
+    }
+
+    /* ── CARDS ─────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    /* ── TAGS ──────────────────────────────────────── */
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      border: 1px solid transparent;
+      line-height: 1.6;
+    }
+    .tag-auto   { background: var(--blue-dim);   color: var(--blue);   border-color: rgba(121,192,255,0.22); }
+    .tag-mistake{ background: var(--rose-dim);   color: var(--rose);   border-color: rgba(248,81,73,0.22); }
+    .tag-coach  { background: var(--gold-dim);   color: var(--gold);   border-color: rgba(212,175,55,0.3); }
+    .tag-sizing { background: var(--purple-dim); color: var(--purple); border-color: rgba(188,140,255,0.22); }
+    .tag-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+
+    /* ── MANUAL TAGGING ────────────────────────────── */
+    #manual .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+
+    /* UI mockup of TagHandPill */
+    .pill-mockup {
+      border-radius: 14px;
+      background: rgba(6,10,15,0.97);
+      border: 1px solid rgba(212,175,55,0.3);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      overflow: hidden;
+      max-width: 240px;
+      margin-left: auto;
+    }
+    .pill-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .pill-header-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--gold);
+    }
+    .pill-saved {
+      font-size: 9px;
+      color: #3fb950;
+      letter-spacing: 0.06em;
+    }
+    .pill-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 12px;
+    }
+    .pill-chip {
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      border: 1px solid;
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+    .pill-chip.on  { background: rgba(212,175,55,0.18); border-color: rgba(212,175,55,0.5); color: #d4b896; }
+    .pill-chip.off { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); color: #6e7681; }
+    .pill-footer {
+      padding: 4px 12px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .pill-count { font-size: 9px; color: #6e7681; }
+    .pill-clear { font-size: 9px; color: rgba(248,81,73,0.7); }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 1rem;
+    }
+    .step-connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+    .step-circle {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border2);
+      background: var(--surface2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--gold);
+      flex-shrink: 0;
+    }
+    .step-line {
+      width: 1.5px;
+      flex: 1;
+      min-height: 24px;
+      background: var(--border);
+    }
+    .step-body {
+      padding-bottom: 1.75rem;
+    }
+    .step-body:last-child { padding-bottom: 0; }
+    .step-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.3rem;
+      padding-top: 7px;
+    }
+    .step-text {
+      font-size: 14px;
+      color: var(--muted2);
+      line-height: 1.6;
+    }
+    .step-text code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--muted2);
+    }
+
+    /* ── AUTO-TAGGING PIPELINE ─────────────────────── */
+    .pipeline {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0;
+    }
+    .pipeline-node {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.1rem 1.4rem;
+      position: relative;
+    }
+    .pipeline-node.trigger {
+      border-color: rgba(212,175,55,0.3);
+      background: var(--gold-glow);
+    }
+    .pipeline-node.context {
+      border-color: rgba(121,192,255,0.2);
+    }
+    .pipeline-node.analyzers {
+      border-color: rgba(57,211,83,0.2);
+    }
+    .pipeline-node.storage {
+      border-color: rgba(188,140,255,0.2);
+    }
+    .pipeline-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    .pipeline-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.25rem;
+    }
+    .pipeline-detail {
+      font-size: 13px;
+      color: var(--muted2);
+      line-height: 1.55;
+    }
+    .pipeline-arrow {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 36px;
+      color: var(--muted);
+    }
+    .pipeline-arrow svg { opacity: 0.5; }
+
+    .analyzer-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 0.75rem;
+    }
+    .analyzer-chip {
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: rgba(57,211,83,0.07);
+      border: 1px solid rgba(57,211,83,0.15);
+      font-size: 12px;
+      font-weight: 600;
+      color: #3fb950;
+    }
+    .analyzer-chip small {
+      display: block;
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    /* ── TAG CATALOG ──────────────────────────────── */
+    .tag-filter-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 100px;
+      border: 1px solid var(--border2);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover { border-color: var(--border2); color: var(--text); }
+    .filter-btn.active-auto   { background: var(--blue-dim);   border-color: rgba(121,192,255,0.3);  color: var(--blue); }
+    .filter-btn.active-mistake{ background: var(--rose-dim);   border-color: rgba(248,81,73,0.3);    color: var(--rose); }
+    .filter-btn.active-coach  { background: var(--gold-dim);   border-color: rgba(212,175,55,0.3);   color: var(--gold); }
+    .filter-btn.active-sizing { background: var(--purple-dim); border-color: rgba(188,140,255,0.3);  color: var(--purple); }
+    .filter-btn.active-all    { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.2); color: var(--text); }
+    .filter-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .catalog-groups { display: flex; flex-direction: column; gap: 2.5rem; }
+    .catalog-group { }
+    .catalog-group-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .catalog-group-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .catalog-group-count {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .tag-rows { display: flex; flex-direction: column; gap: 0; }
+    .tag-row {
+      display: grid;
+      grid-template-columns: 200px 1fr 100px;
+      gap: 1rem;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid var(--border);
+      align-items: baseline;
+    }
+    .tag-row:last-child { border-bottom: none; }
+    .tag-name-col { }
+    .tag-desc-col { font-size: 14px; color: var(--muted2); line-height: 1.5; }
+    .tag-scope-col {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── DOWNSTREAM ───────────────────────────────── */
+    .downstream-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+    .downstream-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .downstream-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 0.25rem;
+    }
+    .downstream-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .downstream-desc {
+      font-size: 14px;
+      color: var(--muted2);
+      line-height: 1.6;
+    }
+    .downstream-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: auto;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── GAPS ─────────────────────────────────────── */
+    .gaps-list { display: flex; flex-direction: column; gap: 1rem; }
+    .gap-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 1.25rem;
+      padding: 1.25rem 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      align-items: start;
+    }
+    .gap-item.high   { border-left: 3px solid var(--rose); }
+    .gap-item.medium { border-left: 3px solid var(--gold); }
+    .gap-item.low    { border-left: 3px solid var(--muted); }
+    .gap-severity {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .high   .gap-severity { background: var(--rose-dim);  color: var(--rose); }
+    .medium .gap-severity { background: var(--gold-dim);  color: var(--gold); }
+    .low    .gap-severity { background: rgba(255,255,255,0.05); color: var(--muted); }
+    .gap-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
+    .gap-desc  { font-size: 14px; color: var(--muted2); line-height: 1.6; }
+
+    /* ── QUICK REF ────────────────────────────────── */
+    .qr-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    .qr-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+    }
+    .qr-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.25rem;
+    }
+    .qr-table { width: 100%; border-collapse: collapse; }
+    .qr-table td {
+      padding: 0.55rem 0;
+      font-size: 13.5px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .qr-table tr:last-child td { border-bottom: none; }
+    .qr-table td:first-child {
+      color: var(--muted);
+      width: 38%;
+      padding-right: 1rem;
+      font-weight: 500;
+    }
+    .qr-table td:last-child {
+      color: var(--text);
+    }
+    .qr-table code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* ── TYPE LEGEND ──────────────────────────────── */
+    .type-legend {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 2.5rem;
+    }
+    .type-cell {
+      padding: 1.25rem 1.5rem;
+      background: var(--surface);
+    }
+    .type-cell-badge { margin-bottom: 0.7rem; }
+    .type-cell-name { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 0.3rem; }
+    .type-cell-desc { font-size: 13px; color: var(--muted2); line-height: 1.5; }
+    .type-cell-who  { font-size: 11px; color: var(--muted); margin-top: 0.5rem; font-weight: 500; }
+
+    /* ── TIMELINE ────────────────────────────────── */
+    .timeline {
+      position: relative;
+      padding-left: 2rem;
+      border-left: 1.5px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 1.75rem;
+    }
+    .tl-item {
+      position: relative;
+    }
+    .tl-dot {
+      position: absolute;
+      left: -2.55rem;
+      top: 4px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 2px solid var(--border2);
+    }
+    .tl-dot.gold { border-color: var(--gold); background: var(--gold-glow); }
+    .tl-dot.blue { border-color: var(--blue); background: var(--blue-dim); }
+    .tl-dot.green{ border-color: var(--teal); background: var(--teal-dim); }
+    .tl-dot.purple{ border-color: var(--purple); background: var(--purple-dim); }
+    .tl-title { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 0.3rem; }
+    .tl-desc  { font-size: 14px; color: var(--muted2); line-height: 1.6; }
+
+    /* ── FOOTER ───────────────────────────────────── */
+    footer {
+      padding: 3rem 0;
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── CALLOUT ──────────────────────────────────── */
+    .callout {
+      padding: 1rem 1.25rem;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.6;
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-start;
+    }
+    .callout.info  { background: var(--blue-dim);   border: 1px solid rgba(121,192,255,0.18); color: var(--muted2); }
+    .callout.warn  { background: var(--gold-glow);  border: 1px solid rgba(212,175,55,0.2);  color: var(--muted2); }
+    .callout-icon  { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── ANIMATIONS ───────────────────────────────── */
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .anim { opacity: 0; }
+    .anim.visible { animation: fade-up 0.5s cubic-bezier(0.16,1,0.3,1) forwards; }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.3); }
+    }
+    .live-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #3fb950;
+      animation: pulse-dot 2s ease-in-out infinite;
+      margin-right: 6px;
+    }
+
+    /* ── RESPONSIVE ───────────────────────────────── */
+    @media (max-width: 768px) {
+      .hero-inner,
+      #manual .two-col,
+      .downstream-grid,
+      .qr-grid { grid-template-columns: 1fr; }
+      .type-legend { grid-template-columns: 1fr 1fr; }
+      .analyzer-grid { grid-template-columns: repeat(2, 1fr); }
+      .tag-row { grid-template-columns: 1fr; gap: 0.25rem; }
+      .tag-scope-col { text-align: left; }
+      nav { padding: 0 1rem; }
+      .wrapper { padding: 0 1rem; }
+      .pill-mockup { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Tagging System</div>
+  <ul class="nav-links">
+    <li><a href="#manual" class="active">Manual</a></li>
+    <li><a href="#auto">Auto</a></li>
+    <li><a href="#catalog">Tag Catalog</a></li>
+    <li><a href="#downstream">Downstream</a></li>
+    <li><a href="#gaps">Gaps</a></li>
+    <li><a href="#reference">Quick Ref</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="wrapper">
+    <div class="hero-inner">
+      <div>
+        <div class="hero-label">Poker Trainer — System Map</div>
+        <h1 class="hero-title">Hand <em>Tagging</em><br>System</h1>
+        <p class="hero-desc">Every hand can carry two kinds of labels: ones a coach places intentionally, and ones the system computes automatically after the hand ends. This document maps out both — who does what, when, and what it unlocks.</p>
+      </div>
+      <div class="hero-stats">
+        <div class="stat-cell">
+          <div class="stat-num">9<span>×</span></div>
+          <div class="stat-label">Auto analyzers running per hand</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num">50<span>+</span></div>
+          <div class="stat-label">Distinct tag types in the system</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num">4</div>
+          <div class="stat-label">Tag categories (auto, mistake, sizing, coach)</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num">6</div>
+          <div class="stat-label">Preset coach tags available</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TYPE LEGEND (inline overview) -->
+<div class="wrapper" style="padding-top: 3rem; padding-bottom: 0;">
+  <div class="type-legend anim">
+    <div class="type-cell">
+      <div class="type-cell-badge"><span class="tag tag-auto"><span class="tag-dot"></span>auto</span></div>
+      <div class="type-cell-name">Auto Tags</div>
+      <div class="type-cell-desc">Descriptive labels about what happened in the hand — board texture, pot type, action sequences.</div>
+      <div class="type-cell-who">Created by: system, after each hand</div>
+    </div>
+    <div class="type-cell">
+      <div class="type-cell-badge"><span class="tag tag-mistake"><span class="tag-dot"></span>mistake</span></div>
+      <div class="type-cell-name">Mistake Tags</div>
+      <div class="type-cell-desc">Automatically flagged decisions that are often (but not always) questionable. Attached to the player who made them.</div>
+      <div class="type-cell-who">Created by: system, after each hand</div>
+    </div>
+    <div class="type-cell">
+      <div class="type-cell-badge"><span class="tag tag-sizing"><span class="tag-dot"></span>sizing</span></div>
+      <div class="type-cell-name">Sizing Tags</div>
+      <div class="type-cell-desc">Bet-size buckets attached to individual actions — every postflop bet or raise gets one of six sizing labels.</div>
+      <div class="type-cell-who">Created by: system, per action</div>
+    </div>
+    <div class="type-cell">
+      <div class="type-cell-badge"><span class="tag tag-coach"><span class="tag-dot"></span>coach</span></div>
+      <div class="type-cell-name">Coach Tags</div>
+      <div class="type-cell-desc">Human labels added during or after a live hand. The coach decides what's worth flagging for review or drilling.</div>
+      <div class="type-cell-who">Created by: coach only</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ───── SECTION 1: MANUAL TAGGING ───── -->
+<section id="manual">
+  <div class="wrapper">
+    <div class="section-num">01 — Coach-Driven</div>
+    <h2>Manual Tagging</h2>
+    <p class="section-desc">The coach can label any active hand with a preset tag at any point while the hand is running. These labels survive forever and are never overwritten by the system.</p>
+
+    <div class="two-col">
+      <!-- STEPS -->
+      <div>
+        <div class="steps">
+          <div class="step anim" style="--i:0">
+            <div class="step-connector">
+              <div class="step-circle">1</div>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-body">
+              <div class="step-title">Hand is in progress</div>
+              <div class="step-text">A "TAG HAND" pill appears at the top-right of the screen. It's only visible during an active hand — it disappears in lobby or replay mode.</div>
+            </div>
+          </div>
+          <div class="step anim" style="--i:1">
+            <div class="step-connector">
+              <div class="step-circle">2</div>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-body">
+              <div class="step-title">Coach clicks the pill</div>
+              <div class="step-text">The pill expands to show six preset tag chips: <code>Review</code>, <code>Bluff</code>, <code>Hero Call</code>, <code>Mistake</code>, <code>Key Hand</code>, <code>3-Bet Pot</code>. Clicking a chip toggles it on or off.</div>
+            </div>
+          </div>
+          <div class="step anim" style="--i:2">
+            <div class="step-connector">
+              <div class="step-circle">3</div>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-body">
+              <div class="step-title">Tags are saved</div>
+              <div class="step-text">Each selection immediately sends a <code>update_hand_tags</code> event to the server. The server deletes any existing coach tags for that hand and inserts the new set. A "&#10003; Saved" indicator confirms success.</div>
+            </div>
+          </div>
+          <div class="step anim" style="--i:3">
+            <div class="step-connector">
+              <div class="step-circle">4</div>
+              <div class="step-line"></div>
+            </div>
+            <div class="step-body">
+              <div class="step-title">A playlist is auto-created</div>
+              <div class="step-text">For each tag applied, the system creates or reuses a playlist with that tag's name, then adds this hand to it. Tag "Bluff" → a "Bluff" playlist is ready for drill sessions immediately. No manual playlist work needed.</div>
+            </div>
+          </div>
+          <div class="step anim" style="--i:4">
+            <div class="step-connector">
+              <div class="step-circle">5</div>
+            </div>
+            <div class="step-body">
+              <div class="step-title">Pill collapses on hand end</div>
+              <div class="step-text">When the coach resets the hand, the pill auto-collapses and clears its selection for the next hand. Coach tags on the <em>previous</em> hand remain stored forever.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout info anim" style="margin-top: 1.75rem;">
+          <div class="callout-icon">i</div>
+          <div>Coach tags are the only tags that are <strong>never replaced by the system</strong>. They persist indefinitely regardless of how many times the hand is re-analyzed.</div>
+        </div>
+      </div>
+
+      <!-- UI MOCKUP -->
+      <div style="display: flex; flex-direction: column; gap: 1.25rem; align-items: flex-end;">
+        <div style="font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-align: right;">LIVE UI — TAG HAND PILL</div>
+        <div class="pill-mockup">
+          <div class="pill-header">
+            <div class="pill-header-label">TAG HAND</div>
+            <div class="pill-saved">&#10003; Saved</div>
+          </div>
+          <div class="pill-tags">
+            <div class="pill-chip on">Review</div>
+            <div class="pill-chip off">Bluff</div>
+            <div class="pill-chip on">Hero Call</div>
+            <div class="pill-chip off">Mistake</div>
+            <div class="pill-chip off">Key Hand</div>
+            <div class="pill-chip off">3-Bet Pot</div>
+          </div>
+          <div class="pill-footer">
+            <div class="pill-count">2 tags applied</div>
+            <div class="pill-clear">Clear</div>
+          </div>
+        </div>
+
+        <div class="card anim" style="max-width: 280px; width: 100%;">
+          <div class="card-title">What makes it coach-only</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.6;">The server checks the player's role before processing <code>update_hand_tags</code>. Anyone without a <code>coach</code> role gets an error. Regular players cannot tag hands.</div>
+        </div>
+
+        <div class="card anim" style="max-width: 280px; width: 100%;">
+          <div class="card-title">Replace, not append</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.6;">Every save replaces <em>all</em> existing coach tags for that hand. Removing a chip and saving removes it from the database. There is no separate "delete" action.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ───── SECTION 2: AUTO TAGGING ───── -->
+<section id="auto">
+  <div class="wrapper">
+    <div class="section-num">02 — System-Driven</div>
+    <h2>Auto-Tagging</h2>
+    <p class="section-desc">When a hand ends, one pipeline runs automatically — no coach involvement needed. It builds a rich context object, then fires nine specialized analyzers in parallel, each responsible for a different dimension of the hand.</p>
+
+    <div class="callout warn anim" style="margin-bottom: 2.5rem; max-width: 700px;">
+      <div class="callout-icon">&#9888;</div>
+      <div>There is <strong>one auto-tagging pipeline</strong>, not two separate systems. However, it produces three distinct tag types — <span class="tag tag-auto" style="font-size:10px;">auto</span>, <span class="tag tag-mistake" style="font-size:10px;">mistake</span>, and <span class="tag tag-sizing" style="font-size:10px;">sizing</span> — which behave and display differently. This may be the source of the "two taggers" impression.</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 320px 1fr; gap: 2.5rem; align-items: start;">
+
+      <!-- PIPELINE DIAGRAM -->
+      <div class="pipeline anim">
+        <div class="pipeline-node trigger">
+          <div class="pipeline-label">Trigger</div>
+          <div class="pipeline-title"><span class="live-dot"></span>Coach resets hand</div>
+          <div class="pipeline-detail">The moment the coach clicks "Reset Hand", the hand is saved to the database, then analysis starts automatically.</div>
+        </div>
+        <div class="pipeline-arrow">
+          <svg width="16" height="24" viewBox="0 0 16 24"><line x1="8" y1="0" x2="8" y2="18" stroke="currentColor" stroke-width="1.5"/><polyline points="4,14 8,22 12,14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="pipeline-node context">
+          <div class="pipeline-label">Step 1 — Context</div>
+          <div class="pipeline-title">Build shared context</div>
+          <div class="pipeline-detail">3 parallel database queries fetch the hand, all actions (with bet-size ratios calculated), and the seat map. Player positions (BTN, BB, etc.) are computed. A hand-evaluator is prepared for strength lookups.</div>
+        </div>
+        <div class="pipeline-arrow">
+          <svg width="16" height="24" viewBox="0 0 16 24"><line x1="8" y1="0" x2="8" y2="18" stroke="currentColor" stroke-width="1.5"/><polyline points="4,14 8,22 12,14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="pipeline-node analyzers">
+          <div class="pipeline-label">Step 2 — Analysis</div>
+          <div class="pipeline-title">9 analyzers run in parallel</div>
+          <div class="pipeline-detail">Each analyzer gets the shared context and returns a list of tag results. If one analyzer crashes, the others continue — faults are independent.</div>
+          <div class="analyzer-grid" style="margin-top: 1rem;">
+            <div class="analyzer-chip">Street<small>progression</small></div>
+            <div class="analyzer-chip">Preflop<small>aggression</small></div>
+            <div class="analyzer-chip">Postflop<small>sequences</small></div>
+            <div class="analyzer-chip">Pot Type<small>size & depth</small></div>
+            <div class="analyzer-chip">Board<small>texture</small></div>
+            <div class="analyzer-chip">Mistakes<small>decisions</small></div>
+            <div class="analyzer-chip">Sizing<small>bet buckets</small></div>
+            <div class="analyzer-chip">Positional<small>seat context</small></div>
+            <div class="analyzer-chip">Hand Str.<small>outcomes</small></div>
+          </div>
+        </div>
+        <div class="pipeline-arrow">
+          <svg width="16" height="24" viewBox="0 0 16 24"><line x1="8" y1="0" x2="8" y2="18" stroke="currentColor" stroke-width="1.5"/><polyline points="4,14 8,22 12,14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="pipeline-node" style="border-color: rgba(255,255,255,0.12);">
+          <div class="pipeline-label">Step 3 — Validate</div>
+          <div class="pipeline-title">Deduplicate results</div>
+          <div class="pipeline-detail">Hand-level and player-level tags are deduplicated. Sizing tags (one per action) are never deduplicated — the same action can have at most one sizing label anyway.</div>
+        </div>
+        <div class="pipeline-arrow">
+          <svg width="16" height="24" viewBox="0 0 16 24"><line x1="8" y1="0" x2="8" y2="18" stroke="currentColor" stroke-width="1.5"/><polyline points="4,14 8,22 12,14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="pipeline-node storage">
+          <div class="pipeline-label">Step 4 — Store</div>
+          <div class="pipeline-title">Atomic replace in database</div>
+          <div class="pipeline-detail">All previous auto/mistake/sizing tags for this hand are deleted. The new tags are inserted in one operation. Coach tags are never touched.</div>
+        </div>
+      </div>
+
+      <!-- ANALYZER DETAIL CARDS -->
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+
+        <div class="card anim">
+          <div class="card-title">Street Analyzer — what happened on each street?</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.65; margin-bottom: 0.75rem;">Tracks how far the hand went. Did everyone fold preflop? Did it reach the river? Was there a showdown?</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            <span class="tag tag-auto">WALK</span>
+            <span class="tag tag-auto">SAW_FLOP</span>
+            <span class="tag tag-auto">SAW_TURN</span>
+            <span class="tag tag-auto">SAW_RIVER</span>
+            <span class="tag tag-auto">WENT_TO_SHOWDOWN</span>
+          </div>
+        </div>
+
+        <div class="card anim">
+          <div class="card-title">Preflop Analyzer — how was the pot built?</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.65; margin-bottom: 0.75rem;">Classifies the preflop action type. Was it a limped pot? A 3-bet? A squeeze? Includes who opened from button and whether the big blind defended.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            <span class="tag tag-auto">3BET_POT</span>
+            <span class="tag tag-auto">FOUR_BET_POT</span>
+            <span class="tag tag-auto">SQUEEZE_POT</span>
+            <span class="tag tag-auto">ALL_IN_PREFLOP</span>
+            <span class="tag tag-auto">LIMPED_POT</span>
+            <span class="tag tag-auto">BTN_OPEN</span>
+            <span class="tag tag-auto">BLIND_DEFENSE</span>
+          </div>
+        </div>
+
+        <div class="card anim">
+          <div class="card-title">Postflop Analyzer — notable postflop events</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.65; margin-bottom: 0.75rem;">Did the preflop raiser bet the flop (c-bet)? Did someone check-raise? Was there a donk bet (non-raiser leading out)? Did someone raise on the river?</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            <span class="tag tag-auto">C_BET</span>
+            <span class="tag tag-auto">CHECK_RAISE</span>
+            <span class="tag tag-auto">BLUFF_CATCH</span>
+            <span class="tag tag-auto">DONK_BET</span>
+            <span class="tag tag-auto">RIVER_RAISE</span>
+          </div>
+        </div>
+
+        <div class="card anim">
+          <div class="card-title">Board Analyzer — what did the board look like?</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.65; margin-bottom: 0.75rem;">Full characterization of board texture across three dimensions: suit distribution (flush draws), pairing (paired/trips), connectivity (straight draws), and card height.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            <span class="tag tag-auto">MONOTONE_BOARD</span>
+            <span class="tag tag-auto">TWO_TONE_BOARD</span>
+            <span class="tag tag-auto">RAINBOW_BOARD</span>
+            <span class="tag tag-auto">PAIRED_BOARD</span>
+            <span class="tag tag-auto">CONNECTED_BOARD</span>
+            <span class="tag tag-auto">WET_BOARD</span>
+            <span class="tag tag-auto">DRY_BOARD</span>
+            <span class="tag tag-auto">ACE_HIGH_BOARD</span>
+          </div>
+        </div>
+
+        <div class="card anim">
+          <div class="card-title">Mistake Analyzer — potentially questionable plays</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.65; margin-bottom: 0.75rem;">Flags common leaks. Tags are attached to the specific player involved, so you can see who made the play, not just that it happened.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            <span class="tag tag-mistake">OPEN_LIMP</span>
+            <span class="tag tag-mistake">OVERLIMP</span>
+            <span class="tag tag-mistake">LIMP_RERAISE</span>
+            <span class="tag tag-mistake">COLD_CALL_3BET</span>
+            <span class="tag tag-mistake">FOLD_TO_PROBE</span>
+            <span class="tag tag-mistake">MIN_RAISE</span>
+            <span class="tag tag-mistake">UNDO_USED</span>
+          </div>
+        </div>
+
+        <div class="card anim">
+          <div class="card-title">Sizing Analyzer — how big were the bets?</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.65; margin-bottom: 0.75rem;">Every postflop bet or raise gets a sizing bucket based on its ratio to the pot at the time of the action. One tag per action, attached to both the action and the player.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            <span class="tag tag-sizing">PROBE_BET &lt;25%</span>
+            <span class="tag tag-sizing">THIRD_POT_BET 25–49%</span>
+            <span class="tag tag-sizing">HALF_POT_BET 50–79%</span>
+            <span class="tag tag-sizing">POT_BET 80–110%</span>
+            <span class="tag tag-sizing">OVERBET 110–200%</span>
+            <span class="tag tag-sizing">OVERBET_JAM &gt;200%</span>
+          </div>
+        </div>
+
+        <div class="card anim">
+          <div class="card-title">Hand Strength Analyzer — what did the cards say?</div>
+          <div style="font-size: 14px; color: var(--muted2); line-height: 1.65; margin-bottom: 0.75rem;">Requires hole cards to be recorded. Evaluates actual hand strength at each street to detect slowplaying, hero calls, missed value, and thin value raises.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+            <span class="tag tag-auto">SLOWPLAY</span>
+            <span class="tag tag-auto">HERO_CALL</span>
+            <span class="tag tag-auto">VALUE_MISSED</span>
+            <span class="tag tag-auto">THIN_VALUE_RAISE</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ───── SECTION 3: TAG CATALOG ───── -->
+<section id="catalog">
+  <div class="wrapper">
+    <div class="section-num">03 — Reference</div>
+    <h2>Complete Tag Catalog</h2>
+    <p class="section-desc">Every tag in the system, organized by analyzer. The scope column shows whether the tag attaches to the whole hand, a specific player, or a specific action.</p>
+
+    <div class="tag-filter-bar">
+      <button class="filter-btn active-all" onclick="filterTags('all', this)"><span class="filter-dot"></span>All tags</button>
+      <button class="filter-btn" onclick="filterTags('auto', this)"><span class="filter-dot" style="background:var(--blue)"></span>Auto</button>
+      <button class="filter-btn" onclick="filterTags('mistake', this)"><span class="filter-dot" style="background:var(--rose)"></span>Mistake</button>
+      <button class="filter-btn" onclick="filterTags('sizing', this)"><span class="filter-dot" style="background:var(--purple)"></span>Sizing</button>
+      <button class="filter-btn" onclick="filterTags('coach', this)"><span class="filter-dot" style="background:var(--gold)"></span>Coach</button>
+    </div>
+
+    <div class="catalog-groups">
+
+      <!-- STREET -->
+      <div class="catalog-group" data-type="auto">
+        <div class="catalog-group-header">
+          <span class="tag tag-auto">auto</span>
+          <span class="catalog-group-title">Street Analyzer</span>
+          <span class="catalog-group-count">5 tags</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">WALK</span></div><div class="tag-desc-col">Everyone folded preflop before the BB acted — no board was dealt.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">SAW_FLOP</span></div><div class="tag-desc-col">The hand reached the flop (3 community cards were dealt).</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">SAW_TURN</span></div><div class="tag-desc-col">The hand reached the turn (4th community card).</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">SAW_RIVER</span></div><div class="tag-desc-col">The hand reached the river (5th community card).</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">WENT_TO_SHOWDOWN</span></div><div class="tag-desc-col">The hand ended with a showdown — cards were turned up.</div><div class="tag-scope-col">hand</div></div>
+        </div>
+      </div>
+
+      <!-- PREFLOP -->
+      <div class="catalog-group" data-type="auto">
+        <div class="catalog-group-header">
+          <span class="tag tag-auto">auto</span>
+          <span class="catalog-group-title">Preflop Analyzer</span>
+          <span class="catalog-group-count">7 tags</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">LIMPED_POT</span></div><div class="tag-desc-col">At least one player limped (called the BB) and there was no raise before the flop.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">3BET_POT</span></div><div class="tag-desc-col">There were at least 2 raises preflop — open raise followed by a 3-bet.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">FOUR_BET_POT</span></div><div class="tag-desc-col">At least 3 raises preflop — open, 3-bet, and a 4-bet.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">SQUEEZE_POT</span></div><div class="tag-desc-col">A raise was made after a previous raise had already been called (raise → call → re-raise sequence).</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">ALL_IN_PREFLOP</span></div><div class="tag-desc-col">Someone went all-in before the flop was dealt.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">BTN_OPEN</span></div><div class="tag-desc-col">The first preflop raise came from the Button position — the most positionally advantaged seat.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">BLIND_DEFENSE</span></div><div class="tag-desc-col">The Big Blind called or re-raised after someone had already raised preflop.</div><div class="tag-scope-col">hand</div></div>
+        </div>
+      </div>
+
+      <!-- POSTFLOP -->
+      <div class="catalog-group" data-type="auto">
+        <div class="catalog-group-header">
+          <span class="tag tag-auto">auto</span>
+          <span class="catalog-group-title">Postflop Analyzer</span>
+          <span class="catalog-group-count">5 tags</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">C_BET</span></div><div class="tag-desc-col">Continuation bet — the player who raised last preflop was also first to bet on the flop.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">DONK_BET</span></div><div class="tag-desc-col">The flop was led by someone other than the preflop raiser — unusual and often a sign of a strong hand or a mistake.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">CHECK_RAISE</span></div><div class="tag-desc-col">A player checked, then raised after being bet into on any postflop street.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">BLUFF_CATCH</span></div><div class="tag-desc-col">Someone called a river bet with a weak hand and won at showdown — a successful bluff catch.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">RIVER_RAISE</span></div><div class="tag-desc-col">A raise occurred on the river — a high-variance action that usually represents a very strong hand or a bluff.</div><div class="tag-scope-col">hand</div></div>
+        </div>
+      </div>
+
+      <!-- POT TYPE -->
+      <div class="catalog-group" data-type="auto">
+        <div class="catalog-group-header">
+          <span class="tag tag-auto">auto</span>
+          <span class="catalog-group-title">Pot Type Analyzer</span>
+          <span class="catalog-group-count">5 tags</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">WHALE_POT</span></div><div class="tag-desc-col">Final pot exceeded 150 big blinds — a very large pot relative to the stakes.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">MULTIWAY</span></div><div class="tag-desc-col">3 or more players saw the flop or were active preflop — multi-way dynamics apply.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">SHORT_STACK</span></div><div class="tag-desc-col">At least one seated player had fewer than 20 big blinds — stack depth matters for this hand.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">DEEP_STACK</span></div><div class="tag-desc-col">At least one player had more than 100 big blinds — deep-stack postflop play applies.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">OVERBET</span></div><div class="tag-desc-col">At least one bet or raise in the hand was more than double the current pot size.</div><div class="tag-scope-col">hand</div></div>
+        </div>
+      </div>
+
+      <!-- BOARD -->
+      <div class="catalog-group" data-type="auto">
+        <div class="catalog-group-header">
+          <span class="tag tag-auto">auto</span>
+          <span class="catalog-group-title">Board Analyzer</span>
+          <span class="catalog-group-count">13 tags</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">MONOTONE_BOARD</span></div><div class="tag-desc-col">All 3 flop cards share the same suit — flush draws are live for everyone.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">TWO_TONE_BOARD</span></div><div class="tag-desc-col">Two flop cards share a suit — one flush draw possible.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">RAINBOW_BOARD</span></div><div class="tag-desc-col">All three flop cards are different suits — no flush draw possible.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">PAIRED_BOARD</span></div><div class="tag-desc-col">Two board cards share the same rank — full houses and trips are possible.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">TRIPS_BOARD</span></div><div class="tag-desc-col">Three board cards share the same rank — the board itself is trips.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">CONNECTED_BOARD</span></div><div class="tag-desc-col">Flop cards span ≤ 2 ranks apart — many straight draws present.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">ONE_GAP_BOARD</span></div><div class="tag-desc-col">Flop cards span 3–4 ranks — some straight draws present.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">DISCONNECTED_BOARD</span></div><div class="tag-desc-col">Flop cards span more than 4 ranks — very few straight draws.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">ACE_HIGH_BOARD</span></div><div class="tag-desc-col">The highest board card is an Ace.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">BROADWAY_BOARD</span></div><div class="tag-desc-col">Highest board card is King, Queen, Jack, or Ten — broadway cards present.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">MID_BOARD</span></div><div class="tag-desc-col">Highest board card is between 6 and 9.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">LOW_BOARD</span></div><div class="tag-desc-col">Highest board card is a 5 or lower — very low flop.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">WET_BOARD</span></div><div class="tag-desc-col">Both a flush draw and a straight draw exist — highly coordinated, draw-heavy board.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">DRY_BOARD</span></div><div class="tag-desc-col">Rainbow and disconnected — no draws, very static board.</div><div class="tag-scope-col">hand</div></div>
+        </div>
+      </div>
+
+      <!-- POSITIONAL -->
+      <div class="catalog-group" data-type="auto">
+        <div class="catalog-group-header">
+          <span class="tag tag-auto">auto</span>
+          <span class="catalog-group-title">Positional Analyzer</span>
+          <span class="catalog-group-count">6 tags — attached to the specific player</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">C_BET_IP</span></div><div class="tag-desc-col">C-bet made while the player had positional advantage (acting last).</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">C_BET_OOP</span></div><div class="tag-desc-col">C-bet made out of position (acting before opponent) — harder to execute profitably.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">DONK_BET_BB</span></div><div class="tag-desc-col">Donk bet made specifically from the Big Blind seat.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">3BET_BTN</span></div><div class="tag-desc-col">3-bet made from the Button — the strongest positional spot for a re-raise.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">3BET_SB</span></div><div class="tag-desc-col">3-bet made from the Small Blind — re-raising from the worst position.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">SQUEEZE_CO</span></div><div class="tag-desc-col">Squeeze play made from the Cutoff position.</div><div class="tag-scope-col">player</div></div>
+        </div>
+      </div>
+
+      <!-- HAND STRENGTH -->
+      <div class="catalog-group" data-type="auto">
+        <div class="catalog-group-header">
+          <span class="tag tag-auto">auto</span>
+          <span class="catalog-group-title">Hand Strength Analyzer</span>
+          <span class="catalog-group-count">4 tags — requires hole cards recorded</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">SLOWPLAY</span></div><div class="tag-desc-col">Player had a very strong hand (set or better) on the flop or turn but never bet or raised — deliberately disguising hand strength.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">HERO_CALL</span></div><div class="tag-desc-col">Called a river bet holding only one pair or worse and won at showdown — read the opponent correctly.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">VALUE_MISSED</span></div><div class="tag-desc-col">Had two pair or better on every postflop street but never bet or raised — left money on the table.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-auto">THIN_VALUE_RAISE</span></div><div class="tag-desc-col">Raised the river with exactly one pair — a risky thin value play.</div><div class="tag-scope-col">player</div></div>
+        </div>
+      </div>
+
+      <!-- MISTAKES -->
+      <div class="catalog-group" data-type="mistake">
+        <div class="catalog-group-header">
+          <span class="tag tag-mistake">mistake</span>
+          <span class="catalog-group-title">Mistake Analyzer</span>
+          <span class="catalog-group-count">7 tags — attached to the specific player who made the play</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-mistake">OPEN_LIMP</span></div><div class="tag-desc-col">First player to act (other than BB) called the big blind instead of raising — limping into the pot.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-mistake">OVERLIMP</span></div><div class="tag-desc-col">Called the big blind after at least one other player had already limped — piling in passively.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-mistake">LIMP_RERAISE</span></div><div class="tag-desc-col">Limped into the pot first, then raised after someone squeezed — a trap play or a mistake.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-mistake">COLD_CALL_3BET</span></div><div class="tag-desc-col">Called a 3-bet without any prior investment in the pot — calling cold into a 3-bet war.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-mistake">FOLD_TO_PROBE</span></div><div class="tag-desc-col">Folded to a bet that was less than 25% of the pot — folding to a very small bet.</div><div class="tag-scope-col">player</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-mistake">MIN_RAISE</span></div><div class="tag-desc-col">Raised to exactly twice the previous bet — the minimum legal raise, often considered weak sizing.</div><div class="tag-scope-col">action</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-mistake">UNDO_USED</span></div><div class="tag-desc-col">An action was undone during the hand. Attached to the hand, not a specific player.</div><div class="tag-scope-col">hand</div></div>
+        </div>
+      </div>
+
+      <!-- SIZING -->
+      <div class="catalog-group" data-type="sizing">
+        <div class="catalog-group-header">
+          <span class="tag tag-sizing">sizing</span>
+          <span class="catalog-group-title">Sizing Analyzer</span>
+          <span class="catalog-group-count">6 tags — one per postflop action, attached to both player and action</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-sizing">PROBE_BET</span></div><div class="tag-desc-col">Bet less than 25% of the pot — a small probe to test the waters.</div><div class="tag-scope-col">action</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-sizing">THIRD_POT_BET</span></div><div class="tag-desc-col">Bet 25–49% of the pot — a small, common sizing often used on the river.</div><div class="tag-scope-col">action</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-sizing">HALF_POT_BET</span></div><div class="tag-desc-col">Bet 50–79% of the pot — standard mid-range sizing.</div><div class="tag-scope-col">action</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-sizing">POT_BET</span></div><div class="tag-desc-col">Bet 80–110% of the pot — a full pot-sized bet, maximizing pressure.</div><div class="tag-scope-col">action</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-sizing">OVERBET</span></div><div class="tag-desc-col">Bet 110–200% of the pot — larger than pot, polarizing sizing.</div><div class="tag-scope-col">action</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-sizing">OVERBET_JAM</span></div><div class="tag-desc-col">Bet more than double the pot — an extreme overbet or shove.</div><div class="tag-scope-col">action</div></div>
+        </div>
+      </div>
+
+      <!-- COACH -->
+      <div class="catalog-group" data-type="coach">
+        <div class="catalog-group-header">
+          <span class="tag tag-coach">coach</span>
+          <span class="catalog-group-title">Manual Coach Tags</span>
+          <span class="catalog-group-count">6 presets</span>
+        </div>
+        <div class="tag-rows">
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-coach">Review</span></div><div class="tag-desc-col">Flag for later discussion — the coach wants to come back to this hand.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-coach">Bluff</span></div><div class="tag-desc-col">Notable bluff attempt worth drilling or reviewing.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-coach">Hero Call</span></div><div class="tag-desc-col">A call made with a weak hand that the coach considers notable.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-coach">Mistake</span></div><div class="tag-desc-col">Coach-flagged error — broader judgment call than the system's mistake tags.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-coach">Key Hand</span></div><div class="tag-desc-col">A pivotal moment in the session worth highlighting.</div><div class="tag-scope-col">hand</div></div>
+          <div class="tag-row"><div class="tag-name-col"><span class="tag tag-coach">3-Bet Pot</span></div><div class="tag-desc-col">Coach manually marking a 3-bet pot for review (complements the auto THREBET_POT tag).</div><div class="tag-scope-col">hand</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ───── SECTION 4: DOWNSTREAM ───── -->
+<section id="downstream">
+  <div class="wrapper">
+    <div class="section-num">04 — What Tags Enable</div>
+    <h2>Downstream Effects</h2>
+    <p class="section-desc">Tags aren't just labels — they power three things in the app today, and have a clear foundation for much more.</p>
+
+    <div class="downstream-grid">
+
+      <div class="downstream-card anim">
+        <div class="downstream-icon" style="background: var(--gold-dim);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="1.5"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+        </div>
+        <div class="downstream-title">Playlist Auto-Creation</div>
+        <div class="downstream-desc">Every time a coach applies a manual tag, the system automatically creates (or reuses) a playlist with that tag's name and adds the hand to it. Tag "Bluff" on 5 hands, and a ready-to-drill "Bluff" playlist exists with no extra effort.</div>
+        <div class="downstream-note">Only coach tags trigger this. Auto-tags don't create playlists automatically.</div>
+      </div>
+
+      <div class="downstream-card anim">
+        <div class="downstream-icon" style="background: var(--blue-dim);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#79c0ff" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18M9 21V9"/></svg>
+        </div>
+        <div class="downstream-title">Hand Library Display</div>
+        <div class="downstream-desc">In the coach sidebar, every hand in the library shows its tags as colored chips: gold for coach tags, blue/teal for auto/mistake/sizing tags. At a glance, you can see what type of hand it was without replaying it.</div>
+        <div class="downstream-note">Auto-tags and coach tags display with different colors so their source is always visible.</div>
+      </div>
+
+      <div class="downstream-card anim">
+        <div class="downstream-icon" style="background: var(--teal-dim);">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#39d353" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </div>
+        <div class="downstream-title">Hand Library Search</div>
+        <div class="downstream-desc">The search bar in the hand library scans tag content — searching "bluff" finds hands with the coach tag "Bluff", and searching "CHECK_RAISE" would find hands auto-tagged with that pattern.</div>
+        <div class="downstream-note">Text-based search only. No dedicated tag-filter UI yet.</div>
+      </div>
+
+    </div>
+
+    <div style="margin-top: 2.5rem;">
+      <div class="section-num" style="margin-bottom: 1rem;">What tags set up (not yet built)</div>
+      <div class="timeline">
+        <div class="tl-item anim">
+          <div class="tl-dot gold"></div>
+          <div class="tl-title">Player-specific mistake tracking</div>
+          <div class="tl-desc">Because mistake tags are attached to player IDs, it's possible to count how many times "Alice" has been tagged OPEN_LIMP or COLD_CALL_3BET across all hands. This would make for a rich per-player coaching dashboard.</div>
+        </div>
+        <div class="tl-item anim">
+          <div class="tl-dot blue"></div>
+          <div class="tl-title">Tag-based filtering in the library</div>
+          <div class="tl-desc">A filter bar — "show me all BLUFF_CATCH hands" or "show only WHALE_POT hands where a CHECK_RAISE occurred" — is fully supported by the database schema, but not yet surfaced as a UI control.</div>
+        </div>
+        <div class="tl-item anim">
+          <div class="tl-dot green"></div>
+          <div class="tl-title">Bet sizing tendencies per player</div>
+          <div class="tl-desc">Sizing tags are tied to specific actions and player IDs. It's possible to compute "Bob bets 60% of pots at POT_BET sizing, almost never uses PROBE_BET" — a full sizing profile per player.</div>
+        </div>
+        <div class="tl-item anim">
+          <div class="tl-dot purple"></div>
+          <div class="tl-title">Tag-triggered automatic playlists</div>
+          <div class="tl-desc">Auto-tags could be wired to the same playlist system as coach tags — e.g., every HERO_CALL hand automatically enters a "Hero Calls" replay queue without coach involvement.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ───── SECTION 5: GAPS ───── -->
+<section id="gaps">
+  <div class="wrapper">
+    <div class="section-num">05 — Known Limitations</div>
+    <h2>Gaps &amp; Watch-Outs</h2>
+    <p class="section-desc">The tagging system is solid but not complete. These are the places where behavior might surprise you or where features are missing.</p>
+
+    <div class="gaps-list">
+
+      <div class="gap-item medium anim">
+        <div class="gap-severity">Limitation</div>
+        <div>
+          <div class="gap-title">Manual tags are locked to 6 presets — no custom text</div>
+          <div class="gap-desc">The "TAG HAND" pill shows exactly six fixed options. There is no free-text field. If a coach wants to mark a hand as "5th-street misplay" or "polarized range spot", there's nowhere to type that. The only workaround is to use a playlist with a custom name.</div>
+        </div>
+      </div>
+
+      <div class="gap-item high anim">
+        <div class="gap-severity">Blind Spot</div>
+        <div>
+          <div class="gap-title">Hand Strength Analyzer is blind without hole cards</div>
+          <div class="gap-desc">SLOWPLAY, HERO_CALL, VALUE_MISSED, and THIN_VALUE_RAISE are only produced if hole cards were recorded for those players. If hole cards weren't entered into the system, these four tags silently produce nothing — no warning is shown. This affects any hands played without card input.</div>
+        </div>
+      </div>
+
+      <div class="gap-item medium anim">
+        <div class="gap-severity">Limitation</div>
+        <div>
+          <div class="gap-title">Sizing tags cover postflop only — preflop sizing is untracked</div>
+          <div class="gap-desc">The Sizing Analyzer only runs on postflop actions (flop, turn, river). A preflop open to 10x the big blind gets no sizing tag. There's no way to currently identify players who habitually open too large or min-raise preflop via sizing tags alone (though MIN_RAISE in mistakes partially covers this).</div>
+        </div>
+      </div>
+
+      <div class="gap-item low anim">
+        <div class="gap-severity">Behavior Note</div>
+        <div>
+          <div class="gap-title">Re-analyzing a hand replaces all auto-tags, no history kept</div>
+          <div class="gap-desc">Every time the auto-tagging pipeline runs (i.e., every time a hand is reset), it deletes all previous auto, mistake, and sizing tags and inserts a fresh set. There is no tag history or changelog. Coach tags are always preserved, but if the analyzer logic changes in a code update, old hands will get different tags when re-analyzed.</div>
+        </div>
+      </div>
+
+      <div class="gap-item low anim">
+        <div class="gap-severity">Behavior Note</div>
+        <div>
+          <div class="gap-title">UNDO_USED doesn't say who undid the action</div>
+          <div class="gap-desc">The UNDO_USED tag is hand-level — it just flags that some action was undone. It doesn't record which player's action was reversed, on which street, or what the action was. You'd need to look at the hand action log manually to find this.</div>
+        </div>
+      </div>
+
+      <div class="gap-item medium anim">
+        <div class="gap-severity">Missing Feature</div>
+        <div>
+          <div class="gap-title">No filter UI for auto-tags in the hand library</div>
+          <div class="gap-desc">Auto-tags are displayed on each hand but cannot be used to filter the library list. To find "all CHECK_RAISE hands", you'd need to search manually or query the database directly. A tag-filter sidebar or dropdown would unlock this, but doesn't exist yet.</div>
+        </div>
+      </div>
+
+      <div class="gap-item low anim">
+        <div class="gap-severity">Behavior Note</div>
+        <div>
+          <div class="gap-title">Auto-tagging only runs on fresh hands — no batch retroactive analysis</div>
+          <div class="gap-desc">Tags are generated immediately after each hand ends. Hands played before the auto-tagging feature was deployed (or before a new analyzer was added) don't get re-analyzed automatically. There is no "re-analyze all past hands" button — this would require a manual script run.</div>
+        </div>
+      </div>
+
+      <div class="gap-item low anim">
+        <div class="gap-severity">Behavior Note</div>
+        <div>
+          <div class="gap-title">Coach tag "Mistake" overlaps with the system's mistake tags</div>
+          <div class="gap-desc">There is both a coach-facing "Mistake" preset and a whole category of system-generated mistake tags (OPEN_LIMP, MIN_RAISE, etc.). These are entirely separate — the coach tag is a subjective label, the system tags are rule-based. In the hand library both appear under the same visual style, which could cause confusion about whether a "Mistake" tag was human or system-generated.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ───── SECTION 6: QUICK REF ───── -->
+<section id="reference">
+  <div class="wrapper">
+    <div class="section-num">06 — Reference</div>
+    <h2>Quick Reference</h2>
+    <p class="section-desc">Fast-access facts about how the tagging system works under the hood.</p>
+
+    <div class="qr-grid">
+
+      <div class="qr-card anim">
+        <div class="qr-title">Tag Anatomy</div>
+        <table class="qr-table">
+          <tr><td>hand_id</td><td>Which hand the tag belongs to</td></tr>
+          <tr><td>tag</td><td>The label (e.g. <code>HERO_CALL</code>)</td></tr>
+          <tr><td>tag_type</td><td>One of: <code>auto</code>, <code>mistake</code>, <code>sizing</code>, <code>coach</code></td></tr>
+          <tr><td>player_id</td><td>If set: tag applies to this player specifically</td></tr>
+          <tr><td>action_id</td><td>If set: tag applies to a single action (sizing tags)</td></tr>
+        </table>
+      </div>
+
+      <div class="qr-card anim">
+        <div class="qr-title">Tag Scope Levels</div>
+        <table class="qr-table">
+          <tr><td>Hand-level</td><td>No player or action attached. Describes the hand as a whole (e.g. <code>WALK</code>, <code>3BET_POT</code>)</td></tr>
+          <tr><td>Player-level</td><td>Player ID attached, no action. "Player X did this" (e.g. <code>OPEN_LIMP</code>, <code>HERO_CALL</code>)</td></tr>
+          <tr><td>Action-level</td><td>Both player ID and action ID attached. "Player X did this on bet #47" (all sizing tags)</td></tr>
+        </table>
+      </div>
+
+      <div class="qr-card anim">
+        <div class="qr-title">Who Can Do What</div>
+        <table class="qr-table">
+          <tr><td>Coach</td><td>Apply/remove manual tags using the TAG HAND pill</td></tr>
+          <tr><td>Players</td><td>Cannot tag hands</td></tr>
+          <tr><td>System</td><td>Auto-tags all hands after each reset, coach tags untouched</td></tr>
+          <tr><td>Second coach</td><td>Joins as a tracked player — cannot tag hands from player seat</td></tr>
+        </table>
+      </div>
+
+      <div class="qr-card anim">
+        <div class="qr-title">When Things Run</div>
+        <table class="qr-table">
+          <tr><td>Manual tags</td><td>Anytime during an active hand, saved on each toggle</td></tr>
+          <tr><td>Auto-tagging</td><td>Automatically after each hand reset — fires once per hand</td></tr>
+          <tr><td>Playlist creation</td><td>Immediately after coach saves a manual tag</td></tr>
+          <tr><td>Tag display</td><td>On next library load — client fetches the updated hand list</td></tr>
+        </table>
+      </div>
+
+      <div class="qr-card anim">
+        <div class="qr-title">Tag Counts</div>
+        <table class="qr-table">
+          <tr><td>Auto tags</td><td>~30 distinct labels across 7 analyzers</td></tr>
+          <tr><td>Mistake tags</td><td>7 labels (MistakeAnalyzer)</td></tr>
+          <tr><td>Sizing tags</td><td>6 labels (SizingAnalyzer, per postflop action)</td></tr>
+          <tr><td>Coach presets</td><td>6 fixed options</td></tr>
+          <tr><td>Total possible</td><td>50+ unique tag values in the system</td></tr>
+        </table>
+      </div>
+
+      <div class="qr-card anim">
+        <div class="qr-title">How Persistence Works</div>
+        <table class="qr-table">
+          <tr><td>Coach tags</td><td>Full replace on each save — deletes old, inserts new</td></tr>
+          <tr><td>Auto tags</td><td>Atomic replace on each analysis — all three auto types deleted together, then fresh set inserted</td></tr>
+          <tr><td>Isolation</td><td>Coach and auto tags are managed by separate functions — neither can overwrite the other</td></tr>
+          <tr><td>Fault handling</td><td>If one analyzer crashes, others still run; crash is logged but silent to users</td></tr>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrapper">
+    Poker Trainer — Hand Tagging System Map &nbsp;&middot;&nbsp; Generated 2026-03-25
+  </div>
+</footer>
+
+<script>
+  // ── FILTER TAGS ──────────────────────────────────────
+  function filterTags(type, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => {
+      b.className = 'filter-btn';
+    });
+    btn.className = `filter-btn active-${type}`;
+
+    document.querySelectorAll('.catalog-group').forEach(group => {
+      if (type === 'all') {
+        group.style.display = '';
+      } else {
+        group.style.display = group.dataset.type === type ? '' : 'none';
+      }
+    });
+  }
+
+  // ── INTERSECTION OBSERVER (FADE IN) ──────────────────
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry, i) => {
+      if (entry.isIntersecting) {
+        const el = entry.target;
+        const delay = el.style.getPropertyValue('--i') || 0;
+        setTimeout(() => {
+          el.classList.add('visible');
+        }, delay * 80);
+        observer.unobserve(el);
+      }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.anim').forEach(el => observer.observe(el));
+
+  // ── NAV ACTIVE STATE ──────────────────────────────────
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('.nav-links a');
+
+  const navObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => {
+          a.classList.toggle('active', a.getAttribute('href') === `#${entry.target.id}`);
+        });
+      }
+    });
+  }, { rootMargin: '-40% 0px -50% 0px' });
+
+  sections.forEach(s => navObserver.observe(s));
+</script>
+</body>
+</html>
