@@ -5,7 +5,7 @@ module.exports = function registerHealthRoute(app, { supabaseAdmin, tables }) {
     let dbStatus = 'ok';
     let dbError  = null;
     try {
-      const { error } = await supabaseAdmin.from('player_profiles').select('player_id').limit(1);
+      const { error } = await supabaseAdmin.from('player_profiles').select('id').limit(1);
       if (error) { dbStatus = 'error'; dbError = error.message; }
     } catch (err) {
       dbStatus = 'error';
