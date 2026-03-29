@@ -160,6 +160,11 @@ describe('Test 2: Reconnection Sync', () => {
       phase: 'flop',
       pot: 240,
       board: ['Ah', 'Kd', '7c', null, null],
+      // flop: preflop bets already collected into pot, so no live round bets
+      players: [
+        { id: 'player-1', name: 'Alice', seat: 0, stack: 880, hole_cards: ['Ah', 'Kd'], action: 'waiting', is_active: true, is_coach: false, is_dealer: false, is_small_blind: false, is_big_blind: false, is_all_in: false, current_bet: 0, total_bet_this_round: 0 },
+        { id: 'player-2', name: 'Bob',   seat: 1, stack: 880, hole_cards: ['7c', '2d'], action: 'waiting', is_active: true, is_coach: false, is_dealer: true,  is_small_blind: false, is_big_blind: false, is_all_in: false, current_bet: 0, total_bet_this_round: 0 },
+      ],
     })
 
     const { rerender } = render(
@@ -265,7 +270,7 @@ describe('Test 3: Illegal Bet Input', () => {
 // ── Test 4: Coach 50% Opacity ──────────────────────────────────────────────
 
 describe('Test 4: Coach 50% Opacity for Opponent Cards', () => {
-  it('opponent cards are rendered with opacity 0.5 when isCoach=true', async () => {
+  it('coach sees opponent cards face-down during live play (server sends HIDDEN)', async () => {
     const { default: PlayerSeat } = await import('../components/PlayerSeat.jsx')
 
     const player = {
@@ -273,7 +278,8 @@ describe('Test 4: Coach 50% Opacity for Opponent Cards', () => {
       name: 'Bob',
       seat: 1,
       stack: 960,
-      hole_cards: ['7c', '2d'],
+      // Server sends 'HIDDEN' for opponents in live play — even to the coach
+      hole_cards: ['HIDDEN', 'HIDDEN'],
       action: 'waiting',
       is_active: true,
       is_coach: false,
@@ -288,15 +294,15 @@ describe('Test 4: Coach 50% Opacity for Opponent Cards', () => {
         player={player}
         isCurrentTurn={false}
         isMe={false}         // Not the current user
-        isCoach={true}       // Coach is viewing
+        isCoach={true}       // Coach is watching live play
         showdownResult={null}
         isWinner={false}
       />
     )
 
-    // Find elements with opacity 0.5 style (the card wrapper added for coach view)
-    const opacityEls = container.querySelectorAll('[style*="opacity: 0.5"]')
-    expect(opacityEls.length).toBeGreaterThan(0)
+    // Cards should be face-down — no face-up card text visible, no opacity reduction
+    expect(screen.queryByText('7c')).toBeNull()
+    expect(screen.queryByText('2d')).toBeNull()
   })
 
   it('player viewing own cards has no opacity reduction', async () => {

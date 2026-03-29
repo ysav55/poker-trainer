@@ -11,7 +11,7 @@ module.exports = function registerHandRoutes(app, { requireAuth, HandLogger }) {
       const hands = await HandLogger.getHands({ tableId, limit, offset });
       res.json({ hands, limit, offset });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -22,7 +22,7 @@ module.exports = function registerHandRoutes(app, { requireAuth, HandLogger }) {
       if (!detail) return res.status(404).json({ error: 'Hand not found' });
       res.json(detail);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 };

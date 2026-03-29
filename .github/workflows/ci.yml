@@ -29,7 +29,6 @@ jobs:
         run: npm test
         env:
           NODE_ENV: test
-          # Tests set their own SESSION_SECRET inline; this satisfies any top-level require
           SESSION_SECRET: ci-placeholder-secret
 
   test-client:
@@ -66,10 +65,40 @@ jobs:
           node-version: '20'
 
       - name: Syntax check — server JS files (node --check)
-        # Parses every .js file; catches syntax errors without a full ESLint setup.
-        # JSX files require eslint + react plugin — add that when ESLint is configured.
         run: |
           find server -name "*.js" \
             -not -path "*/node_modules/*" \
             -print0 \
           | xargs -0 -r node --check
+
+  deploy-staging:
+    name: Deploy → Staging
+    needs: [test-server, test-client, lint]
+    runs-on: ubuntu-latest
+    # Any branch except master — so PRs and feature branches go to staging
+    if: github.ref != 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to poker-trainer-staging
+        run: flyctl deploy --config fly.staging.toml --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  deploy-prod:
+    name: Deploy → Production
+    needs: [test-server, test-client, lint]
+    runs-on: ubuntu-latest
+    # Only master merges go to prod
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to poker-trainer-ysav55
+        run: flyctl deploy --config fly.toml --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

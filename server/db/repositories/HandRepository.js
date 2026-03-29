@@ -92,6 +92,9 @@ async function endHand({ handId, state, socketToStable = {} }) {
   );
 
   const preflopByPlayer = {};
+  // raiseCount tracks total raises in preflop action order within this hand.
+  // The 2nd raise is the 3-bet by definition; 4-bets and beyond are not tracked.
+  // Blind postings are NOT in hand_actions and are not counted here.
   let raiseCount = 0;
   for (const row of (preflopRows || [])) {
     if (!preflopByPlayer[row.player_id]) preflopByPlayer[row.player_id] = { vpip: false, pfr: false, three_bet: false };
@@ -118,16 +121,8 @@ async function endHand({ handId, state, socketToStable = {} }) {
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const winnerIdForDb = winnerId && uuidRe.test(winnerId) ? winnerId : null;
 
-  await q(supabase.from('hands').update({
-    ended_at:           now,
-    board:              state.board || [],
-    final_pot:          state.showdown_result?.potAwarded ?? state.pot ?? 0,
-    winner_id:          winnerIdForDb,
-    winner_name:        state.winner_name || null,
-    phase_ended:        phaseEnded,
-    completed_normally: completedNormally,
-  }).eq('hand_id', handId));
-
+  // Run player updates first — mark hand complete only after they succeed.
+  // Promise.allSettled tolerates partial failures without losing the entire hand record.
   const updatePromises = (state.players || [])
     .map(p => {
       const stableId = resolveId(p.id);
@@ -144,14 +139,32 @@ async function endHand({ handId, state, socketToStable = {} }) {
       }).eq('hand_id', handId).eq('player_id', stableId));
     });
 
-  await Promise.all(updatePromises);
+  const playerResults = await Promise.allSettled(updatePromises);
+  const failures = playerResults.filter(r => r.status === 'rejected');
+  if (failures.length > 0) {
+    const log = require('../../logs/logger');
+    log.error('db', 'end_hand_partial', 'Some hand_players updates failed', { handId, count: failures.length });
+  }
+  if (failures.length === playerResults.length && playerResults.length > 0) {
+    throw new Error('All hand_players updates failed');
+  }
+
+  await q(supabase.from('hands').update({
+    ended_at:           now,
+    board:              state.board || [],
+    final_pot:          state.showdown_result?.potAwarded ?? state.pot ?? 0,
+    winner_id:          winnerIdForDb,
+    winner_name:        state.winner_name || null,
+    phase_ended:        phaseEnded,
+    completed_normally: completedNormally,
+  }).eq('hand_id', handId));
 }
 
 async function recordDeal(handId, players) {
   if (!players?.length) return;
   const rows = players.filter(p => p.hole_cards?.length > 0);
   if (!rows.length) return;
-  await Promise.all(
+  await Promise.allSettled(
     rows.map(p =>
       q(supabase.from('hand_players')
         .update({ hole_cards: p.hole_cards })
@@ -173,7 +186,7 @@ async function markIncomplete(handId, state = null) {
 
   if (state?.players) {
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    await Promise.all(
+    await Promise.allSettled(
       (state.players || [])
         .filter(p => p.hole_cards?.length > 0 && uuidRe.test(p.stableId || p.id))
         .map(p => q(supabase.from('hand_players')

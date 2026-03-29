@@ -6,6 +6,17 @@ module.exports = function registerBetting(socket, ctx) {
           HandLogger, log, getPosition } = ctx;
 
   socket.on('place_bet', ({ action, amount = 0 } = {}) => {
+    const VALID_ACTIONS = ['fold', 'check', 'call', 'raise', 'all-in'];
+    if (!VALID_ACTIONS.includes(action)) {
+      return sendError(socket, 'Invalid action');
+    }
+    if (action === 'raise') {
+      const n = Number(amount);
+      if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+        return sendError(socket, 'Raise amount must be a positive integer');
+      }
+    }
+
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');

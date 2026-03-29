@@ -50,6 +50,8 @@ module.exports = function registerCoachControls(socket, ctx) {
 
   socket.on('set_player_in_hand', ({ playerId, inHand } = {}) => {
     if (requireCoach(socket, 'change in-hand status')) return;
+    if (!playerId || typeof playerId !== 'string' || !playerId.trim()) return sendError(socket, 'playerId is required');
+    if (typeof inHand !== 'boolean') return sendError(socket, 'inHand must be a boolean');
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -77,11 +79,14 @@ module.exports = function registerCoachControls(socket, ctx) {
 
   socket.on('set_blind_levels', ({ sb, bb } = {}) => {
     if (requireCoach(socket, 'change blind levels')) return;
+    const sbN = Number(sb), bbN = Number(bb);
+    if (!Number.isFinite(sbN) || !Number.isInteger(sbN) || sbN <= 0) return sendSyncError(socket, 'Invalid blind levels: sb must be a positive integer');
+    if (!Number.isFinite(bbN) || !Number.isInteger(bbN) || bbN <= sbN) return sendSyncError(socket, 'Invalid blind levels: bb must be a positive integer greater than sb');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
-    const result = gm.setBlindLevels(Number(sb), Number(bb));
+    const result = gm.setBlindLevels(sbN, bbN);
     if (result.error) return sendSyncError(socket, result.error);
-    broadcastState(socket.data.tableId, { type: 'blind_change', message: `Blinds set to ${sb}/${bb}` });
+    broadcastState(socket.data.tableId, { type: 'blind_change', message: `Blinds set to ${sbN}/${bbN}` });
   });
 
   socket.on('set_mode', ({ mode } = {}) => {
@@ -112,6 +117,7 @@ module.exports = function registerCoachControls(socket, ctx) {
 
   socket.on('award_pot', ({ winnerId } = {}) => {
     if (requireCoach(socket, 'award the pot')) return;
+    if (!winnerId || typeof winnerId !== 'string' || !winnerId.trim()) return sendError(socket, 'winnerId is required');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     const result = gm.awardPot(winnerId);
@@ -128,6 +134,9 @@ module.exports = function registerCoachControls(socket, ctx) {
 
   socket.on('adjust_stack', ({ playerId, amount } = {}) => {
     if (requireCoach(socket, 'adjust stacks')) return;
+    if (!playerId || typeof playerId !== 'string' || !playerId.trim()) return sendError(socket, 'playerId is required');
+    const amtN = Number(amount);
+    if (!Number.isFinite(amtN) || amtN < 0 || !Number.isInteger(amtN)) return sendError(socket, 'amount must be a non-negative integer');
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     const result = gm.adjustStack(playerId, Number(amount));

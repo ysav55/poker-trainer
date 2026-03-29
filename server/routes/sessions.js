@@ -8,7 +8,7 @@ module.exports = function registerSessionRoutes(app, { requireAuth, HandLogger, 
       const stats = await HandLogger.getSessionStats(req.params.sessionId);
       res.json({ sessionId: req.params.sessionId, players: stats });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -22,7 +22,7 @@ module.exports = function registerSessionRoutes(app, { requireAuth, HandLogger, 
       res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; script-src 'none'");
       res.send(html);
     } catch (err) {
-      res.status(500).send(`<pre>Report error: ${err.message}</pre>`);
+      res.status(500).json({ error: 'report_failed' });
     }
   });
 
@@ -39,7 +39,7 @@ module.exports = function registerSessionRoutes(app, { requireAuth, HandLogger, 
       const stats = gm.getSessionStats();
       res.json(stats);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 };

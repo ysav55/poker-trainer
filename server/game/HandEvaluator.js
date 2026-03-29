@@ -345,14 +345,16 @@ function reorderWheel(sorted) {
  * Returns positive if a > b, negative if a < b, 0 if tie.
  */
 function compareHands(a, b) {
+  if (!a || !b) return 0; // treat missing as tie
+
   // Primary: hand rank
   if (a.rank !== b.rank) return a.rank - b.rank;
 
   // Tiebreak: compare bestFive card values, highest first
   // For wheel straights the reordering means bestFive[0] is 5 (value 3), not A (value 12)
   // This is correct: two wheel straights tie; a 6-high straight > wheel.
-  const aVals = a.bestFive.map(c => rankVal(cardRank(c)));
-  const bVals = b.bestFive.map(c => rankVal(cardRank(c)));
+  const aVals = (a.bestFive ?? []).map(c => rankVal(cardRank(c)));
+  const bVals = (b.bestFive ?? []).map(c => rankVal(cardRank(c)));
 
   for (let i = 0; i < Math.min(aVals.length, bVals.length); i++) {
     if (aVals[i] !== bVals[i]) return aVals[i] - bVals[i];

@@ -49,6 +49,8 @@ async function getPlaylistHands(playlistId) {
 }
 
 async function addHandToPlaylist(playlistId, handId) {
+  if (!playlistId || !handId) throw new Error('playlistId and handId are required');
+
   const existing = await q(
     supabase.from('playlist_hands')
       .select('display_order')

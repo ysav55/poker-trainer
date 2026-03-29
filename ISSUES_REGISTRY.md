@@ -1,6 +1,6 @@
 # Issues Registry — Poker Trainer
 
-**Last updated:** 2026-03-24 — Replay controls moved inline below table; ghost seat face-down cards; board non-interactive during replay; markIncomplete saves board+cards; number spinner CSS fixed globally; blind levels input overflow fixed.
+**Last updated:** 2026-03-29 — Added React error boundaries around PokerTable and CoachSidebar (ISS-98).
 
 ## Severity Legend
 - 🔴 CRITICAL — crash or incorrect game outcome
@@ -16,9 +16,42 @@
 |----|-----|-------------|-------|
 | ISS-77 | 🟡 | `hand_tags` unique constraint was `(hand_id, tag, tag_type)`. Migration 006 replaces it with three partial unique indexes for hand-level, player-level, and action-level tags. Old rows with the original constraint are not retroactively cleaned — duplicate rows could exist if the migration is applied to a DB with existing data. | Safe for new Supabase projects. If applying to an existing DB, run `DELETE FROM hand_tags WHERE ctid NOT IN (SELECT min(ctid) FROM hand_tags GROUP BY hand_id, tag, tag_type, player_id, action_id)` first. |
 | ISS-73 | 🟡 | Replay hole cards may not show for hands recorded before the ISS-69 stableId fix (2026-03-16). Pre-fix hands stored `socket.id` as `player_id` in `hand_players`; the replay lookup keys on `stableId`, so they never match. New hands are unaffected. | Mitigation: re-play hands via load scenario instead. Full fix would require a DB migration to back-fill stableIds for old hands, which is low priority. |
-| ISS-74 | 🟠 | Coach sidebar (`position: fixed`, 18 rem wide) overlays the table as an overlay rather than pushing the layout. Rightmost seats can still be partially obscured when the sidebar is open. Full fix requires making the sidebar push the main content (flex layout or CSS variable for available width). | Partial mitigation applied (seat 7 moved inward, seats now inside oval referencing oval dimensions). TagHandPill positions itself correctly relative to sidebar open/closed state. |
 | ~~ISS-75~~ | ~~🟡~~ | ~~Supabase anon read policies on all tables expose all hand/player data to any unauthenticated browser client.~~ | **RESOLVED 2026-03-19** — Anon key removed from browser entirely. All data access goes through Express (JWT-authenticated). Supabase RLS can now be simplified to service-role-only. |
-| ISS-76 | 🟡 | `loginRosterPlayer` uses `.eq('display_name', name)` — exact case match. Player names in `player_profiles` are inserted as given in `players.csv`, but the login form may trim/normalize differently. If case mismatch occurs, login returns "not found". | Mitigation: ensure `players.csv` names match exactly what players type. Full fix: case-insensitive collation or lowercase normalisation on upsert + lookup. |
+
+---
+
+## Resolved — 2026-03-29
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-98 | 🟠 | A crash inside `<PokerTable>` or `<CoachSidebar>` blanked the entire UI with no recovery path. Added `<ErrorBoundary>` wrappers in `App.jsx` with a reload/retry prompt and best-effort server-side logging to `/api/logs/client-error`. | 2026-03-29 |
+
+---
+
+## Resolved — v1.0 Hardening (2026-03-26)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-78 | 🔴 | `AnalyzerService.buildAnalyzerContext` selected wrong column names (`starting_stack`, `final_stack`) from `hand_players`. Actual columns are `stack_start`/`stack_end`. Caused `SHORT_STACK`/`DEEP_STACK` tags to always compute against 0. | v1.0 hardening |
+| ISS-79 | 🟠 | `/api/alpha-report` had no auth middleware — unauthenticated users could access system diagnostic reports. | v1.0 hardening |
+| ISS-80 | 🟠 | 5 async socket handlers in `playlists.js` had no try-catch — a DB error would leave the client hanging with no error. | v1.0 hardening |
+| ISS-81 | 🟠 | `replay.js` `replay_exit` and `handConfig.js` `load_hand_scenario` had no try-catch around async DB calls. | v1.0 hardening |
+| ISS-82 | 🟡 | `leaveRoom` did not clear `poker_trainer_jwt` / `poker_trainer_player_id` from localStorage. A new user on the same browser inherited the previous session's credentials. | v1.0 hardening |
+| ISS-83 | 🟡 | `endHand()` marked the hand complete before player stat updates. If player updates failed, the hand was marked complete with partial data. Fixed: run player updates first, mark hand complete only after. | v1.0 hardening |
+| ISS-84 | 🟡 | `endHand()` used `Promise.all` for player updates — one failure aborted all. Replaced with `Promise.allSettled` to tolerate partial failures. | v1.0 hardening |
+| ISS-85 | 🟡 | `recordDeal` and `markIncomplete` used `Promise.all` — switched to `Promise.allSettled` for partial-failure tolerance. | v1.0 hardening |
+| ISS-86 | 🟡 | No `connect_error` handler on the Socket.io client. Expired JWT caused a silent stuck state with no feedback. Now clears credentials and logs the error. | v1.0 hardening |
+| ISS-87 | 🟡 | `apiFetch` threw generic `Error` on 401, with no credential cleanup. Now clears localStorage and throws a typed error on 401. | v1.0 hardening |
+| ISS-88 | 🟡 | `pendingBet` in `BettingControls` could get stuck if `gameState` object reference didn't change. Added a belt-and-suspenders `useEffect` keyed on `isMyTurn` to reset it. | v1.0 hardening |
+| ISS-89 | 🟡 | `ReplayEngine.load()` accepted any truthy `handDetail` without checking `actions`/`players` arrays — garbage state on incomplete hands. Now validates before touching state. | v1.0 hardening |
+| ISS-90 | 🟢 | `findLastAggressorIndex` in `tagAnalyzers/util.js` only matched `raise`/`bet` — all-in aggression was invisible to `BLUFF_CATCH`/`HERO_CALL` tags. Added `all-in` to the match set. | v1.0 hardening |
+| ISS-91 | 🟡 | `compareHands()` in `HandEvaluator` would throw on malformed hand results (`bestFive` undefined). Added null guard. | v1.0 hardening |
+| ISS-92 | 🟡 | `place_bet` handler accepted arbitrary action strings and non-integer raise amounts from the client. Now validates action enum and raise amount before processing. | v1.0 hardening |
+| ISS-93 | 🟡 | Coach control handlers (`set_blind_levels`, `adjust_stack`, `set_player_in_hand`, `award_pot`) had no input type validation. Now validated before forwarding to game engine. | v1.0 hardening |
+| ISS-94 | 🟠 | Dealer rotation used array index arithmetic (`dealer_seat + 1) % numPlayers`) — seat and index conflated. When players had non-sequential seats or a player was removed, the button jumped to the wrong player. Fixed to find dealer by seat, advance by iterating eligible players sorted by seat. | v1.0 hardening |
+| ISS-95 | 🟢 | `addHandToPlaylist` had no guard on missing args — silent DB failure. Added explicit validation. | v1.0 hardening |
+| ISS-96 | 🟠 | `sessions.js` error handler interpolated `err.message` into raw HTML (`<pre>Report error: ${err.message}</pre>`), creating a reflected XSS vector. Fixed to return `{ error: 'report_failed' }` JSON. | v1.0 hardening |
+| ISS-97 | 🟡 | All 5 route files returned `{ error: err.message }` in catch blocks, leaking internal error details to clients. Now return `{ error: 'internal_error' }` uniformly. | v1.0 hardening |
 
 ---
 
@@ -143,3 +176,12 @@
 | FE-20 | 🟢 | `client/src/components/CoachSidebar.jsx` blind levels `<input type="number">` — React inline `style={{ appearance: 'textfield' }}` only suppresses spinners in Firefox. Chrome showed native spinner arrows that overflowed the panel border. Fixed: global CSS rule in `client/src/index.css` targeting `input[type='number']::-webkit-inner-spin-button` and `::-webkit-outer-spin-button`. Removed redundant per-component rule from `BettingControls.jsx`. | Fixed 2026-03-24 |
 | FE-21 | 🟢 | `client/src/components/CoachSidebar.jsx` blind levels input — `type="number" min={2}` caused Chrome to reject intermediate keystrokes (e.g. typing "1" before "10"), making the field feel unresponsive. Also `flex-1` without `min-w-0` allowed the input to overflow its flex container. Fixed: changed to `type="text" inputMode="numeric"` with regex-strip onChange; added `min-w-0`. Same `min-w-0` fix applied to playlist name input and playlist select. | Fixed 2026-03-24 |
 | SERVER-01 | 🟡 | `server/db/HandLoggerSupabase.js` `markIncomplete(handId)` only set `completed_normally=false`, leaving `board=[]` and `hole_cards=[]` in the DB for all hands abandoned at server shutdown. Replay of these hands showed empty board and placeholder cards. Fixed: `markIncomplete(handId, state?)` now optionally saves `board`, `final_pot`, `phase_ended`, and per-player `hole_cards`. `markAllHandsIncomplete()` in `server/index.js` now passes `gm.state`. | Fixed 2026-03-24 |
+| ISS-74 | 🟠 | Coach sidebar (`position: fixed`) overlaid the table rather than pushing it. Rightmost seats were obscured when sidebar open. Fixed in UI Redesign: sidebar is now a flex sibling; oval centers via `paddingRight: sidebarOpen ? 360 : 0`; seats inside oval div reference oval dimensions. | Fixed 2026-03-24 |
+| ISS-76 | 🟡 | `loginRosterPlayer` used `.ilike()` for the `display_name` lookup, which crashes on nondeterministic collations ("nondeterministic collations not supported for ILIKE", code 0A000). Fixed: switched to `.eq()` — the `display_name` column has `COLLATE case_insensitive` so equality is already case-insensitive. | Fixed 2026-03-24 |
+| REFACTOR-01 | 🟡 | `server/index.js` was a 1704-line monolith mixing auth, socket handlers, game logic, REST routes, and DB calls with no separation of concerns. Extracted into: `server/auth/` (JwtService, requireAuth, requireRole, socketAuthMiddleware, socketGuards), `server/socket/` (middleware + 7 handler groups), `server/routes/` (6 route files), `server/game/` (BettingRound, ShowdownResolver, ReplayEngine), `server/db/repositories/` (5 repositories), `server/game/AnalyzerService.js`, `server/state/SharedState.js`, `server/lifecycle/`. Bootstrap reduced to ~110 lines. | Fixed 2026-03-25 (Phases 0–9) |
+| REFACTOR-02 | 🟡 | `client/src/hooks/useSocket.js` was a single monolithic hook (all state + all socket listeners). Decomposed into 6 focused hooks: `useConnectionManager`, `useGameState`, `usePlaylistManager`, `useReplay`, `useNotifications`, `usePreferences`. `useSocket.js` becomes a 110-line composition layer. | Fixed 2026-03-25 (Phase 8) |
+| REFACTOR-03 | 🟡 | `client/src/App.jsx` had 6 inline component definitions (514 lines total). Extracted: `ConnectionDot`, `JoinScreen`, `TopBar`, `TagHandPill`, `ErrorToast`, `NotificationToast` into `client/src/components/`. App.jsx reduced to 336 lines; emit bundle wrapped in `useMemo` to prevent unnecessary re-renders. | Fixed 2026-03-25 (Phase 8) |
+| REFACTOR-04 | 🟡 | `client/src/components/CoachSidebar.jsx` was a 1626-line monolith with all coach UI, all state, and a duplicate `/api/hands` fetch on mount. Decomposed into 8 section components under `client/src/components/sidebar/`; `useHistory()` called once and shared via props. CoachSidebar.jsx reduced to 299 lines. | Fixed 2026-03-25 (Phase 8) |
+| DB-10 | 🟡 | `PlayerRepository.getPlayerHands` sorted by `hand_id` (UUID, effectively random order). Hand history in the coach sidebar displayed in non-chronological order. Fixed: `.order('started_at', { foreignTable: 'hands', ascending: false })`. | Fixed 2026-03-25 (Phase 9) |
+| DB-11 | 🟡 | `AnalyzerService.buildAnalyzerContext` used `SELECT *` on three tables, pulling unused columns and risking schema coupling. Replaced with explicit column lists on all three parallel queries. | Fixed 2026-03-25 (Phase 9) |
+| SERVER-02 | 🟡 | `ALLOWED_ORIGIN` defaulted to `''` (empty string) when `CORS_ORIGIN` env var was not set, blocking all cross-origin browser requests in dev without a `.env` file. Fixed: defaults to `http://localhost:5173` when `NODE_ENV !== 'production'` and `CORS_ORIGIN` is unset. | Fixed 2026-03-25 (Phase 9) |

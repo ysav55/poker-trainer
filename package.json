@@ -19,5 +19,8 @@
   },
   "dependencies": {
     "bcrypt": "^6.0.0"
+  },
+  "devDependencies": {
+    "xlsx": "^0.18.5"
   }
 }

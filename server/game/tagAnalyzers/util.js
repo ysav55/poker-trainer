@@ -35,7 +35,7 @@ function findLastPFRaiser(pre) {
  */
 function findLastAggressorIndex(streetActions) {
   for (let i = streetActions.length - 1; i >= 0; i--) {
-    if (['raise', 'bet'].includes(norm(streetActions[i]))) return i;
+    if (['raise', 'bet', 'all-in'].includes(norm(streetActions[i]))) return i;
   }
   return -1;
 }

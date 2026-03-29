@@ -21,6 +21,13 @@ export async function apiFetch(path, options = {}) {
     },
   });
   if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('poker_trainer_jwt');
+      localStorage.removeItem('poker_trainer_player_id');
+      const err = new Error('Session expired — please log in again');
+      err.status = 401;
+      throw err;
+    }
     let message = `HTTP ${res.status}`;
     try { message = (await res.json()).message || message; } catch { /* not JSON */ }
     throw new Error(message);

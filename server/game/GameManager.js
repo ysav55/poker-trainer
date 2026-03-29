@@ -940,18 +940,15 @@ class GameManager {
 
   resetForNextHand() {
     this._saveSnapshot('action');
-    const gamePlayers = this._gamePlayers();
-    const numPlayers = Math.max(1, gamePlayers.length);
-    let nextSeat = (this.state.dealer_seat + 1) % numPlayers;
-    // Skip disconnected players when rotating the dealer button
-    if (gamePlayers.length > 0) {
-      let steps = 0;
-      while (gamePlayers[nextSeat] && gamePlayers[nextSeat].disconnected === true && steps < numPlayers) {
-        nextSeat = (nextSeat + 1) % numPlayers;
-        steps++;
-      }
+    // Rotate dealer button by player object (not seat index) so removals don't cause jumps.
+    const eligible = this.state.players
+      .filter(p => !p.is_coach && !p.disconnected && p.seat >= 0)
+      .sort((a, b) => a.seat - b.seat);
+    if (eligible.length > 0) {
+      const dealerIdx = eligible.findIndex(p => p.seat === this.state.dealer_seat);
+      const nextDealer = eligible[(dealerIdx + 1) % eligible.length];
+      this.state.dealer_seat = nextDealer.seat;
     }
-    this.state.dealer_seat = nextSeat;
     const players = this._gamePlayers();
     players.forEach(p => {
       p.hole_cards = [];

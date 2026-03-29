@@ -10,7 +10,9 @@ const PostflopAnalyzer = {
     const flopActions  = byStreet['flop']    || [];
     const riverActions = byStreet['river']   || [];
 
-    // C_BET: last preflop raiser is first to bet/raise on the flop
+    // C_BET: last preflop raiser is first to bet/raise on the flop.
+    // In multiway pots, earlier checks by other players don't change this —
+    // the PF raiser's first bet is a C-bet regardless of position in the betting order.
     if (flopActions.length > 0) {
       const lastPFRaiser = findLastPFRaiser(pre);
       if (lastPFRaiser) {

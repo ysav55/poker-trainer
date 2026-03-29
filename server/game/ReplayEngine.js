@@ -70,6 +70,14 @@ function load(state, handDetail) {
   }
   if (!handDetail) return { error: 'Hand not found' };
 
+  // Validate completeness before touching state
+  if (!Array.isArray(handDetail.actions)) return { error: 'Hand has no action data' };
+  if (!Array.isArray(handDetail.players) || handDetail.players.length === 0) {
+    return { error: 'Hand has no player data' };
+  }
+  const malformed = handDetail.actions.find(a => !a.player_id || !a.action || !a.street);
+  if (malformed) return { error: 'Hand contains malformed action data' };
+
   const rm = state.replay_mode;
   rm.source_hand_id = handDetail.hand_id;
   rm.actions = (handDetail.actions || []).filter(a => !a.is_reverted);
@@ -132,6 +140,12 @@ function branch(state) {
   if (rm.branched) return { error: 'Already branched' };
 
   rm.pre_branch_snapshot = JSON.parse(JSON.stringify(state));
+  // In dev: warn if snapshot is suspiciously large (indicates long-session memory growth).
+  // Call unbranch() or exit() to release snapshot memory.
+  if (process.env.NODE_ENV !== 'production' &&
+      JSON.stringify(rm.pre_branch_snapshot).length > 500_000) {
+    console.warn('[ReplayEngine] branch snapshot >500KB — consider long-session cleanup');
+  }
   rm.branched = true;
 
   // Mark all real seated players as observers — coach acts for shadow players

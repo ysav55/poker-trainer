@@ -59,6 +59,15 @@ export default function BettingControls({
   // with an updated phase/current_turn, so this is not observed in normal play.
   useEffect(() => { setPendingBet(false); }, [gameState]);
 
+  // Belt-and-suspenders: also reset when isMyTurn becomes false (authoritative signal
+  // that the server processed the action), in case the gameState ref didn't change.
+  useEffect(() => {
+    if (!isMyTurn) {
+      setPendingBet(false);
+      setShowRaise(false);
+    }
+  }, [isMyTurn]);
+
   // Slide-up animation on mount / when it becomes our turn
   useEffect(() => {
     if (isMyTurn) {

@@ -1,7 +1,7 @@
 'use strict';
 
-module.exports = function registerAlphaReportRoute(app, { generateAlphaReport, log }) {
-  app.get('/api/alpha-report', async (req, res) => {
+module.exports = function registerAlphaReportRoute(app, { generateAlphaReport, log, requireAuth, requireRole }) {
+  app.get('/api/alpha-report', requireAuth, requireRole('coach'), async (req, res) => {
     try {
       const hours = Math.min(Math.max(parseInt(req.query.hours, 10) || 72, 1), 720);
       const html = await generateAlphaReport(hours);

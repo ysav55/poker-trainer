@@ -9,7 +9,7 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, requireRole
       const playlists = await HandLogger.getPlaylists({ tableId: req.query.tableId || null });
       res.json({ playlists });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -21,7 +21,7 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, requireRole
       const playlist = await HandLogger.createPlaylist({ name, description, tableId });
       res.status(201).json(playlist);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -31,7 +31,7 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, requireRole
       const hands = await HandLogger.getPlaylistHands(req.params.playlistId);
       res.json({ hands });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -43,7 +43,7 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, requireRole
       const entry = await HandLogger.addHandToPlaylist(req.params.playlistId, handId);
       res.status(201).json(entry);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -53,7 +53,7 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, requireRole
       await HandLogger.removeHandFromPlaylist(req.params.playlistId, req.params.handId);
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -63,7 +63,7 @@ module.exports = function registerPlaylistRoutes(app, { requireAuth, requireRole
       await HandLogger.deletePlaylist(req.params.playlistId);
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 };

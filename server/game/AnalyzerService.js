@@ -35,7 +35,7 @@ async function buildAnalyzerContext(handId) {
   const [hand, allActions, handPlayers] = await Promise.all([
     q(supabase.from('hands').select('hand_id, session_id, table_id, started_at, ended_at, board, final_pot, winner_id, winner_name, phase_ended, completed_normally, dealer_seat, is_scenario_hand').eq('hand_id', handId).maybeSingle()),
     q(supabase.from('hand_actions').select('id, hand_id, player_id, player_name, street, action, amount, pot_at_action, position, timestamp, is_manual_scenario, is_reverted').eq('hand_id', handId).order('id', { ascending: true })),
-    q(supabase.from('hand_players').select('hand_id, player_id, player_name, seat, hole_cards, is_coach, starting_stack, final_stack').eq('hand_id', handId)),
+    q(supabase.from('hand_players').select('hand_id, player_id, player_name, seat, hole_cards, is_coach, stack_start, stack_end').eq('hand_id', handId)),
   ]);
 
   if (!hand) return null;

@@ -41,6 +41,17 @@ export function useConnectionManager() {
     window.addEventListener('error', handleWindowError)
     window.addEventListener('unhandledrejection', handleUnhandledRejection)
 
+    socket.on('connect_error', (err) => {
+      // If the server rejects the socket due to an expired or invalid JWT, clear
+      // stale credentials so the user is prompted to log in again.
+      if (err.message?.toLowerCase().includes('auth') || err.message?.toLowerCase().includes('token') || err.message?.toLowerCase().includes('unauthorized')) {
+        localStorage.removeItem('poker_trainer_jwt')
+        localStorage.removeItem('poker_trainer_player_id')
+        joinParamsRef.current = null
+      }
+      console.error('[socket] connect_error', err.message)
+    })
+
     socket.on('connect', () => {
       setConnected(true)
       // Auto-rejoin if we were already seated (socket reconnected after a drop)

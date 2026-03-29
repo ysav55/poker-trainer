@@ -54,6 +54,8 @@ export function useSocket() {
     resetGame()
     resetNotifications()
     resetPlaylists()
+    localStorage.removeItem('poker_trainer_jwt')
+    localStorage.removeItem('poker_trainer_player_id')
     socketRef.current?.disconnect()
     socketRef.current?.connect()
   }, [clearJoinParams, resetGame, resetNotifications, resetPlaylists, socketRef])

@@ -10,13 +10,17 @@ module.exports = function registerReplay(socket, ctx) {
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     if (gm.state.phase !== 'waiting') return sendSyncError(socket, 'Can only load replay between hands');
-    const handDetail = await HandLogger.getHandDetail(handId);
-    if (!handDetail) return sendSyncError(socket, `Hand ${handId} not found`);
-    const result = gm.loadReplay(handDetail);
-    if (result.error) return sendSyncError(socket, result.error);
-    const actionCount = (handDetail.actions || []).filter(a => !a.is_reverted).length;
-    broadcastState(tableId);
-    socket.emit('replay_loaded', { handId, actionCount });
+    try {
+      const handDetail = await HandLogger.getHandDetail(handId);
+      if (!handDetail) return sendSyncError(socket, `Hand ${handId} not found`);
+      const result = gm.loadReplay(handDetail);
+      if (result.error) return sendSyncError(socket, result.error);
+      const actionCount = (handDetail.actions || []).filter(a => !a.is_reverted).length;
+      broadcastState(tableId);
+      socket.emit('replay_loaded', { handId, actionCount });
+    } catch (err) {
+      sendError(socket, `Failed to load replay: ${err.message}`);
+    }
   });
 
   socket.on('replay_step_forward', () => {
@@ -75,12 +79,16 @@ module.exports = function registerReplay(socket, ctx) {
     const tableId = socket.data.tableId;
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
-    const result = gm.exitReplay();
-    if (result.error) return sendSyncError(socket, result.error);
-    if (result.playlistWasActive && gm.state.playlist_mode?.active) {
-      await advancePlaylist(tableId, gm);
-    } else {
-      broadcastState(tableId, { type: 'replay_exited', message: 'Replay mode ended' });
+    try {
+      const result = gm.exitReplay();
+      if (result.error) return sendSyncError(socket, result.error);
+      if (result.playlistWasActive && gm.state.playlist_mode?.active) {
+        await advancePlaylist(tableId, gm);
+      } else {
+        broadcastState(tableId, { type: 'replay_exited', message: 'Replay mode ended' });
+      }
+    } catch (err) {
+      sendError(socket, `Failed to exit replay: ${err.message}`);
     }
   });
 };

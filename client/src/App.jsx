@@ -10,6 +10,7 @@ import TopBar from './components/TopBar';
 import NotificationToast from './components/NotificationToast';
 import ErrorToast from './components/ErrorToast';
 import TagHandPill from './components/TagHandPill';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // ── Root App component ────────────────────────────────────────────────────────
 
@@ -249,34 +250,38 @@ export default function App() {
         )}
 
         {/* Poker table — fills remaining vertical space */}
-        <PokerTable
-          gameState={gameState}
-          myId={myId}
-          isCoach={isCoach}
-          coachDisconnected={coachDisconnected}
-          actionTimer={actionTimer}
-          emit={emit}
-          onOpenCardPicker={handleOpenCardPicker}
-          bbView={bbView}
-          bigBlind={gameState?.big_blind ?? 10}
-        />
+        <ErrorBoundary name="PokerTable">
+          <PokerTable
+            gameState={gameState}
+            myId={myId}
+            isCoach={isCoach}
+            coachDisconnected={coachDisconnected}
+            actionTimer={actionTimer}
+            emit={emit}
+            onOpenCardPicker={handleOpenCardPicker}
+            bbView={bbView}
+            bigBlind={gameState?.big_blind ?? 10}
+          />
+        </ErrorBoundary>
       </div>
 
       {/* ── Coach sidebar (right) ────────────────────────────────────────── */}
       {isCoach && !isSpectator && (
-        <CoachSidebar
-          gameState={gameState}
-          emit={emit}
-          myId={myId}
-          onOpenCardPicker={handleOpenCardPicker}
-          sessionStats={sessionStats}
-          playlists={playlists}
-          isOpen={sidebarOpen}
-          onToggle={handleToggleSidebar}
-          activeHandId={activeHandId}
-          handTagsSaved={handTagsSaved}
-          setBlindLevels={setBlindLevels}
-        />
+        <ErrorBoundary name="CoachSidebar">
+          <CoachSidebar
+            gameState={gameState}
+            emit={emit}
+            myId={myId}
+            onOpenCardPicker={handleOpenCardPicker}
+            sessionStats={sessionStats}
+            playlists={playlists}
+            isOpen={sidebarOpen}
+            onToggle={handleToggleSidebar}
+            activeHandId={activeHandId}
+            handTagsSaved={handTagsSaved}
+            setBlindLevels={setBlindLevels}
+          />
+        </ErrorBoundary>
       )}
 
       {/* ── Stats panel ──────────────────────────────────────────────────── */}

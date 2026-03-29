@@ -2,7 +2,7 @@
 
 A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history and player stats survive restarts and are accessible from any device.
 
-**Last updated:** 2026-03-24 — Replay controls moved inline (below table, replaces betting panel during replay); ghost seat cards now show face-down backs when hole cards missing; board suppressed as interactive during replay; markIncomplete saves board+cards on shutdown; number input spinners hidden globally; blind levels input overflow fixed.
+**Last updated:** 2026-03-26 — v1.0 hardening complete: security fixes (auth guard on alpha-report, XSS in error responses, input validation on bet/coach sockets), stability fixes (Promise.allSettled in DB writes, try-catch on all async handlers, JWT expiry handling), correctness fixes (dealer rotation bug, AnalyzerService column names, compareHands null guard, findLastAggressorIndex all-in), and UX (NotificationToast auto-dismiss, pendingBet reset, localStorage cleared on leave).
 
 ---
 
@@ -122,15 +122,14 @@ After logging in, everyone automatically joins the main table. Players on the sa
 
 The **coach sidebar** appears on the right (collapsible via the tab on its left edge). All sections are individually collapsible — click a section header to expand or collapse it. The default order is:
 
-1. **GAME CONTROLS** — start/reset hands, pause, mode selection
+1. **GAME CONTROLS** — start/reset hands, pause, mode selection; hand config (manual mode)
 2. **BLIND LEVELS** — change BB between hands (collapsed by default)
-3. **CARD INJECTION** — manual card picker (manual mode only)
-4. **UNDO CONTROLS** — undo last action / rollback street (collapsed by default)
-5. **POT & STACKS** — award pot, adjust stacks (collapsed by default)
-6. **PLAYERS** — seated players with in-hand toggles and hole card view
-7. **PLAYLISTS** — create / manage / activate hand playlists (collapsed by default)
-8. **SCENARIO LOADER** — search and load historical hands (collapsed by default)
-9. **HISTORY** — recent hand history with expandable detail (collapsed by default)
+3. **UNDO CONTROLS** — undo last action / rollback street (collapsed by default)
+4. **ADJUST STACKS** — directly set any player's chip count (collapsed by default)
+5. **PLAYERS** — seated players with in-hand toggles and hole card view (collapsed by default)
+6. **PLAYLISTS** — create / manage / activate hand playlists (collapsed by default)
+7. **HAND LIBRARY** — search and load historical hands (collapsed by default)
+8. **HISTORY** — recent hand history with expandable detail (collapsed by default)
 
 ### TAG HAND Pill
 
@@ -170,9 +169,9 @@ When a hand is loaded via Replay, the **replay panel appears inline below the ta
 
 > In branched mode, the coach acts for each shadow player's turn using the betting controls (showing "ACT FOR [name]").
 
-### CARD INJECTION (manual mode)
+### GAME CONTROLS — Card Config (manual mode)
 
-All card picking is done through the sidebar only — clicking cards on the table does nothing. Click any card slot in CARD INJECTION to open the card picker.
+All card picking is done through the GAME CONTROLS section (via Configure Hand) — clicking cards on the table does nothing. Click any card slot in the HandConfigPanel to open the card picker.
 
 ### UNDO CONTROLS
 
@@ -180,10 +179,9 @@ All card picking is done through the sidebar only — clicking cards on the tabl
 - **Rollback Street** — roll back to the start of the current street
 - **Force Next Street** — skip immediately to the next community card street
 
-### POT & STACKS
+### ADJUST STACKS
 
-- **Award Pot To** — manually award the pot to any player
-- **Adjust Stack** — directly set any player's chip count
+Directly set any player's chip count between hands.
 
 ### PLAYERS
 
@@ -203,7 +201,7 @@ Hover over any player's seat on the table to see their stats (visible to all cli
 | 3-bet % | ✓ | ✓ |
 | Alltime Winning | — | ✓ (0 if negative) |
 
-### SCENARIO LOADER
+### HAND LIBRARY
 
 Search historical hands by player name, date, or auto-tags. Per result:
 - **Load** (blue) — pre-fills cards for a new hand
@@ -266,7 +264,18 @@ Stats are stored in Supabase (PostgreSQL) and persist across server restarts and
 
 ---
 
-## 9. Disconnection Handling
+## 9. Error Recovery
+
+The poker table and coach sidebar are each wrapped in a React **error boundary**. If an unexpected JavaScript error occurs inside one of those panels:
+
+- A "Something went wrong" overlay is shown in that panel instead of a blank screen.
+- Two buttons are offered: **Reload page** (full reload) and **Try again** (clears the error and re-renders).
+- The error is logged best-effort to `/api/logs/client-error` on the server (non-blocking — no user impact if the request fails).
+- The rest of the UI (top bar, card picker, stats panel) remains functional.
+
+---
+
+## 10. Disconnection Handling
 
 - A disconnected player's seat shows an amber **OFFLINE** badge at 50% opacity.
 - If it is their turn when they disconnect, the timer is paused.
@@ -283,7 +292,7 @@ Server tests (Jest):
 cd server
 npx jest --no-coverage
 ```
-Expected: **951 tests passing** across 21 suites.
+Expected: **1245 tests passing** across 41 suites.
 
 Client tests (Vitest + React Testing Library):
 ```bash
@@ -310,8 +319,8 @@ Expected: 0 crashes, 0 anomalies.
 | `PORT` | `3001` | Server port |
 | `SUPABASE_URL` | *(required)* | Your Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | *(required)* | Service role key — used for all DB access (only the server ever holds this) |
-| `SESSION_SECRET` | `dev-secret-change-in-production` | Signs player JWTs — set to a long random string in production |
-| `CORS_ORIGIN` | `*` | Allowed origin for CORS — set to your domain in production (e.g. `https://poker.example.com`) |
+| `SESSION_SECRET` | *(required — server exits if missing)* | Signs player JWTs — generate with `openssl rand -hex 32` |
+| `CORS_ORIGIN` | `http://localhost:5173` in dev, `''` in production | Allowed origin for CORS — set to your domain in production (e.g. `https://poker.example.com`) |
 
 > The client has no `.env` file. The browser never receives any Supabase credentials.
 > There is no `COACH_PASSWORD` variable. Coach access is granted by adding a `coach` role row to `players.csv`.

@@ -43,3 +43,8 @@ server/coverage/
 
 # Vite
 client/.vite/
+
+# Personal / sensitive files
+*.xlsx
+*.pdf
+COACH_GUIDE.html

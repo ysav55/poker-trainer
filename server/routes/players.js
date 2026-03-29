@@ -10,7 +10,7 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
       const stats = await HandLogger.getPlayerHoverStats(stableId, sessionId || null);
       res.json(stats);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -21,7 +21,7 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
       if (!stats) return res.status(404).json({ error: 'Player not found' });
       res.json(stats);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -31,7 +31,7 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
       const players = await HandLogger.getAllPlayersWithStats();
       res.json({ players });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 
@@ -43,7 +43,7 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
       const hands = await HandLogger.getPlayerHands(req.params.stableId, { limit, offset });
       res.json({ hands, limit, offset });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: 'internal_error' });
     }
   });
 };

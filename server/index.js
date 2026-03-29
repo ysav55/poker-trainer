@@ -87,7 +87,7 @@ registerSessionRoutes(app, { requireAuth, HandLogger, tables: sharedState.tables
 registerPlaylistRoutes(app, { requireAuth, requireRole, HandLogger });
 registerAuthRoutes(app, { HandLogger, PlayerRoster, JwtService, authLimiter, log });
 registerHealthRoute(app, { supabaseAdmin, tables: sharedState.tables });
-registerAlphaReportRoute(app, { generateAlphaReport, log });
+registerAlphaReportRoute(app, { generateAlphaReport, log, requireAuth, requireRole });
 
 // ─── Global Express error handler ────────────────────────────────────────────
 
