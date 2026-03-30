@@ -20,6 +20,7 @@ const supabaseAdmin   = require('./db/supabase');
 const { generateHTMLReport }          = require('./reports/SessionReport');
 const { generateReport: generateAlphaReport } = require('./logs/AlphaReporter');
 const sharedState = require('./state/SharedState');
+const EquityService = require('./game/EquityService');
 
 const { registerSocketHandlers } = require('./socket/index');
 
@@ -30,9 +31,17 @@ const registerPlaylistRoutes    = require('./routes/playlists');
 const registerAuthRoutes        = require('./routes/auth');
 const registerHealthRoute       = require('./routes/health');
 const registerAlphaReportRoute  = require('./routes/alphaReport');
+const registerTableRoutes       = require('./routes/tables');
+const adminUsersRouter          = require('./routes/admin/users.js');
+const adminScenariosRouter      = require('./routes/admin/scenarios.js');
+const adminCRMRouter            = require('./routes/admin/crm.js');
+const adminTournamentsRouter    = require('./routes/admin/tournaments.js');
+const { registerTournamentRoutes } = require('./routes/admin/tournaments.js');
 
 const { registerShutdown }  = require('./lifecycle/shutdown');
 const { registerIdleTimer } = require('./lifecycle/idleTimer');
+const { startTableCleanup } = require('./lifecycle/tableCleanup');
+const { scheduleSundaySnapshot } = require('./jobs/snapshotJob');
 
 // ─── Startup checks ───────────────────────────────────────────────────────────
 
@@ -81,13 +90,19 @@ registerSocketHandlers(io);
 
 // ─── REST routes ──────────────────────────────────────────────────────────────
 
-registerHandRoutes(app, { requireAuth, HandLogger });
+registerHandRoutes(app, { requireAuth, HandLogger, EquityService });
 registerPlayerRoutes(app, { requireAuth, HandLogger });
 registerSessionRoutes(app, { requireAuth, HandLogger, tables: sharedState.tables, generateHTMLReport });
-registerPlaylistRoutes(app, { requireAuth, requireRole, HandLogger });
+registerPlaylistRoutes(app, { requireAuth, HandLogger });
 registerAuthRoutes(app, { HandLogger, PlayerRoster, JwtService, authLimiter, log });
 registerHealthRoute(app, { supabaseAdmin, tables: sharedState.tables });
-registerAlphaReportRoute(app, { generateAlphaReport, log, requireAuth, requireRole });
+registerAlphaReportRoute(app, { generateAlphaReport, log, requireAuth });
+registerTableRoutes(app, { requireAuth });
+app.use('/api/admin', requireAuth, adminUsersRouter);
+app.use('/api/admin', requireAuth, adminScenariosRouter);
+app.use('/api/admin', requireAuth, adminCRMRouter);
+app.use('/api/admin', requireAuth, adminTournamentsRouter);
+registerTournamentRoutes(app);
 
 // ─── Global Express error handler ────────────────────────────────────────────
 
@@ -105,6 +120,8 @@ registerShutdown(sharedState.tables, sharedState.activeHands, HandLogger);
 
 const IDLE_MINUTES = parseInt(process.env.IDLE_TIMEOUT_MINUTES, 10) || 0;
 const scheduleIdleShutdown = registerIdleTimer(io, sharedState.activeHands, HandLogger, IDLE_MINUTES);
+startTableCleanup(io, sharedState.tables);
+scheduleSundaySnapshot();
 
 // ─── Static file serving (production) ────────────────────────────────────────
 

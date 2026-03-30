@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
-export function usePlaylistManager({ socketRef }) {
+export function usePlaylistManager(socket) {
+  const { socketRef } = socket ?? {}
   const [playlists, setPlaylists] = useState([])
 
   useEffect(() => {

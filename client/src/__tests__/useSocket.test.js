@@ -55,6 +55,7 @@ describe('useSocket — return shape', () => {
     expect('activeHandId' in r).toBe(true)
     expect('handTagsSaved' in r).toBe(true)
     expect('myPlayer' in r).toBe(true)
+    expect('tableMode' in r).toBe(true)
   })
 
   it('exposes all notification fields', () => {
@@ -91,16 +92,6 @@ describe('useSocket — return shape', () => {
     }
   })
 
-  it('exposes replay emit helpers', () => {
-    const { result } = renderHook(() => useSocket())
-    const helpers = [
-      'loadReplay', 'replayStepFwd', 'replayStepBack',
-      'replayJumpTo', 'replayBranch', 'replayUnbranch', 'replayExit',
-    ]
-    for (const fn of helpers) {
-      expect(typeof result.current[fn], fn).toBe('function')
-    }
-  })
 })
 
 describe('useSocket — connection state', () => {

@@ -27,6 +27,21 @@
  *   DELETE /api/playlists/:id/hands/:hid  (requires coach role)
  */
 
+// ── Mock requirePermission — grants playlist:manage to coach role ────────────
+jest.mock('../../auth/requirePermission.js', () => ({
+  requirePermission: (...keys) => (req, res, next) => {
+    const uid = req.user?.stableId ?? req.user?.id;
+    if (!uid) return res.status(401).json({ error: 'Unauthorized' });
+    // In tests, only the 'coach' role has playlist:manage
+    if (keys.includes('playlist:manage') && req.user?.role !== 'coach') {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  },
+  getPlayerPermissions:     jest.fn().mockResolvedValue(new Set()),
+  invalidatePermissionCache: jest.fn(),
+}));
+
 // ── Mock HandLoggerSupabase ───────────────────────────────────────────────────
 jest.mock('../HandLoggerSupabase', () => {
   const { v4: uuidv4 } = require('uuid');

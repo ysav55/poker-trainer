@@ -2,7 +2,7 @@
 
 A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history and player stats survive restarts and are accessible from any device.
 
-**Last updated:** 2026-03-26 — v1.0 hardening complete: security fixes (auth guard on alpha-report, XSS in error responses, input validation on bet/coach sockets), stability fixes (Promise.allSettled in DB writes, try-catch on all async handlers, JWT expiry handling), correctness fixes (dealer rotation bug, AnalyzerService column names, compareHands null guard, findLastAggressorIndex all-in), and UX (NotificationToast auto-dismiss, pendingBet reset, localStorage cleared on leave).
+**Last updated:** 2026-03-31 — Gap fixes: replay UI removed from client (server-side ReplayEngine intact), AuthContext loading state added, JWT source unified through AuthContext, DB migrations 008–013 applied (RBAC, user management, tables registry, scenario configs, player CRM, tournaments).
 
 ---
 
@@ -68,68 +68,95 @@ Open **http://localhost:5173**. The client hot-reloads on file save; the server 
 
 ---
 
-## 3. Accounts
+## 3. Accounts & Roles
 
-This is a **closed system** — there is no self-registration. The admin edits `players.csv` at the project root to add or remove players.
+This is a **closed system** — there is no self-registration. Admins create and manage accounts through the **Admin → User Management** panel (at `/admin/users`) or by editing `players.csv` at the project root (legacy path — still supported for bootstrapping).
 
-### Managing the player roster (`players.csv`)
+### Roles
 
-```csv
-# Poker Trainer — Player Roster
-# Format: name,password,role
-# role must be: coach   or   student
-# Lines starting with # are ignored. Whitespace around commas is trimmed.
+| Role | Description |
+|------|-------------|
+| `superadmin` | Full unrestricted access |
+| `admin` | All permissions — user management, all admin panels |
+| `coach` | Leads coached tables, tags hands, builds scenarios, manages playlists |
+| `moderator` | Can tag hands, run tables; limited admin |
+| `referee` | Creates and manages tournaments |
+| `player` | Standard seated player — no elevated permissions |
+| `trial` | Trial access — no special permissions |
 
-Coach,coach123,coach
-Alice,alice123,student
-Bob,bob123,student
-```
-
-- Add a row to give someone access.
-- Delete a row to revoke access immediately (takes effect on next server restart, or call `reload()` in server console).
-- `role` must be exactly `coach` or `student`.
-- Names are case-insensitive for login but the capitalisation in the file is what appears in-game.
-- There is no email field — name + password is sufficient.
-
-> The server exits with a fatal error at startup if `players.csv` is missing.
+Roles map to 12 granular permissions (`table:create`, `hand:tag`, `playlist:manage`, `crm:view`, `admin:access`, etc.). Permission checks happen both in Express middleware and socket handlers.
 
 ### Logging in
 
-1. Open the app — the **Log In** tab is shown by default.
-2. Enter your **name** and **password** exactly as listed in `players.csv`. Click Log In.
-3. The server returns a `stableId` that is stored in `localStorage` so your hand history persists across sessions.
+1. Open the app — you are redirected to `/login`.
+2. Enter your **name** and **password**. Click Log In.
+3. On success you land on the **Lobby** (`/lobby`).
+
+### Coach vs. player modes
+
+- **coached_cash table**: The coach controls dealing, configuration, undo, and pausing. Players only see betting controls. The coach cannot be dealt cards.
+- **uncoached_cash / tournament tables**: All seated users (including coaches) are regular players who are dealt cards and take actions. No coach-specific controls exist on these tables.
 
 ### Watching without an account
 
-Click **Watch**. Enter any name. You can see the table but cannot act or place bets.
-
-### Joining as coach
-
-Log in with a name that has `role: coach` in `players.csv`. The coach flag is granted automatically — there is no separate coach password.
+Spectators can join any table without authentication. They see the board and player stacks but cannot act.
 
 ---
 
-## 4. Joining a Table
+## 4. Lobby & Tables
 
-After logging in, everyone automatically joins the main table. Players on the same server see the same game.
+After logging in you land on the **Lobby** (`/lobby`).
 
-- Players on the same Wi-Fi use the **Network URL** printed by Vite in dev mode (e.g. `http://192.168.x.x:5173`), or the server's IP on port 3001 in production.
-- For remote/internet play, use [ngrok](https://ngrok.com): `ngrok http 3001` and share the resulting URL.
+### Lobby layout
+- **Stats row** — hands played, net chips, VPIP since login
+- **Active Tables** — live card grid of open tables with a **Join** button on each tile
+- **Recent Hands** — last 5 completed hands with tags and net chips
+- **Playlists** — visible to coaches; quick access to activate drills
+- **Admin nav pills** — Users / Hands / CRM / Tournaments — visible to roles with `admin:access`
+
+### Joining a table
+Click **Join** on any table tile in the lobby, or navigate directly to `/table/:tableId`.
+
+### Creating a table (coach / admin)
+Click **+ Create Table** in the lobby. Choose mode, name, and optional scheduled start time.
+
+### Multi-table view
+Coaches and admins can open `/multi` for a grid overview of all active tables. Focused table (click to select) renders a full table view; unfocused tables show status chips. The **Broadcast Bar** at the bottom sends Start / Reset / Pause / Advance Blinds to all tables simultaneously.
+
+### Game modes
+
+| Mode | Description |
+|------|-------------|
+| **coached_cash** | Coach controls dealing, config, undo. Players bet. Coach is an observer. |
+| **uncoached_cash** | Auto-deals after each hand. All users (including coaches) are seated players. |
+| **tournament** | Auto-deals with a blind schedule and elimination tracking. All users are players. |
+
+### Network access
+- Same-LAN players: use the server's IP on port 3001 (or the Vite network URL in dev mode).
+- Remote play: `ngrok http 3001` and share the URL.
 
 ---
 
-## 5. Coach Controls
+## 5. Coach Controls (coached_cash mode only)
 
-The **coach sidebar** appears on the right (collapsible via the tab on its left edge). All sections are individually collapsible — click a section header to expand or collapse it. The default order is:
+The **coach sidebar** appears on the right (collapsible). It has three tabs:
 
-1. **GAME CONTROLS** — start/reset hands, pause, mode selection; hand config (manual mode)
-2. **BLIND LEVELS** — change BB between hands (collapsed by default)
-3. **UNDO CONTROLS** — undo last action / rollback street (collapsed by default)
-4. **ADJUST STACKS** — directly set any player's chip count (collapsed by default)
-5. **PLAYERS** — seated players with in-hand toggles and hole card view (collapsed by default)
-6. **PLAYLISTS** — create / manage / activate hand playlists (collapsed by default)
-7. **HAND LIBRARY** — search and load historical hands (collapsed by default)
-8. **HISTORY** — recent hand history with expandable detail (collapsed by default)
+### GAME tab
+- **GAME CONTROLS** — start/reset hands, pause, mode selection; hand config (manual mode)
+- **BLIND LEVELS** — change BB between hands (collapsed by default)
+- **UNDO CONTROLS** — undo last action / rollback street (collapsed by default)
+- **ADJUST STACKS** — directly set any player's chip count (collapsed by default)
+- **PLAYERS** — seated players with in-hand toggles and hole card view (collapsed by default)
+
+### HANDS tab
+- **HAND LIBRARY** — search and load historical hands; load as scenario or activate as drill
+- **HISTORY** — recent hand history with expandable detail
+- **+ Build Scenario** button — navigates to the Scenario Builder admin page
+
+### PLAYLISTS tab
+- **PLAYLISTS** — create / manage / activate hand playlists
+
+A sticky strip at the top of the sidebar shows the current phase badge and pot size at all times.
 
 ### TAG HAND Pill
 
@@ -145,6 +172,9 @@ While a hand is in progress, a **TAG HAND** pill button floats in the top-right 
 | **Start Hand** | Deals a new hand |
 | **Reset** | Resets to the waiting lobby |
 | **Pause / Resume** | Freezes the action timer; players cannot act while paused |
+| **EV OVERLAY — Coach** | Show/hide equity % badges on all seats in the coach's own view |
+| **EV OVERLAY — Players** | Broadcast equity % to all players; they see their own equity above the action bar |
+| **⬡ Share Range** | Open a 13×13 matrix modal, select a range, and broadcast it to all clients as an overlay |
 
 ### BLIND LEVELS
 
@@ -153,21 +183,6 @@ Change the big blind **between hands** (disabled during an active hand).
 - Enter a new **BB** value. The small blind is automatically set to `floor(BB / 2)`. Click **Set Blinds**.
 - Any player joining after blinds are set receives a default stack of **100 × the new BB**.
 - Default blind levels are **5/10** (1,000-chip stack).
-
-### REPLAY CONTROLS
-
-When a hand is loaded via Replay, the **replay panel appears inline below the table** — replacing the betting controls for the duration of the replay. All hole cards are shown face-up for coaching.
-
-| Control | What it does |
-|---------|-------------|
-| **Progress label** | Shows "N / Total" and the current action description |
-| **Scrubber** | Drag to jump to any action |
-| **◀ Back / Fwd ▶** | Step one action at a time |
-| **Branch to Live from Here** | Switches to live play from the current board state. Coach acts for shadow players using the normal betting controls. |
-| **Return to Replay** | Unwinds the live branch and restores the replay state. |
-| **Exit Replay** | Ends replay and returns to the waiting lobby. |
-
-> In branched mode, the coach acts for each shadow player's turn using the betting controls (showing "ACT FOR [name]").
 
 ### GAME CONTROLS — Card Config (manual mode)
 
@@ -203,10 +218,15 @@ Hover over any player's seat on the table to see their stats (visible to all cli
 
 ### HAND LIBRARY
 
-Search historical hands by player name, date, or auto-tags. Per result:
+Search historical hands by player name, date, or auto-tags. Each row shows a **hand-group chip** (e.g. "AKo") if the hero's hole cards are available. Per result:
 - **Load** (blue) — pre-fills cards for a new hand
-- **Replay** (purple) — enters Guided Replay Mode for that hand
 - **+ Playlist** — adds to a selected playlist
+
+Per result:
+- **Load** (blue) — pre-fills cards for a new hand
+- **+ Playlist** — adds to a selected playlist
+
+**Filter by Range** — click the "⬡ Filter by Range" toggle above the hand list to expand a 13×13 matrix. Click cells to filter the list to only hands where the hero was dealt those hand groups. A chip count badge on the button shows how many groups are active. Click "Clear filter" to reset.
 
 ### HISTORY
 
@@ -217,9 +237,10 @@ Last 10 hands with expandable detail: full board, player stacks, hole cards, and
 ## 6. Configuring a Hand (Manual / Hybrid Mode)
 
 1. Click **Configure Hand** in Section 1 (only visible between hands).
-2. For each player, use the **Cards / Range** toggle:
+2. For each player, use the **Cards / Range / Matrix** toggle:
    - **Cards** — click the two card slots to pin specific hole cards.
    - **Range** — click scenario tags to constrain the dealt hand. The server picks randomly from the intersection of all selected tags.
+   - **Matrix** — click cells on the interactive 13×13 hand grid to select any combination of hand groups (AA, AKs, QJo, etc.). The selected cells are highlighted green; a combo count is shown below the grid.
 3. **Range tag groups** (radio within each group, intersect across groups):
    - **PAIRS:** All Pairs · QQ+ · 77-JJ · 22-66
    - **SUIT:** Suited · Offsuit
@@ -239,7 +260,39 @@ Last 10 hands with expandable detail: full board, player stacks, hole cards, and
 
 ---
 
-## 7. Playing as a Player
+## 7. Equity Overlays & Range Tools
+
+### Live Equity (EV Overlay)
+
+Equity (win probability) is computed automatically at the start of each hand and after each street. The coach controls visibility:
+
+- **Coach view** — toggle "EV OVERLAY → Coach" in Game Controls to show/hide equity badges above each player's seat chip (green >55%, amber 40–55%, red <40%).
+- **Player view** — toggle "EV OVERLAY → Players" to broadcast equity to all seated players. Players see their own equity as a line above the action buttons.
+- **Showdown** — equity is always shown to everyone after the last card is dealt.
+
+### Shared Range Overlay
+
+1. Click **⬡ Share Range** in Game Controls.
+2. Select hand groups in the 13×13 matrix modal and optionally add a label.
+3. Click **Broadcast** — a floating overlay appears for all clients showing the matrix.
+4. Each client can dismiss their overlay independently. You can re-broadcast any time.
+
+> During the waiting phase the overlay is labeled **Warmup** — useful for pre-session range discussion.
+
+### Auto-Tags — Equity-Based Mistakes
+
+The hand analyzer now includes equity-based tags:
+
+| Tag | Meaning |
+|-----|---------|
+| `DREW_THIN` | Called a bet with <25% equity |
+| `EQUITY_FOLD` | Folded with >50% equity |
+| `VALUE_BACKED` | Bet/raised with >70% equity |
+| `EQUITY_BLUFF` | Bet/raised with <30% equity and got called |
+
+---
+
+## 8. Playing as a Player
 
 - Your hole cards are visible only to you (face-down to others).
 - **BB view toggle** — click the **Chips / BB** pill button in the **top bar (top-left)** to switch between flat chip counts (e.g. "1,000") and big-blind units (e.g. "100bb"). This is a personal setting — it only affects your view and is remembered across sessions via `localStorage`.
@@ -285,21 +338,62 @@ The poker table and coach sidebar are each wrapped in a React **error boundary**
 
 ---
 
-## 10. Running Tests
+## 10. Admin Features
+
+Admin pages are accessible from the lobby nav pills (require `admin:access` permission).
+
+### User Management (`/admin/users`)
+- Create users with name, password, role, optional email, and notes
+- Edit role, status (active/archived), and profile details
+- Reset passwords
+- Assign/remove roles
+
+### Scenario Builder (`/admin/hands`)
+- Build hand scenarios for drill playlists
+- Configure hole cards, board, stacks, and positions with a vertical flow UI
+- Save scenarios to playlists — students replay them as ordered drills
+- Also accessible from CoachSidebar → HANDS tab → "+ Build Scenario"
+
+### Player CRM (`/admin/crm`)
+Requires `crm:view` / `crm:edit` permissions.
+- **Left panel**: search/filter player list; assign tags; quick actions
+- **OVERVIEW tab**: stats (hands, net chips, VPIP, PFR) + line chart of weekly snapshots
+- **NOTES tab**: append-only coach notes with type badges (general / session_review / goal / weakness)
+- **SCHEDULE tab**: upcoming coaching sessions; create / update status
+- **HISTORY tab**: paginated hand history with tag filters
+
+### Tournament Setup (`/admin/tournaments`)
+Requires `tournament:manage` permission.
+- Create a tournament: name, blind schedule (level rows with SB/BB/ante/duration), starting stack, rebuy settings
+- Start/stop tournaments via the admin panel or the table page overlay
+
+---
+
+## 11. Tournament Mode
+
+During a tournament:
+- **TournamentInfoPanel** (right side overlay) shows: current blind level, countdown timer, player count, recent eliminations
+- **Blind levels advance automatically** on a timer — the panel shows a gold pulse when < 15 s remain
+- **Eliminations**: when a player's stack reaches 0, they are recorded in standings and removed from the hand. The panel shows their finish position.
+- **Tournament ends** when one player remains. Final standings are shown and the table closes.
+
+---
+
+## 12. Running Tests
 
 Server tests (Jest):
 ```bash
 cd server
 npx jest --no-coverage
 ```
-Expected: **1245 tests passing** across 41 suites.
+Expected: **~1598 tests passing** across 59 suites.
 
 Client tests (Vitest + React Testing Library):
 ```bash
 cd client
 npm test
 ```
-Expected: **46 tests passing** across 3 suites.
+Expected: **677 tests passing** across 30 suites.
 
 Batch integration simulation (100 scenario batches × 20 hands each):
 ```bash

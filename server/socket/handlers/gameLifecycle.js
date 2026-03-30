@@ -4,9 +4,17 @@ module.exports = function registerGameLifecycle(socket, ctx) {
   const { tables, activeHands, stableIdMap, io,
           broadcastState, sendError, sendSyncError, startActionTimer, clearActionTimer,
           pausedTimerRemainders,
+          equityCache, equitySettings, emitEquityUpdate,
           requireCoach, HandLogger, AnalyzerService, log, uuidv4, advancePlaylist } = ctx;
 
   socket.on('start_game', async ({ mode = 'rng' } = {}) => {
+    {
+      const { getController } = require('../../state/SharedState');
+      const ctrl = getController(socket.data.tableId);
+      if (ctrl?.getMode() === 'uncoached_cash') {
+        return socket.emit('error', { message: 'Auto-deal tables start automatically' });
+      }
+    }
     if (requireCoach(socket, 'start the game')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -48,6 +56,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
     }
 
     broadcastState(tableId, { type: 'game_start', message: `New hand started (${mode.toUpperCase()} mode)` });
+    emitEquityUpdate(tableId);
     startActionTimer(tableId);
     log.info('game', 'hand_start', `hand started mode=${mode}`, { tableId, mode, sessionId: gm.sessionId });
     log.trackSocket('start_game', tableId, socket.data.stableId, { mode });
@@ -74,7 +83,19 @@ module.exports = function registerGameLifecycle(socket, ctx) {
 
     gm.resetForNextHand();
 
+    equityCache.delete(tableId);
+
     if (handInfo && stateCopy) {
+      const handResult = stateCopy.showdown_result ?? null;
+      {
+        const { getController } = require('../../state/SharedState');
+        const ctrl = getController(tableId);
+        if (ctrl) {
+          await ctrl.onHandComplete(handResult);
+        } else {
+          io.to(tableId).emit('hand_complete', handResult);
+        }
+      }
       HandLogger.endHand({ handId: handInfo.handId, state: stateCopy, socketToStable: Object.fromEntries(stableIdMap) })
         .then(() => AnalyzerService.analyzeAndTagHand(handInfo.handId))
         .catch(err => log.error('db', 'end_hand_failed', '[HandLogger] endHand/analyzeAndTagHand', { err, tableId }));
@@ -126,6 +147,21 @@ module.exports = function registerGameLifecycle(socket, ctx) {
       .catch(err => log.error('db', 'record_deal_failed', '[HandLogger] recordDeal (configured)', { err, tableId }));
 
     broadcastState(tableId, { type: 'game_start', message: 'Configured hand started' });
+    emitEquityUpdate(tableId);
     startActionTimer(tableId);
+  });
+
+  socket.on('toggle_equity_display', () => {
+    if (requireCoach(socket, 'toggle equity display')) return;
+    const tableId = socket.data.tableId;
+    const current = equitySettings.get(tableId) || { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, showToPlayers: !current.showToPlayers };
+    equitySettings.set(tableId, updated);
+    io.to(tableId).emit('equity_settings', updated);
+    // Re-emit cached equity so clients update immediately without waiting for next action
+    const cached = equityCache.get(tableId);
+    if (cached) {
+      io.to(tableId).emit('equity_update', { ...cached, showToPlayers: updated.showToPlayers });
+    }
   });
 };

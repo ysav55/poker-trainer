@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Card from './Card';
 import { fmtChips } from '../utils/chips';
 import { apiFetch } from '../lib/api';
+import { EquityBadge } from './EquityBadge';
 
 // ── ActionTimerRing — SVG circle ring around seat card ───────────────────────
 function ActionTimerRing({ timer, playerId }) {
@@ -126,11 +127,12 @@ export default function PlayerSeat({
   onHoleCardClick,
   showdownResult = null,
   isWinner = false,
-  replayMode = null,
   bbView = false,
   bigBlind = 10,
   sessionId = null,
   actionTimer = null,
+  equity = null,        // number 0-100 or null
+  equityVisible = false,
 }) {
   if (!player) return null;
 
@@ -172,8 +174,6 @@ export default function PlayerSeat({
 
   const actionKey = player.action?.toLowerCase?.();
   const actionStyle = actionKey ? ACTION_STYLES[actionKey] : null;
-
-  const isReplayActive = replayMode?.active && replayMode?.current_action?.player_id === player.stableId;
 
   // Show cards face-up only for the local player (or at showdown).
   // Server now controls visibility: opponents arrive as 'HIDDEN' in live play.
@@ -238,7 +238,6 @@ export default function PlayerSeat({
         absolute flex flex-col items-center gap-1 select-none
         ${isCurrentTurn ? 'turn-indicator rounded-xl' : ''}
         ${isFolded ? 'opacity-40' : isDisconnected ? 'opacity-50' : 'opacity-100'}
-        ${isReplayActive ? 'ring-2 ring-purple-400 ring-offset-1 rounded-xl' : ''}
         transition-opacity duration-300
       `}
       style={{
@@ -356,6 +355,9 @@ export default function PlayerSeat({
           </div>
         )}
       </div>
+
+      {/* ── EquityBadge — floating above seat card ── */}
+      <EquityBadge equity={equity} visible={equityVisible} />
 
       {/* ── BetChip — current street bet floating below seat card ── */}
       <BetChip amount={player.total_bet_this_round} bigBlind={bigBlind} bbView={bbView} />

@@ -1,5 +1,7 @@
 'use strict';
 
+const { requireSocketPermission } = require('./socketPermissions.js');
+
 /**
  * requireCoach — Socket guard for coach-only actions.
  *
@@ -17,4 +19,4 @@ function requireCoach(socket, action) {
   return false;
 }
 
-module.exports = { requireCoach };
+module.exports = { requireCoach, requireSocketPermission };

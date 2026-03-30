@@ -1,6 +1,6 @@
 # Issues Registry — Poker Trainer
 
-**Last updated:** 2026-03-29 — Added React error boundaries around PokerTable and CoachSidebar (ISS-98).
+**Last updated:** 2026-03-31 — Gap fixes: replay UI removed from client, AuthContext loading state, JWT auth path unified, DB migrations 008–013 applied. Server: 1598 tests. Client: 677 tests.
 
 ## Severity Legend
 - 🔴 CRITICAL — crash or incorrect game outcome
@@ -14,11 +14,39 @@
 
 | ID | Sev | Description | Notes |
 |----|-----|-------------|-------|
-| ISS-77 | 🟡 | `hand_tags` unique constraint was `(hand_id, tag, tag_type)`. Migration 006 replaces it with three partial unique indexes for hand-level, player-level, and action-level tags. Old rows with the original constraint are not retroactively cleaned — duplicate rows could exist if the migration is applied to a DB with existing data. | Safe for new Supabase projects. If applying to an existing DB, run `DELETE FROM hand_tags WHERE ctid NOT IN (SELECT min(ctid) FROM hand_tags GROUP BY hand_id, tag, tag_type, player_id, action_id)` first. |
-| ISS-73 | 🟡 | Replay hole cards may not show for hands recorded before the ISS-69 stableId fix (2026-03-16). Pre-fix hands stored `socket.id` as `player_id` in `hand_players`; the replay lookup keys on `stableId`, so they never match. New hands are unaffected. | Mitigation: re-play hands via load scenario instead. Full fix would require a DB migration to back-fill stableIds for old hands, which is low priority. |
+| ISS-104 | 🟡 | `poker-odds-calculator` is ESM-only. In Jest (CJS) tests it is replaced by a deterministic stub (`__mocks__/poker-odds-calculator.js`). The stub returns equal-split equity for any inputs. Equity-analyzer tests run against the stub, not real equity values. | Non-breaking at runtime — Node.js loads the real package fine. Tests pass. Real equity accuracy is verified manually. |
+| ISS-105 | 🟢 | `MistakeMatrixPanel` tooltip shows mistake tags on hover only if the consuming component passes a `onHover` or a tooltip library. Currently the tooltip state is internal but there is no visual hover trigger — the hover detection is unused. | Minor. The mistake cells are still red; tooltip text renders below the matrix on hover. |
+| ISS-99 | 🟡 | `players.csv` auth is still the primary login mechanism. Migration to DB-backed user accounts (`player_profiles.password_hash`) is implemented (migration 009) but `PlayerRoster.authenticate()` still falls back to CSV if no DB record exists. Full cutover requires admin to re-provision all users via `/admin/users`. | Non-breaking. Both paths work simultaneously. |
+| ISS-100 | 🟡 | `E-Poker logo` stamp at `/epoker-logo.png` — file must be placed in `client/public/` manually. If missing, the `<img>` renders a broken image (invisible due to low opacity). | Drop the PNG into `client/public/epoker-logo.png` to activate. |
+| ISS-77 | 🟡 | `hand_tags` unique constraint was `(hand_id, tag, tag_type)`. Migration 006 replaces it with three partial unique indexes. Old rows could have duplicates if migration applied to DB with existing data. | Safe for new projects. See registry for cleanup query. |
+| ISS-73 | 🟡 | Replay hole cards may not show for hands recorded before the ISS-69 stableId fix (2026-03-16). | Mitigation: re-play via load scenario. |
 | ~~ISS-75~~ | ~~🟡~~ | ~~Supabase anon read policies on all tables expose all hand/player data to any unauthenticated browser client.~~ | **RESOLVED 2026-03-19** — Anon key removed from browser entirely. All data access goes through Express (JWT-authenticated). Supabase RLS can now be simplified to service-role-only. |
 
 ---
+
+## Resolved — 2026-03-31 (Integration gap fixes)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-108 | 🟠 | `AuthContext` did not expose a `loading` field. `App.jsx`'s `RequireAuth` guard destructured `loading` from `useAuth()` — it was always `undefined`, so the loading spinner never rendered. Added `const [loading] = useState(false)` to `AuthProvider` and exposed it in context value. Auth init is synchronous (localStorage) so `false` is always correct. | 2026-03-31 |
+| ISS-109 | 🟡 | `useConnectionManager` read the JWT directly from `localStorage` even though `AuthContext` was available. Token changes (login/logout) were not reflected in the socket's auth callback until a full page reload. Now reads `user?.token` from `AuthContext` via a ref, falling back to `localStorage` for test/legacy compatibility (`?? {}`). | 2026-03-31 |
+| ISS-110 | 🟡 | DB migrations 008–013 (RBAC, user management, tables registry, scenario configs, player CRM, tournament) were written and tested locally but never applied to the live Supabase project. Applied via Supabase MCP on 2026-03-31. All migrations are additive DDL — no data was altered. | 2026-03-31 |
+| ISS-111 | 🟢 | `plans/phase2-master.md` showed all 9 Phase 2 items as `⬜ pending` despite being fully implemented. Updated to `✅ done`. `plans/phase2-06-multi-table-frontend.md` still referenced the deleted `useReplay` hook in the `TableContext` code sample. Updated to reflect the actual implementation. | 2026-03-31 |
+
+## Resolved — 2026-03-30 (Equity + Range Matrix)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-106 | 🟠 | `HandLibrarySection.jsx` had a JSX parse error (`Expected } but found )`) after the map callback was changed from expression body to block body. Fixed by removing the extra `)` at the closing brace. | 2026-03-30 |
+| ISS-107 | 🟡 | `@holdem-poker-tools/hand-matrix` requires `prop-types` as a peer dependency but it was not installed, causing all vitest suites that import anything transitively touching HandMatrix to crash with `Cannot find module 'prop-types'`. Fixed by installing `prop-types`. | 2026-03-30 |
+
+## Resolved — 2026-03-30 (Phase 2)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-101 | 🟠 | Coaches joining `uncoached_cash` or `tournament` tables were blocked from being seated as regular players — `joinRoom.js` always honored the `isCoach` JWT flag regardless of table mode. Fixed: mode is now fetched before the coach check; in non-coached modes `isCoach` is forced to `false`. | 2026-03-30 |
+| ISS-102 | 🟡 | `TablePage.jsx` rendered `<TableInfoPanel>` instead of `<PokerTable>` in non-coached modes, preventing all players (including coaches) from seeing their seat and cards. Fixed to always render `<PokerTable>`. | 2026-03-30 |
+| ISS-103 | 🟡 | `/admin/crm` route used `<AdminCrmStub>` placeholder instead of the real `<PlayerCRM>` component. Fixed in `App.jsx`. | 2026-03-30 |
 
 ## Resolved — 2026-03-29
 

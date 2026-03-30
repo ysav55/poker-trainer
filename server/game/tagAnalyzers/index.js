@@ -31,6 +31,7 @@ const MistakeAnalyzer      = require('./mistakes');
 const { SizingAnalyzer }   = require('./sizing');
 const PositionalAnalyzer   = require('./positional');
 const HandStrengthAnalyzer = require('./handStrength');
+const EquityAnalyzer       = require('./equity');
 
 const ANALYZER_REGISTRY = [
   StreetAnalyzer,
@@ -42,6 +43,7 @@ const ANALYZER_REGISTRY = [
   SizingAnalyzer,
   PositionalAnalyzer,
   HandStrengthAnalyzer,
+  EquityAnalyzer,
 ];
 
 module.exports = { ANALYZER_REGISTRY };

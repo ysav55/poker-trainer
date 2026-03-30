@@ -4,8 +4,6 @@ import { usePreferences }     from './usePreferences'
 import { useConnectionManager } from './useConnectionManager'
 import { useGameState }       from './useGameState'
 import { usePlaylistManager } from './usePlaylistManager'
-import { useReplay }          from './useReplay'
-
 /**
  * useSocket — thin composition layer.
  *
@@ -15,7 +13,6 @@ import { useReplay }          from './useReplay'
  *   useConnectionManager — socket lifecycle, connect/disconnect, joinRoom
  *   useGameState       — game + session event listeners + all game emit helpers
  *   usePlaylistManager — playlist_state listener + playlist emit helpers
- *   useReplay          — replay emit helpers (no listeners)
  *
  * leaveRoom is the only cross-hook operation: it resets state in useGameState,
  * useNotifications, and usePlaylistManager before reconnecting the socket.
@@ -23,29 +20,25 @@ import { useReplay }          from './useReplay'
 export function useSocket() {
   const { errors, notifications, addError, addNotification, reset: resetNotifications } = useNotifications()
   const { bbView, toggleBBView }                                                         = usePreferences()
-  const { socketRef, connected, joinRoom, clearJoinParams }                              = useConnectionManager()
+  const socket                                                                           = useConnectionManager()
+  const { socketRef, connected, joinRoom, clearJoinParams }                              = socket
 
   const {
     playlists,
     reset: resetPlaylists,
     createPlaylist, getPlaylists, addToPlaylist, removeFromPlaylist,
     deletePlaylist, activatePlaylist, deactivatePlaylist,
-  } = usePlaylistManager({ socketRef })
-
-  const {
-    loadReplay, replayStepFwd, replayStepBack, replayJumpTo,
-    replayBranch, replayUnbranch, replayExit,
-  } = useReplay({ socketRef })
+  } = usePlaylistManager(socket)
 
   const {
     gameState, myId, isCoach, isSpectator, coachDisconnected,
-    actionTimer, syncError, sessionStats, activeHandId, handTagsSaved, myPlayer,
+    actionTimer, syncError, sessionStats, activeHandId, handTagsSaved, tableMode, myPlayer,
     reset: resetGame,
     startGame, placeBet, manualDealCard, undoAction, rollbackStreet,
     togglePause, setMode, forceNextStreet, awardPot, resetHand,
     adjustStack, openConfigPhase, updateHandConfig, startConfiguredHand,
     loadHandScenario, updateHandTags, setPlayerInHand, setBlindLevels,
-  } = useGameState({ socketRef, addError, addNotification })
+  } = useGameState({ ...socket, addError, addNotification })
 
   // leaveRoom orchestrates a full session reset across all hooks, then bounces the socket
   // so the server starts the 30s eviction TTL on the old connection.
@@ -74,6 +67,7 @@ export function useSocket() {
     sessionStats,
     activeHandId,
     handTagsSaved,
+    tableMode,
     // derived
     myPlayer,
     // notifications
@@ -113,14 +107,6 @@ export function useSocket() {
     deletePlaylist,
     activatePlaylist,
     deactivatePlaylist,
-    // replay emit helpers
-    loadReplay,
-    replayStepFwd,
-    replayStepBack,
-    replayJumpTo,
-    replayBranch,
-    replayUnbranch,
-    replayExit,
     // preferences
     toggleBBView,
   }

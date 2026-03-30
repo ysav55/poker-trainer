@@ -13,7 +13,7 @@ function TagHandPill({ currentHandTags, setCurrentHandTags, handTagsSaved, gameS
   }, [gameState?.phase]);
 
   // Hide when not in an active hand
-  const isActive = gameState && gameState.phase !== 'waiting' && gameState.phase !== 'replay';
+  const isActive = gameState && gameState.phase !== 'waiting';
   if (!isActive) return null;
 
   const rightOffset = sidebarOpen ? 'calc(18rem + 8px)' : '8px';

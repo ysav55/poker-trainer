@@ -45,6 +45,7 @@ describe('useGameState — initial state', () => {
     expect(result.current.activeHandId).toBeNull()
     expect(result.current.handTagsSaved).toBeNull()
     expect(result.current.myPlayer).toBeNull()
+    expect(result.current.tableMode).toBe('coached_cash')
   })
 })
 
@@ -241,10 +242,10 @@ describe('useGameState — socket event listeners', () => {
     expect(result.current.handTagsSaved).not.toBeNull()
   })
 
-  it('replay_loaded calls addNotification with hand details', () => {
-    const { result, addNotification } = renderGameState(socket)
-    act(() => { socket._trigger('replay_loaded', { handId: 7, actionCount: 42 }) })
-    expect(addNotification).toHaveBeenCalledWith('Replay loaded — hand #7 (42 actions)')
+  it('table_config event updates tableMode', () => {
+    const { result } = renderGameState(socket)
+    act(() => { socket._trigger('table_config', { mode: 'tournament' }) })
+    expect(result.current.tableMode).toBe('tournament')
   })
 
   it('registers socket.off cleanup handlers on unmount', () => {
@@ -260,7 +261,7 @@ describe('useGameState — socket event listeners', () => {
     expect(socket.off).toHaveBeenCalledWith('sync_error')
     expect(socket.off).toHaveBeenCalledWith('hand_started')
     expect(socket.off).toHaveBeenCalledWith('hand_tags_saved')
-    expect(socket.off).toHaveBeenCalledWith('replay_loaded')
+    expect(socket.off).toHaveBeenCalledWith('table_config')
   })
 })
 
@@ -290,6 +291,7 @@ describe('useGameState — reset()', () => {
     expect(result.current.syncError).toBeNull()
     expect(result.current.activeHandId).toBeNull()
     expect(result.current.handTagsSaved).toBeNull()
+    expect(result.current.tableMode).toBe('coached_cash')
   })
 })
 

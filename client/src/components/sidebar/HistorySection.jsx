@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import CollapsibleSection from '../CollapsibleSection';
+import { apiFetch } from '../../lib/api';
 
 const ACTION_COLORS = {
   fold:   { bg: '#2d1a1a', text: '#f85149' },
@@ -75,7 +76,7 @@ function PhasedEndedTag({ phase }) {
   );
 }
 
-function HandHistoryRow({ hand, index, onExpand, onReplay }) {
+function HandHistoryRow({ hand, index, onExpand }) {
   const isComplete = hand.completed_normally === 1;
   const winnerDisplay = isComplete ? (hand.winner_name || '—') : 'Incomplete';
   const board = parseBoardCards(hand.board);
@@ -91,7 +92,7 @@ function HandHistoryRow({ hand, index, onExpand, onReplay }) {
       onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = '#0d1117'; }}
     >
-      {/* Top row: index, winner, phase tag, pot, replay, expand */}
+      {/* Top row: index, winner, phase tag, pot, expand */}
       <div className="flex items-center gap-1.5">
         <span
           style={{
@@ -122,26 +123,6 @@ function HandHistoryRow({ hand, index, onExpand, onReplay }) {
         >
           ${Number(hand.final_pot || 0).toLocaleString()}
         </span>
-        {onReplay && (
-          <button
-            onClick={() => onReplay(hand.hand_id)}
-            title="Load instant replay"
-            style={{
-              background: 'rgba(139,92,246,0.15)',
-              border: '1px solid rgba(139,92,246,0.4)',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              padding: '1px 5px',
-              color: '#a78bfa',
-              fontSize: '10px',
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.3)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.15)'; }}
-          >
-            ↺
-          </button>
-        )}
         <button
           onClick={onExpand}
           title="View detail"
@@ -178,6 +159,14 @@ function HandDetailPanel({ detail, onClose }) {
   const board = parseBoardCards(detail.board);
   const players = detail.players || [];
   const actions = detail.actions || [];
+  const [peakEquity, setPeakEquity] = useState(null);
+
+  useEffect(() => {
+    if (!detail.hand_id) return;
+    apiFetch(`/api/hands/${encodeURIComponent(detail.hand_id)}/equity`)
+      .then(data => setPeakEquity(data.peakEquity ?? null))
+      .catch(() => setPeakEquity(null));
+  }, [detail.hand_id]);
 
   return (
     <div
@@ -233,7 +222,7 @@ function HandDetailPanel({ detail, onClose }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #21262d' }}>
-                  {['Name', 'Cards', 'Start', 'End', 'W/L'].map((h) => (
+                  {['Name', 'Cards', 'Start', 'End', 'W/L', 'Peak EV'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -280,6 +269,14 @@ function HandDetailPanel({ detail, onClose }) {
                         <span style={{ color: isWinner ? '#3fb950' : net < 0 ? '#f85149' : '#6e7681', fontFamily: 'monospace', fontWeight: 600 }}>
                           {net > 0 ? '+' : ''}{net}
                         </span>
+                      </td>
+                      <td style={{ padding: '3px 5px', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
+                        {peakEquity && peakEquity[p.player_id] != null
+                          ? <span style={{ color: peakEquity[p.player_id] > 55 ? '#22c55e' : peakEquity[p.player_id] > 40 ? '#f59e0b' : '#ef4444' }}>
+                              {peakEquity[p.player_id]}%
+                            </span>
+                          : <span style={{ color: '#444' }}>—</span>
+                        }
                       </td>
                     </tr>
                   );
@@ -422,7 +419,6 @@ export default function HistorySection({ phase, emit, hands, historyLoading, han
                   hand={hand}
                   index={idx + 1}
                   onExpand={() => fetchHandDetail(hand.hand_id)}
-                  onReplay={emit.loadReplay}
                 />
               ))}
             </div>

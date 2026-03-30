@@ -102,7 +102,112 @@ async function getPlayerHands(stableId, { limit = 20, offset = 0 } = {}) {
   }));
 }
 
-// ─── Roster Auth ──────────────────────────────────────────────────────────────
+// ─── Auth / RBAC ─────────────────────────────────────────────────────────────
+
+/**
+ * Look up a player by display name (case-insensitive via DB collation).
+ * Returns a full player_profiles row — including password_hash and status —
+ * once migration 009 and the roster-migration script have been applied.
+ * Returns null if not found.
+ */
+async function findByDisplayName(name) {
+  const { data } = await supabase
+    .from('player_profiles')
+    .select('id, display_name, email, status, password_hash, is_roster, last_seen')
+    .eq('display_name', name.trim())
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
+/**
+ * Get the highest-privilege role name for a player.
+ * Returns null if the player has no roles assigned.
+ * Requires the player_roles + roles tables (migration 009).
+ */
+async function getPrimaryRole(playerId) {
+  const ROLE_PRIORITY = ['superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
+  const { data } = await supabase
+    .from('player_roles')
+    .select('roles(name)')
+    .eq('player_id', playerId);
+  if (!data || data.length === 0) return null;
+  const names = data.map(r => r.roles?.name).filter(Boolean);
+  for (const r of ROLE_PRIORITY) {
+    if (names.includes(r)) return r;
+  }
+  return names[0] ?? null;
+}
+
+/**
+ * Create a new player profile. Returns the new player's UUID.
+ * Requires migration 009 (password_hash, email, created_by columns).
+ */
+async function createPlayer({ displayName, email, passwordHash, createdBy }) {
+  const { data, error } = await supabase
+    .from('player_profiles')
+    .insert({ display_name: displayName, email, password_hash: passwordHash, created_by: createdBy })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return data.id;
+}
+
+/**
+ * Patch a player's profile. Accepts camelCase keys; maps to DB column names.
+ * Supported patch keys: displayName, email, status, avatarUrl.
+ */
+async function updatePlayer(id, patch) {
+  const dbPatch = {};
+  if (patch.displayName !== undefined) dbPatch.display_name = patch.displayName;
+  if (patch.email       !== undefined) dbPatch.email        = patch.email;
+  if (patch.status      !== undefined) dbPatch.status       = patch.status;
+  if (patch.avatarUrl   !== undefined) dbPatch.avatar_url   = patch.avatarUrl;
+  const { error } = await supabase.from('player_profiles').update(dbPatch).eq('id', id);
+  if (error) throw error;
+}
+
+/** Soft-delete a player by setting status = 'archived'. */
+async function archivePlayer(id) {
+  const { error } = await supabase.from('player_profiles').update({ status: 'archived' }).eq('id', id);
+  if (error) throw error;
+}
+
+/** Replace a player's bcrypt password hash. */
+async function setPassword(id, passwordHash) {
+  const { error } = await supabase.from('player_profiles').update({ password_hash: passwordHash }).eq('id', id);
+  if (error) throw error;
+}
+
+/** Assign a role (by roleId UUID) to a player. */
+async function assignRole(playerId, roleId, assignedBy) {
+  const { error } = await supabase.from('player_roles').insert({ player_id: playerId, role_id: roleId, assigned_by: assignedBy });
+  if (error) throw error;
+}
+
+/** Remove a role from a player. */
+async function removeRole(playerId, roleId) {
+  const { error } = await supabase.from('player_roles').delete().eq('player_id', playerId).eq('role_id', roleId);
+  if (error) throw error;
+}
+
+/**
+ * List player profiles with optional filters.
+ * @param {{ status?: string, role?: string, limit?: number, offset?: number }} opts
+ */
+async function listPlayers({ status, role, limit = 50, offset = 0 } = {}) {
+  let query = supabase
+    .from('player_profiles')
+    .select('id, display_name, email, status, avatar_url, created_at, player_roles(roles(name))')
+    .order('display_name')
+    .range(offset, offset + limit - 1);
+  if (status) query = query.eq('status', status);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ─── Roster Auth (legacy) ─────────────────────────────────────────────────────
 
 async function loginRosterPlayer(name) {
   const trimmed = name.trim();
@@ -145,6 +250,11 @@ async function isRegisteredPlayer(stableId) {
 }
 
 module.exports = {
+  // Identity / stats (existing)
   upsertPlayerIdentity, getPlayerStats, getAllPlayersWithStats,
   getPlayerHoverStats, getPlayerHands, loginRosterPlayer, isRegisteredPlayer,
+  // Auth / RBAC (new — requires migration 009)
+  findByDisplayName, getPrimaryRole,
+  createPlayer, updatePlayer, archivePlayer, setPassword,
+  assignRole, removeRole, listPlayers,
 };

@@ -1,22 +1,29 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { io } from 'socket.io-client'
+import { useAuth } from '../contexts/AuthContext.jsx'
 
 // In production (unified server), connect to the same host the page was served from.
 // In development, connect to the Vite dev server's proxy target (localhost:3001).
 const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3001' : ''
 
 export function useConnectionManager() {
+  const { user } = useAuth() ?? {}
   const socketRef = useRef(null)
   // Stores last join params so the socket can auto-rejoin after a disconnect/reconnect
   const joinParamsRef = useRef(null)
   const [connected, setConnected] = useState(false)
+
+  // Keep a ref to the latest token so the socket auth callback always sends fresh
+  // credentials without needing to recreate the socket when the user changes.
+  const tokenRef = useRef(null)
+  tokenRef.current = user?.token || localStorage.getItem('poker_trainer_jwt') || ''
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
-      auth: (cb) => cb({ token: localStorage.getItem('poker_trainer_jwt') || '' }),
+      auth: (cb) => cb({ token: tokenRef.current }),
     })
     socketRef.current = socket
 

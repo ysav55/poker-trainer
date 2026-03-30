@@ -3,6 +3,7 @@
 module.exports = function registerBetting(socket, ctx) {
   const { tables, activeHands, stableIdMap, actionTimers, io,
           broadcastState, sendError, startActionTimer, clearActionTimer,
+          emitEquityUpdate,
           HandLogger, log, getPosition } = ctx;
 
   socket.on('place_bet', ({ action, amount = 0 } = {}) => {
@@ -74,10 +75,14 @@ module.exports = function registerBetting(socket, ctx) {
     }
 
     const actingPlayer = gm.state.players.find(p => p.id === effectivePlayerId);
+    const newPhase = gm.state.phase;
     broadcastState(tableId, {
       type: 'action',
       message: `${actingPlayer?.name} ${action}${action === 'raise' ? 's to ' + amount : action === 'call' ? 's' : 's'}`
     });
+    if (newPhase !== streetBeforeBet) {
+      emitEquityUpdate(tableId);
+    }
     const freshState = gm.getPublicState(socket.id, socket.data.isCoach);
     if (freshState.phase === 'showdown' && freshState.showdown_result) {
       io.to(tableId).emit('showdown_result', freshState.showdown_result);

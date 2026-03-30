@@ -35,7 +35,7 @@ function makeEmit(overrides = {}) {
     deletePlaylist: vi.fn(),
     setPlayerInHand: vi.fn(),
     loadHandScenario: vi.fn(),
-    loadReplay: vi.fn(),
+
     addToPlaylist: vi.fn(),
     startConfiguredHand: vi.fn(),
     ...overrides,
@@ -474,16 +474,6 @@ describe('HandLibrarySection', () => {
     fireEvent.click(screen.getByText('HAND LIBRARY'))
     fireEvent.click(screen.getByText('Load'))
     expect(emit.loadHandScenario).toHaveBeenCalledWith('hand-42', 'keep')
-  })
-
-  it('Replay button calls emit.loadReplay with hand_id', async () => {
-    const { default: HandLibrarySection } = await import('../components/sidebar/HandLibrarySection.jsx')
-    const emit = makeEmit()
-    const hands = [makeHand({ hand_id: 'hand-99' })]
-    render(<HandLibrarySection hands={hands} playlists={[]} emit={emit} />)
-    fireEvent.click(screen.getByText('HAND LIBRARY'))
-    fireEvent.click(screen.getByText('Replay'))
-    expect(emit.loadReplay).toHaveBeenCalledWith('hand-99')
   })
 
   it('switching to "Hist. Stacks" changes loadHandScenario stack mode', async () => {

@@ -5,7 +5,8 @@ const MAX_NOTIFICATIONS = 8
 const ERROR_TTL = 5000
 const NOTIFICATION_TTL = 4000
 
-export function useNotifications() {
+// eslint-disable-next-line no-unused-vars
+export function useNotifications(_socket) {
   const errorTimersRef = useRef({})
   const notifTimersRef = useRef({})
   const [errors, setErrors] = useState([])

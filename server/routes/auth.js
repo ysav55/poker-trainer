@@ -1,5 +1,7 @@
 'use strict';
 
+const requireAuth = require('../auth/requireAuth.js');
+
 module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, JwtService, authLimiter, log }) {
 
   // POST /api/auth/register — self-registration disabled
@@ -35,5 +37,16 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
     const token = JwtService.sign({ stableId, name: entry.name, role: entry.role });
     log.info('auth', 'login_ok', `${entry.name} logged in`, { name: entry.name, role: entry.role, playerId: stableId });
     res.json({ stableId, name: entry.name, role: entry.role, token });
+  });
+
+  // GET /api/auth/permissions — returns the current user's permission keys
+  app.get('/api/auth/permissions', requireAuth, async (req, res) => {
+    try {
+      const { getPlayerPermissions } = require('../auth/requirePermission.js');
+      const perms = await getPlayerPermissions(req.user.id);
+      res.json({ permissions: [...perms] });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to load permissions' });
+    }
   });
 };
