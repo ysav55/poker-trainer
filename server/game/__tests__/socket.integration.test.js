@@ -682,16 +682,16 @@ describe('adjust_stack socket event', () => {
     player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
 
     await joinRoom(coach,   { name: 'StackCoach', tableId: TABLE + tableSuffix });
-    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
-    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
+    const j1 = await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
+    const j2 = await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
-    // Drain the initial game_state broadcast; also capture player IDs for the coach
-    const state = await waitForEvent(coach, 'game_state', 2000);
-    // Drain player1's pending game_state so it doesn't pollute subsequent waitForEvent calls
-    await waitForEvent(player1, 'game_state', 2000);
+    // Flush in-flight game_state broadcasts from joins before tests register listeners.
+    // room_joined already carries the socket ID, so no game_state drain is needed.
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
 
-    const p1ServerObj = state.players.find(p => p.name === p1.name);
-    const p2ServerObj = state.players.find(p => p.name === p2.name);
+    const p1ServerObj = { id: j1.data.playerId, name: p1.name };
+    const p2ServerObj = { id: j2.data.playerId, name: p2.name };
 
     return { p1, p2, p1ServerObj, p2ServerObj };
   }
