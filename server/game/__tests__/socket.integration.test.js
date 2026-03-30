@@ -149,8 +149,9 @@ beforeAll((done) => {
 afterAll((done) => {
   allClients.forEach(c => { try { c.disconnect(); } catch {} });
   // Give sockets a tick to close, then shut down the server
-  setTimeout(() => httpServer.close(done), 100);
-});
+  if (!httpServer) return done();
+  setTimeout(() => httpServer.close(done), 300);
+}, 15000);
 
 // ─────────────────────────────────────────────
 //  Helper: register a player in the DB and return their stableId
