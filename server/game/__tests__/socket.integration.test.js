@@ -16,6 +16,17 @@
  *  8. start_game / place_bet — non-coach cannot call these outside turn
  */
 
+// ── Mock supabase client — CI has no DB credentials ──────────────────────────
+// index.js requires supabase directly; without this mock it throws at load time.
+jest.mock('../../db/supabase', () => ({
+  from: jest.fn().mockReturnValue({
+    select:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
+    insert:  jest.fn().mockResolvedValue({ data: [], error: null }),
+    update:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
+    delete:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
+  }),
+}));
+
 // ── Mock HandLoggerSupabase (replaces SQLite Database mock) ──────────────────
 // Stateful in-memory store so loginRosterPlayer → isRegisteredPlayer works.
 jest.mock('../../db/HandLoggerSupabase', () => {
