@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api.js';
 
 const AuthContext = createContext(null);
@@ -19,9 +19,23 @@ export function AuthProvider({ children }) {
   });
 
   const [permissions, setPermissions] = useState(new Set());
-  // Auth is initialised synchronously from localStorage — loading stays false.
-  // The field exists so App.jsx's RequireAuth guard has a stable API to check.
-  const [loading] = useState(false);
+  // loading is true while permissions are being fetched for a restored session.
+  const [loading, setLoading] = useState(() => !!localStorage.getItem('poker_trainer_jwt'));
+
+  // On mount, restore permissions from the server if a token already exists.
+  useEffect(() => {
+    const token = localStorage.getItem('poker_trainer_jwt');
+    if (!token) return;
+    apiFetch('/api/auth/permissions')
+      .then(({ permissions: perms }) => setPermissions(new Set(perms)))
+      .catch(() => {
+        // Token is expired or invalid — clear the session
+        localStorage.removeItem('poker_trainer_jwt');
+        localStorage.removeItem('poker_trainer_player_id');
+        setUser(null);
+      })
+      .finally(() => setLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = async (name, password) => {
     const data = await apiFetch('/api/auth/login', {

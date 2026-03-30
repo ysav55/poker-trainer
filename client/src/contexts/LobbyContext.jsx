@@ -9,8 +9,8 @@ export function LobbyProvider({ children }) {
 
   const refreshTables = useCallback(async () => {
     try {
-      const tables = await apiFetch('/api/tables');
-      setActiveTables(tables);
+      const data = await apiFetch('/api/tables');
+      setActiveTables(data?.tables ?? data ?? []);
     } catch {
       // Tables endpoint may not exist yet — fail silently
       setActiveTables([]);
