@@ -7,7 +7,7 @@ WORKDIR /app/client
 
 # Install dependencies first (layer cache)
 COPY client/package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Copy source and build
 COPY client/ ./
