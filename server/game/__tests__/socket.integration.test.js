@@ -584,10 +584,6 @@ describe('set_blind_levels socket event', () => {
     await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
     await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
-    // Drain the initial game_state broadcast so subsequent waitForEvent calls don't pick up stale state
-    await waitForEvent(coach,   'game_state', 2000);
-    await waitForEvent(player1, 'game_state', 2000);
-
     return { p1, p2 };
   }
 
