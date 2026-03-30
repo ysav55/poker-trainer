@@ -584,6 +584,12 @@ describe('set_blind_levels socket event', () => {
     await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
     await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
+    // Yield to the event loop twice so any in-flight game_state broadcasts from the
+    // join sequence are delivered to (no listeners) before tests register their own.
+    // setImmediate runs in the "check" phase — after pending I/O callbacks (TCP data).
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
+
     return { p1, p2 };
   }
 
