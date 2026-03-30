@@ -17,7 +17,10 @@
  *   log.httpMiddleware()  → Express middleware that logs every request
  */
 
-const supabase = require('../db/supabase');
+// Supabase is optional — logger must not crash if DB credentials are absent
+// (CI test environment, cold-boot before .env is loaded, etc.)
+let supabase = null;
+try { supabase = require('../db/supabase'); } catch { /* no-op */ }
 
 // ─── Level ordering ────────────────────────────────────────────────────────────
 const LEVEL_ORDER = { error: 0, warn: 1, info: 2, debug: 3 };
@@ -82,6 +85,7 @@ function log(level, category, event, message, data = {}) {
 // ─── Async Supabase write (never throws) ──────────────────────────────────────
 
 async function _persistAsync(level, category, event, message, data) {
+  if (!supabase) return; // no credentials available — skip DB persistence silently
   try {
     // Strip the 'err' field if it's an Error object — store only the message string
     const safeData = { ...data };
