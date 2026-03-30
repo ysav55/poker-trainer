@@ -359,6 +359,9 @@ describe('RequireAuth', () => {
     const fakeToken = `header.${payload}.sig`
     localStorage.setItem('poker_trainer_jwt', fakeToken)
 
+    // AuthProvider now fetches permissions on mount when a token exists
+    apiFetch.mockResolvedValueOnce({ permissions: [] })
+
     render(
       <AuthProvider>
         <MemoryRouter initialEntries={['/protected']}>
