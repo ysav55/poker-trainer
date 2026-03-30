@@ -8,6 +8,15 @@
  * so each test gets a fresh module instance (and therefore an empty controllers Map).
  */
 
+// SharedState → TournamentController → TournamentRepository → supabase.js.
+// Mock supabase so the module chain loads in CI without DB credentials.
+jest.mock('../../db/supabase.js', () => ({
+  from: jest.fn().mockReturnValue({
+    select: jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
+    insert: jest.fn().mockResolvedValue({ data: [], error: null }),
+  }),
+}));
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeIo() {
