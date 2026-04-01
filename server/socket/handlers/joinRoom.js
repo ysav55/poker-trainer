@@ -55,25 +55,29 @@ module.exports = function registerJoinRoom(socket, ctx) {
     //   privacy=private  — solo-created: only the creator may join as a human player
     //   privacy=school   — coach-created: creator + same-school members may join
     if (mode === 'bot_cash') {
-      if (!socket.data.authenticated || !stableId || stableId.length === 0) {
-        return sendError(socket, 'Authentication required to join a bot table');
-      }
-      const creatorId = tableRow?.created_by ?? null;
-      if (privacy === 'private') {
-        if (resolvedStableId !== creatorId) {
-          return sendError(socket, 'This bot table is private — only the creator can join');
+      // Bot sockets (spawned by BotTableController, role='bot') are implicitly trusted
+      // and bypass all human visibility checks below.
+      if (!socket.data.isBot) {
+        if (!socket.data.authenticated || !stableId || stableId.length === 0) {
+          return sendError(socket, 'Authentication required to join a bot table');
         }
-      } else if (privacy === 'school') {
-        if (resolvedStableId !== creatorId) {
-          const supabase = require('../../db/supabase');
-          const [reqRes, creatorRes] = await Promise.all([
-            supabase.from('player_profiles').select('school_id').eq('id', resolvedStableId).maybeSingle(),
-            supabase.from('player_profiles').select('school_id').eq('id', creatorId).maybeSingle(),
-          ]);
-          const reqSchool     = reqRes.data?.school_id     ?? null;
-          const creatorSchool = creatorRes.data?.school_id ?? null;
-          if (!reqSchool || reqSchool !== creatorSchool) {
-            return sendError(socket, "This bot table is only visible to the coach's students");
+        const creatorId = tableRow?.created_by ?? null;
+        if (privacy === 'private') {
+          if (resolvedStableId !== creatorId) {
+            return sendError(socket, 'This bot table is private — only the creator can join');
+          }
+        } else if (privacy === 'school') {
+          if (resolvedStableId !== creatorId) {
+            const supabase = require('../../db/supabase');
+            const [reqRes, creatorRes] = await Promise.all([
+              supabase.from('player_profiles').select('school_id').eq('id', resolvedStableId).maybeSingle(),
+              supabase.from('player_profiles').select('school_id').eq('id', creatorId).maybeSingle(),
+            ]);
+            const reqSchool     = reqRes.data?.school_id     ?? null;
+            const creatorSchool = creatorRes.data?.school_id ?? null;
+            if (!reqSchool || reqSchool !== creatorSchool) {
+              return sendError(socket, "This bot table is only visible to the coach's students");
+            }
           }
         }
       }

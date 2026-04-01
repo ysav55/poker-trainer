@@ -105,6 +105,31 @@ async function getPlayerHands(stableId, { limit = 20, offset = 0 } = {}) {
 // ─── Auth / RBAC ─────────────────────────────────────────────────────────────
 
 /**
+ * Look up a player by UUID.
+ * Returns a full player_profiles row including trial fields, or null if not found.
+ */
+async function findById(id) {
+  const { data } = await supabase
+    .from('player_profiles')
+    .select('id, display_name, email, status, password_hash, is_roster, last_seen, trial_expires_at, trial_hands_remaining')
+    .eq('id', id)
+    .maybeSingle();
+  return data ?? null;
+}
+
+/**
+ * Decrement trial_hands_remaining by 1 for a player.
+ * Does nothing if the column is NULL (unlimited) or already 0.
+ */
+async function decrementTrialHands(id) {
+  const player = await findById(id);
+  if (!player || player.trial_hands_remaining == null) return;
+  const next = Math.max(0, player.trial_hands_remaining - 1);
+  const { error } = await supabase.from('player_profiles').update({ trial_hands_remaining: next }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+/**
  * Look up a player by display name (case-insensitive via DB collation).
  * Returns a full player_profiles row — including password_hash and status —
  * once migration 009 and the roster-migration script have been applied.
@@ -254,7 +279,9 @@ module.exports = {
   upsertPlayerIdentity, getPlayerStats, getAllPlayersWithStats,
   getPlayerHoverStats, getPlayerHands, loginRosterPlayer, isRegisteredPlayer,
   // Auth / RBAC (new — requires migration 009)
-  findByDisplayName, getPrimaryRole,
+  findByDisplayName, findById, getPrimaryRole,
   createPlayer, updatePlayer, archivePlayer, setPassword,
   assignRole, removeRole, listPlayers,
+  // Trial helpers (migration 014)
+  decrementTrialHands,
 };

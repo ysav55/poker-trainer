@@ -13,7 +13,10 @@ import { LobbyProvider } from './contexts/LobbyContext.jsx';
 
 // Pages
 import LoginPage from './pages/LoginPage.jsx';
+import LeaderboardPage from './pages/LeaderboardPage.jsx';
+import AnalysisPage from './pages/AnalysisPage.jsx';
 import MainLobby from './pages/MainLobby.jsx';
+import BotLobbyPage from './pages/BotLobbyPage.jsx';
 import TablePage from './pages/TablePage.jsx';
 import MultiTablePage from './pages/MultiTablePage.jsx';
 
@@ -22,6 +25,13 @@ import UserManagement from './pages/admin/UserManagement.jsx';
 import HandBuilder from './pages/admin/HandBuilder.jsx';
 import TournamentSetup from './pages/admin/TournamentSetup.jsx';
 import PlayerCRM from './pages/admin/PlayerCRM.jsx';
+import RefereeDashboard from './pages/admin/RefereeDashboard.jsx';
+import CoachAlertsPage from './pages/admin/CoachAlertsPage.jsx';
+import StableOverviewPage from './pages/admin/StableOverviewPage.jsx';
+
+// Tournament pages
+import TournamentLobby from './pages/TournamentLobby.jsx';
+import TournamentStandings from './pages/TournamentStandings.jsx';
 
 // Existing single-table view components (still used in TablePage integration)
 import { useSocket } from './hooks/useSocket';
@@ -76,13 +86,20 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login"           element={<LoginPage />} />
 
       {/* Authenticated */}
       <Route element={<RequireAuth />}>
-        <Route path="/lobby"           element={<MainLobby />} />
+        <Route path="/lobby"          element={<MainLobby />} />
+        <Route path="/bot-lobby"      element={<BotLobbyPage />} />
+        <Route path="/leaderboard"    element={<LeaderboardPage />} />
+        <Route path="/analysis"       element={<AnalysisPage />} />
         <Route path="/table/:tableId"  element={<TablePage />} />
         <Route path="/multi"           element={<MultiTablePage />} />
+
+        {/* Tournament pages — any authenticated user */}
+        <Route path="/tournament/:tableId/lobby"     element={<TournamentLobby />} />
+        <Route path="/tournament/:tableId/standings" element={<TournamentStandings />} />
 
         {/* Admin — require admin:access */}
         <Route element={<RequirePermission permission="admin:access" />}>
@@ -90,6 +107,9 @@ function AppRoutes() {
           <Route path="/admin/hands"        element={<HandBuilder />} />
           <Route path="/admin/crm"          element={<PlayerCRM />} />
           <Route path="/admin/tournaments"  element={<TournamentSetup />} />
+          <Route path="/admin/referee"      element={<RefereeDashboard />} />
+          <Route path="/admin/alerts"       element={<CoachAlertsPage />} />
+          <Route path="/admin/stable"       element={<StableOverviewPage />} />
         </Route>
       </Route>
 

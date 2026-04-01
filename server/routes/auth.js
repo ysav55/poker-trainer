@@ -1,18 +1,82 @@
 'use strict';
 
+const bcrypt      = require('bcrypt');
 const requireAuth = require('../auth/requireAuth.js');
+
+const TRIAL_DAYS    = 7;
+const TRIAL_HANDS   = 20;
+const BCRYPT_ROUNDS = 12;
 
 module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, JwtService, authLimiter, log }) {
 
-  // POST /api/auth/register — self-registration disabled
-  app.post('/api/auth/register', (req, res) => {
-    res.status(410).json({
-      error: 'registration_disabled',
-      message: 'Self-registration is disabled. Contact the coach to be added to the roster.',
-    });
+  // ── POST /api/auth/register ──────────────────────────────────────────────────
+  // Student self-registration. Creates a trial account (7-day / 20-hand window).
+  // coachId (optional) determines coached_student vs solo_student role.
+  // schoolId (optional) assigns the new player to a school; capacity is enforced.
+  app.post('/api/auth/register', authLimiter, async (req, res) => {
+    const { name, password, email, coachId, schoolId } = req.body || {};
+
+    if (!name || typeof name !== 'string' || name.trim().length < 2)
+      return res.status(400).json({ error: 'invalid_name', message: 'Name must be at least 2 characters.' });
+    if (!password || typeof password !== 'string' || password.length < 8)
+      return res.status(400).json({ error: 'invalid_password', message: 'Password must be at least 8 characters.' });
+    if (email && (typeof email !== 'string' || !email.includes('@')))
+      return res.status(400).json({ error: 'invalid_email', message: 'Email is not valid.' });
+
+    const { findByDisplayName, createPlayer, getPrimaryRole, assignRole } = require('../db/repositories/PlayerRepository');
+    const supabase = require('../db/supabase.js');
+
+    try {
+      const existing = await findByDisplayName(name.trim());
+      if (existing) return res.status(409).json({ error: 'name_taken', message: 'That name is already registered.' });
+
+      // School capacity check (if schoolId provided)
+      if (schoolId) {
+        const { canAddStudent, findById: findSchool } = require('../db/repositories/SchoolRepository');
+        const school = await findSchool(schoolId);
+        if (!school) return res.status(404).json({ error: 'school_not_found', message: 'School not found.' });
+        if (school.status !== 'active') return res.status(409).json({ error: 'school_inactive', message: 'School is not active.' });
+        const ok = await canAddStudent(schoolId);
+        if (!ok) return res.status(409).json({ error: 'school_at_capacity', message: 'This school has reached its student limit.' });
+      }
+
+      const passwordHash   = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      const trialExpiresAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+      const newId = await createPlayer({
+        displayName: name.trim(),
+        email:       email ? email.trim().toLowerCase() : undefined,
+        passwordHash,
+        createdBy:   null,
+      });
+
+      // Set trial fields
+      await supabase.from('player_profiles').update({
+        trial_expires_at:      trialExpiresAt,
+        trial_hands_remaining: TRIAL_HANDS,
+      }).eq('id', newId);
+
+      // Assign role: coached_student (has coach) or solo_student (no coach)
+      const roleName = coachId ? 'coached_student' : 'solo_student';
+      const { data: roleRow } = await supabase.from('roles').select('id').eq('name', roleName).single();
+      if (roleRow?.id) await assignRole(newId, roleRow.id, null);
+
+      // Assign to school if provided
+      if (schoolId) {
+        await supabase.from('player_profiles').update({ school_id: schoolId }).eq('id', newId);
+      }
+
+      const role  = await getPrimaryRole(newId);
+      const token = JwtService.sign({ stableId: newId, name: name.trim(), role: role ?? roleName });
+      log.info('auth', 'register_ok', `New student registered: ${name.trim()}`, { playerId: newId, role: roleName, coachId });
+      return res.status(201).json({ stableId: newId, name: name.trim(), role: role ?? roleName, token });
+    } catch (err) {
+      log.error('auth', 'register_error', `Registration error: ${err.message}`, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Registration failed.' });
+    }
   });
 
-  // POST /api/auth/login
+  // ── POST /api/auth/login ─────────────────────────────────────────────────────
   app.post('/api/auth/login', authLimiter, async (req, res) => {
     const { name, password } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim().length === 0)
@@ -39,7 +103,85 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
     res.json({ stableId, name: entry.name, role: entry.role, token });
   });
 
-  // GET /api/auth/permissions — returns the current user's permission keys
+  // ── POST /api/auth/reset-password ────────────────────────────────────────────
+  // Authenticated users reset their own password by verifying the current one.
+  app.post('/api/auth/reset-password', requireAuth, async (req, res) => {
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (!currentPassword || typeof currentPassword !== 'string')
+      return res.status(400).json({ error: 'invalid_password', message: 'currentPassword is required.' });
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8)
+      return res.status(400).json({ error: 'invalid_password', message: 'newPassword must be at least 8 characters.' });
+    if (currentPassword === newPassword)
+      return res.status(400).json({ error: 'invalid_password', message: 'New password must differ from current password.' });
+
+    const { findById, setPassword } = require('../db/repositories/PlayerRepository');
+
+    try {
+      const player = await findById(req.user.stableId);
+      if (!player || !player.password_hash)
+        return res.status(404).json({ error: 'not_found', message: 'Player account not found.' });
+
+      const valid = await bcrypt.compare(currentPassword, player.password_hash);
+      if (!valid) return res.status(401).json({ error: 'invalid_credentials', message: 'Current password is incorrect.' });
+
+      const newHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+      await setPassword(req.user.stableId, newHash);
+
+      log.info('auth', 'password_reset_ok', `${req.user.name} reset their password`, { playerId: req.user.stableId });
+      return res.json({ success: true });
+    } catch (err) {
+      log.error('auth', 'reset_password_error', `Password reset error: ${err.message}`, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Password reset failed.' });
+    }
+  });
+
+  // ── POST /api/auth/register-coach ────────────────────────────────────────────
+  // Submit a coach registration request.
+  // An admin sets status='active' and assigns 'coach' role to approve.
+  app.post('/api/auth/register-coach', authLimiter, async (req, res) => {
+    const { name, password, email } = req.body || {};
+
+    if (!name || typeof name !== 'string' || name.trim().length < 2)
+      return res.status(400).json({ error: 'invalid_name', message: 'Name must be at least 2 characters.' });
+    if (!password || typeof password !== 'string' || password.length < 8)
+      return res.status(400).json({ error: 'invalid_password', message: 'Password must be at least 8 characters.' });
+    if (!email || typeof email !== 'string' || !email.includes('@'))
+      return res.status(400).json({ error: 'invalid_email', message: 'A valid email is required for coach applications.' });
+
+    const { findByDisplayName, createPlayer } = require('../db/repositories/PlayerRepository');
+    const supabase = require('../db/supabase.js');
+
+    try {
+      const existing = await findByDisplayName(name.trim());
+      if (existing) return res.status(409).json({ error: 'name_taken', message: 'That name is already registered.' });
+
+      const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      const newId = await createPlayer({
+        displayName: name.trim(),
+        email:       email.trim().toLowerCase(),
+        passwordHash,
+        createdBy:   null,
+      });
+
+      // Mark as pending + store intent in metadata for admin review
+      await supabase.from('player_profiles').update({
+        status:   'pending',
+        metadata: { requestedRole: 'coach' },
+      }).eq('id', newId);
+
+      log.info('auth', 'coach_application', `Coach application from ${name.trim()}`, { playerId: newId, email: email.trim().toLowerCase() });
+      return res.status(202).json({
+        status:  'pending',
+        message: 'Your coach application has been submitted and is awaiting admin approval.',
+      });
+    } catch (err) {
+      log.error('auth', 'register_coach_error', `Coach registration error: ${err.message}`, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Coach registration failed.' });
+    }
+  });
+
+  // ── GET /api/auth/permissions ────────────────────────────────────────────────
   app.get('/api/auth/permissions', requireAuth, async (req, res) => {
     try {
       const { getPlayerPermissions } = require('../auth/requirePermission.js');

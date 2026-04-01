@@ -16,9 +16,12 @@ const express = require('express');
 
 const { requirePermission } = require('../../auth/requirePermission.js');
 const requireAuth            = require('../../auth/requireAuth.js');
+const { requireFeature }     = require('../../auth/featureGate.js');
 const { TableRepository }      = require('../../db/repositories/TableRepository.js');
 const { TournamentRepository } = require('../../db/repositories/TournamentRepository.js');
 const { getController }        = require('../../state/SharedState.js');
+
+const gateTournaments = requireFeature('tournaments');
 
 // ─── Admin sub-router (mounted at /api/admin) ────────────────────────────────
 
@@ -28,6 +31,7 @@ const router = express.Router();
 router.post(
   '/tournaments',
   requireAuth,
+  gateTournaments,
   requirePermission('tournament:manage'),
   async (req, res) => {
     try {
@@ -81,7 +85,7 @@ module.exports = router;
  */
 function registerTournamentRoutes(app) {
   // GET /api/tables/:id/tournament — config + standings
-  app.get('/api/tables/:id/tournament', requireAuth, async (req, res) => {
+  app.get('/api/tables/:id/tournament', requireAuth, gateTournaments, async (req, res) => {
     try {
       const [config, standings] = await Promise.all([
         TournamentRepository.getConfig(req.params.id),
@@ -100,6 +104,7 @@ function registerTournamentRoutes(app) {
   app.post(
     '/api/tables/:id/tournament/start',
     requireAuth,
+    gateTournaments,
     requirePermission('tournament:manage'),
     async (req, res) => {
       try {
@@ -115,6 +120,49 @@ function registerTournamentRoutes(app) {
 
         await ctrl.start(config);
         res.json({ started: true });
+      } catch (err) {
+        res.status(500).json({ error: 'internal_error', message: err.message });
+      }
+    }
+  );
+
+  // POST /api/tables/:id/tournament/advance-level — force-advance to next blind level
+  app.post(
+    '/api/tables/:id/tournament/advance-level',
+    requireAuth,
+    gateTournaments,
+    requirePermission('tournament:manage'),
+    async (req, res) => {
+      try {
+        const ctrl = getController(req.params.id);
+        if (!ctrl || ctrl.getMode() !== 'tournament') {
+          return res.status(400).json({ error: 'Table is not a tournament table' });
+        }
+        await ctrl._advanceLevel();
+        res.json({ advanced: true });
+      } catch (err) {
+        res.status(500).json({ error: 'internal_error', message: err.message });
+      }
+    }
+  );
+
+  // POST /api/tables/:id/tournament/end — end the tournament immediately
+  app.post(
+    '/api/tables/:id/tournament/end',
+    requireAuth,
+    gateTournaments,
+    requirePermission('tournament:manage'),
+    async (req, res) => {
+      try {
+        const ctrl = getController(req.params.id);
+        if (!ctrl || ctrl.getMode() !== 'tournament') {
+          return res.status(400).json({ error: 'Table is not a tournament table' });
+        }
+        const state = ctrl.gm.getState ? ctrl.gm.getState() : {};
+        const active = (state.seated ?? state.players ?? []).filter(p => (p.stack ?? 0) > 0);
+        const winner = active.sort((a, b) => b.stack - a.stack)[0] ?? null;
+        await ctrl._endTournament(winner?.id ?? null);
+        res.json({ ended: true });
       } catch (err) {
         res.status(500).json({ error: 'internal_error', message: err.message });
       }

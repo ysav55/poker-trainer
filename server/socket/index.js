@@ -23,6 +23,7 @@ const registerReplay           = require('./handlers/replay');
 const registerDisconnect       = require('./handlers/disconnect');
 const registerMisc             = require('./handlers/misc');
 const registerScenarioBuilder  = require('./handlers/scenarioBuilder');
+const registerTournament       = require('./handlers/tournament');
 
 /**
  * registerSocketHandlers — wires all socket event handlers onto the io instance.
@@ -97,6 +98,7 @@ function registerSocketHandlers(io) {
     registerDisconnect(socket, ctx);
     registerMisc(socket, ctx);
     registerScenarioBuilder(socket, ctx);
+    registerTournament(socket, ctx);
   });
 }
 

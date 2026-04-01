@@ -4,6 +4,7 @@ import { usePreferences }     from './usePreferences'
 import { useConnectionManager } from './useConnectionManager'
 import { useGameState }       from './useGameState'
 import { usePlaylistManager } from './usePlaylistManager'
+import { useReplay }          from './useReplay'
 /**
  * useSocket — thin composition layer.
  *
@@ -40,6 +41,18 @@ export function useSocket() {
     loadHandScenario, updateHandTags, setPlayerInHand, setBlindLevels,
   } = useGameState({ ...socket, addError, addNotification })
 
+  const {
+    replayMeta,
+    reset: resetReplay,
+    loadReplay,
+    replayStepForward,
+    replayStepBack,
+    replayJumpTo,
+    replayBranch,
+    replayUnbranch,
+    replayExit,
+  } = useReplay(socket)
+
   // leaveRoom orchestrates a full session reset across all hooks, then bounces the socket
   // so the server starts the 30s eviction TTL on the old connection.
   const leaveRoom = useCallback(() => {
@@ -47,11 +60,12 @@ export function useSocket() {
     resetGame()
     resetNotifications()
     resetPlaylists()
+    resetReplay()
     localStorage.removeItem('poker_trainer_jwt')
     localStorage.removeItem('poker_trainer_player_id')
     socketRef.current?.disconnect()
     socketRef.current?.connect()
-  }, [clearJoinParams, resetGame, resetNotifications, resetPlaylists, socketRef])
+  }, [clearJoinParams, resetGame, resetNotifications, resetPlaylists, resetReplay, socketRef])
 
   return {
     // connection
@@ -107,6 +121,15 @@ export function useSocket() {
     deletePlaylist,
     activatePlaylist,
     deactivatePlaylist,
+    // replay
+    replayMeta,
+    loadReplay,
+    replayStepForward,
+    replayStepBack,
+    replayJumpTo,
+    replayBranch,
+    replayUnbranch,
+    replayExit,
     // preferences
     toggleBBView,
   }

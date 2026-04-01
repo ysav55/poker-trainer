@@ -76,7 +76,7 @@ function PhasedEndedTag({ phase }) {
   );
 }
 
-function HandHistoryRow({ hand, index, onExpand }) {
+function HandHistoryRow({ hand, index, onExpand, onLoadReplay }) {
   const isComplete = hand.completed_normally === 1;
   const winnerDisplay = isComplete ? (hand.winner_name || '—') : 'Incomplete';
   const board = parseBoardCards(hand.board);
@@ -123,6 +123,27 @@ function HandHistoryRow({ hand, index, onExpand }) {
         >
           ${Number(hand.final_pot || 0).toLocaleString()}
         </span>
+        {onLoadReplay && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onLoadReplay(hand.hand_id); }}
+            title="Load replay"
+            data-testid={`load-replay-${hand.hand_id}`}
+            style={{
+              background: 'rgba(212,175,55,0.08)',
+              border: '1px solid rgba(212,175,55,0.3)',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              padding: '1px 5px',
+              color: '#c9a227',
+              fontSize: '10px',
+              flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.18)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.08)'; }}
+          >
+            ▶
+          </button>
+        )}
         <button
           onClick={onExpand}
           title="View detail"
@@ -155,7 +176,7 @@ function HandHistoryRow({ hand, index, onExpand }) {
   );
 }
 
-function HandDetailPanel({ detail, onClose }) {
+function HandDetailPanel({ detail, onClose, onLoadReplay }) {
   const board = parseBoardCards(detail.board);
   const players = detail.players || [];
   const actions = detail.actions || [];
@@ -174,26 +195,48 @@ function HandDetailPanel({ detail, onClose }) {
       style={{ background: '#0d1117', border: '1px solid #30363d' }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 gap-2">
         <span className="text-xs font-semibold" style={{ color: '#d4af37', letterSpacing: '0.1em' }}>
           HAND DETAIL
         </span>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'none',
-            border: '1px solid #30363d',
-            borderRadius: '3px',
-            cursor: 'pointer',
-            padding: '1px 7px',
-            color: '#6e7681',
-            fontSize: '10px',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = '#f85149'; e.currentTarget.style.borderColor = '#f85149'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; e.currentTarget.style.borderColor = '#30363d'; }}
-        >
-          Close
-        </button>
+        <div className="flex gap-1.5">
+          {onLoadReplay && detail.hand_id && (
+            <button
+              onClick={() => onLoadReplay(detail.hand_id)}
+              data-testid="detail-load-replay"
+              style={{
+                background: 'rgba(212,175,55,0.12)',
+                border: '1px solid rgba(212,175,55,0.4)',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                padding: '1px 7px',
+                color: '#d4af37',
+                fontSize: '10px',
+                fontWeight: 600,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.22)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.12)'; }}
+            >
+              ▶ Replay
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: '1px solid #30363d',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              padding: '1px 7px',
+              color: '#6e7681',
+              fontSize: '10px',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#f85149'; e.currentTarget.style.borderColor = '#f85149'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; e.currentTarget.style.borderColor = '#30363d'; }}
+          >
+            Close
+          </button>
+        </div>
       </div>
 
       {/* Board */}
@@ -369,7 +412,7 @@ function HandDetailPanel({ detail, onClose }) {
   );
 }
 
-export default function HistorySection({ phase, emit, hands, historyLoading, handDetail, fetchHands, fetchHandDetail, clearDetail }) {
+export default function HistorySection({ phase, emit, hands, historyLoading, handDetail, fetchHands, fetchHandDetail, clearDetail, onLoadReplay }) {
   // Auto-fetch hands when phase transitions to 'waiting' (after a hand ends)
   const prevPhaseRef = useRef(phase);
   useEffect(() => {
@@ -400,7 +443,7 @@ export default function HistorySection({ phase, emit, hands, historyLoading, han
     >
       {/* Detail panel */}
       {handDetail && (
-        <HandDetailPanel detail={handDetail} onClose={clearDetail} />
+        <HandDetailPanel detail={handDetail} onClose={clearDetail} onLoadReplay={onLoadReplay} />
       )}
 
       {!handDetail && (
@@ -419,6 +462,7 @@ export default function HistorySection({ phase, emit, hands, historyLoading, han
                   hand={hand}
                   index={idx + 1}
                   onExpand={() => fetchHandDetail(hand.hand_id)}
+                  onLoadReplay={onLoadReplay}
                 />
               ))}
             </div>

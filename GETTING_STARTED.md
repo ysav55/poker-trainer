@@ -2,7 +2,7 @@
 
 A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history and player stats survive restarts and are accessible from any device.
 
-**Last updated:** 2026-04-01 — **Coach Intelligence Layer complete (POK-43–47):** BaselineService (rolling 30-day stat profiles), SessionQualityService, AlertService (6 detector types), SessionPrepService (7-section prep brief), ProgressReportService (8-section weekly/monthly/custom reports, `GET/POST /api/coach/students/:id/reports`, `GET /api/coach/reports/stable`), and NarratorService (Tier 2 LLM — Claude Haiku summaries on alerts, prep briefs, and reports; degrades gracefully if `ANTHROPIC_API_KEY` is absent). School Management System (POK-51), Announcements (POK-31), Chip Bank (POK-26), Auth & Registration Backend (POK-23), and Table Privacy + Controller + Presets also shipped.
+**Last updated:** 2026-04-01 — **Play vs Bot Phase 1-B (POK-56):** `BotDecisionService` (stateless rule-based engine: Easy/Medium/Hard) and `BotTableController` (spawns bot socket.io-client connections, responds to `game_state` events with a 300–800 ms think delay, pauses on human disconnect). `SharedState` now routes `bot_cash` tables to `BotTableController`. Previously: **Coach Intelligence Layer complete (POK-43–47):** BaselineService, SessionQualityService, AlertService, SessionPrepService, ProgressReportService, NarratorService. School Management System (POK-51), Announcements (POK-31), Chip Bank (POK-26), Auth & Registration Backend (POK-23), and Table Privacy + Controller + Presets also shipped.
 
 ---
 

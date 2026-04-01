@@ -60,12 +60,21 @@ module.exports = function registerDisconnect(socket, ctx) {
       const currentGm = tables.get(tableId);
       if (!currentGm) return;
       const ghostPlayer = currentGm.state.players.find(p => p.id === socket.id);
+      const ghostStack  = ghostPlayer?.stack ?? 0;
       if (ghostPlayer && socket.data.stableId) {
-        ghostStacks.set(socket.data.stableId, ghostPlayer.stack);
+        ghostStacks.set(socket.data.stableId, ghostStack);
       }
       currentGm.removePlayer(socket.id);
       broadcastState(tableId, { type: 'leave', message: `${name} left the table (timeout)` });
       console.log(`[TTL expired] ${name} removed from ${tableId}`);
+
+      // Chip bank cash-out: return remaining stack to the player's bank (fire-and-forget)
+      if (socket.data.stableId && !isCoach && ghostStack > 0) {
+        const ChipBankRepo = require('../../db/repositories/ChipBankRepository');
+        ChipBankRepo.cashOut(socket.data.stableId, ghostStack, tableId).catch(err =>
+          log.error('db', 'chip_cash_out_failed', `chipCashOut failed for ${name}`, { err, tableId, playerId: socket.data.stableId }));
+      }
+
       const socketsInRoom = io.sockets.adapter.rooms.get(tableId);
       if (!socketsInRoom || socketsInRoom.size === 0) {
         tables.delete(tableId);

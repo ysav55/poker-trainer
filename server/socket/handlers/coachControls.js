@@ -188,4 +188,27 @@ module.exports = function registerCoachControls(socket, ctx) {
     if (requireCoach(socket, 'clear shared range')) return;
     io.to(socket.data.tableId).emit('range_shared', null);
   });
+
+  // transfer_controller — current coach hands table control to another player
+  socket.on('transfer_controller', async ({ toPlayerId } = {}) => {
+    if (requireCoach(socket, 'transfer controller')) return;
+    if (!toPlayerId || typeof toPlayerId !== 'string') {
+      return sendError(socket, 'toPlayerId is required');
+    }
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+
+    const { TableRepository } = require('../../db/repositories/TableRepository');
+    await TableRepository.setController(tableId, toPlayerId).catch(err =>
+      log.error('db', 'set_controller_failed', '[coachControls] setController', { err, tableId })
+    );
+
+    io.to(tableId).emit('controller_transferred', {
+      toPlayerId,
+      byPlayerId: socket.data.stableId,
+      byName:     socket.data.name,
+    });
+    log.info('game', 'controller_transfer', `controller transferred to ${toPlayerId}`, { tableId, by: socket.data.stableId });
+  });
 };

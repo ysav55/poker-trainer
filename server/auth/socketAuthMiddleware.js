@@ -21,6 +21,7 @@ function socketAuthMiddleware(socket, next) {
     socket.data.stableId      = payload.stableId;
     socket.data.role          = payload.role;
     socket.data.isCoach       = payload.role === 'coach';
+    socket.data.isBot         = payload.role === 'bot';
     socket.data.jwtName       = payload.name;
   } else {
     socket.data.authenticated = false;

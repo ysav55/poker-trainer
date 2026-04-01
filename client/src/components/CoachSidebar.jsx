@@ -8,6 +8,7 @@ import PlayersSection from './sidebar/PlayersSection';
 import PlaylistsSection from './sidebar/PlaylistsSection';
 import HandLibrarySection from './sidebar/HandLibrarySection';
 import HistorySection from './sidebar/HistorySection';
+import ReplayControlsSection from './sidebar/ReplayControlsSection';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,6 +56,15 @@ export default function CoachSidebar({
   equityEnabled = false,
   setEquityEnabled = null,
   equitySettings = null,
+  // replay props
+  replayMeta = null,
+  loadReplay = null,
+  replayStepForward = null,
+  replayStepBack = null,
+  replayJumpTo = null,
+  replayBranch = null,
+  replayUnbranch = null,
+  replayExit = null,
 }) {
   // History hook — called once; results shared with HandLibrarySection and HistorySection
   const { hands, loading: historyLoading, handDetail, fetchHands, fetchHandDetail, clearDetail } = useHistory();
@@ -285,6 +295,21 @@ export default function CoachSidebar({
           {/* ── GAME tab ─────────────────────────────────────────────────── */}
           {activeTab === 'GAME' && (
             <>
+              {/* Replay controls — shown at top when replay mode is active */}
+              {(gameState?.phase === 'replay' || gameState?.replay_mode?.active) && replayExit && (
+                <ReplayControlsSection
+                  gameState={gameState}
+                  replayMeta={replayMeta}
+                  isCoach
+                  onStepForward={replayStepForward}
+                  onStepBack={replayStepBack}
+                  onJumpTo={replayJumpTo}
+                  onBranch={replayBranch}
+                  onUnbranch={replayUnbranch}
+                  onExit={replayExit}
+                />
+              )}
+
               <GameControlsSection
                 gameState={gameState}
                 emit={emit}
@@ -339,6 +364,7 @@ export default function CoachSidebar({
                 fetchHands={fetchHands}
                 fetchHandDetail={fetchHandDetail}
                 clearDetail={clearDetail}
+                onLoadReplay={loadReplay}
               />
 
               {/* + Build Scenario button */}

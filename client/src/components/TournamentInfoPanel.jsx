@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTable } from '../contexts/TableContext.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiFetch } from '../lib/api.js';
@@ -114,6 +115,7 @@ function ConfirmModal({ title, body, confirmLabel, danger, onConfirm, onClose })
 export default function TournamentInfoPanel({ socket }) {
   const { tableId, gameState } = useTable();
   const { hasPermission } = useAuth();
+  const navigate = useNavigate();
 
   // ── Tournament state ───────────────────────────────────────────────────────
   const [currentLevel, setCurrentLevel]   = useState(null);   // { level, sb, bb, ante, durationMs }
@@ -170,6 +172,8 @@ export default function TournamentInfoPanel({ socket }) {
     const onEnded = ({ winnerId, standings }) => {
       setWinner({ winnerId, standings });
       clearInterval(tickRef.current);
+      // Navigate to standings page after a short delay
+      setTimeout(() => navigate(`/tournament/${tableId}/standings`), 3000);
     };
 
     socket.on('tournament:time_remaining', onTimeRemaining);

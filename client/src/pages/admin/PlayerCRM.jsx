@@ -4,11 +4,13 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { apiFetch } from '../../lib/api';
+import PrepBriefTab from './PrepBriefTab';
+import ReportsTab from './ReportsTab';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ROLES = ['', 'superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
-const SUB_TABS = ['OVERVIEW', 'NOTES', 'SCHEDULE', 'HISTORY'];
+const SUB_TABS = ['OVERVIEW', 'NOTES', 'SCHEDULE', 'HISTORY', 'PREP BRIEF', 'REPORTS'];
 const NOTE_TYPES = ['general', 'session_review', 'goal', 'weakness'];
 
 const NOTE_TYPE_COLORS = {
@@ -784,9 +786,200 @@ function HistoryTab({ player }) {
   );
 }
 
+// ─── Stable Overview (roster grid) ───────────────────────────────────────────
+
+const SORT_OPTIONS = [
+  { value: 'name',        label: 'Name' },
+  { value: 'last_active', label: 'Last Active' },
+  { value: 'hands',       label: 'Hands' },
+];
+
+function StableTab({ players, playerStats = [], onSelectPlayer }) {
+  const [sortBy, setSortBy] = useState('name');
+  const [search, setSearch] = useState('');
+
+  // Merge admin player list (roles/status) with leaderboard stats
+  const merged = players.map(p => {
+    const s = playerStats.find(st => st.stableId === p.id) || {};
+    return {
+      ...p,
+      total_hands:  s.total_hands  ?? 0,
+      vpip_percent: s.vpip_percent ?? null,
+      pfr_percent:  s.pfr_percent  ?? null,
+      last_hand_at: s.last_hand_at ?? null,
+    };
+  });
+
+  const filtered = merged.filter(p => {
+    if (search) {
+      const q = search.toLowerCase();
+      if (!(p.display_name || '').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === 'name')        return (a.display_name || '').localeCompare(b.display_name || '');
+    if (sortBy === 'last_active') return (b.last_hand_at || '').localeCompare(a.last_hand_at || '');
+    if (sortBy === 'hands')       return b.total_hands - a.total_hands;
+    return 0;
+  });
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: '#0d1117' }}>
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+        style={{ borderBottom: '1px solid #30363d', background: '#161b22' }}
+      >
+        <div>
+          <h2 className="text-sm font-bold tracking-[0.12em]" style={{ color: '#d4af37' }}>
+            STABLE OVERVIEW
+          </h2>
+          <p className="text-xs mt-0.5" style={{ color: '#6e7681' }}>
+            {sorted.length} player{sorted.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Search */}
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Filter players…"
+            data-testid="stable-search"
+            className="rounded px-3 py-1.5 text-sm outline-none"
+            style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3', width: 160 }}
+          />
+          {/* Sort */}
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            data-testid="stable-sort"
+            className="rounded px-2 py-1.5 text-xs outline-none"
+            style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
+          >
+            {SORT_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Grid */}
+      {players.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center text-sm" style={{ color: '#6e7681' }}>
+          Loading roster…
+        </div>
+      ) : sorted.length === 0 ? (
+        <div
+          className="flex-1 flex items-center justify-center text-sm"
+          style={{ color: '#6e7681' }}
+          data-testid="stable-empty"
+        >
+          No players found.
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          {/* Table header */}
+          <div
+            className="grid text-xs font-semibold tracking-wider px-6 py-2.5 sticky top-0"
+            style={{
+              background: '#161b22',
+              borderBottom: '1px solid #30363d',
+              color: '#6e7681',
+              gridTemplateColumns: '1fr 90px 70px 70px 70px 100px',
+            }}
+            data-testid="stable-roster"
+          >
+            <span>PLAYER</span>
+            <span>LAST ACTIVE</span>
+            <span>HANDS</span>
+            <span>VPIP</span>
+            <span>PFR</span>
+            <span></span>
+          </div>
+
+          {sorted.map(p => {
+            const vpip = p.vpip_percent != null ? `${p.vpip_percent}%` : '—';
+            const pfr  = p.pfr_percent  != null ? `${p.pfr_percent}%`  : '—';
+            const lastActive = p.last_hand_at
+              ? formatDate(p.last_hand_at)
+              : p.last_seen ? formatDate(p.last_seen) : '—';
+
+            return (
+              <div
+                key={p.id}
+                className="grid items-center px-6 py-3"
+                style={{
+                  gridTemplateColumns: '1fr 90px 70px 70px 70px 100px',
+                  borderBottom: '1px solid #21262d',
+                }}
+                data-testid={`stable-row-${p.id}`}
+              >
+                {/* Player name + role */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className="flex items-center justify-center rounded-full text-xs font-bold flex-shrink-0"
+                    style={{
+                      width: 30, height: 30,
+                      background: 'rgba(212,175,55,0.12)',
+                      color: '#d4af37',
+                      border: '1px solid rgba(212,175,55,0.25)',
+                    }}
+                  >
+                    {getInitials(p.display_name)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate" style={{ color: '#f0ece3' }}>
+                      {p.display_name || '—'}
+                    </div>
+                    <div className="mt-0.5">
+                      <RolePill role={p.role} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Last active */}
+                <span className="text-xs font-mono" style={{ color: '#6e7681' }}>{lastActive}</span>
+
+                {/* Hands */}
+                <span className="text-xs font-mono" style={{ color: '#8b949e' }}>
+                  {p.total_hands > 0 ? p.total_hands.toLocaleString() : '—'}
+                </span>
+
+                {/* VPIP */}
+                <span className="text-xs font-mono" style={{ color: '#8b949e' }}>{vpip}</span>
+
+                {/* PFR */}
+                <span className="text-xs font-mono" style={{ color: '#8b949e' }}>{pfr}</span>
+
+                {/* Action */}
+                <button
+                  onClick={() => onSelectPlayer(p)}
+                  data-testid={`stable-view-crm-${p.id}`}
+                  className="text-xs px-3 py-1.5 rounded font-semibold transition-colors"
+                  style={{
+                    background: 'rgba(212,175,55,0.1)',
+                    border: '1px solid rgba(212,175,55,0.3)',
+                    color: '#d4af37',
+                    cursor: 'pointer',
+                  }}
+                >
+                  View CRM →
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── PlayerDetail (right panel) ───────────────────────────────────────────────
 
-function PlayerDetail({ player, crm, crmLoading }) {
+function PlayerDetail({ player, crm, crmLoading, onBack }) {
   const [activeTab, setActiveTab] = useState('OVERVIEW');
 
   return (
@@ -796,6 +989,16 @@ function PlayerDetail({ player, crm, crmLoading }) {
         className="flex items-center gap-4 px-6 py-4 flex-shrink-0"
         style={{ borderBottom: '1px solid #30363d', background: '#161b22' }}
       >
+        {onBack && (
+          <button
+            onClick={onBack}
+            data-testid="stable-back"
+            className="text-xs flex-shrink-0 mr-1"
+            style={{ color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            ← Stable
+          </button>
+        )}
         <div
           className="flex items-center justify-center rounded-full text-lg font-bold flex-shrink-0"
           style={{
@@ -857,10 +1060,12 @@ function PlayerDetail({ player, crm, crmLoading }) {
           </div>
         ) : (
           <>
-            {activeTab === 'OVERVIEW'  && <OverviewTab  player={player} crm={crm} />}
-            {activeTab === 'NOTES'     && <NotesTab     player={player} />}
-            {activeTab === 'SCHEDULE'  && <ScheduleTab  player={player} />}
-            {activeTab === 'HISTORY'   && <HistoryTab   player={player} />}
+            {activeTab === 'OVERVIEW'    && <OverviewTab    player={player} crm={crm} />}
+            {activeTab === 'NOTES'       && <NotesTab       player={player} />}
+            {activeTab === 'SCHEDULE'    && <ScheduleTab    player={player} />}
+            {activeTab === 'HISTORY'     && <HistoryTab     player={player} />}
+            {activeTab === 'PREP BRIEF'  && <PrepBriefTab   player={player} />}
+            {activeTab === 'REPORTS'     && <ReportsTab     player={player} />}
           </>
         )}
       </div>
@@ -878,6 +1083,8 @@ export default function PlayerCRM() {
   const [search, setSearch]             = useState('');
   const [filterRole, setFilterRole]     = useState('');
   const [filterArchived, setFilterArchived] = useState(false);
+
+  const [playerStats, setPlayerStats]   = useState([]);
 
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [crm, setCrm]                   = useState(null);
@@ -897,6 +1104,13 @@ export default function PlayerCRM() {
         setPlayersLoading(false);
       }
     })();
+  }, []);
+
+  // Load player stats (VPIP/PFR/hands) for stable overview
+  useEffect(() => {
+    apiFetch('/api/players')
+      .then(d => setPlayerStats(d?.players ?? []))
+      .catch(() => {});
   }, []);
 
   // Fetch CRM data whenever a player is selected
@@ -947,7 +1161,7 @@ export default function PlayerCRM() {
       >
         {/* Left header */}
         <div className="px-4 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid #30363d' }}>
-          <h1 className="text-sm font-bold tracking-[0.14em]" style={{ color: '#d4af37' }}>PLAYER CRM</h1>
+          <h1 className="text-sm font-bold tracking-[0.14em]" style={{ color: '#d4af37' }}>STABLE / CRM</h1>
           <p className="text-xs mt-0.5" style={{ color: '#6e7681' }}>{filtered.length} players</p>
         </div>
 
@@ -1095,17 +1309,13 @@ export default function PlayerCRM() {
       {/* ── Right column ───────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden" style={{ background: '#0d1117' }}>
         {!selectedPlayer ? (
-          <div
-            className="flex items-center justify-center h-full text-sm"
-            style={{ color: '#6e7681' }}
-          >
-            ← Select a player
-          </div>
+          <StableTab players={players} playerStats={playerStats} onSelectPlayer={setSelectedPlayer} />
         ) : (
           <PlayerDetail
             player={selectedPlayer}
             crm={crm}
             crmLoading={crmLoading}
+            onBack={() => setSelectedPlayer(null)}
           />
         )}
       </div>

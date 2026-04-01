@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
 const INPUT_STYLE = {
@@ -115,7 +115,12 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <p className="text-xs text-red-400 leading-snug -mt-1">{error}</p>
+            <p
+              data-testid="login-error"
+              className="text-xs text-red-400 leading-snug -mt-1"
+            >
+              {error}
+            </p>
           )}
 
           <button
@@ -123,9 +128,41 @@ export default function LoginPage() {
             disabled={loading}
             className="btn-gold w-full py-3 text-sm tracking-widest uppercase"
           >
-            {loading ? 'Logging in…' : 'Log In'}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span
+                  className="inline-block w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin"
+                  aria-hidden="true"
+                />
+                Logging in…
+              </span>
+            ) : (
+              'Log In'
+            )}
           </button>
         </form>
+
+        {/* Footer links */}
+        <div className="flex flex-col gap-2 items-center">
+          <Link
+            to="/forgot-password"
+            data-testid="forgot-password-link"
+            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            Forgot password?
+          </Link>
+          <p className="text-xs text-gray-600">
+            New here?{' '}
+            <Link
+              to="/register"
+              data-testid="register-link"
+              className="underline"
+              style={{ color: '#d4af37' }}
+            >
+              Create account
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

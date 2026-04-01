@@ -37,6 +37,14 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const register = async ({ name, password, role = 'student' }) => {
+    const data = await apiFetch('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ name, password, role }),
+    });
+    return data;
+  };
+
   const login = async (name, password) => {
     const data = await apiFetch('/api/auth/login', {
       method: 'POST',
@@ -59,8 +67,10 @@ export function AuthProvider({ children }) {
 
   const hasPermission = (key) => permissions.has(key);
 
+  const isTrial = user?.role === 'trial';
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, hasPermission, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, register, hasPermission, loading, isTrial }}>
       {children}
     </AuthContext.Provider>
   );

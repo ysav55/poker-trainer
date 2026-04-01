@@ -29,11 +29,21 @@ const PHASE_STYLE = {
 
 const MODE_LABEL = { coached: 'COACHED', auto: 'AUTO', tournament: 'TOURNAMENT' };
 
-const ADMIN_LINKS = [
-  { label: 'User Management', path: '/admin/users' },
-  { label: 'Hand Builder',    path: '/admin/hands'  },
-  { label: 'Player CRM',      path: '/admin/crm'    },
-  { label: 'Tournaments',     path: '/admin/tournaments' },
+// Navigation tiles config
+// permission:null  — visible to all authenticated users
+// roles:[...]      — visible only to users with one of these roles
+const NAV_TILES = [
+  { icon: '🏆', label: 'Leaderboard',    desc: 'Rankings & net chips',          path: '/leaderboard',       permission: null,           roles: null },
+  { icon: '🎮', label: 'Multi Table',    desc: 'Review multiple tables',        path: '/multi',             permission: null,           roles: null },
+  { icon: '🤖', label: 'Play vs Bots',  desc: 'Practice against bot players',  path: '/bot-lobby',         permission: null,           roles: null },
+  { icon: '🧠', label: 'AI Analysis',   desc: 'Tag insights & mistakes',        path: '/analysis',          permission: null,           roles: ['coach', 'admin', 'superadmin'] },
+  { icon: '👥', label: 'Stable / CRM',   desc: 'Roster & player management',   path: '/admin/crm',         permission: 'admin:access', roles: null },
+  { icon: '⚠️', label: 'Coach Alerts',  desc: 'Students needing attention',    path: '/admin/alerts',      permission: 'admin:access', roles: null },
+  { icon: '📊', label: 'Stable Report', desc: 'Weekly overview — all students', path: '/admin/stable',      permission: 'admin:access', roles: null },
+  { icon: '📖', label: 'Hand Scenarios', desc: 'Build & review hands',          path: '/admin/hands',       permission: 'admin:access', roles: null },
+  { icon: '🏅', label: 'Tournaments',    desc: 'Setup & manage',                path: '/admin/tournaments', permission: 'admin:access', roles: null },
+  { icon: '🦺', label: 'Referee',        desc: 'Tournament referee',            path: '/admin/referee',     permission: 'admin:access', roles: null },
+  { icon: '👤', label: 'Users',          desc: 'User management',               path: '/admin/users',       permission: 'admin:access', roles: null },
 ];
 
 const GOLD  = '#d4af37';
@@ -49,6 +59,43 @@ function Pill({ children, style }) {
     >
       {children}
     </span>
+  );
+}
+
+// ── Trial Banner ──────────────────────────────────────────────────────────────
+
+function TrialBanner() {
+  return (
+    <div
+      className="flex items-center gap-3 rounded-lg px-4 py-3"
+      style={{ background: 'rgba(212,175,55,0.07)', border: '1px solid rgba(212,175,55,0.3)' }}
+      data-testid="trial-banner"
+    >
+      <span style={{ fontSize: 16 }}>⚠️</span>
+      <div>
+        <span className="text-sm font-semibold" style={{ color: GOLD }}>Trial Account</span>
+        <span className="text-xs text-gray-500 ml-2">
+          Your access is limited. Contact your coach to unlock full features.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Nav Tile ──────────────────────────────────────────────────────────────────
+
+function NavTile({ icon, label, desc, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-start gap-1.5 rounded-xl p-4 text-left w-full transition-all hover:border-[rgba(212,175,55,0.4)]"
+      style={{ background: '#161b22', border: '1px solid #30363d', cursor: 'pointer' }}
+      data-testid={`nav-tile-${label.toLowerCase().replace(/\s+/g, '-')}`}
+    >
+      <span style={{ fontSize: 20 }}>{icon}</span>
+      <span className="text-sm font-semibold text-white">{label}</span>
+      <span className="text-xs text-gray-500 leading-tight">{desc}</span>
+    </button>
   );
 }
 
@@ -118,11 +165,11 @@ function TableCard({ table, onJoin }) {
       {/* Join button */}
       <div className="flex justify-end mt-auto">
         <button
-          onClick={() => onJoin(tableId)}
+          onClick={() => onJoin(tableId, mode)}
           className="text-xs px-3 py-1.5 rounded font-semibold uppercase tracking-wider transition-opacity hover:opacity-80"
           style={{ background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.45)', color: GOLD }}
         >
-          JOIN
+          {mode === 'tournament' ? 'LOBBY' : 'JOIN'}
         </button>
       </div>
     </div>
@@ -278,6 +325,7 @@ export default function MainLobby() {
   const navigate = useNavigate();
 
   const [stats, setStats]               = useState(null);
+  const [rank, setRank]                 = useState(null);
   const [recentHands, setRecentHands]   = useState([]);
   const [playlists, setPlaylists]       = useState([]);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -286,6 +334,8 @@ export default function MainLobby() {
 
   // user.id holds the stableId (see AuthContext — `id: payload.stableId`)
   const userId = user?.id;
+  const isTrial = user?.role === 'trial';
+  const isAdmin = hasPermission('admin:access');
 
   useEffect(() => {
     if (!userId) return;
@@ -307,6 +357,21 @@ export default function MainLobby() {
     load();
   }, [userId]);
 
+  // Fetch leaderboard rank for non-admin users
+  useEffect(() => {
+    if (!userId || isAdmin) return;
+    apiFetch('/api/players')
+      .then((data) => {
+        const players = data?.players ?? data ?? [];
+        const sorted = [...players].sort(
+          (a, b) => Number(b.total_net_chips ?? b.net_chips ?? 0) - Number(a.total_net_chips ?? a.net_chips ?? 0)
+        );
+        const pos = sorted.findIndex((p) => p.stable_id === userId || p.id === userId);
+        setRank(pos >= 0 ? pos + 1 : null);
+      })
+      .catch(() => {});
+  }, [userId, isAdmin]);
+
   useEffect(() => {
     if (!hasPermission('playlist:manage')) return;
     apiFetch('/api/playlists')
@@ -319,8 +384,12 @@ export default function MainLobby() {
     navigate('/login');
   }, [logout, navigate]);
 
-  const handleJoin = useCallback((tableId) => {
-    navigate(`/table/${tableId}`);
+  const handleJoin = useCallback((tableId, mode) => {
+    if (mode === 'tournament') {
+      navigate(`/tournament/${tableId}/lobby`);
+    } else {
+      navigate(`/table/${tableId}`);
+    }
   }, [navigate]);
 
   const handleCreated = useCallback((table) => {
@@ -360,8 +429,16 @@ export default function MainLobby() {
           <span className="text-xs text-gray-500 tracking-widest">TRAINING PLATFORM</span>
         </div>
 
-        {/* Right: user info + logout */}
+        {/* Right: nav + user info + logout */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/leaderboard')}
+            data-testid="nav-leaderboard"
+            className="text-xs px-3 py-1.5 rounded-lg font-semibold uppercase tracking-wider transition-opacity hover:opacity-80 hidden sm:flex items-center gap-1"
+            style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.25)', color: GOLD }}
+          >
+            🏆 Leaderboard
+          </button>
           <span className="text-sm text-gray-300 hidden sm:inline">{user?.name}</span>
           <Pill style={roleBadgeStyle}>{ROLE_LABEL[user?.role] ?? user?.role}</Pill>
           <button
@@ -378,8 +455,11 @@ export default function MainLobby() {
 
         {error && <p className="text-sm text-red-400">{error}</p>}
 
+        {/* ── Trial Banner ─────────────────────────────────────────────────── */}
+        {isTrial && <TrialBanner />}
+
         {/* ── Stats row ──────────────────────────────────────────────────────── */}
-        <section className="flex gap-4">
+        <section className="flex gap-4 flex-wrap">
           {loadingStats ? (
             <p className="text-sm text-gray-500">Loading stats…</p>
           ) : (
@@ -397,8 +477,40 @@ export default function MainLobby() {
                 label="VPIP %"
                 value={stats?.vpip != null ? `${stats.vpip}%` : null}
               />
+              {!isAdmin && rank != null && (
+                <StatCard
+                  label="Leaderboard Rank"
+                  value={`#${rank}`}
+                  valueStyle={{ color: GOLD }}
+                />
+              )}
             </>
           )}
+        </section>
+
+        {/* ── Navigation Tiles ──────────────────────────────────────────────── */}
+        <section data-testid="nav-tiles">
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+              gap: 10,
+            }}
+          >
+            {NAV_TILES.filter((t) => {
+              if (t.permission != null && !hasPermission(t.permission)) return false;
+              if (t.roles != null && !t.roles.includes(user?.role)) return false;
+              return true;
+            }).map((tile) => (
+              <NavTile
+                key={tile.path}
+                icon={tile.icon}
+                label={tile.label}
+                desc={tile.desc}
+                onClick={() => navigate(tile.path)}
+              />
+            ))}
+          </div>
         </section>
 
         {/* ── Active Tables ─────────────────────────────────────────────────── */}
@@ -533,31 +645,6 @@ export default function MainLobby() {
           )}
         </section>
 
-        {/* ── Admin nav pills ───────────────────────────────────────────────── */}
-        {hasPermission('admin:access') && (
-          <nav className="flex flex-wrap gap-2">
-            {ADMIN_LINKS.map(({ label, path }) => (
-              <button
-                key={path}
-                onClick={() => navigate(path)}
-                className="transition-opacity hover:opacity-80"
-                style={{
-                  background: 'rgba(212,175,55,0.08)',
-                  border: '1px solid rgba(212,175,55,0.2)',
-                  color: '#d4af37',
-                  borderRadius: 9999,
-                  padding: '4px 12px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
-        )}
 
       </div>
 

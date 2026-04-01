@@ -4,12 +4,13 @@ const SessionManager = require('../game/SessionManager');
 const { CoachedController }    = require('../game/controllers/CoachedController');
 const { AutoController }       = require('../game/controllers/AutoController');
 const { TournamentController } = require('../game/controllers/TournamentController');
+const { BotTableController }   = require('../game/controllers/BotTableController');
 
 const controllers = new Map(); // tableId → TableController
 
-function getOrCreateController(tableId, mode, gm, io) {
+function getOrCreateController(tableId, mode, gm, io, tableConfig = {}) {
   if (controllers.has(tableId)) return controllers.get(tableId);
-  const ctrl = _createController(mode, tableId, gm, io);
+  const ctrl = _createController(mode, tableId, gm, io, tableConfig);
   controllers.set(tableId, ctrl);
   return ctrl;
 }
@@ -23,10 +24,11 @@ function destroyController(tableId) {
   if (ctrl) { ctrl.destroy(); controllers.delete(tableId); }
 }
 
-function _createController(mode, tableId, gm, io) {
+function _createController(mode, tableId, gm, io, tableConfig = {}) {
   switch (mode) {
     case 'uncoached_cash': return new AutoController(tableId, gm, io);
     case 'tournament':     return new TournamentController(tableId, gm, io);
+    case 'bot_cash':       return new BotTableController(tableId, gm, io, tableConfig);
     default:               return new CoachedController(tableId, gm, io);
   }
 }
