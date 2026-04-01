@@ -32,10 +32,18 @@ const registerAuthRoutes        = require('./routes/auth');
 const registerHealthRoute       = require('./routes/health');
 const registerAlphaReportRoute  = require('./routes/alphaReport');
 const registerTableRoutes       = require('./routes/tables');
+const registerAnnotationRoutes  = require('./routes/annotations');
+const registerChipBankRoutes         = require('./routes/chipBank');
+const registerAnnouncementRoutes     = require('./routes/announcements');
+const registerAnalysisRoutes         = require('./routes/analysis');
+const registerPrepBriefRoutes        = require('./routes/prepBriefs');
+const registerAlertRoutes            = require('./routes/alerts');
+const registerReportRoutes           = require('./routes/reports');
 const adminUsersRouter          = require('./routes/admin/users.js');
 const adminScenariosRouter      = require('./routes/admin/scenarios.js');
 const adminCRMRouter            = require('./routes/admin/crm.js');
 const adminTournamentsRouter    = require('./routes/admin/tournaments.js');
+const adminSchoolsRouter        = require('./routes/admin/schools.js');
 const { registerTournamentRoutes } = require('./routes/admin/tournaments.js');
 
 const { registerShutdown }  = require('./lifecycle/shutdown');
@@ -98,10 +106,18 @@ registerAuthRoutes(app, { HandLogger, PlayerRoster, JwtService, authLimiter, log
 registerHealthRoute(app, { supabaseAdmin, tables: sharedState.tables });
 registerAlphaReportRoute(app, { generateAlphaReport, log, requireAuth });
 registerTableRoutes(app, { requireAuth });
+registerAnnotationRoutes(app, { requireAuth, supabaseAdmin });
+registerChipBankRoutes(app, { requireAuth, requireRole });
+registerAnnouncementRoutes(app, { requireAuth, requireRole });
+registerAnalysisRoutes(app, { requireAuth });
+registerPrepBriefRoutes(app, { requireAuth, requireRole });
+registerAlertRoutes(app, { requireAuth, requireRole });
+registerReportRoutes(app, { requireAuth, requireRole });
 app.use('/api/admin', requireAuth, adminUsersRouter);
 app.use('/api/admin', requireAuth, adminScenariosRouter);
 app.use('/api/admin', requireAuth, adminCRMRouter);
 app.use('/api/admin', requireAuth, adminTournamentsRouter);
+app.use('/api/admin', requireAuth, adminSchoolsRouter);
 registerTournamentRoutes(app);
 
 // ─── Global Express error handler ────────────────────────────────────────────
