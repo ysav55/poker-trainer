@@ -2,7 +2,7 @@
 
 A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history and player stats survive restarts and are accessible from any device.
 
-**Last updated:** 2026-03-31 — Gap fixes: replay UI removed from client (server-side ReplayEngine intact), AuthContext loading state added, JWT source unified through AuthContext, DB migrations 008–013 applied (RBAC, user management, tables registry, scenario configs, player CRM, tournaments).
+**Last updated:** 2026-04-01 — **Coach Intelligence Layer complete (POK-43–47):** BaselineService (rolling 30-day stat profiles), SessionQualityService, AlertService (6 detector types), SessionPrepService (7-section prep brief), ProgressReportService (8-section weekly/monthly/custom reports, `GET/POST /api/coach/students/:id/reports`, `GET /api/coach/reports/stable`), and NarratorService (Tier 2 LLM — Claude Haiku summaries on alerts, prep briefs, and reports; degrades gracefully if `ANTHROPIC_API_KEY` is absent). School Management System (POK-51), Announcements (POK-31), Chip Bank (POK-26), Auth & Registration Backend (POK-23), and Table Privacy + Controller + Presets also shipped.
 
 ---
 
@@ -70,7 +70,17 @@ Open **http://localhost:5173**. The client hot-reloads on file save; the server 
 
 ## 3. Accounts & Roles
 
-This is a **closed system** — there is no self-registration. Admins create and manage accounts through the **Admin → User Management** panel (at `/admin/users`) or by editing `players.csv` at the project root (legacy path — still supported for bootstrapping).
+Accounts can be created by admins (via **Admin → User Management**) or via **self-registration** through the API. Legacy `players.csv` bootstrapping is still supported.
+
+### Self-registration (API)
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/auth/register` | Student self-registration. Requires `name` (≥2 chars), `password` (≥8 chars). Optional: `email`, `coachId`, `schoolId`. Returns a JWT. If `schoolId` is provided, school capacity is checked before account creation. |
+| `POST /api/auth/register-coach` | Coach application. Requires `name`, `password`, `email`. Returns `202 Accepted` — admin must approve before login is possible. |
+| `POST /api/auth/reset-password` | Authenticated users reset their own password. Requires `currentPassword` and `newPassword` (≥8 chars). |
+
+**Trial accounts**: students registered via `/api/auth/register` receive a 7-day trial window and 20 trial hands. Joining a table is blocked after either limit is reached. An admin or coach must upgrade the account.
 
 ### Roles
 
@@ -79,6 +89,8 @@ This is a **closed system** — there is no self-registration. Admins create and
 | `superadmin` | Full unrestricted access |
 | `admin` | All permissions — user management, all admin panels |
 | `coach` | Leads coached tables, tags hands, builds scenarios, manages playlists |
+| `coached_student` | Student registered under a specific coach (trial account) |
+| `solo_student` | Student registered without a coach (trial account) |
 | `moderator` | Can tag hands, run tables; limited admin |
 | `referee` | Creates and manages tournaments |
 | `player` | Standard seated player — no elevated permissions |
@@ -103,16 +115,192 @@ Spectators can join any table without authentication. They see the board and pla
 
 ---
 
-## 4. Lobby & Tables
+## 4. Chip Bank (Player Economy)
+
+Each player has a persistent chip balance stored in Supabase (`player_chip_bank`). Chips move between the bank and the table via atomic DB transactions — no race conditions even under high concurrency.
+
+### How it works
+
+| Event | Direction | Description |
+|-------|-----------|-------------|
+| **Join table (buy-in)** | Bank → Table | Deducted automatically when `join_room` includes `buyInAmount` |
+| **Leave table (cash-out)** | Table → Bank | Returned automatically after the 60-second reconnect window expires |
+| **Coach reload** | Admin → Bank | `POST /api/players/:id/chips` (coach or admin role required) |
+| **Manual adjustment** | ±Bank | `POST /api/players/:id/chip-adjust` (admin role required) |
+
+### Chip Bank REST endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/players/:id/chip-balance` | Own or coach/admin | Current bank balance |
+| `POST` | `/api/players/:id/chips` | Coach+ | Reload chips (`amount` must be a positive integer) |
+| `POST` | `/api/players/:id/chip-adjust` | Admin+ | Manual credit or debit (`amount` non-zero integer; negative = debit) |
+| `GET` | `/api/players/:id/chip-history` | Own or coach/admin | Paginated transaction log (`?limit=50&offset=0`; max 200) |
+
+### Client buy-in
+
+When emitting `join_room`, include `buyInAmount` (positive integer) to deduct that amount from the player's bank and set their table stack:
+
+```js
+socket.emit('join_room', { name: 'Alice', tableId: 'main-table', buyInAmount: 500 });
+```
+
+If the player's balance is too low, the join is rejected with a clear error. Unauthenticated spectators are unaffected.
+
+---
+
+## 5. School Management
+
+Superadmins and admins with the `school:manage` permission can create and manage schools. Schools let you group players under a coaching organization and restrict access to specific features.
+
+### Admin API (`/api/admin/schools` — requires `school:manage`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/schools` | List all schools with coach/student counts |
+| POST | `/api/admin/schools` | Create a school (`name` required; optional `maxCoaches`, `maxStudents`, `logoUrl`, `primaryColor`, `theme`) |
+| GET | `/api/admin/schools/:id` | Get school detail + members + feature toggles |
+| PATCH | `/api/admin/schools/:id` | Update school fields |
+| DELETE | `/api/admin/schools/:id` | Archive school (soft delete) |
+| GET | `/api/admin/schools/:id/members` | List members (optional `?role=coach`) |
+| POST | `/api/admin/schools/:id/members` | Assign player `{ playerId, role }` — enforces capacity limits |
+| DELETE | `/api/admin/schools/:id/members/:playerId` | Remove player from school |
+| GET | `/api/admin/schools/:id/features` | Get feature toggle states |
+| PUT | `/api/admin/schools/:id/features` | Bulk update features `{ replay: true, analysis: false, … }` |
+
+### Feature Toggles
+
+Each school can disable specific features. Disabled features return `403 feature_disabled` for all players in that school. Features default to **enabled** when no setting exists.
+
+| Key | Controls |
+|-----|----------|
+| `replay` | Hand replay viewer |
+| `analysis` | Hand analyzer (`/api/analysis/*`) |
+| `chip_bank` | Chip bank system |
+| `playlists` | Playlist access |
+| `tournaments` | Tournament mode |
+| `crm` | Coach CRM/player notes |
+| `leaderboard` | Leaderboard visibility |
+| `scenarios` | Scenario/drill mode |
+
+### Capacity Limits
+
+Set `maxCoaches` and `maxStudents` on a school to enforce member limits. Attempting to add a member over the limit returns `409`. Registration via `POST /api/auth/register` with a `schoolId` also checks student capacity before creating the account.
+
+---
+
+## 6. Announcements
+
+Coaches and admins can broadcast messages to all students or a specific individual. Students see their feed via the REST API with unread badge support.
+
+### Announcement REST endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/announcements` | Coach+ | Create an announcement. Body: `{title, body, targetType?, targetId?}` |
+| `GET` | `/api/announcements` | Any authenticated | List announcements visible to the caller. Supports `?limit=50&offset=0`. Each item includes `readAt` (null if unread). |
+| `GET` | `/api/announcements/unread-count` | Any authenticated | Returns `{unreadCount: N}` — use for badge display. |
+| `PATCH` | `/api/announcements/:id/read` | Any authenticated | Mark an announcement as read. Idempotent. |
+
+### Target types
+
+| `targetType` | Who sees it |
+|---|---|
+| `all` (default) | Every authenticated user |
+| `individual` | Only the player whose UUID matches `targetId` |
+| `group` | (Future) players with a matching CRM group tag |
+
+### Example — send an announcement
+
+```js
+// Coach client
+await apiFetch('/api/announcements', {
+  method: 'POST',
+  body: JSON.stringify({ title: 'Session tonight', body: 'We meet at 7pm on the main table.' }),
+});
+
+// Student client — poll or load on mount
+const { announcements } = await apiFetch('/api/announcements').then(r => r.json());
+const { unreadCount }   = await apiFetch('/api/announcements/unread-count').then(r => r.json());
+```
+
+---
+
+## 6. Coach Intelligence
+
+The Coach Intelligence Layer surfaces prioritized, actionable insights to the coach across four admin pages (accessible to `admin` / `superadmin` / `coach` roles).
+
+> **Status (2026-04-01):** Prep Brief API (`GET /api/coach/students/:id/prep-brief` + refresh) is live. DB migration 018 (POK-41) and BaselineService + SessionQualityService (POK-43) are implemented and tested. Alert feed baseline data will be live once the migration is applied to the database; AlertService (POK-44) is the remaining dependency for full alert generation.
+
+### Alert Feed — `/admin/alerts`
+
+Accessed via the **Coach Alerts** nav tile on the lobby.
+
+- **Needs Attention** section — students sorted by severity score (0.0–1.0):
+  - 🔴 ≥ 0.75 — Critical (red)
+  - 🟠 0.50–0.74 — Warning (orange)
+  - 🟡 < 0.50 — Low (yellow)
+  - Alert types: `mistake_spike`, `inactivity`, `volume_drop`, `losing_streak`, `stat_regression`
+  - Actions: **Dismiss** (hides from feed), **Review →** (navigates to CRM)
+- **Milestones** section — 🟢 positive events (first profitable week, stat improvement)
+
+### Session Prep Brief — CRM student profile → PREP BRIEF tab
+
+Full brief assembled before sitting with a student:
+- **Active Alerts** — any outstanding alerts
+- **Top Leaks** — student rate vs stable average with trend direction
+- **Stats Snapshot** — current vs previous period, per-stat delta
+- **Hands to Review** — top 5 by review score (mistake tags + equity decisions + depth)
+- **Coach's Last Notes** — most recent session notes
+- **Recent Sessions** — last 5: date, hands, net chips, quality score
+- **Refresh** button — calls `POST /api/coach/students/:id/prep-brief/refresh` to force-regenerate
+
+### Progress Reports — CRM student profile → REPORTS tab
+
+Periodic performance summaries:
+- **Report list** — weekly/monthly cards showing period, grade (0–100), and net chip result
+- **Report detail** (tap a card) — full breakdown:
+  - Overall grade prominently displayed (green ≥80, gold 60–79, red <60)
+  - Stat changes table (vs prior period) with ▲/▼/= arrows
+  - Mistake trends (per tag, this vs last period)
+  - Leak coaching effectiveness (which leaks improved/worsened)
+  - Key hands: best, worst, most instructive
+- **Previous/Next week** navigation
+- **Share with Student** button (placeholder)
+
+### Stable Overview — `/admin/stable`
+
+Accessed via the **Stable Report** nav tile on the lobby. Coach-level weekly summary of all students:
+- **Stable Averages** — avg grade, grade delta, active/total students, total hands
+- **Top Improvers** — top 3 by grade improvement this week
+- **Needs Attention** — bottom 3 by grade or flagged as inactive
+- Click any student row to navigate to their CRM profile
+
+### Wiring to real APIs
+
+When the backend ships these endpoints, update the mock constants in each component file:
+
+| Surface | File | Endpoint |
+|---|---|---|
+| Alert feed | `CoachAlertsPage.jsx` | `GET /api/coach/alerts`, `PATCH /api/coach/alerts/:id` |
+| Prep brief | `PrepBriefTab.jsx` | `GET /api/coach/students/:id/prep-brief` |
+| Reports | `ReportsTab.jsx` | `GET /api/coach/students/:id/reports` |
+| Stable overview | `StableOverviewPage.jsx` | `GET /api/coach/reports/stable` |
+
+---
+
+## 6. Lobby & Tables
 
 After logging in you land on the **Lobby** (`/lobby`).
 
 ### Lobby layout
-- **Stats row** — hands played, net chips, VPIP since login
+- **Trial banner** — shown at top for trial-role accounts with an upgrade notice
+- **Stats row** — hands played, net chips, VPIP%; plus leaderboard rank for non-admin users
+- **Navigation tiles** — role-filtered quick links: Leaderboard, Multi Table, AI Analysis (coach+), Player CRM, Coach Alerts, Stable Report, Hand Scenarios, Tournaments, Referee, Users
 - **Active Tables** — live card grid of open tables with a **Join** button on each tile
 - **Recent Hands** — last 5 completed hands with tags and net chips
 - **Playlists** — visible to coaches; quick access to activate drills
-- **Admin nav pills** — Users / Hands / CRM / Tournaments — visible to roles with `admin:access`
+- **Leaderboard** (`/leaderboard`) — full ranked player table sortable with medal ranks, period filter tabs, and search. Accessible from the lobby header (🏆 button) or the Leaderboard navigation tile.
 
 ### Joining a table
 Click **Join** on any table tile in the lobby, or navigate directly to `/table/:tableId`.
@@ -137,7 +325,7 @@ Coaches and admins can open `/multi` for a grid overview of all active tables. F
 
 ---
 
-## 5. Coach Controls (coached_cash mode only)
+## 6. Coach Controls (coached_cash mode only)
 
 The **coach sidebar** appears on the right (collapsible). It has three tabs:
 
@@ -365,17 +553,59 @@ Requires `crm:view` / `crm:edit` permissions.
 ### Tournament Setup (`/admin/tournaments`)
 Requires `tournament:manage` permission.
 - Create a tournament: name, blind schedule (level rows with SB/BB/ante/duration), starting stack, rebuy settings
-- Start/stop tournaments via the admin panel or the table page overlay
+- After creation you are navigated to the **Tournament Lobby** (`/tournament/:tableId/lobby`)
+- From the lobby, start the tournament with the "START TOURNAMENT" button
+
+### Referee Dashboard (`/admin/referee`)
+Requires `tournament:manage` permission.
+- Live overview of all active tournament tables
+- Per-table: player list with chip counts, current blind level, active player count
+- **Advance Level** button — force-advance to the next blind level immediately
+- **End** button (confirm required) — end the tournament immediately, recording the chip leader as winner
+- **Move Player** — opens a modal to move a player from one tournament table to another (for balancing)
 
 ---
 
 ## 11. Tournament Mode
 
-During a tournament:
-- **TournamentInfoPanel** (right side overlay) shows: current blind level, countdown timer, player count, recent eliminations
-- **Blind levels advance automatically** on a timer — the panel shows a gold pulse when < 15 s remain
-- **Eliminations**: when a player's stack reaches 0, they are recorded in standings and removed from the hand. The panel shows their finish position.
-- **Tournament ends** when one player remains. Final standings are shown and the table closes.
+### Tournament Lifecycle
+
+1. **Create** — admin/coach navigates to `/admin/tournaments` and fills in the creation wizard (name, blind schedule, starting stack, rebuy settings). Clicking "Create Tournament" creates the table and config, then redirects to the Tournament Lobby.
+
+2. **Lobby** (`/tournament/:tableId/lobby`) — pre-start view showing:
+   - Tournament config (starting stack, levels, rebuy rules, scheduled start time)
+   - Full blind structure sheet
+   - Countdown timer if a scheduled start time was set
+   - "Start Tournament" button (coaches only) — starts the blind timer and deals the first hand
+   - "Join Table" button (players) — goes directly to the table seat
+
+3. **In-progress** — **TournamentInfoPanel** (right side overlay) shows:
+   - Current blind level and SB/BB/ante
+   - Countdown timer (color shifts amber → red as the level expires)
+   - Player count remaining
+   - Recent eliminations feed (last 5)
+   - **Advance Level** and **End Tournament** coach controls (confirmation modal)
+   - Blind levels advance automatically on a timer
+   - Eliminations: when a player's stack reaches 0, they are recorded in standings and marked out of future hands
+
+4. **Standings** (`/tournament/:tableId/standings`) — automatically navigated to 3 seconds after `tournament:ended` fires. Shows:
+   - Winner banner (gold)
+   - Full final standings table with finish position, player name, chip count at elimination, prize (if set)
+   - Tournament summary footer
+
+### Player Table Balancing (Referee / Coach)
+
+The server supports a `tournament:move_player` socket event for moving players between tables:
+
+```js
+socket.emit('tournament:move_player', {
+  fromTableId: 'tournament-123',
+  toTableId:   'tournament-456',
+  playerId:    '<uuid>',
+});
+```
+
+The Referee Dashboard provides a UI for this via the "Move Player" button on each table card.
 
 ---
 
@@ -386,7 +616,7 @@ Server tests (Jest):
 cd server
 npx jest --no-coverage
 ```
-Expected: **~1598 tests passing** across 59 suites.
+Expected: **~2012 tests passing** across 77 suites.
 
 Client tests (Vitest + React Testing Library):
 ```bash

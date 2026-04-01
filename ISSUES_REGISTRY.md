@@ -1,6 +1,6 @@
 # Issues Registry — Poker Trainer
 
-**Last updated:** 2026-03-31 — Gap fixes: replay UI removed from client, AuthContext loading state, JWT auth path unified, DB migrations 008–013 applied. Server: 1598 tests. Client: 677 tests.
+**Last updated:** 2026-04-01 — **Coach Intelligence Layer fully shipped (POK-43–47):** AlertService (6 detector types with configurable thresholds + dedup upsert), ProgressReportService (8 sections: period_stats, comparison, mistake_trends, top_hands, leak_evolution, session_summary, scenario_results, overall_grade 0–100 composite; weekly/monthly/custom periods; `GET/POST /api/coach/students/:id/reports`, `GET /api/coach/reports/stable`), NarratorService (Tier 2 LLM via Claude Haiku — narrateAlerts, narratePrepBrief, narrateProgressReport, narrateStableOverview; returns null gracefully when `ANTHROPIC_API_KEY` absent). 2051 server tests across 79 suites. Previously: BaselineService, SessionQualityService, School Management, SessionPrepService, Coach Intelligence UI, Announcements, Chip Bank, Auth & Registration.
 
 ## Severity Legend
 - 🔴 CRITICAL — crash or incorrect game outcome
@@ -23,6 +23,83 @@
 | ~~ISS-75~~ | ~~🟡~~ | ~~Supabase anon read policies on all tables expose all hand/player data to any unauthenticated browser client.~~ | **RESOLVED 2026-03-19** — Anon key removed from browser entirely. All data access goes through Express (JWT-authenticated). Supabase RLS can now be simplified to service-role-only. |
 
 ---
+
+## Resolved — 2026-04-01 (Coach Intelligence — POK-44/46/47)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-137 | 🟡 | No AlertService — coach dashboard had no alert feed. Implemented `AlertService.generateAlerts(coachId)` with 6 detectors (inactivity, volume_drop, mistake_spike, losing_streak, stat_regression, positive_milestone), severity filter (< 0.2 suppressed; milestones exempt), dedup upsert. REST routes: `GET /api/coach/alerts` (with `?generate=true`), `PATCH /api/coach/alerts/:id`, `GET/PUT /api/coach/alerts/config`. NarratorService integrated — `?generate=true` includes `narrative` field. | 2026-04-01 |
+| ISS-138 | 🟡 | No ProgressReportService — coach had no way to track student progress over time. Implemented 8-section report generator: period stats, comparison vs previous period, mistake trends, top hands (best/worst/most instructive), leak evolution, session summary with quality trend, scenario results, and overall grade (30% stat improvement + 30% mistake reduction + 15% volume + 15% scenario + 10% quality). Auto-detects weekly/monthly/custom from period length. Stored in `progress_reports` with upsert. NarratorService narrative stored on generation. 4 REST endpoints. | 2026-04-01 |
+| ISS-139 | 🟡 | No LLM narration layer — intelligence outputs were structured data only. Implemented `NarratorService` (Tier 2) with `narrateAlerts`, `narratePrepBrief`, `narrateProgressReport`, `narrateStableOverview` via Claude Haiku Anthropic API. All methods return `null` gracefully when `ANTHROPIC_API_KEY` is absent or LLM call fails — never in the critical path. 26 Jest tests. | 2026-04-01 |
+
+## Resolved — 2026-04-01 (Coach Intelligence DB + Services — POK-41/43)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-132 | 🟡 | No DB schema for Coach Intelligence — `student_baselines`, `alert_instances`, `alert_config`, `session_prep_briefs`, and `progress_reports` tables were missing; `session_player_stats` had no `quality_score`/`quality_breakdown` columns. Added migration 018 with all 5 tables, service-role-only RLS policies, and the two new columns. Unresolved on Paperclip side: POK-41 issue stuck due to run ownership conflict — board must manually mark done. | 2026-04-01 |
+| ISS-133 | 🟡 | No session quality score computed — students' session performance was untracked beyond raw hand counts. Implemented `SessionQualityService.compute(playerId, sessionId)` → 0–100 score using formula `(1−mistake_rate)×30 + good_play_rate×20 + sizing_accuracy×25 + equity_score×25`; result stored in `session_player_stats.quality_score` + `quality_breakdown`. 23 Jest tests. | 2026-04-01 |
+| ISS-134 | 🟡 | No rolling statistical baseline per student — coach had no view of 30-day trends for VPIP/PFR/WTSD/WSD/cbet/aggression. Implemented `BaselineService.recompute(playerId)` aggregating data from `session_player_stats`, `hand_actions`, and `hand_tags`; upserts `student_baselines` row; triggers weekly/monthly snapshots on boundary days. `recomputeAfterSession(playerIds)` batch helper called fire-and-forget from `tableCleanup.js` on every session close. 21 Jest tests. | 2026-04-01 |
+
+## Resolved — 2026-04-01 (School Management System — POK-51)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-131 | 🟡 | No server-side school management. Added migration 017 (`school:manage` permission + capacity columns on `schools`), `SchoolRepository` (CRUD, member management, capacity checks, feature toggles), `featureGate.js` middleware (school-scoped feature enable/disable with 1-minute cache), `/api/admin/schools` REST routes (10 endpoints), feature gates wired to `/api/analysis/*`, chip bank, playlist, and tournament routes. Registration (`POST /api/auth/register`) now checks school capacity when `schoolId` is provided. | 2026-04-01 |
+
+## Resolved — 2026-04-01 (SessionPrepService + Prep Brief API — POK-45)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-130 | 🟡 | No backend for the Session Prep Brief — `PrepBriefTab.jsx` was rendering mock data with no real API. Implemented `SessionPrepService.generate()` (7 sections: leak ranking, flagged hands, coach notes, stats snapshot, session history, active alerts, scenario performance), 1-hour cache in `session_prep_briefs` table, and REST endpoints `GET /api/coach/students/:id/prep-brief` + `POST …/refresh`. 30 new Jest tests (route + service). Note: sections requiring `student_baselines` and `alert_instances` return empty arrays until POK-41 migration + POK-43 BaselineService deploy. | 2026-04-01 |
+
+## Resolved — 2026-04-01 (Coach Intelligence UI — POK-42)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-128 | 🟡 | No coach-facing intelligence surfaces — coaches had no way to see which students needed attention or quickly prep for a session. Added 4 UI surfaces with mock data: Alert Feed (`/admin/alerts`), Session Prep Brief (CRM → PREP BRIEF tab), Progress Reports (CRM → REPORTS tab), and Stable Overview (`/admin/stable`). All 50 component tests pass. APIs wire automatically when backend lands. | 2026-04-01 |
+
+## Resolved — 2026-04-01 (Announcements System — POK-31)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-127 | 🟡 | No in-app communication channel between coaches and students. Added `announcements` + `announcement_reads` tables (migration 016), `AnnouncementRepository` (createAnnouncement, listForPlayer, markRead, unreadCount), and 4 REST endpoints: `POST /api/announcements` (coach+), `GET /api/announcements` (filtered + read status per caller), `GET /api/announcements/unread-count` (badge), `PATCH /api/announcements/:id/read` (idempotent mark-read). Supports `all` / `group` / `individual` target types. | 2026-04-01 |
+
+## Resolved — 2026-04-01 (Chip Bank System — POK-26)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-123 | 🟠 | No persistent chip economy — player stacks reset to the table default on every join with no carry-over between sessions. Added `player_chip_bank` (balance) + `chip_transactions` (audit log) tables (migration 015) with an atomic `apply_chip_transaction` PL/pgSQL function. | 2026-04-01 |
+| ISS-124 | 🟠 | No buy-in deduction from the bank — players could join tables with arbitrary stacks unchecked by their actual balance. `join_room` now accepts `buyInAmount`, validates against `getBalance`, deducts via `ChipBankRepo.buyIn` (fire-and-forget), and applies the stack override post-`addPlayer`. | 2026-04-01 |
+| ISS-125 | 🟠 | No automatic cash-out on disconnect — a player's remaining stack was lost when they timed out (60-second reconnect window). `disconnect.js` now captures the ghost stack and calls `ChipBankRepo.cashOut` after `removePlayer` (fire-and-forget; errors logged, not thrown). | 2026-04-01 |
+| ISS-126 | 🟡 | No REST surface for chip management. Added 4 endpoints: `GET /api/players/:id/chip-balance`, `POST /api/players/:id/chips` (coach reload), `POST /api/players/:id/chip-adjust` (admin manual adjustment), `GET /api/players/:id/chip-history` (paginated). Full role-based access control (own-or-elevated for reads; coach+ for reload; admin+ for adjust). | 2026-04-01 |
+
+## Resolved — 2026-04-01 (Auth & Registration Backend — POK-23)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-119 | 🟠 | `POST /api/auth/register` returned 410 (disabled). Enabled student self-registration with trial auto-start (7-day / 20-hand), `coached_student` / `solo_student` role split, duplicate-name guard, and bcrypt password hashing. Migration 014 adds `trial_expires_at`, `trial_hands_remaining` to `player_profiles` and seeds the two new roles. | 2026-04-01 |
+| ISS-120 | 🟠 | No way for users to reset their own password. Added `POST /api/auth/reset-password` (requireAuth, verifies current password before setting new hash). | 2026-04-01 |
+| ISS-121 | 🟡 | No coach self-registration flow. Added `POST /api/auth/register-coach` (returns 202 pending; admin approves via existing user-management API). | 2026-04-01 |
+| ISS-122 | 🟡 | Trial accounts could join tables indefinitely after their trial expired or hands ran out. Added trial enforcement in `joinRoom` socket handler: rejects join with a clear error when `trial_expires_at` is past or `trial_hands_remaining ≤ 0`. | 2026-04-01 |
+
+## Resolved — 2026-04-01 (Table Privacy, Controller, & Presets — POK-29)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-116 | 🟡 | No table privacy controls. Added `privacy` enum (open/school/private) to tables; private tables enforce an invited-player whitelist in `join_room`; privacy dropdown added to Create Table modal. Migration 015. | 2026-04-01 |
+| ISS-117 | 🟡 | No explicit controller ownership. Added `controller_id` FK; `transfer_controller` socket event; `POST /api/tables/:id/controller` REST endpoint. | 2026-04-01 |
+| ISS-118 | 🟡 | No way to save/load table configurations as reusable presets. Added `table_presets` table and full CRUD API (`GET/POST/PATCH/DELETE /api/table-presets`, clone endpoint). | 2026-04-01 |
+| ISS-115 | 🟡 | No forward-looking schema hooks for multi-school, org settings, or scenario marketplace. Migration 014: schools, settings, audit columns, scenario marketplace fields, referral_code. 38 structural tests. | 2026-04-01 |
+
+## Resolved — 2026-04-01 (Tournament Mode)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-112 | 🟠 | `TournamentInfoPanel` referenced `POST /api/tables/:id/tournament/advance-level` and `.../end` endpoints that did not exist — buttons silently failed. Both endpoints are now implemented in `registerTournamentRoutes`. | 2026-04-01 |
+| ISS-113 | 🟠 | Tournament tables in the lobby navigated directly to `/table/:id` (bypassing the pre-start lobby). Lobby now routes tournament tables to `/tournament/:id/lobby`, which shows the blind structure and a Start button. | 2026-04-01 |
+| ISS-114 | 🟡 | No final standings page — `tournament:ended` was emitted but users had no UI to view results. Added `TournamentStandings` page at `/tournament/:id/standings`; `TournamentInfoPanel` auto-navigates there 3 s after the event fires. | 2026-04-01 |
+| ISS-115 | 🟡 | No referee view for multi-table tournament overview. Added `RefereeDashboard` at `/admin/referee` with per-table player lists, advance-level, end tournament, and move-player controls. | 2026-04-01 |
+| ISS-116 | 🟡 | No socket event for moving players between tournament tables. Added `tournament:move_player` handler in `server/socket/handlers/tournament.js`. | 2026-04-01 |
 
 ## Resolved — 2026-03-31 (Integration gap fixes)
 
