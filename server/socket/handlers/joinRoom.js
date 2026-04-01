@@ -5,7 +5,7 @@ module.exports = function registerJoinRoom(socket, ctx) {
           broadcastState, sendError,
           HandLogger, log } = ctx;
 
-  socket.on('join_room', async ({ name, isSpectator: payloadSpectator = false, tableId = 'main-table' } = {}) => {
+  socket.on('join_room', async ({ name, isSpectator: payloadSpectator = false, tableId = 'main-table', buyInAmount } = {}) => {
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return sendError(socket, 'Name is required');
     }
@@ -35,9 +35,10 @@ module.exports = function registerJoinRoom(socket, ctx) {
     // Fetch table mode before deciding coach status.
     // In uncoached_cash and tournament modes every authenticated user is a regular
     // seated player — nobody holds the special coach (dealer-control) role.
-    const { TableRepository } = require('../../db/repositories/TableRepository.js');
+    const { TableRepository, InvitedPlayersRepository } = require('../../db/repositories/TableRepository.js');
     const tableRow = await TableRepository.getTable(tableId).catch(() => null);
-    const mode = tableRow?.mode ?? 'coached_cash';
+    const mode    = tableRow?.mode    ?? 'coached_cash';
+    const privacy = tableRow?.privacy ?? 'open';
 
     // Upsert table record so it's discoverable via GET /api/tables
     TableRepository.createTable({
@@ -46,6 +47,37 @@ module.exports = function registerJoinRoom(socket, ctx) {
       mode,
       createdBy: resolvedStableId,
     }).catch(() => {}); // fire-and-forget; ignore if already exists (upsert is idempotent)
+
+    // Bot cash table visibility enforcement.
+    // Bot sockets (spawned by BotTableController) bypass this check — they connect
+    // server-side and are implicitly trusted. Only human joins are gated here.
+    // Visibility rules:
+    //   privacy=private  — solo-created: only the creator may join as a human player
+    //   privacy=school   — coach-created: creator + same-school members may join
+    if (mode === 'bot_cash') {
+      if (!socket.data.authenticated || !stableId || stableId.length === 0) {
+        return sendError(socket, 'Authentication required to join a bot table');
+      }
+      const creatorId = tableRow?.created_by ?? null;
+      if (privacy === 'private') {
+        if (resolvedStableId !== creatorId) {
+          return sendError(socket, 'This bot table is private — only the creator can join');
+        }
+      } else if (privacy === 'school') {
+        if (resolvedStableId !== creatorId) {
+          const supabase = require('../../db/supabase');
+          const [reqRes, creatorRes] = await Promise.all([
+            supabase.from('player_profiles').select('school_id').eq('id', resolvedStableId).maybeSingle(),
+            supabase.from('player_profiles').select('school_id').eq('id', creatorId).maybeSingle(),
+          ]);
+          const reqSchool     = reqRes.data?.school_id     ?? null;
+          const creatorSchool = creatorRes.data?.school_id ?? null;
+          if (!reqSchool || reqSchool !== creatorSchool) {
+            return sendError(socket, "This bot table is only visible to the coach's students");
+          }
+        }
+      }
+    }
 
     // In non-coached modes all non-spectators are regular players — no coach role.
     if (mode !== 'coached_cash') {
@@ -56,12 +88,21 @@ module.exports = function registerJoinRoom(socket, ctx) {
     const { getOrCreateController } = require('../../state/SharedState');
     const sm = tables.get(tableId);
     if (sm) {
-      getOrCreateController(tableId, mode, sm.gm ?? sm, io);
+      getOrCreateController(tableId, mode, sm.gm ?? sm, io, tableRow);
     }
     socket.emit('table_config', { mode });
 
     HandLogger.upsertPlayerIdentity(resolvedStableId, trimmedName).catch(err =>
       log.error('db', 'upsert_identity_failed', '[HandLogger] upsertPlayerIdentity', { err, tableId, playerId: resolvedStableId }));
+
+    // Privacy enforcement — private tables only admit invited players (coaches bypass).
+    // Skipped for bot_cash tables, which have their own visibility enforcement above.
+    if (mode !== 'bot_cash' && privacy === 'private' && !isCoach && socket.data.authenticated && resolvedStableId && resolvedStableId !== socket.id) {
+      const invited = await InvitedPlayersRepository.isInvited(tableId, resolvedStableId).catch(() => false);
+      if (!invited) {
+        return sendError(socket, 'This table is private — you need an invitation to join');
+      }
+    }
 
     // Kick duplicate tab
     for (const [existingSocketId, existingStableId] of stableIdMap.entries()) {
@@ -124,8 +165,36 @@ module.exports = function registerJoinRoom(socket, ctx) {
       }
     }
 
+    // Chip bank buy-in — deduct from bank if player provides an amount and has a stableId
+    if (
+      !isCoach &&
+      socket.data.authenticated &&
+      resolvedStableId &&
+      resolvedStableId !== socket.id &&
+      Number.isInteger(buyInAmount) && buyInAmount > 0
+    ) {
+      const ChipBankRepo = require('../../db/repositories/ChipBankRepository');
+      const balance = await ChipBankRepo.getBalance(resolvedStableId).catch(() => null);
+      if (balance !== null) {
+        if (balance < buyInAmount)
+          return sendError(socket, `Insufficient chip balance — you have ${balance} chips (requested ${buyInAmount}).`);
+        ChipBankRepo.buyIn(resolvedStableId, buyInAmount, tableId).catch(err =>
+          log.error('db', 'chip_buy_in_failed', `chipBuyIn failed for ${trimmedName}`, { err, tableId, playerId: resolvedStableId }));
+        socket.data.buyInAmount = buyInAmount;
+      }
+    }
+
     const result = gm.addPlayer(socket.id, trimmedName, isCoach, resolvedStableId);
     if (result.error) return sendError(socket, result.error);
+
+    // Override initial stack with buyInAmount if set
+    if (socket.data.buyInAmount && socket.data.buyInAmount > 0) {
+      const currentPlayer = gm.state.players.find(p => p.id === socket.id);
+      if (currentPlayer) {
+        const diff = socket.data.buyInAmount - (currentPlayer.stack || 0);
+        if (diff !== 0) gm.adjustStack(socket.id, diff);
+      }
+    }
 
     if (ghostStacks.has(resolvedStableId)) {
       gm.adjustStack(socket.id, ghostStacks.get(resolvedStableId));

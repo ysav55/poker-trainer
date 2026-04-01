@@ -16,6 +16,7 @@ jest.mock('../../db/supabase', () => {
   chain.select      = jest.fn(() => chain);
   chain.insert      = jest.fn(() => chain);
   chain.eq          = jest.fn(() => chain);
+  chain.in          = jest.fn(() => chain);
   chain.order       = jest.fn(() => chain);
   chain.maybeSingle = jest.fn(() => chain);
   // Default: resolves with null (used by logger._persistAsync fire-and-forget)
