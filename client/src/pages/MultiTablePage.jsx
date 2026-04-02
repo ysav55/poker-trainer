@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLobby } from '../contexts/LobbyContext.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { TableProvider, useTable } from '../contexts/TableContext.jsx';
@@ -67,6 +68,7 @@ function SocketRefBridge({ tableId, onRef }) {
 export default function MultiTablePage() {
   const { activeTables } = useLobby();
   const { hasPermission } = useAuth();
+  const navigate = useNavigate();
   const [focusedTableId, setFocusedTableId] = useState(null);
 
   // Map of tableId -> socketRef, kept stable
@@ -92,14 +94,30 @@ export default function MultiTablePage() {
         style={{
           minHeight: '100vh',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
+          gap: 16,
           background: '#0d1117',
         }}
       >
         <p style={{ color: '#8b949e', fontSize: 14 }}>
           No active tables. Create one from the lobby.
         </p>
+        <button
+          onClick={() => navigate('/lobby')}
+          style={{
+            fontSize: 12,
+            padding: '6px 14px',
+            borderRadius: 6,
+            background: 'transparent',
+            color: '#8b949e',
+            border: '1px solid #30363d',
+            cursor: 'pointer',
+          }}
+        >
+          ← Back to Lobby
+        </button>
       </div>
     );
   }
@@ -117,6 +135,51 @@ export default function MultiTablePage() {
         overflow: 'hidden',
       }}
     >
+      {/* Top navigation bar */}
+      <div
+        style={{
+          height: 40,
+          background: '#0d1117',
+          borderBottom: '1px solid #21262d',
+          display: 'flex',
+          alignItems: 'center',
+          padding: '0 12px',
+          gap: 10,
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={() => navigate('/lobby')}
+          style={{
+            fontSize: 11,
+            padding: '3px 10px',
+            borderRadius: 5,
+            background: 'transparent',
+            color: '#8b949e',
+            border: '1px solid #30363d',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#e6edf3'; e.currentTarget.style.borderColor = '#6e7681'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = '#8b949e'; e.currentTarget.style.borderColor = '#30363d'; }}
+        >
+          ← Lobby
+        </button>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.12em',
+            color: 'rgba(212,175,55,0.7)',
+            textTransform: 'uppercase',
+          }}
+        >
+          Multi-Table
+        </span>
+        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#6e7681' }}>
+          {count} table{count !== 1 ? 's' : ''}
+        </span>
+      </div>
+
       {/* Broadcast bar — visible only to coaches with table:manage permission */}
       {hasPermission('table:manage') && (
         <BroadcastBar tableRefs={socketRefs} />

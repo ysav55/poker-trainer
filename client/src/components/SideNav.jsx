@@ -61,6 +61,12 @@ const NAV_ITEMS = [
     roles: ['coach', 'admin', 'superadmin'],
   },
   {
+    icon: '⊞',
+    label: 'Multi',
+    path: '/multi',
+    roles: ['coach', 'admin', 'superadmin'],
+  },
+  {
     icon: '🏆',
     label: 'Leaderboard',
     path: '/leaderboard',

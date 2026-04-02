@@ -31,10 +31,56 @@ function PhaseBadge({ phase }) {
   );
 }
 
+function TinyCard({ card }) {
+  if (!card || card === 'HIDDEN') {
+    return (
+      <span
+        style={{
+          display: 'inline-block',
+          width: 14,
+          height: 20,
+          borderRadius: 2,
+          background: 'linear-gradient(135deg, #0f1b3d, #162244)',
+          border: '1px solid #1e2d5a',
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+  const rankRaw = card[0];
+  const suitRaw = card[1];
+  const rank = rankRaw === 'T' ? '10' : rankRaw;
+  const suit = { h: '♥', d: '♦', c: '♣', s: '♠' }[suitRaw] ?? suitRaw;
+  const isRed = suitRaw === 'h' || suitRaw === 'd';
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#fafaf8',
+        borderRadius: 2,
+        fontSize: 9,
+        fontWeight: 700,
+        minWidth: 14,
+        height: 20,
+        padding: '0 2px',
+        color: isRed ? '#dc2626' : '#1a1a2e',
+        lineHeight: 1,
+        flexShrink: 0,
+        border: '1px solid #e2e0da',
+      }}
+    >
+      {rank}{suit}
+    </span>
+  );
+}
+
 export default function TableStatusChip({ gameState, tableId, tableName }) {
   const phase = gameState?.phase ?? 'waiting';
   const players = gameState?.players ?? [];
   const pot = gameState?.pot ?? 0;
+  const board = gameState?.board ?? [];
   const currentTurnId = gameState?.current_player ?? gameState?.current_turn ?? null;
   const currentPlayer = players.find((p) => p.id === currentTurnId);
   const playerCount = players.filter((p) => p.seat !== undefined && p.seat !== null).length;
@@ -71,6 +117,15 @@ export default function TableStatusChip({ gameState, tableId, tableName }) {
       <span className="text-xs" style={{ color: '#8b949e' }}>
         {subtitle}
       </span>
+
+      {/* Community cards */}
+      {board.length > 0 && (
+        <div style={{ display: 'flex', gap: 3, flexWrap: 'nowrap', marginTop: 2 }}>
+          {board.map((card, i) => (
+            <TinyCard key={i} card={card} />
+          ))}
+        </div>
+      )}
 
       {/* Pot */}
       {pot > 0 && (
