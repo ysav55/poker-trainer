@@ -59,13 +59,16 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
 
+  // Coach-only field
+  const [schoolName, setSchoolName] = useState('');
+
   // State
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const reset = () => {
-    setName(''); setPassword(''); setConfirm('');
+    setName(''); setPassword(''); setConfirm(''); setSchoolName('');
     setError(''); setSuccess('');
   };
 
@@ -135,7 +138,7 @@ export default function RegisterPage() {
             className="text-2xl font-black tracking-[0.25em] uppercase leading-none"
             style={{ color: '#d4af37', textShadow: '0 0 30px rgba(212,175,55,0.35)' }}
           >
-            POKER TRAINING
+            ♠ POKER TRAINER
           </h1>
           <p className="text-xs text-gray-500 tracking-widest uppercase">Create Account</p>
         </div>
@@ -199,6 +202,20 @@ export default function RegisterPage() {
               disabled={loading}
             />
           </div>
+
+          {/* Coach-only: School Name */}
+          {tab === 'coach' && (
+            <div className="flex flex-col gap-1.5">
+              <label className="label-sm">School Name</label>
+              <AuthInput
+                value={schoolName}
+                onChange={(e) => { setSchoolName(e.target.value); setError(''); }}
+                placeholder="e.g. Rivera Poker Academy"
+                maxLength={64}
+                disabled={loading}
+              />
+            </div>
+          )}
 
           {error && (
             <p

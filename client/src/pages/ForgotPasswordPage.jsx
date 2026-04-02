@@ -73,7 +73,7 @@ export default function ForgotPasswordPage() {
             className="text-2xl font-black tracking-[0.25em] uppercase leading-none"
             style={{ color: '#d4af37', textShadow: '0 0 30px rgba(212,175,55,0.35)' }}
           >
-            POKER TRAINING
+            ♠ POKER TRAINER
           </h1>
           <p className="text-xs text-gray-500 tracking-widest uppercase">Reset Password</p>
         </div>
