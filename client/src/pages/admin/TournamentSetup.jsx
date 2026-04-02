@@ -1,471 +1,550 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_LEVEL = { sb: 25, bb: 50, ante: 0, durationMin: 20 };
+const FILTER_TABS   = ['Upcoming', 'Active', 'Completed'];
 
-function makeLevel(prevLevel) {
-  if (!prevLevel) return { ...DEFAULT_LEVEL };
-  return {
-    sb: prevLevel.sb * 2,
-    bb: prevLevel.bb * 2,
-    ante: prevLevel.ante ? prevLevel.ante * 2 : 0,
-    durationMin: prevLevel.durationMin,
-  };
+const STATUS_MAP = {
+  Upcoming:  ['pending'],
+  Active:    ['running', 'paused'],
+  Completed: ['finished'],
+};
+
+const STATUS_COLORS = {
+  pending:  { bg: 'rgba(59,130,246,0.1)',  border: 'rgba(59,130,246,0.3)',  text: '#93c5fd' },
+  running:  { bg: 'rgba(63,185,80,0.1)',   border: 'rgba(63,185,80,0.3)',   text: '#3fb950' },
+  paused:   { bg: 'rgba(227,179,65,0.1)',  border: 'rgba(227,179,65,0.3)',  text: '#e3b341' },
+  finished: { bg: 'rgba(110,118,129,0.1)', border: 'rgba(110,118,129,0.3)', text: '#6e7681' },
+};
+
+function makeLevel(prev) {
+  if (!prev) return { ...DEFAULT_LEVEL };
+  return { sb: prev.sb * 2, bb: prev.bb * 2, ante: prev.ante ? prev.ante * 2 : 0, durationMin: prev.durationMin };
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Small helpers ─────────────────────────────────────────────────────────────
 
 function NumberInput({ value, onChange, width = 80, min = 0, placeholder = '' }) {
   return (
     <input
-      type="number"
-      value={value}
-      min={min}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+      type="number" value={value} min={min} placeholder={placeholder}
+      onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))}
       className="rounded text-sm outline-none text-center"
-      style={{
-        width,
-        background: '#0d1117',
-        border: '1px solid #30363d',
-        color: '#f0ece3',
-        padding: '5px 6px',
-      }}
-      onFocus={(e)  => { e.currentTarget.style.borderColor = '#d4af37'; }}
-      onBlur={(e)   => { e.currentTarget.style.borderColor = '#30363d'; }}
+      style={{ width, background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3', padding: '5px 6px' }}
+      onFocus={e => { e.currentTarget.style.borderColor = '#d4af37'; }}
+      onBlur={e => { e.currentTarget.style.borderColor = '#30363d'; }}
     />
   );
 }
 
-function LevelRow({ index, level, isFirst, isLast, onChange, onMove, onRemove }) {
-  const handleField = (field) => (val) => onChange(index, { ...level, [field]: val });
+function StatusBadge({ status }) {
+  const c = STATUS_COLORS[status] ?? STATUS_COLORS.finished;
+  return (
+    <span style={{
+      fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+      padding: '2px 7px', borderRadius: 3, background: c.bg, border: `1px solid ${c.border}`, color: c.text,
+    }}>
+      {status}
+    </span>
+  );
+}
 
+// ── Tournament Card ───────────────────────────────────────────────────────────
+
+function TournamentCard({ t, onOpen }) {
+  const levels = Array.isArray(t.blind_structure) ? t.blind_structure.length : 0;
   return (
     <div
-      className="flex items-center gap-2 rounded-lg px-3 py-2.5"
-      style={{ background: index % 2 === 0 ? '#0d1117' : 'rgba(22,27,34,0.6)', border: '1px solid #21262d' }}
+      onClick={onOpen}
+      style={{
+        background: '#161b22', border: '1px solid #30363d', borderRadius: 8,
+        padding: '14px 16px', cursor: 'pointer', transition: 'all 0.12s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.4)'; e.currentTarget.style.background = 'rgba(212,175,55,0.04)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.background = '#161b22'; }}
     >
-      {/* Level badge */}
-      <span
-        className="text-xs font-bold tracking-wider flex-shrink-0"
-        style={{
-          minWidth: '48px',
-          textAlign: 'center',
-          background: 'rgba(212,175,55,0.12)',
-          border: '1px solid rgba(212,175,55,0.25)',
-          borderRadius: '4px',
-          padding: '3px 6px',
-          color: '#d4af37',
-        }}
-      >
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#f0ece3' }}>{t.name}</div>
+        <StatusBadge status={t.status} />
+      </div>
+      <div className="flex items-center gap-4" style={{ fontSize: 11, color: '#6e7681' }}>
+        <span>Starting stack: <strong style={{ color: '#8b949e' }}>{(t.starting_stack ?? 0).toLocaleString()}</strong></span>
+        <span>{levels} level{levels !== 1 ? 's' : ''}</span>
+        {t.rebuy_allowed && <span style={{ color: '#e3b341' }}>Rebuys on</span>}
+      </div>
+      {t.created_at && (
+        <div style={{ fontSize: 10, color: '#444', marginTop: 6 }}>
+          Created {new Date(t.created_at).toLocaleDateString()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Blind Level Row ───────────────────────────────────────────────────────────
+
+function LevelRow({ index, level, isFirst, isLast, onChange, onMove, onRemove }) {
+  const field = k => v => onChange(index, { ...level, [k]: v });
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2.5"
+      style={{ background: index % 2 === 0 ? '#0d1117' : 'rgba(22,27,34,0.6)', border: '1px solid #21262d' }}>
+      <span className="text-xs font-bold tracking-wider flex-shrink-0"
+        style={{ minWidth: 48, textAlign: 'center', background: 'rgba(212,175,55,0.12)', border: '1px solid rgba(212,175,55,0.25)', borderRadius: 4, padding: '3px 6px', color: '#d4af37' }}>
         LVL {index + 1}
       </span>
-
-      {/* SB */}
       <div className="flex flex-col items-center gap-0.5">
         <span className="text-xs" style={{ color: '#6e7681' }}>SB</span>
-        <NumberInput value={level.sb} onChange={handleField('sb')} width={72} min={1} />
+        <NumberInput value={level.sb} onChange={field('sb')} width={72} min={1} />
       </div>
-
-      {/* BB */}
       <div className="flex flex-col items-center gap-0.5">
         <span className="text-xs" style={{ color: '#6e7681' }}>BB</span>
-        <NumberInput value={level.bb} onChange={handleField('bb')} width={72} min={1} />
+        <NumberInput value={level.bb} onChange={field('bb')} width={72} min={1} />
       </div>
-
-      {/* Ante */}
       <div className="flex flex-col items-center gap-0.5">
         <span className="text-xs" style={{ color: '#6e7681' }}>Ante</span>
-        <NumberInput value={level.ante} onChange={handleField('ante')} width={64} min={0} />
+        <NumberInput value={level.ante} onChange={field('ante')} width={60} />
       </div>
-
-      {/* Duration */}
       <div className="flex flex-col items-center gap-0.5">
-        <span className="text-xs" style={{ color: '#6e7681' }}>Min</span>
-        <NumberInput value={level.durationMin} onChange={handleField('durationMin')} width={56} min={1} />
+        <span className="text-xs" style={{ color: '#6e7681' }}>Mins</span>
+        <NumberInput value={level.durationMin} onChange={field('durationMin')} width={60} min={1} />
       </div>
-
-      {/* Up/Down/Delete */}
-      <div className="flex items-center gap-1 ml-auto flex-shrink-0">
-        <button
-          onClick={() => onMove(index, -1)}
-          disabled={isFirst}
-          title="Move up"
-          style={{
-            background: 'none',
-            border: '1px solid #30363d',
-            borderRadius: '4px',
-            color: isFirst ? '#30363d' : '#8b949e',
-            cursor: isFirst ? 'not-allowed' : 'pointer',
-            width: '26px',
-            height: '26px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '12px',
-          }}
-          onMouseEnter={(e) => { if (!isFirst) e.currentTarget.style.borderColor = '#d4af37'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
-        >
+      <div className="flex items-center gap-1 ml-auto">
+        <button onClick={() => onMove(index, 'up')} disabled={isFirst}
+          style={{ width: 24, height: 24, background: 'none', border: '1px solid #30363d', borderRadius: 3, color: '#6e7681', cursor: isFirst ? 'not-allowed' : 'pointer', opacity: isFirst ? 0.3 : 1, fontSize: 10 }}>
           ▲
         </button>
-        <button
-          onClick={() => onMove(index, 1)}
-          disabled={isLast}
-          title="Move down"
-          style={{
-            background: 'none',
-            border: '1px solid #30363d',
-            borderRadius: '4px',
-            color: isLast ? '#30363d' : '#8b949e',
-            cursor: isLast ? 'not-allowed' : 'pointer',
-            width: '26px',
-            height: '26px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '12px',
-          }}
-          onMouseEnter={(e) => { if (!isLast) e.currentTarget.style.borderColor = '#d4af37'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
-        >
+        <button onClick={() => onMove(index, 'down')} disabled={isLast}
+          style={{ width: 24, height: 24, background: 'none', border: '1px solid #30363d', borderRadius: 3, color: '#6e7681', cursor: isLast ? 'not-allowed' : 'pointer', opacity: isLast ? 0.3 : 1, fontSize: 10 }}>
           ▼
         </button>
-        <button
-          onClick={() => onRemove(index)}
-          title="Remove level"
-          style={{
-            background: 'none',
-            border: '1px solid rgba(248,81,73,0.25)',
-            borderRadius: '4px',
-            color: '#f85149',
-            cursor: 'pointer',
-            width: '26px',
-            height: '26px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '13px',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(248,81,73,0.65)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(248,81,73,0.25)'; }}
-        >
-          ✕
+        <button onClick={() => onRemove(index)} disabled={index === 0}
+          style={{ width: 24, height: 24, background: 'none', border: '1px solid rgba(248,81,73,0.25)', borderRadius: 3, color: '#f85149', cursor: index === 0 ? 'not-allowed' : 'pointer', opacity: index === 0 ? 0.3 : 1, fontSize: 14 }}>
+          ×
         </button>
       </div>
     </div>
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── 5-Step Wizard Modal ────────────────────────────────────────────────────────
 
-export default function TournamentSetup() {
-  const navigate = useNavigate();
+const STEPS = ['Basic Info', 'Blind Structure', 'Payout Structure', 'Rules', 'Review'];
 
-  const [name, setName]                     = useState('');
-  const [levels, setLevels]                 = useState([{ ...DEFAULT_LEVEL }]);
-  const [startingStack, setStartingStack]   = useState(10000);
-  const [rebuyEnabled, setRebuyEnabled]     = useState(false);
-  const [rebuyCap, setRebuyCap]             = useState(3);
-  const [saving, setSaving]                 = useState(false);
-  const [error, setError]                   = useState(null);
+function WizardModal({ onClose, onCreated }) {
+  const [step, setStep] = useState(0);
 
-  // ── Level editors ──────────────────────────────────────────────────────────
+  // Step 1 — Basic Info
+  const [name, setName]             = useState('');
+  const [startingStack, setStack]   = useState(10000);
+  const [buyIn, setBuyIn]           = useState(0);
 
-  const handleLevelChange = useCallback((idx, updated) => {
-    setLevels((prev) => prev.map((l, i) => (i === idx ? updated : l)));
-  }, []);
+  // Step 2 — Blind Structure
+  const [levels, setLevels] = useState([
+    { sb: 25, bb: 50, ante: 0, durationMin: 20 },
+    { sb: 50, bb: 100, ante: 0, durationMin: 20 },
+    { sb: 100, bb: 200, ante: 25, durationMin: 20 },
+  ]);
 
-  const handleMove = useCallback((idx, dir) => {
-    setLevels((prev) => {
+  // Step 3 — Payout Structure
+  const [payouts, setPayouts] = useState([
+    { place: 1, percent: 50 },
+    { place: 2, percent: 30 },
+    { place: 3, percent: 20 },
+  ]);
+
+  // Step 4 — Rules
+  const [rebuyAllowed, setRebuy]  = useState(false);
+  const [addonAllowed, setAddon]  = useState(false);
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState(null);
+
+  useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  // Level helpers
+  function handleLevelChange(idx, updated) {
+    setLevels(prev => prev.map((l, i) => i === idx ? updated : l));
+  }
+  function handleLevelMove(idx, dir) {
+    setLevels(prev => {
       const next = [...prev];
-      const target = idx + dir;
-      if (target < 0 || target >= next.length) return prev;
-      [next[idx], next[target]] = [next[target], next[idx]];
+      const swap = dir === 'up' ? idx - 1 : idx + 1;
+      if (swap < 0 || swap >= next.length) return prev;
+      [next[idx], next[swap]] = [next[swap], next[idx]];
       return next;
     });
-  }, []);
+  }
+  function handleLevelRemove(idx) {
+    setLevels(prev => prev.filter((_, i) => i !== idx));
+  }
+  function handleAddLevel() {
+    setLevels(prev => [...prev, makeLevel(prev[prev.length - 1])]);
+  }
 
-  const handleRemove = useCallback((idx) => {
-    setLevels((prev) => prev.filter((_, i) => i !== idx));
-  }, []);
+  // Payout helpers
+  function handlePayoutChange(idx, field, val) {
+    setPayouts(prev => prev.map((p, i) => i === idx ? { ...p, [field]: val } : p));
+  }
+  function addPayout() {
+    setPayouts(prev => [...prev, { place: prev.length + 1, percent: 0 }]);
+  }
+  function removePayout(idx) {
+    setPayouts(prev => prev.filter((_, i) => i !== idx));
+  }
 
-  const handleAddLevel = useCallback(() => {
-    setLevels((prev) => {
-      const last = prev[prev.length - 1] ?? null;
-      return [...prev, makeLevel(last)];
-    });
-  }, []);
-
-  // ── Submit ─────────────────────────────────────────────────────────────────
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!name.trim()) { setError('Tournament name is required.'); return; }
-    if (levels.length === 0) { setError('Add at least one blind level.'); return; }
-    if (!startingStack || startingStack < 100) { setError('Starting stack must be at least 100.'); return; }
-
-    const payload = {
-      name: name.trim(),
-      blindSchedule: levels.map((l) => ({
-        sb:          Number(l.sb)          || 0,
-        bb:          Number(l.bb)          || 0,
-        ante:        Number(l.ante)        || 0,
-        durationMs:  (Number(l.durationMin) || 20) * 60_000,
-      })),
-      startingStack: Number(startingStack),
-      rebuy: rebuyEnabled,
-      ...(rebuyEnabled ? { rebuyCap: Number(rebuyCap) } : {}),
-    };
-
+  async function handleCreate() {
     setSaving(true);
+    setError(null);
     try {
-      const data = await apiFetch('/api/admin/tournaments', {
+      const blindStructure = levels.map((l, i) => ({
+        level: i + 1,
+        sb: l.sb,
+        bb: l.bb,
+        ante: l.ante,
+        duration_minutes: l.durationMin,
+      }));
+      const data = await apiFetch('/api/tournaments', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ name, blindStructure, startingStack, rebuyAllowed, addonAllowed }),
       });
-      // Navigate to the newly created table
-      const tableId = data?.tableId ?? data?.id;
-      if (tableId) {
-        navigate(`/table/${tableId}`);
-      } else {
-        navigate('/lobby');
-      }
+      onCreated(data.id);
+      onClose();
     } catch (err) {
-      setError(err.message || 'Failed to create tournament.');
+      setError(err.message ?? 'Create failed');
+    } finally {
       setSaving(false);
     }
-  };
+  }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const canNext = step === 0 ? !!name.trim() && startingStack > 0
+    : step === 1 ? levels.length > 0
+    : true;
+
+  const sectionLabel = text => (
+    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: '#6e7681', textTransform: 'uppercase', marginBottom: 10 }}>
+      {text}
+    </div>
+  );
+
+  const fieldInput = (label, value, onChange, type = 'text') => (
+    <div className="mb-4">
+      {sectionLabel(label)}
+      <input type={type} value={value} onChange={e => onChange(type === 'number' ? Number(e.target.value) : e.target.value)}
+        className="w-full rounded px-3 py-2 text-sm outline-none"
+        style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
+        onFocus={e => { e.currentTarget.style.borderColor = '#d4af37'; }}
+        onBlur={e => { e.currentTarget.style.borderColor = '#30363d'; }}
+      />
+    </div>
+  );
 
   return (
-    <div className="p-6" style={{ color: '#f0ece3' }}>
-      {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-lg font-bold tracking-[0.12em]" style={{ color: '#d4af37' }}>
-            NEW TOURNAMENT
-          </h1>
-          <p className="text-xs mt-0.5" style={{ color: '#6e7681' }}>
-            Configure blind schedule, stacks, and settings
-          </p>
-        </div>
-        <button
-          onClick={() => navigate(-1)}
-          className="px-3 py-1.5 rounded text-sm"
-          style={{ background: 'none', border: '1px solid #30363d', color: '#8b949e', cursor: 'pointer' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.color = '#d4af37'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#8b949e'; }}
-        >
-          ← Back
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5" style={{ maxWidth: '680px' }}>
-
-        {/* ── Tournament name ─────────────────────────────────────────────── */}
-        <div
-          className="rounded-lg px-5 py-4 flex flex-col gap-3"
-          style={{ background: '#161b22', border: '1px solid #30363d' }}
-        >
-          <h2 className="text-xs font-bold tracking-[0.14em]" style={{ color: '#8b949e' }}>
-            BASICS
-          </h2>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium" style={{ color: '#6e7681' }}>
-              Tournament Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Friday Night Freezeout"
-              required
-              className="rounded px-3 py-2 text-sm outline-none"
-              style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
-              onFocus={(e)  => { e.currentTarget.style.borderColor = '#d4af37'; }}
-              onBlur={(e)   => { e.currentTarget.style.borderColor = '#30363d'; }}
-            />
+    <div className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(3px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="flex flex-col rounded-xl"
+        style={{
+          width: '100%', maxWidth: 560, maxHeight: '88vh',
+          background: '#0d1117', border: '1px solid #30363d', boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
+          overflow: 'hidden',
+        }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ borderBottom: '1px solid #30363d' }}>
+          <div>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', color: '#d4af37', textTransform: 'uppercase' }}>
+              New Tournament
+            </span>
+            <span style={{ fontSize: 10, color: '#6e7681', marginLeft: 12 }}>
+              Step {step + 1} of {STEPS.length} — {STEPS[step]}
+            </span>
           </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium" style={{ color: '#6e7681' }}>
-                Starting Stack
-              </label>
-              <NumberInput
-                value={startingStack}
-                onChange={setStartingStack}
-                width={120}
-                min={100}
-              />
-            </div>
-          </div>
+          <button onClick={onClose}
+            style={{ width: 28, height: 28, borderRadius: 4, border: '1px solid #30363d', background: 'none', color: '#6e7681', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.color = '#d4af37'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#6e7681'; }}>
+            ×
+          </button>
         </div>
 
-        {/* ── Rebuy settings ──────────────────────────────────────────────── */}
-        <div
-          className="rounded-lg px-5 py-4 flex flex-col gap-3"
-          style={{ background: '#161b22', border: '1px solid #30363d' }}
-        >
-          <h2 className="text-xs font-bold tracking-[0.14em]" style={{ color: '#8b949e' }}>
-            REBUY
-          </h2>
-          <label
-            className="flex items-center gap-3 cursor-pointer select-none"
-            style={{ width: 'fit-content' }}
-          >
-            {/* Custom checkbox */}
-            <span
-              onClick={() => setRebuyEnabled((v) => !v)}
-              style={{
-                width: '18px',
-                height: '18px',
-                borderRadius: '4px',
-                border: `2px solid ${rebuyEnabled ? '#d4af37' : '#30363d'}`,
-                background: rebuyEnabled ? 'rgba(212,175,55,0.18)' : 'transparent',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                transition: 'border-color 0.15s, background 0.15s',
-                cursor: 'pointer',
-              }}
-            >
-              {rebuyEnabled && (
-                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4l3 3 5-6" stroke="#d4af37" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </span>
-            <span className="text-sm" style={{ color: rebuyEnabled ? '#f0ece3' : '#8b949e' }}>
-              Allow rebuys
-            </span>
-          </label>
+        {/* Step indicator */}
+        <div className="flex px-5 pt-4 pb-2 gap-1 flex-shrink-0">
+          {STEPS.map((s, i) => (
+            <div key={s} style={{
+              flex: 1, height: 3, borderRadius: 99,
+              background: i <= step ? '#d4af37' : '#21262d',
+              transition: 'background 0.2s',
+            }} />
+          ))}
+        </div>
 
-          {rebuyEnabled && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium" style={{ color: '#6e7681' }}>
-                Rebuy level cap (last level rebuys are allowed)
-              </label>
-              <NumberInput value={rebuyCap} onChange={setRebuyCap} width={80} min={1} />
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+
+          {/* Step 0: Basic Info */}
+          {step === 0 && (
+            <div>
+              {fieldInput('Tournament Name', name, setName)}
+              {fieldInput('Starting Stack', startingStack, setStack, 'number')}
+              {fieldInput('Buy-In Amount', buyIn, setBuyIn, 'number')}
             </div>
           )}
-        </div>
 
-        {/* ── Blind schedule ──────────────────────────────────────────────── */}
-        <div
-          className="rounded-lg px-5 py-4 flex flex-col gap-3"
-          style={{ background: '#161b22', border: '1px solid #30363d' }}
-        >
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold tracking-[0.14em]" style={{ color: '#8b949e' }}>
-              BLIND SCHEDULE
-            </h2>
-            <span className="text-xs" style={{ color: '#6e7681' }}>
-              {levels.length} level{levels.length !== 1 ? 's' : ''}
-            </span>
-          </div>
+          {/* Step 1: Blind Structure */}
+          {step === 1 && (
+            <div>
+              {sectionLabel('Blind Levels')}
+              <div className="flex flex-col gap-2 mb-3">
+                {levels.map((lvl, i) => (
+                  <LevelRow key={i} index={i} level={lvl}
+                    isFirst={i === 0} isLast={i === levels.length - 1}
+                    onChange={handleLevelChange}
+                    onMove={handleLevelMove}
+                    onRemove={handleLevelRemove}
+                  />
+                ))}
+              </div>
+              <button onClick={handleAddLevel}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                style={{ background: 'none', border: '1px dashed rgba(212,175,55,0.35)', color: '#d4af37', cursor: 'pointer', width: '100%', justifyContent: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.65)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.35)'; }}>
+                + Add Level
+              </button>
+            </div>
+          )}
 
-          {/* Column headers */}
-          {levels.length > 0 && (
-            <div className="flex items-center gap-2 px-3">
-              <span style={{ minWidth: '48px' }} />
-              {['SB', 'BB', 'Ante', 'Min'].map((h, i) => (
-                <span
-                  key={h}
-                  className="text-xs font-semibold tracking-wider text-center"
-                  style={{ color: '#6e7681', width: i === 0 ? '72px' : i === 1 ? '72px' : i === 2 ? '64px' : '56px', flexShrink: 0 }}
-                >
-                  {h}
-                </span>
+          {/* Step 2: Payout Structure */}
+          {step === 2 && (
+            <div>
+              {sectionLabel('Payout Places')}
+              <div className="flex flex-col gap-2 mb-3">
+                {payouts.map((p, i) => (
+                  <div key={i} className="flex items-center gap-3"
+                    style={{ background: '#161b22', border: '1px solid #21262d', borderRadius: 6, padding: '8px 12px' }}>
+                    <span style={{ fontSize: 11, color: '#d4af37', fontWeight: 700, minWidth: 30 }}>#{p.place}</span>
+                    <NumberInput value={p.percent} onChange={v => handlePayoutChange(i, 'percent', v)} width={72} min={0} placeholder="%" />
+                    <span style={{ fontSize: 11, color: '#6e7681' }}>%</span>
+                    <button onClick={() => removePayout(i)}
+                      style={{ marginLeft: 'auto', width: 24, height: 24, background: 'none', border: '1px solid rgba(248,81,73,0.25)', borderRadius: 3, color: '#f85149', cursor: 'pointer', fontSize: 14 }}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={addPayout}
+                style={{ background: 'none', border: '1px dashed rgba(212,175,55,0.35)', borderRadius: 6, color: '#d4af37', cursor: 'pointer', width: '100%', padding: '8px', fontSize: 12 }}>
+                + Add Place
+              </button>
+              <div style={{ fontSize: 10, color: '#6e7681', marginTop: 8 }}>
+                Total: {payouts.reduce((s, p) => s + (Number(p.percent) || 0), 0)}%
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Rules */}
+          {step === 3 && (
+            <div>
+              {sectionLabel('Optional Rules')}
+              {[
+                { label: 'Allow Rebuys', value: rebuyAllowed, onChange: setRebuy },
+                { label: 'Allow Add-ons', value: addonAllowed, onChange: setAddon },
+              ].map(({ label, value, onChange }) => (
+                <label key={label} className="flex items-center gap-3 mb-4 cursor-pointer" style={{ userSelect: 'none' }}>
+                  <div onClick={() => onChange(!value)}
+                    style={{
+                      width: 36, height: 20, borderRadius: 99, cursor: 'pointer',
+                      background: value ? '#d4af37' : '#21262d',
+                      border: value ? '1px solid #d4af37' : '1px solid #30363d',
+                      position: 'relative', transition: 'all 0.15s', flexShrink: 0,
+                    }}>
+                    <div style={{
+                      width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                      position: 'absolute', top: 2, left: value ? 18 : 2,
+                      transition: 'left 0.15s',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: 13, color: '#c9d1d9' }}>{label}</span>
+                </label>
               ))}
             </div>
           )}
 
-          {levels.length === 0 && (
-            <div
-              className="rounded-lg flex items-center justify-center py-8 text-sm"
-              style={{ background: '#0d1117', border: '1px dashed #30363d', color: '#6e7681' }}
-            >
-              No levels yet. Add one below.
+          {/* Step 4: Review */}
+          {step === 4 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 8, padding: '12px 16px' }}>
+                {sectionLabel('Summary')}
+                {[
+                  ['Name', name || '—'],
+                  ['Starting Stack', startingStack.toLocaleString()],
+                  ['Buy-In', buyIn > 0 ? `$${buyIn}` : 'Free'],
+                  ['Blind Levels', levels.length],
+                  ['Rebuys', rebuyAllowed ? 'Yes' : 'No'],
+                  ['Add-ons', addonAllowed ? 'Yes' : 'No'],
+                ].map(([label, val]) => (
+                  <div key={label} className="flex justify-between py-1" style={{ fontSize: 12, borderBottom: '1px solid #21262d' }}>
+                    <span style={{ color: '#6e7681' }}>{label}</span>
+                    <span style={{ color: '#f0ece3', fontWeight: 600 }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+              {error && (
+                <div style={{ padding: '8px 12px', borderRadius: 4, background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.25)', fontSize: 11, color: '#f85149' }}>
+                  {error}
+                </div>
+              )}
             </div>
           )}
-
-          <div className="flex flex-col gap-1.5">
-            {levels.map((level, idx) => (
-              <LevelRow
-                key={idx}
-                index={idx}
-                level={level}
-                isFirst={idx === 0}
-                isLast={idx === levels.length - 1}
-                onChange={handleLevelChange}
-                onMove={handleMove}
-                onRemove={handleRemove}
-              />
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={handleAddLevel}
-            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
-            style={{
-              background: 'none',
-              border: '1px dashed rgba(212,175,55,0.3)',
-              color: '#d4af37',
-              cursor: 'pointer',
-              width: '100%',
-              justifyContent: 'center',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(212,175,55,0.65)';
-              e.currentTarget.style.background = 'rgba(212,175,55,0.04)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(212,175,55,0.3)';
-              e.currentTarget.style.background = 'none';
-            }}
-          >
-            + Add Level
-          </button>
         </div>
 
-        {/* ── Error ───────────────────────────────────────────────────────── */}
-        {error && (
-          <div
-            className="rounded px-4 py-3 text-sm"
-            style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}
-          >
-            {error}
-          </div>
-        )}
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0" style={{ borderTop: '1px solid #30363d' }}>
+          <button onClick={step === 0 ? onClose : () => setStep(s => s - 1)}
+            style={{ padding: '7px 16px', borderRadius: 4, background: 'none', border: '1px solid #30363d', color: '#8b949e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            {step === 0 ? 'Cancel' : '← Back'}
+          </button>
+          {step < STEPS.length - 1 ? (
+            <button onClick={() => setStep(s => s + 1)} disabled={!canNext}
+              style={{
+                padding: '7px 18px', borderRadius: 4,
+                background: canNext ? '#d4af37' : 'rgba(212,175,55,0.2)', color: canNext ? '#000' : '#6e7681',
+                border: 'none', fontSize: 12, fontWeight: 700, cursor: canNext ? 'pointer' : 'not-allowed',
+                letterSpacing: '0.06em',
+              }}>
+              Next →
+            </button>
+          ) : (
+            <button onClick={handleCreate} disabled={saving}
+              style={{
+                padding: '7px 18px', borderRadius: 4,
+                background: saving ? 'rgba(212,175,55,0.3)' : '#d4af37', color: saving ? '#888' : '#000',
+                border: 'none', fontSize: 12, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
+                letterSpacing: '0.06em',
+              }}>
+              {saving ? 'Creating…' : 'Create Tournament'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* ── Submit ──────────────────────────────────────────────────────── */}
-        <button
-          type="submit"
-          disabled={saving}
-          className="px-6 py-3 rounded-lg font-bold tracking-widest text-sm transition-colors"
-          style={{
-            background: saving ? 'rgba(212,175,55,0.35)' : '#d4af37',
-            border: '1px solid transparent',
-            color: saving ? '#888' : '#0d1117',
-            cursor: saving ? 'not-allowed' : 'pointer',
-            opacity: saving ? 0.75 : 1,
-          }}
-          onMouseEnter={(e) => { if (!saving) e.currentTarget.style.background = '#c9a227'; }}
-          onMouseLeave={(e) => { if (!saving) e.currentTarget.style.background = '#d4af37'; }}
-        >
-          {saving ? 'CREATING…' : 'CREATE TOURNAMENT'}
+// ── Main Component ─────────────────────────────────────────────────────────────
+
+export default function TournamentSetup() {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab]   = useState('Upcoming');
+  const [tournaments, setTournaments] = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [showWizard, setShowWizard] = useState(false);
+
+  const fetchTournaments = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiFetch('/api/tournaments');
+      setTournaments(Array.isArray(data?.tournaments) ? data.tournaments : []);
+    } catch (err) {
+      setError(err.message ?? 'Failed to load tournaments');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchTournaments(); }, [fetchTournaments]);
+
+  const filtered = tournaments.filter(t => STATUS_MAP[activeTab]?.includes(t.status));
+
+  function handleCreated(id) {
+    fetchTournaments();
+  }
+
+  return (
+    <div className="p-6" style={{ color: '#f0ece3' }}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-lg font-bold tracking-[0.12em]" style={{ color: '#d4af37' }}>TOURNAMENTS</h1>
+          <p className="text-xs mt-0.5" style={{ color: '#6e7681' }}>
+            {filtered.length} tournament{filtered.length !== 1 ? 's' : ''} in {activeTab.toLowerCase()}
+          </p>
+        </div>
+        <button onClick={() => setShowWizard(true)}
+          className="px-4 py-2 rounded text-sm font-bold tracking-wider"
+          style={{ background: '#d4af37', border: '1px solid transparent', color: '#0d1117', cursor: 'pointer' }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#c9a227'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#d4af37'; }}>
+          + New Tournament
         </button>
-      </form>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex mb-5" style={{ borderBottom: '1px solid #21262d' }}>
+        {FILTER_TABS.map(tab => {
+          const count = tournaments.filter(t => STATUS_MAP[tab]?.includes(t.status)).length;
+          const active = activeTab === tab;
+          return (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              style={{
+                padding: '8px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+                textTransform: 'uppercase', cursor: 'pointer', background: 'none', border: 'none',
+                borderBottom: active ? '2px solid #d4af37' : '2px solid transparent',
+                color: active ? '#d4af37' : '#6e7681', transition: 'all 0.1s', marginBottom: -1,
+              }}>
+              {tab}
+              {count > 0 && (
+                <span style={{
+                  marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 99,
+                  background: active ? 'rgba(212,175,55,0.2)' : 'rgba(110,118,129,0.15)',
+                  color: active ? '#d4af37' : '#6e7681',
+                }}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {error && (
+        <div className="rounded px-4 py-3 mb-4 text-sm"
+          style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ color: '#6e7681', fontSize: 13, padding: '32px 0', textAlign: 'center' }}>Loading tournaments…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ color: '#444', fontSize: 13, padding: '48px 0', textAlign: 'center' }}>
+          No {activeTab.toLowerCase()} tournaments.{' '}
+          {activeTab === 'Upcoming' && (
+            <button onClick={() => setShowWizard(true)}
+              style={{ background: 'none', border: 'none', color: '#d4af37', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}>
+              Create one.
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+          {filtered.map(t => (
+            <TournamentCard key={t.id} t={t} onOpen={() => navigate(`/tournament/${t.id}/lobby`)} />
+          ))}
+        </div>
+      )}
+
+      {showWizard && (
+        <WizardModal onClose={() => setShowWizard(false)} onCreated={handleCreated} />
+      )}
     </div>
   );
 }

@@ -297,6 +297,7 @@ export default function ScenarioBuilder({
   socket = null,
   playlists = [],
   initialScenario = null,
+  inline = false,
 }) {
   // ── Local state ──────────────────────────────────────────────────────────────
 
@@ -394,7 +395,7 @@ export default function ScenarioBuilder({
         e.preventDefault();
         if (canSave && validationErrors.length === 0) handleSave();
       }
-      if (e.key === 'Escape' && !pickerTarget) {
+      if (e.key === 'Escape' && !pickerTarget && !inline) {
         onClose();
       }
     }
@@ -533,22 +534,17 @@ export default function ScenarioBuilder({
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  return (
-    <div
-      className="fixed inset-0 z-[300] flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(3px)' }}
-      onClick={e => { if (e.target === e.currentTarget && !pickerTarget) onClose(); }}
-    >
+  const innerContent = (
       <div
         className="flex flex-col"
         style={{
           width: '100%',
-          maxWidth: '42rem',
-          height: '90vh',
+          maxWidth: inline ? undefined : '42rem',
+          height: inline ? '100%' : '90vh',
           background: '#0d1117',
-          border: '1px solid #30363d',
-          borderRadius: 10,
-          boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
+          border: inline ? 'none' : '1px solid #30363d',
+          borderRadius: inline ? 0 : 10,
+          boxShadow: inline ? 'none' : '0 24px 80px rgba(0,0,0,0.7)',
           overflow: 'hidden',
           position: 'relative',
         }}
@@ -900,6 +896,18 @@ export default function ScenarioBuilder({
           />
         </div>
       )}
+    </div>
+  );
+
+  if (inline) return innerContent;
+
+  return (
+    <div
+      className="fixed inset-0 z-[300] flex items-center justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(3px)' }}
+      onClick={e => { if (e.target === e.currentTarget && !pickerTarget) onClose(); }}
+    >
+      {innerContent}
     </div>
   );
 }
