@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -310,12 +311,20 @@ function PlayerTagManager({ playerId, tags: initialTags }) {
 
 // ─── InfoTab ─────────────────────────────────────────────────────────────────
 
-function InfoTab({ player, crm }) {
-  const [reloadAmount, setReloadAmount] = useState('');
-  const [reloading, setReloading]       = useState(false);
-  const [reloadMsg, setReloadMsg]       = useState('');
+function InfoTab({ player, crm, onPlayerUpdate }) {
+  const [reloadAmount, setReloadAmount]   = useState('');
+  const [reloading, setReloading]         = useState(false);
+  const [reloadMsg, setReloadMsg]         = useState('');
+  const [suspending, setSuspending]       = useState(false);
+  const [resetOpen, setResetOpen]         = useState(false);
+  const [newPwd, setNewPwd]               = useState('');
+  const [resetMsg, setResetMsg]           = useState('');
+  const [resetting, setResetting]         = useState(false);
+  const [showAllTx, setShowAllTx]         = useState(false);
+
   const transactions = crm?.transactions ?? [];
   const chipBank     = crm?.chip_bank ?? crm?.chipBank ?? null;
+  const displayedTx  = showAllTx ? transactions : transactions.slice(0, 5);
 
   const handleReload = async () => {
     const amount = Number(reloadAmount);
@@ -336,19 +345,111 @@ function InfoTab({ player, crm }) {
     }
   };
 
+  const handleSuspend = async () => {
+    const newStatus = player.status === 'suspended' ? 'active' : 'suspended';
+    setSuspending(true);
+    try {
+      await apiFetch(`/api/admin/users/${player.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      onPlayerUpdate?.({ ...player, status: newStatus });
+    } catch { /* ignore — stale UI */ }
+    finally { setSuspending(false); }
+  };
+
+  const handleResetPassword = async () => {
+    if (!newPwd.trim()) return;
+    setResetting(true);
+    setResetMsg('');
+    try {
+      await apiFetch(`/api/admin/users/${player.id}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ password: newPwd.trim() }),
+      });
+      setResetMsg('Password updated.');
+      setNewPwd('');
+    } catch (err) {
+      setResetMsg(err.message || 'Failed to reset password');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-5">
       {/* Profile section */}
       <div className="rounded-lg p-4 flex flex-col gap-3" style={{ background: '#161b22', border: '1px solid #30363d' }}>
         <h3 className="text-xs font-bold tracking-widest uppercase" style={{ color: '#6e7681' }}>Profile</h3>
         <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <InfoRow label="Name" value={player.display_name} />
-          <InfoRow label="Email" value={player.email ?? '—'} />
-          <InfoRow label="Status" value={player.status ?? 'active'} />
-          <InfoRow label="Joined" value={formatDate(player.created_at)} />
-          <InfoRow label="Role" value={player.role} />
+          <InfoRow label="Name"      value={player.display_name} />
+          <InfoRow label="Email"     value={player.email ?? '—'} />
+          <span className="text-xs" style={{ color: '#6e7681' }}>Status</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs" style={{ color: player.status === 'suspended' ? '#f85149' : '#f0ece3' }}>
+              {player.status ?? 'active'}
+            </span>
+            <button
+              onClick={handleSuspend}
+              disabled={suspending}
+              className="text-xs px-2 py-0.5 rounded"
+              style={{
+                background: player.status === 'suspended' ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)',
+                border: `1px solid ${player.status === 'suspended' ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)'}`,
+                color: player.status === 'suspended' ? '#3fb950' : '#f85149',
+                cursor: suspending ? 'not-allowed' : 'pointer',
+                opacity: suspending ? 0.6 : 1,
+              }}
+            >
+              {suspending ? '…' : player.status === 'suspended' ? 'Unsuspend' : 'Suspend'}
+            </button>
+            <button
+              onClick={() => { setResetOpen((v) => !v); setResetMsg(''); setNewPwd(''); }}
+              className="text-xs px-2 py-0.5 rounded"
+              style={{
+                background: 'rgba(88,166,255,0.08)',
+                border: '1px solid rgba(88,166,255,0.2)',
+                color: '#58a6ff',
+                cursor: 'pointer',
+              }}
+            >
+              Reset Password
+            </button>
+          </div>
+          <InfoRow label="Joined"    value={formatDate(player.created_at)} />
+          <InfoRow label="Role"      value={player.role} />
           <InfoRow label="Last Seen" value={formatDate(player.last_seen)} />
+          <InfoRow label="Groups"    value={crm?.groups?.join(', ') || '—'} />
         </div>
+
+        {/* Reset password inline panel */}
+        {resetOpen && (
+          <div className="flex flex-col gap-2 p-3 rounded mt-1" style={{ background: '#0d1117', border: '1px solid #30363d' }}>
+            <span className="text-xs font-semibold tracking-widest" style={{ color: '#6e7681' }}>NEW PASSWORD</span>
+            <div className="flex gap-2 items-center">
+              <input
+                type="password"
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleResetPassword(); }}
+                placeholder="Enter new password"
+                className="flex-1 rounded px-3 py-1.5 text-xs outline-none"
+                style={{ background: '#161b22', border: '1px solid #30363d', color: '#f0ece3' }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                onBlur={(e)  => { e.currentTarget.style.borderColor = '#30363d'; }}
+              />
+              <GoldBtn onClick={handleResetPassword} disabled={resetting || !newPwd.trim()}>
+                {resetting ? '…' : 'Set'}
+              </GoldBtn>
+            </div>
+            {resetMsg && (
+              <span className="text-xs" style={{ color: resetMsg.includes('updated') ? '#3fb950' : '#f85149' }}>
+                {resetMsg}
+              </span>
+            )}
+          </div>
+        )}
+
         <PlayerTagManager playerId={player.id} tags={crm?.tags ?? []} />
       </div>
 
@@ -377,15 +478,27 @@ function InfoTab({ player, crm }) {
         {transactions.length > 0 && (
           <div className="flex flex-col gap-1 mt-1">
             <span className="text-xs uppercase tracking-widest mb-1" style={{ color: '#6e7681' }}>Recent transactions</span>
-            {transactions.slice(0, 5).map((tx, i) => (
-              <div key={i} className="flex items-center justify-between text-xs py-1"
+            {displayedTx.map((tx, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 text-xs py-1"
                 style={{ borderBottom: '1px solid #21262d', color: '#8b949e' }}>
-                <span>{tx.description ?? tx.reason ?? '—'}</span>
-                <span style={{ color: tx.amount >= 0 ? '#3fb950' : '#f85149' }}>
+                <span className="flex-1 min-w-0 truncate">{tx.description ?? tx.reason ?? '—'}</span>
+                <span className="flex-shrink-0 font-mono" style={{ color: '#6e7681' }}>
+                  {formatDate(tx.created_at ?? tx.date)}
+                </span>
+                <span className="flex-shrink-0 font-mono" style={{ color: tx.amount >= 0 ? '#3fb950' : '#f85149' }}>
                   {tx.amount >= 0 ? '+' : ''}{Number(tx.amount).toLocaleString()}
                 </span>
               </div>
             ))}
+            {transactions.length > 5 && (
+              <button
+                onClick={() => setShowAllTx((v) => !v)}
+                style={{ background: 'none', border: 'none', color: '#58a6ff', cursor: 'pointer', padding: 0 }}
+                className="text-xs mt-1 text-left"
+              >
+                {showAllTx ? 'Show less' : `See all ${transactions.length} transactions →`}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -404,29 +517,190 @@ function InfoRow({ label, value }) {
 
 // ─── StatsTab ─────────────────────────────────────────────────────────────────
 
-function StatsTab({ crm }) {
-  const stats    = crm?.stats    ?? {};
-  const trend    = crm?.trend    ?? [];
-  const mistakes = crm?.mistakes ?? [];
+const STAT_TREND_OPTIONS = [
+  { value: 'vpip_pct',      label: 'VPIP' },
+  { value: 'pfr_pct',       label: 'PFR' },
+  { value: 'three_bet_pct', label: '3bet%' },
+  { value: 'wtsd_pct',      label: 'WTSD' },
+  { value: 'wsd_pct',       label: 'WSD' },
+];
+
+const TRACKED_MISTAKES = ['OPEN_LIMP', 'COLD_CALL_3BET', 'FOLD_TO_PROBE', 'MIN_RAISE'];
+
+function TrendArrow({ curr, prev }) {
+  if (curr == null || prev == null) return <span style={{ color: '#6e7681' }}>—</span>;
+  const delta = curr - prev;
+  if (Math.abs(delta) < 0.5) return <span style={{ color: '#6e7681' }}>→</span>;
+  return delta > 0
+    ? <span style={{ color: '#3fb950', fontWeight: 700 }}>↑</span>
+    : <span style={{ color: '#f85149', fontWeight: 700 }}>↓</span>;
+}
+
+function StatPill({ label, value, prev, suffix = '%' }) {
+  const display = value != null ? `${Number(value).toFixed(1)}${suffix}` : '—';
+  return (
+    <div
+      className="flex flex-col items-center gap-1 rounded-lg px-4 py-3 flex-1 min-w-0"
+      style={{ background: '#161b22', border: '1px solid #30363d' }}
+    >
+      <span className="text-xs font-semibold tracking-widest" style={{ color: '#6e7681' }}>{label}</span>
+      <span className="text-lg font-bold" style={{ color: '#f0ece3' }}>{display}</span>
+      <TrendArrow curr={value} prev={prev} />
+    </div>
+  );
+}
+
+function StatsTab({ player, crm }) {
+  const [snapshots, setSnapshots]     = useState([]);
+  const [selectedStat, setSelectedStat] = useState('vpip_pct');
+
+  useEffect(() => {
+    if (!player?.id) return;
+    apiFetch(`/api/admin/players/${player.id}/snapshots?limit=12`)
+      .then((d) => setSnapshots(d?.snapshots ?? []))
+      .catch(() => {});
+  }, [player?.id]);
+
+  const latest = snapshots[0] ?? {};
+  const prev   = snapshots[1] ?? {};
+
+  // Build trend chart data from snapshots (oldest → newest)
+  const trendData = [...snapshots].reverse().map((s) => ({
+    label: s.period_start ? s.period_start.slice(5) : '?',  // MM-DD
+    value: s[selectedStat] ?? null,
+  })).filter((d) => d.value != null);
+
+  // Mistakes per 100 hands from latest snapshot
+  const rawMistakes = latest.most_common_mistakes ?? {};
+  const handsPlayed = latest.hands_played ?? 0;
+  const mistakeData = TRACKED_MISTAKES.map((tag) => {
+    const count = rawMistakes[tag] ?? 0;
+    return {
+      tag,
+      per100: handsPlayed > 0 ? Math.round((count / handsPlayed) * 100 * 10) / 10 : 0,
+    };
+  }).sort((a, b) => b.per100 - a.per100);
+
+  // School average — stubbed until school-wide aggregate endpoint exists
+  const schoolAvg = { vpip: 28, pfr: 21, three_bet: 7, wtsd: 32, wsd: 52 };
+  const schoolRows = [
+    { label: 'VPIP',  player: latest.vpip_pct,      school: schoolAvg.vpip },
+    { label: 'PFR',   player: latest.pfr_pct,       school: schoolAvg.pfr },
+    { label: '3bet%', player: latest.three_bet_pct, school: schoolAvg.three_bet },
+    { label: 'WTSD',  player: latest.wtsd_pct,      school: schoolAvg.wtsd },
+    { label: 'WSD',   player: latest.wsd_pct,       school: schoolAvg.wsd },
+  ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex gap-3 flex-wrap">
-        <StatCard label="HANDS PLAYED" value={stats.hands_played ?? '—'} />
-        <StatCard
-          label="NET CHIPS"
-          value={
-            <span style={{ color: stats.net_chips >= 0 ? '#3fb950' : '#f85149' }}>
-              {formatNetChips(stats.net_chips)}
-            </span>
-          }
-        />
-        <StatCard label="VPIP%" value={stats.vpip != null ? `${stats.vpip}%` : '—'} />
-        <StatCard label="PFR%" value={stats.pfr != null ? `${stats.pfr}%` : '—'} />
+    <div className="flex flex-col gap-5">
+      {/* Performance row — 5 stat pills */}
+      <div className="flex gap-3">
+        <StatPill label="VPIP"  value={latest.vpip_pct}      prev={prev.vpip_pct} />
+        <StatPill label="PFR"   value={latest.pfr_pct}       prev={prev.pfr_pct} />
+        <StatPill label="3bet%" value={latest.three_bet_pct} prev={prev.three_bet_pct} />
+        <StatPill label="WTSD"  value={latest.wtsd_pct}      prev={prev.wtsd_pct} />
+        <StatPill label="WSD"   value={latest.wsd_pct}       prev={prev.wsd_pct} />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <PlayerStatsChart trend={trend} />
-        <PlayerMistakeBreakdown mistakes={mistakes} />
+
+      {/* Trend chart */}
+      <div className="rounded-lg p-4" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-semibold tracking-widest" style={{ color: '#6e7681' }}>TREND — PER SESSION</span>
+          <select
+            value={selectedStat}
+            onChange={(e) => setSelectedStat(e.target.value)}
+            className="rounded px-2 py-1 text-xs outline-none"
+            style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
+          >
+            {STAT_TREND_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value} style={{ background: '#161b22' }}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        {trendData.length === 0 ? (
+          <div className="flex items-center justify-center" style={{ height: 140, color: '#6e7681', fontSize: 13 }}>
+            No snapshot data yet
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={140}>
+            <LineChart data={trendData} margin={{ top: 4, right: 8, left: -24, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#21262d" />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#6e7681' }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#6e7681' }} tickLine={false} axisLine={false} unit="%" />
+              <Tooltip
+                contentStyle={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 6, fontSize: 12 }}
+                labelStyle={{ color: '#8b949e' }}
+                formatter={(val) => [`${val}%`]}
+              />
+              <Line type="monotone" dataKey="value" stroke="#d4af37" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Mistakes per 100 hands */}
+      <div className="rounded-lg p-4" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+        <span className="text-xs font-semibold tracking-widest" style={{ color: '#6e7681' }}>MISTAKES PER 100 HANDS</span>
+        <div className="flex flex-col gap-2 mt-3">
+          {mistakeData.map((m) => (
+            <div key={m.tag} className="flex items-center justify-between">
+              <span className="text-xs font-mono" style={{ color: '#8b949e' }}>{m.tag.replace(/_/g, ' ')}</span>
+              <div className="flex items-center gap-2">
+                <div className="rounded" style={{ width: 80, height: 6, background: '#21262d', overflow: 'hidden' }}>
+                  <div
+                    className="h-full rounded"
+                    style={{
+                      width: `${Math.min(m.per100 * 10, 100)}%`,
+                      background: m.per100 > 5 ? '#f85149' : m.per100 > 2 ? '#d4af37' : '#3fb950',
+                    }}
+                  />
+                </div>
+                <span className="text-xs font-mono w-8 text-right" style={{ color: '#f0ece3' }}>
+                  {m.per100.toFixed(1)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Vs School Average */}
+      <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #30363d' }}>
+        <div className="px-4 py-2.5" style={{ background: '#161b22', borderBottom: '1px solid #30363d' }}>
+          <span className="text-xs font-semibold tracking-widest" style={{ color: '#6e7681' }}>VS SCHOOL AVERAGE</span>
+        </div>
+        <table className="w-full text-xs">
+          <thead>
+            <tr style={{ background: '#161b22', color: '#6e7681' }}>
+              <th className="px-4 py-2 text-left font-semibold tracking-wider">STAT</th>
+              <th className="px-4 py-2 text-right font-semibold tracking-wider">PLAYER</th>
+              <th className="px-4 py-2 text-right font-semibold tracking-wider">SCHOOL AVG</th>
+              <th className="px-4 py-2 text-right font-semibold tracking-wider">DIFF</th>
+            </tr>
+          </thead>
+          <tbody>
+            {schoolRows.map((row, i) => {
+              const pVal = row.player != null ? Number(row.player).toFixed(1) : null;
+              const diff = pVal != null ? (Number(pVal) - row.school).toFixed(1) : null;
+              const diffColor = diff == null ? '#6e7681' : Number(diff) > 0 ? '#3fb950' : Number(diff) < 0 ? '#f85149' : '#6e7681';
+              return (
+                <tr
+                  key={row.label}
+                  style={{ borderTop: '1px solid #21262d', background: i % 2 === 0 ? '#0d1117' : 'transparent' }}
+                >
+                  <td className="px-4 py-2 font-semibold" style={{ color: '#8b949e' }}>{row.label}</td>
+                  <td className="px-4 py-2 text-right font-mono" style={{ color: '#f0ece3' }}>
+                    {pVal != null ? `${pVal}%` : '—'}
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono" style={{ color: '#6e7681' }}>{row.school}%</td>
+                  <td className="px-4 py-2 text-right font-mono font-bold" style={{ color: diffColor }}>
+                    {diff != null ? `${Number(diff) > 0 ? '+' : ''}${diff}%` : '—'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -435,16 +709,173 @@ function StatsTab({ crm }) {
 // ─── StakingTab ───────────────────────────────────────────────────────────────
 
 function StakingTab({ player }) {
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+
+  useEffect(() => {
+    if (!player?.id) return;
+    setLoading(true);
+    apiFetch(`/api/coach/students/${player.id}/staking`)
+      .then(setData)
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [player?.id]);
+
+  const handleSaveNote = async () => {
+    if (!noteText.trim()) return;
+    setSavingNote(true);
+    try {
+      await apiFetch(`/api/coach/students/${player.id}/staking/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ text: noteText.trim() }),
+      });
+      setNoteText('');
+      // reload
+      const fresh = await apiFetch(`/api/coach/students/${player.id}/staking`);
+      setData(fresh);
+    } catch (_) {}
+    finally { setSavingNote(false); }
+  };
+
+  const contract  = data?.contract  ?? null;
+  const monthly   = data?.monthly   ?? [];
+  const notes     = data?.notes     ?? [];
+  const cumulativePnl = monthly.reduce((acc, m) => acc + (m.net ?? 0), 0);
+
+  const pnlColor = (n) => n >= 0 ? '#3fb950' : '#f85149';
+  const pnlSign  = (n) => (n >= 0 ? '+' : '') + Number(n).toLocaleString();
+
+  if (loading) {
+    return <div className="py-10 text-center text-sm" style={{ color: '#6e7681' }}>Loading staking data…</div>;
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="rounded-lg p-5 flex flex-col gap-2" style={{ background: '#161b22', border: '1px solid #30363d' }}>
-        <h3 className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: '#6e7681' }}>Staking Ledger</h3>
-        <p className="text-sm" style={{ color: '#6e7681' }}>
-          Staking management for {player.display_name} — coming soon.
-        </p>
-        <p className="text-xs mt-1" style={{ color: '#484f58' }}>
-          Tracked in sub-issue POK-81.
-        </p>
+    <div className="flex flex-col gap-5">
+
+      {/* Contract summary */}
+      <div className="rounded-lg px-4 py-4" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold tracking-widest uppercase" style={{ color: '#6e7681' }}>Staking Contract</h3>
+          {contract?.status && (
+            <span
+              className="text-xs px-2 py-0.5 rounded font-semibold"
+              style={{
+                background: contract.status === 'active' ? 'rgba(63,185,80,0.1)' : 'rgba(110,118,129,0.1)',
+                border: `1px solid ${contract.status === 'active' ? 'rgba(63,185,80,0.3)' : 'rgba(110,118,129,0.3)'}`,
+                color: contract.status === 'active' ? '#3fb950' : '#6e7681',
+              }}
+            >
+              {contract.status.charAt(0).toUpperCase() + contract.status.slice(1)}
+            </span>
+          )}
+        </div>
+        {contract ? (
+          <div className="flex flex-col gap-1.5 text-sm">
+            <div className="flex gap-2">
+              <span style={{ color: '#6e7681', minWidth: 72 }}>Started</span>
+              <span style={{ color: '#e6edf3' }}>{formatDate(contract.startedAt ?? contract.started_at)}</span>
+            </div>
+            <div className="flex gap-2">
+              <span style={{ color: '#6e7681', minWidth: 72 }}>Terms</span>
+              <span style={{ color: '#e6edf3' }}>{contract.terms ?? '—'}</span>
+            </div>
+            {contract.review_date && (
+              <div className="flex gap-2">
+                <span style={{ color: '#6e7681', minWidth: 72 }}>Review</span>
+                <span style={{ color: '#d4af37' }}>{formatDate(contract.review_date)}</span>
+              </div>
+            )}
+            {contract.notes && (
+              <div className="flex gap-2">
+                <span style={{ color: '#6e7681', minWidth: 72 }}>Notes</span>
+                <span style={{ color: '#8b949e', fontStyle: 'italic' }}>"{contract.notes}"</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm" style={{ color: '#6e7681' }}>No staking contract on file.</p>
+        )}
+      </div>
+
+      {/* Monthly summary */}
+      {monthly.length > 0 && (
+        <div>
+          <h3 className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: '#6e7681' }}>Monthly Summary</h3>
+          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #30363d' }}>
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ background: '#161b22', color: '#6e7681' }}>
+                  <th className="px-3 py-2 text-left font-semibold tracking-widest uppercase">Month</th>
+                  <th className="px-3 py-2 text-right font-semibold tracking-widest uppercase">Buy-ins</th>
+                  <th className="px-3 py-2 text-right font-semibold tracking-widest uppercase">Cashouts</th>
+                  <th className="px-3 py-2 text-right font-semibold tracking-widest uppercase">Net</th>
+                  <th className="px-3 py-2 text-center font-semibold tracking-widest uppercase">P&L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthly.map((m, i) => (
+                  <tr key={m.month ?? i} style={{ borderTop: '1px solid #21262d', background: i % 2 === 0 ? '#0d1117' : 'transparent' }}>
+                    <td className="px-3 py-2" style={{ color: '#8b949e' }}>{m.month ?? formatDate(m.date)}</td>
+                    <td className="px-3 py-2 text-right font-mono" style={{ color: '#e6edf3' }}>{Number(m.buyins ?? m.buy_ins ?? 0).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right font-mono" style={{ color: '#e6edf3' }}>{Number(m.cashouts ?? 0).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right font-mono font-bold" style={{ color: pnlColor(m.net ?? 0) }}>
+                      {pnlSign(m.net ?? 0)}
+                    </td>
+                    <td className="px-3 py-2 text-center" style={{ fontSize: 14 }}>
+                      {(m.net ?? 0) >= 0 ? '✅' : '❌'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between mt-3 px-1">
+            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#6e7681' }}>Cumulative P&L</span>
+            <span className="text-sm font-bold font-mono" style={{ color: pnlColor(cumulativePnl) }}>
+              {pnlSign(cumulativePnl)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Notes */}
+      <div>
+        <h3 className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: '#6e7681' }}>Free-form Notes</h3>
+        {notes.length > 0 && (
+          <div
+            className="rounded-lg px-3 py-2.5 mb-3 flex flex-col gap-1.5"
+            style={{ background: '#0d1117', border: '1px solid #21262d' }}
+          >
+            {notes.map((n, i) => (
+              <p key={i} className="text-xs leading-relaxed" style={{ color: '#8b949e' }}>
+                <span style={{ color: '#6e7681' }}>{formatDate(n.date ?? n.created_at)}: </span>
+                {n.text ?? n.body}
+              </p>
+            ))}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <textarea
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            placeholder="Write a staking note…"
+            rows={2}
+            className="flex-1 text-xs rounded px-2 py-1.5 resize-none outline-none"
+            style={{ background: '#0d1117', border: '1px solid #30363d', color: '#e6edf3' }}
+            onFocus={(e) => { e.target.style.borderColor = 'rgba(212,175,55,0.5)'; }}
+            onBlur={(e) => { e.target.style.borderColor = '#30363d'; }}
+          />
+          <button
+            onClick={handleSaveNote}
+            disabled={savingNote || !noteText.trim()}
+            className="text-xs px-3 py-1.5 rounded font-semibold self-end disabled:opacity-40"
+            style={{ background: 'rgba(212,175,55,0.12)', border: '1px solid rgba(212,175,55,0.3)', color: '#d4af37' }}
+          >
+            {savingNote ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -453,20 +884,141 @@ function StakingTab({ player }) {
 // ─── ScenariosTab ─────────────────────────────────────────────────────────────
 
 function ScenariosTab({ player }) {
+  const navigate = useNavigate();
+  const [playlists, setPlaylists]   = useState([]);
+  const [history, setHistory]       = useState([]);
+  const [loading, setLoading]       = useState(false);
+  const [assigning, setAssigning]   = useState(false);
+
+  useEffect(() => {
+    if (!player?.id) return;
+    setLoading(true);
+    Promise.all([
+      apiFetch(`/api/coach/students/${player.id}/playlists`).catch(() => ({ playlists: [] })),
+      apiFetch(`/api/coach/students/${player.id}/scenario-history`).catch(() => ({ history: [] })),
+    ]).then(([plData, histData]) => {
+      setPlaylists(plData?.playlists ?? []);
+      setHistory(histData?.history ?? []);
+    }).finally(() => setLoading(false));
+  }, [player?.id]);
+
+  const handleOpenScenario = (handId) => {
+    if (!handId) return;
+    if (navigate) {
+      navigate(`/review?handId=${encodeURIComponent(handId)}`);
+    }
+  };
+
+  if (loading) {
+    return <div className="py-10 text-center text-sm" style={{ color: '#6e7681' }}>Loading scenarios…</div>;
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="rounded-lg p-5 flex flex-col gap-2" style={{ background: '#161b22', border: '1px solid #30363d' }}>
-        <h3 className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: '#6e7681' }}>Scenarios</h3>
-        <p className="text-sm" style={{ color: '#6e7681' }}>
-          Assigned hand scenarios for {player.display_name} — coming soon.
-        </p>
-        <p className="text-xs mt-1" style={{ color: '#484f58' }}>
-          Tracked in sub-issue POK-82.
-        </p>
+    <div className="flex flex-col gap-5">
+
+      {/* Assigned Playlists */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-bold tracking-widest uppercase" style={{ color: '#6e7681' }}>Assigned Playlists</h3>
+          <button
+            onClick={() => setAssigning(true)}
+            className="text-xs px-3 py-1 rounded font-semibold"
+            style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', color: '#d4af37', cursor: 'pointer' }}
+          >
+            + Assign Playlist
+          </button>
+        </div>
+        {playlists.length === 0 ? (
+          <div className="rounded-lg px-4 py-6 text-center text-sm" style={{ background: '#161b22', border: '1px solid #30363d', color: '#6e7681' }}>
+            No playlists assigned yet.
+          </div>
+        ) : (
+          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #30363d' }}>
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ background: '#161b22', color: '#6e7681' }}>
+                  <th className="px-3 py-2 text-left font-semibold tracking-widest uppercase">Playlist</th>
+                  <th className="px-3 py-2 text-right font-semibold tracking-widest uppercase">Played</th>
+                  <th className="px-3 py-2 text-right font-semibold tracking-widest uppercase">Correct</th>
+                  <th className="px-3 py-2 text-right font-semibold tracking-widest uppercase">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {playlists.map((pl, i) => {
+                  const pct = pl.played > 0 && pl.correct != null
+                    ? Math.round((pl.correct / pl.played) * 100)
+                    : null;
+                  return (
+                    <tr key={pl.id ?? i} style={{ borderTop: '1px solid #21262d', background: i % 2 === 0 ? '#0d1117' : 'transparent' }}>
+                      <td className="px-3 py-2" style={{ color: '#e6edf3' }}>
+                        {pl.name}
+                        {pl.total != null && <span style={{ color: '#4b5563' }}> ({pl.total})</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono" style={{ color: '#8b949e' }}>
+                        {pl.played ?? '—'}{pl.total != null ? `/${pl.total}` : ''}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono" style={{ color: '#8b949e' }}>
+                        {pl.correct ?? '—'}{pl.played != null ? `/${pl.played}` : ''}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono font-bold" style={{ color: pct != null ? (pct >= 60 ? '#3fb950' : '#f85149') : '#4b5563' }}>
+                        {pct != null ? `${pct}%` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Scenario History */}
+      <div>
+        <h3 className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: '#6e7681' }}>Scenario History</h3>
+        {history.length === 0 ? (
+          <div className="rounded-lg px-4 py-6 text-center text-sm" style={{ background: '#161b22', border: '1px solid #30363d', color: '#6e7681' }}>
+            No scenario history yet.
+          </div>
+        ) : (
+          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #30363d' }}>
+            {history.map((h, i) => (
+              <button
+                key={h.id ?? i}
+                onClick={() => handleOpenScenario(h.handId ?? h.hand_id)}
+                className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors"
+                style={{
+                  background: i % 2 === 0 ? '#0d1117' : 'transparent',
+                  borderTop: i > 0 ? '1px solid #21262d' : 'none',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.05)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = i % 2 === 0 ? '#0d1117' : 'transparent'; }}
+              >
+                <span style={{ fontSize: 14, flexShrink: 0 }}>
+                  {(h.correct ?? h.result === 'correct') ? '✅' : '❌'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium" style={{ color: '#e6edf3' }}>
+                    {h.scenarioName ?? h.scenario_name ?? `Hand #${h.handId ?? h.hand_id}`}
+                  </div>
+                  {h.tag && (
+                    <div className="text-xs mt-0.5">
+                      <span className="font-mono" style={{ color: '#8b949e' }}>→ {h.tag}</span>
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs flex-shrink-0" style={{ color: '#4b5563' }}>
+                  {formatDate(h.date ?? h.created_at)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
 
 // ─── OverviewTab ──────────────────────────────────────────────────────────────
 
@@ -508,12 +1060,19 @@ function OverviewTab({ player, crm }) {
 // ─── NotesTab ─────────────────────────────────────────────────────────────────
 
 function NotesTab({ player }) {
-  const [notes, setNotes]       = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [content, setContent]   = useState('');
-  const [noteType, setNoteType] = useState('general');
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState(null);
+  const [notes, setNotes]         = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [content, setContent]     = useState('');
+  const [noteType, setNoteType]   = useState('general');
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState(null);
+  const [filterType, setFilterType] = useState('');
+
+  // Edit state
+  const [editingId, setEditingId]     = useState(null);
+  const [editContent, setEditContent] = useState('');
+  const [editType, setEditType]       = useState('general');
+  const [editSaving, setEditSaving]   = useState(false);
 
   const loadNotes = useCallback(async () => {
     setLoading(true);
@@ -537,7 +1096,7 @@ function NotesTab({ player }) {
     try {
       await apiFetch(`/api/admin/players/${player.id}/notes`, {
         method: 'POST',
-        body: JSON.stringify({ content: content.trim(), note_type: noteType }),
+        body: JSON.stringify({ content: content.trim(), noteType }),
       });
       setContent('');
       setNoteType('general');
@@ -549,9 +1108,46 @@ function NotesTab({ player }) {
     }
   }
 
+  function startEdit(note) {
+    setEditingId(note.id);
+    setEditContent(note.content);
+    setEditType(note.note_type ?? 'general');
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditContent('');
+    setEditType('general');
+  }
+
+  async function handleSaveEdit(noteId) {
+    if (!editContent.trim()) return;
+    setEditSaving(true);
+    try {
+      await apiFetch(`/api/admin/players/${player.id}/notes/${noteId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ content: editContent.trim(), noteType: editType }),
+      });
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === noteId ? { ...n, content: editContent.trim(), note_type: editType } : n
+        )
+      );
+      cancelEdit();
+    } catch (err) {
+      setError(err.message || 'Failed to save note');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  const filteredNotes = filterType
+    ? notes.filter((n) => n.note_type === filterType)
+    : notes;
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Add Note form */}
+      {/* Filter + Add Note form */}
       <form
         onSubmit={handleAddNote}
         className="rounded-lg p-4 flex flex-col gap-3"
@@ -566,7 +1162,7 @@ function NotesTab({ player }) {
           className="w-full rounded px-3 py-2 text-sm outline-none resize-none"
           style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
           onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+          onBlur={(e)  => { e.currentTarget.style.borderColor = '#30363d'; }}
         />
         <div className="flex items-center gap-3">
           <select
@@ -575,7 +1171,7 @@ function NotesTab({ player }) {
             className="rounded px-3 py-1.5 text-sm outline-none"
             style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3', cursor: 'pointer' }}
             onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+            onBlur={(e)  => { e.currentTarget.style.borderColor = '#30363d'; }}
           >
             {NOTE_TYPES.map((t) => (
               <option key={t} value={t} style={{ background: '#161b22' }}>
@@ -585,48 +1181,338 @@ function NotesTab({ player }) {
           </select>
           <div className="flex-1" />
           <GoldBtn type="submit" disabled={saving || !content.trim()}>
-            {saving ? 'ADDING…' : 'ADD NOTE'}
+            {saving ? 'ADDING…' : 'SAVE NOTE'}
           </GoldBtn>
         </div>
         {error && (
-          <div
-            className="rounded px-3 py-2 text-sm"
-            style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}
-          >
+          <div className="rounded px-3 py-2 text-sm"
+            style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}>
             {error}
           </div>
         )}
       </form>
 
+      {/* Filter dropdown */}
+      {notes.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-xs" style={{ color: '#6e7681' }}>Filter:</span>
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="rounded px-2 py-1 text-xs outline-none"
+            style={{ background: '#161b22', border: '1px solid #30363d', color: '#f0ece3', cursor: 'pointer' }}
+          >
+            <option value="" style={{ background: '#161b22' }}>All types</option>
+            {NOTE_TYPES.map((t) => (
+              <option key={t} value={t} style={{ background: '#161b22' }}>
+                {t.replace('_', ' ').charAt(0).toUpperCase() + t.replace('_', ' ').slice(1)}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs" style={{ color: '#6e7681' }}>
+            {filteredNotes.length} note{filteredNotes.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
+
       {/* Notes list */}
       {loading && (
         <div className="text-sm text-center py-8" style={{ color: '#6e7681' }}>Loading notes…</div>
       )}
-      {!loading && notes.length === 0 && (
-        <div className="text-sm text-center py-8" style={{ color: '#6e7681' }}>No notes yet</div>
+      {!loading && filteredNotes.length === 0 && (
+        <div className="text-sm text-center py-8" style={{ color: '#6e7681' }}>
+          {filterType ? 'No notes for this type' : 'No notes yet'}
+        </div>
       )}
       <div className="flex flex-col gap-3">
-        {notes.map((note) => (
+        {filteredNotes.map((note) => (
           <div
             key={note.id}
             className="rounded-lg p-4 flex flex-col gap-2"
             style={{ background: '#161b22', border: '1px solid #30363d' }}
           >
-            <div className="flex items-center gap-2 flex-wrap">
-              <NoteTypeBadge type={note.note_type} />
-              <span className="text-xs font-mono" style={{ color: '#6e7681' }}>
-                {formatDateTime(note.created_at)}
-              </span>
-              {note.coach_name && (
-                <span className="text-xs ml-auto" style={{ color: '#6e7681' }}>
-                  by {note.coach_name}
-                </span>
-              )}
-            </div>
-            <p className="text-sm leading-relaxed" style={{ color: '#f0ece3' }}>{note.content}</p>
+            {editingId === note.id ? (
+              /* Inline edit form */
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <select
+                    value={editType}
+                    onChange={(e) => setEditType(e.target.value)}
+                    className="rounded px-2 py-1 text-xs outline-none"
+                    style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
+                  >
+                    {NOTE_TYPES.map((t) => (
+                      <option key={t} value={t} style={{ background: '#161b22' }}>
+                        {t.replace('_', ' ').charAt(0).toUpperCase() + t.replace('_', ' ').slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={3}
+                  className="w-full rounded px-3 py-2 text-sm outline-none resize-none"
+                  style={{ background: '#0d1117', border: '1px solid #d4af37', color: '#f0ece3' }}
+                />
+                <div className="flex gap-2 justify-end">
+                  <GhostBtn onClick={cancelEdit}>Cancel</GhostBtn>
+                  <GoldBtn onClick={() => handleSaveEdit(note.id)} disabled={editSaving || !editContent.trim()}>
+                    {editSaving ? 'Saving…' : 'Save'}
+                  </GoldBtn>
+                </div>
+              </div>
+            ) : (
+              /* Read view */
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <NoteTypeBadge type={note.note_type} />
+                  <span className="text-xs font-mono" style={{ color: '#6e7681' }}>
+                    {formatDateTime(note.created_at)}
+                  </span>
+                  {note.coach_name && (
+                    <span className="text-xs" style={{ color: '#6e7681' }}>by {note.coach_name}</span>
+                  )}
+                  <button
+                    onClick={() => startEdit(note)}
+                    className="text-xs px-2 py-0.5 rounded ml-auto"
+                    style={{
+                      background: 'rgba(212,175,55,0.08)',
+                      border: '1px solid rgba(212,175,55,0.2)',
+                      color: '#d4af37',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Edit
+                  </button>
+                </div>
+                <p className="text-sm leading-relaxed" style={{ color: '#f0ece3' }}>{note.content}</p>
+              </>
+            )}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ─── SessionsTab ─────────────────────────────────────────────────────────────
+// POK-78: Game session history + coaching attendance
+
+function SessionsTab({ player }) {
+  const [gameSessions, setGameSessions]     = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [expandedSession, setExpandedSession] = useState(null);
+
+  const [coachSessions, setCoachSessions]   = useState([]);
+  const [coachLoading, setCoachLoading]     = useState(true);
+
+  useEffect(() => {
+    if (!player?.id) return;
+    setSessionsLoading(true);
+    apiFetch(`/api/admin/players/${player.id}/game-sessions`)
+      .then((d) => setGameSessions(d?.sessions ?? []))
+      .catch(() => setGameSessions([]))
+      .finally(() => setSessionsLoading(false));
+  }, [player?.id]);
+
+  useEffect(() => {
+    if (!player?.id) return;
+    setCoachLoading(true);
+    apiFetch(`/api/admin/players/${player.id}/schedule`)
+      .then((d) => setCoachSessions(d?.sessions ?? []))
+      .catch(() => setCoachSessions([]))
+      .finally(() => setCoachLoading(false));
+  }, [player?.id]);
+
+  const attended = coachSessions.filter((s) => s.status === 'completed').length;
+  const missed   = coachSessions.filter((s) => s.status === 'cancelled').length;
+  const attendPct = coachSessions.length > 0
+    ? Math.round((attended / coachSessions.length) * 100)
+    : null;
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Game Session History */}
+      <div>
+        <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: '#6e7681' }}>SESSION HISTORY</p>
+
+        {sessionsLoading && (
+          <div className="text-sm text-center py-8" style={{ color: '#6e7681' }}>Loading sessions…</div>
+        )}
+        {!sessionsLoading && gameSessions.length === 0 && (
+          <div className="text-sm text-center py-8" style={{ color: '#6e7681' }}>No sessions recorded</div>
+        )}
+        {!sessionsLoading && gameSessions.length > 0 && (
+          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #30363d' }}>
+            <div
+              className="grid text-xs font-semibold tracking-wider px-4 py-2.5"
+              style={{
+                background: '#161b22', borderBottom: '1px solid #30363d', color: '#6e7681',
+                gridTemplateColumns: '140px 1fr 70px 80px 60px 80px',
+              }}
+            >
+              <span>DATE</span>
+              <span>TABLE</span>
+              <span>HANDS</span>
+              <span>NET</span>
+              <span>WIN%</span>
+              <span></span>
+            </div>
+            {gameSessions.map((s, idx) => (
+              <div key={s.session_id} className="flex flex-col">
+                <div
+                  className="grid items-center px-4 py-3"
+                  style={{
+                    gridTemplateColumns: '140px 1fr 70px 80px 60px 80px',
+                    borderBottom: '1px solid #21262d',
+                    background: idx % 2 === 0 ? '#0d1117' : 'rgba(22,27,34,0.5)',
+                  }}
+                >
+                  <span className="text-xs font-mono" style={{ color: '#6e7681' }}>
+                    {formatDate(s.started_at)}
+                  </span>
+                  <span className="text-xs truncate pr-2" style={{ color: '#8b949e' }}>
+                    {s.table_id ?? 'main-table'}
+                  </span>
+                  <span className="text-xs font-mono" style={{ color: '#f0ece3' }}>
+                    {s.hands_played ?? '—'}
+                  </span>
+                  <span className="text-xs font-mono font-bold" style={{ color: s.net_chips >= 0 ? '#3fb950' : '#f85149' }}>
+                    {formatNetChips(s.net_chips)}
+                  </span>
+                  <span className="text-xs font-mono" style={{ color: '#8b949e' }}>
+                    {s.win_rate != null ? `${s.win_rate}%` : '—'}
+                  </span>
+                  <button
+                    onClick={() => setExpandedSession(expandedSession === s.session_id ? null : s.session_id)}
+                    className="text-xs px-2 py-1 rounded"
+                    style={{
+                      background: 'rgba(88,166,255,0.08)',
+                      border: '1px solid rgba(88,166,255,0.2)',
+                      color: '#58a6ff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {expandedSession === s.session_id ? 'Hide' : 'Hands'}
+                  </button>
+                </div>
+                {expandedSession === s.session_id && (
+                  <SessionHandHistory player={player} sessionId={s.session_id} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Attendance section */}
+      <div>
+        <p className="text-xs font-semibold tracking-widest mb-3" style={{ color: '#6e7681' }}>COACHING ATTENDANCE</p>
+        {coachLoading ? (
+          <div className="text-sm text-center py-4" style={{ color: '#6e7681' }}>Loading…</div>
+        ) : (
+          <div className="rounded-lg p-4 flex flex-col gap-4" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+            <div className="flex gap-4">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs tracking-widest" style={{ color: '#6e7681' }}>SCHEDULED</span>
+                <span className="text-xl font-bold" style={{ color: '#f0ece3' }}>{coachSessions.length}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs tracking-widest" style={{ color: '#6e7681' }}>ATTENDED</span>
+                <span className="text-xl font-bold" style={{ color: '#3fb950' }}>{attended}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs tracking-widest" style={{ color: '#6e7681' }}>ATTENDANCE %</span>
+                <span className="text-xl font-bold" style={{ color: attendPct != null && attendPct < 60 ? '#f85149' : '#d4af37' }}>
+                  {attendPct != null ? `${attendPct}%` : '—'}
+                </span>
+              </div>
+            </div>
+            {missed > 0 && (
+              <div>
+                <span className="text-xs uppercase tracking-widest" style={{ color: '#6e7681' }}>MISSED SESSIONS</span>
+                <div className="flex flex-col gap-1 mt-2">
+                  {coachSessions
+                    .filter((s) => s.status === 'cancelled')
+                    .map((s) => (
+                      <div key={s.id} className="flex items-center justify-between text-xs py-1"
+                        style={{ borderBottom: '1px solid #21262d', color: '#8b949e' }}>
+                        <span>{formatDateTime(s.scheduled_at)}</span>
+                        <span className="px-2 py-0.5 rounded text-xs"
+                          style={{ background: 'rgba(110,118,129,0.1)', border: '1px solid rgba(110,118,129,0.25)', color: '#6e7681' }}>
+                          CANCELLED
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SessionHandHistory({ player, sessionId }) {
+  const [hands, setHands]     = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    apiFetch(`/api/players/${player.id}/hands?limit=50`)
+      .then((d) => {
+        const all = Array.isArray(d) ? d : (d.hands ?? []);
+        setHands(all.filter((h) => h.session_id === sessionId || !sessionId));
+      })
+      .catch(() => setHands([]))
+      .finally(() => setLoading(false));
+  }, [player.id, sessionId]);
+
+  if (loading) return (
+    <div className="px-4 py-3 text-xs text-center" style={{ color: '#6e7681', background: '#0d1117' }}>
+      Loading hands…
+    </div>
+  );
+
+  if (hands.length === 0) return (
+    <div className="px-4 py-3 text-xs text-center" style={{ color: '#6e7681', background: '#0d1117' }}>
+      No hands for this session
+    </div>
+  );
+
+  return (
+    <div className="px-4 py-2" style={{ background: '#0d1117', borderBottom: '1px solid #21262d' }}>
+      {hands.slice(0, 10).map((hand, i) => {
+        const tags = Array.isArray(hand.auto_tags) ? hand.auto_tags : (hand.tags ?? []);
+        return (
+          <div key={hand.hand_id ?? i} className="flex items-center gap-3 py-1.5"
+            style={{ borderBottom: i < hands.length - 1 ? '1px solid #161b22' : 'none' }}>
+            <span className="text-xs font-mono w-28 flex-shrink-0" style={{ color: '#6e7681' }}>
+              {formatDate(hand.started_at)}
+            </span>
+            <div className="flex flex-wrap gap-1 flex-1">
+              {tags.slice(0, 4).map((t) => (
+                <span key={t} className="px-1.5 py-0.5 rounded text-xs"
+                  style={{ background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.15)', color: '#58a6ff' }}>
+                  {t}
+                </span>
+              ))}
+            </div>
+            <span className="text-xs font-mono flex-shrink-0" style={{ color: hand.stack_end - hand.stack_start >= 0 ? '#3fb950' : '#f85149' }}>
+              {hand.stack_end != null && hand.stack_start != null
+                ? formatNetChips(hand.stack_end - hand.stack_start)
+                : '—'}
+            </span>
+          </div>
+        );
+      })}
+      {hands.length > 10 && (
+        <div className="text-xs py-1" style={{ color: '#6e7681' }}>
+          +{hands.length - 10} more hands this session
+        </div>
+      )}
     </div>
   );
 }
@@ -1147,8 +2033,8 @@ function StableTab({ players, playerStats = [], onSelectPlayer }) {
 
 // ─── PlayerDetail (right panel) ───────────────────────────────────────────────
 
-function PlayerDetail({ player, crm, crmLoading, onBack }) {
-  const [activeTab, setActiveTab] = useState('OVERVIEW');
+function PlayerDetail({ player, crm, crmLoading, onBack, onPlayerUpdate }) {
+  const [activeTab, setActiveTab] = useState('INFO');
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: '#0d1117' }}>
@@ -1228,9 +2114,9 @@ function PlayerDetail({ player, crm, crmLoading, onBack }) {
           </div>
         ) : (
           <>
-            {activeTab === 'INFO'       && <InfoTab       player={player} crm={crm} />}
-            {activeTab === 'SESSIONS'   && <ScheduleTab   player={player} />}
-            {activeTab === 'STATS'      && <StatsTab      crm={crm} />}
+            {activeTab === 'INFO'       && <InfoTab       player={player} crm={crm} onPlayerUpdate={onPlayerUpdate} />}
+            {activeTab === 'SESSIONS'   && <SessionsTab   player={player} />}
+            {activeTab === 'STATS'      && <StatsTab      player={player} crm={crm} />}
             {activeTab === 'NOTES'      && <NotesTab      player={player} />}
             {activeTab === 'STAKING'    && <StakingTab    player={player} />}
             {activeTab === 'SCENARIOS'  && <ScenariosTab  player={player} />}
@@ -1246,6 +2132,8 @@ function PlayerDetail({ player, crm, crmLoading, onBack }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PlayerCRM() {
+  const location = useLocation();
+
   const [players, setPlayers]           = useState([]);
   const [playersLoading, setPlayersLoading] = useState(true);
   const [playersError, setPlayersError] = useState(null);
@@ -1279,20 +2167,29 @@ export default function PlayerCRM() {
     return ALERT_DOT.healthy;
   }, [alerts]);
 
-  // Load player list on mount
+  // Load player list on mount; auto-select if navigated here with a playerId
   useEffect(() => {
     (async () => {
       setPlayersLoading(true);
       setPlayersError(null);
       try {
         const data = await apiFetch('/api/admin/players');
-        setPlayers(Array.isArray(data) ? data : (data.players ?? []));
+        const list = Array.isArray(data) ? data : (data.players ?? []);
+        setPlayers(list);
+        // Deep-link: leaderboard (and other pages) can navigate here with
+        // location.state.playerId to pre-select a player.
+        const preselect = location.state?.playerId;
+        if (preselect) {
+          const match = list.find((p) => p.id === preselect);
+          if (match) setSelectedPlayer(match);
+        }
       } catch (err) {
         setPlayersError(err.message || 'Failed to load players');
       } finally {
         setPlayersLoading(false);
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load player stats (VPIP/PFR/hands) for stable overview
@@ -1536,6 +2433,7 @@ export default function PlayerCRM() {
             crm={crm}
             crmLoading={crmLoading}
             onBack={() => setSelectedPlayer(null)}
+            onPlayerUpdate={(updated) => setSelectedPlayer(updated)}
           />
         )}
       </div>

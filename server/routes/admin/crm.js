@@ -192,6 +192,43 @@ router.get('/players/:id/snapshots', canView, async (req, res) => {
   }
 });
 
+// GET /api/admin/players/:id/game-sessions
+// Game session history for a player (from session_player_stats).
+router.get('/players/:id/game-sessions', canView, async (req, res) => {
+  try {
+    const { limit, offset } = req.query;
+    const sessions = await CRMRepo.getPlayerGameSessions(req.params.id, {
+      limit:  limit  ? parseInt(limit,  10) : 20,
+      offset: offset ? parseInt(offset, 10) : 0,
+    });
+    res.json({ sessions });
+  } catch (err) {
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// PUT /api/admin/players/:id/notes/:noteId
+router.put('/players/:id/notes/:noteId', canEdit, async (req, res) => {
+  try {
+    const { content, noteType } = req.body || {};
+    if (content !== undefined && !String(content).trim()) {
+      return res.status(400).json({ error: 'content cannot be empty' });
+    }
+    const VALID_TYPES = ['general', 'session_review', 'goal', 'weakness'];
+    if (noteType !== undefined && !VALID_TYPES.includes(noteType)) {
+      return res.status(400).json({ error: `noteType must be one of: ${VALID_TYPES.join(', ')}` });
+    }
+    await CRMRepo.updateNote(
+      req.params.noteId,
+      req.params.id,
+      { content: content !== undefined ? String(content).trim() : undefined, noteType }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
 // POST /api/admin/snapshots/compute
 // Manually triggers snapshot computation for all active players. Admin only.
 router.post('/snapshots/compute', canManage, async (req, res) => {

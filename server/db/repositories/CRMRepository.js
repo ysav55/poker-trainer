@@ -250,12 +250,71 @@ async function getSnapshots(playerId, { limit = 12 } = {}) {
   return data || [];
 }
 
+// ─── Game Session History ─────────────────────────────────────────────────────
+
+/**
+ * Get game session history for a player from session_player_stats.
+ * Joins the sessions table to get table_id and started_at.
+ *
+ * @param {string} playerId
+ * @param {{ limit?: number, offset?: number }} opts
+ * @returns {Array}
+ */
+async function getPlayerGameSessions(playerId, { limit = 20, offset = 0 } = {}) {
+  const data = await q(
+    supabase
+      .from('session_player_stats')
+      .select('session_id, hands_played, hands_won, net_chips, vpip_count, pfr_count, wtsd_count, created_at, sessions(table_id, started_at, ended_at)')
+      .eq('player_id', playerId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+  );
+  return (data || []).map(r => {
+    const total = r.hands_played ?? 0;
+    return {
+      session_id:   r.session_id,
+      table_id:     r.sessions?.table_id ?? null,
+      started_at:   r.sessions?.started_at ?? r.created_at,
+      ended_at:     r.sessions?.ended_at ?? null,
+      hands_played: total,
+      net_chips:    r.net_chips ?? 0,
+      win_rate:     total > 0 ? Math.round((r.hands_won ?? 0) / total * 100) : null,
+      vpip:         total > 0 ? Math.round((r.vpip_count  ?? 0) / total * 100) : null,
+      pfr:          total > 0 ? Math.round((r.pfr_count   ?? 0) / total * 100) : null,
+    };
+  });
+}
+
+// ─── Note Update ──────────────────────────────────────────────────────────────
+
+/**
+ * Update a coach note. Validates the note belongs to the given player.
+ *
+ * @param {string} noteId
+ * @param {string} playerId  Safety scoping: note must belong to this player
+ * @param {{ content?: string, noteType?: string }} opts
+ */
+async function updateNote(noteId, playerId, { content, noteType } = {}) {
+  const patch = {};
+  if (content  !== undefined) patch.content   = content;
+  if (noteType !== undefined) patch.note_type = noteType;
+  if (Object.keys(patch).length === 0) return;
+
+  const { error } = await supabase
+    .from('player_notes')
+    .update(patch)
+    .eq('id', noteId)
+    .eq('player_id', playerId);
+  if (error) throw new Error(error.message);
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
   getPlayerCRMSummary,
   createNote,
   getNotes,
+  updateNote,
   setPlayerTags,
   getPlayerTags,
   createCoachingSession,
@@ -263,4 +322,5 @@ module.exports = {
   updateSessionStatus,
   upsertSnapshot,
   getSnapshots,
+  getPlayerGameSessions,
 };
