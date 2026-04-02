@@ -1,8 +1,28 @@
 # Poker Trainer — Feature Audit
-**Date:** 2026-03-31
+**Last updated:** 2026-04-02 (reflects `feat/phase2` branch)
 **Source:** Live codebase vs. `poker_trainer_component_spec.md` (v1.0) + `USER_STORIES.md` (US-001–US-100)
 
 Legend: ✅ Done · ⚠️ Partial · ❌ Missing
+
+---
+
+## Changelog since 2026-03-31
+
+Phase 2 landed significant new surface area. Net additions vs. the previous audit:
+
+| Area | What shipped |
+|---|---|
+| Auth & Registration | `POST /api/auth/register`, `register-coach`, `reset-password` · `RegisterPage`, `ForgotPasswordPage` (pages exist; **not yet routed** in App.jsx) |
+| Chip Bank | Full bank system: buy-in at join, cash-out on disconnect, reload/adjust endpoints, transaction log |
+| School Management | Create/edit schools, capacity limits, per-school feature toggles (8 features), member API |
+| Announcements | Broadcast to all or individual · unread count badge backend · REST API fully wired |
+| Bot Tables | `BotTableController`, `BotDecisionService`, `BotLobbyPage` (`/bot-lobby`), socket visibility enforcement (`private`/`school` privacy modes) |
+| Coach Intelligence | `BaselineService`, `SessionQualityService`, `AlertService`, `SessionPrepService`, `ProgressReportService`, `NarratorService` (LLM Tier 2) · `CoachAlertsPage`, `PrepBriefTab`, `ReportsTab`, `StableOverviewPage` pages exist — **client pages use mock data pending API wiring** |
+| Tournament pages | `TournamentLobby`, `TournamentStandings`, `RefereeDashboard` — all wired to real API |
+| Analytics | `AnalysisPage` (`/analysis`) — wired to real API |
+| Leaderboard | `LeaderboardPage` (`/leaderboard`) — wired to real API |
+| DB migrations | 008–019: RBAC, user management, tables registry, scenario configs, CRM, tournament, trial/registration, chip bank, table privacy, announcements, school management, coach intelligence, bot tables |
+| New routes (server) | `tables.js`, `analysis.js`, `botTables.js`, `chipBank.js`, `prepBriefs.js`, `reports.js`, `alerts.js`, `annotations.js`, `announcements.js` · `admin/users.js`, `admin/crm.js`, `admin/schools.js`, `admin/scenarios.js`, `admin/tournaments.js` |
 
 ---
 
@@ -12,36 +32,46 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 |---|---|---|---|
 | `/login` | `LoginPage.jsx` | ✅ | |
 | `/lobby` | `MainLobby.jsx` | ✅ | |
+| `/leaderboard` | `LeaderboardPage.jsx` | ✅ | New — wired to real API |
+| `/analysis` | `AnalysisPage.jsx` | ✅ | New — tag analysis, hand filters, wired |
+| `/bot-lobby` | `BotLobbyPage.jsx` | ✅ | New — create/join bot tables |
 | `/table/:id` | `TablePage.jsx` | ✅ | |
-| `/hand-builder` | `admin/HandBuilder.jsx` | ✅ | |
-| `/hand-builder/:id` | `admin/HandBuilder.jsx` | ⚠️ | Edit-mode routing probably shares the same file; version history UI unconfirmed |
-| `/stable` | — | ❌ | Page file does not exist |
-| `/playlists` | — | ❌ | Page file does not exist |
-| `/crm/:id` | `admin/PlayerCRM.jsx` | ✅ | |
-| `/tournament` | `admin/TournamentSetup.jsx` | ⚠️ | Lives under `/admin/*`, not at spec route `/tournament` |
 | `/multi` | `MultiTablePage.jsx` | ✅ | |
-| `/analytics` | — | ❌ | Page file does not exist |
+| `/tournament/:id/lobby` | `TournamentLobby.jsx` | ✅ | New |
+| `/tournament/:id/standings` | `TournamentStandings.jsx` | ✅ | New |
 | `/admin/users` | `admin/UserManagement.jsx` | ✅ | |
-| `/admin/audit` | — | ❌ | Page file does not exist |
-| `/admin/settings` | — | ❌ | Page file does not exist |
-| `/admin/roles` | — | ❌ | Page file does not exist |
-| `*` (forbidden) | — | ❌ | No dedicated `ForbiddenPage` |
+| `/admin/hands` | `admin/HandBuilder.jsx` | ✅ | Spec route was `/hand-builder` |
+| `/admin/crm` | `admin/PlayerCRM.jsx` | ✅ | Spec route was `/crm/:id` — no id param |
+| `/admin/tournaments` | `admin/TournamentSetup.jsx` | ✅ | Spec route was `/tournament` |
+| `/admin/referee` | `admin/RefereeDashboard.jsx` | ✅ | New — wired to real API |
+| `/admin/alerts` | `admin/CoachAlertsPage.jsx` | ⚠️ | Page exists; uses MOCK data |
+| `/admin/stable` | `admin/StableOverviewPage.jsx` | ⚠️ | Page exists; uses MOCK data |
+| `/register` | `RegisterPage.jsx` | ⚠️ | Page exists, linked from LoginPage; **not in App.jsx router** |
+| `/forgot-password` | `ForgotPasswordPage.jsx` | ⚠️ | Page exists, linked from LoginPage; **not in App.jsx router** |
+| `/stable` | — | ❌ | Spec route for `StableManagementPage` — not implemented |
+| `/playlists` | — | ❌ | Standalone playlists page not implemented |
+| `/admin/audit` | — | ❌ | `AuditLogPage` not implemented |
+| `/admin/settings` | — | ❌ | `PlatformSettingsPage` not implemented |
+| `/admin/roles` | — | ❌ | `RolesPage` not implemented (Superadmin only) |
+| `*` (forbidden) | — | ❌ | Wildcard falls back to `/lobby`; no dedicated `ForbiddenPage` |
 
 ---
 
 ## 2. Auth & Session (US-001–005, US-093)
 
-| Component | Status | Notes |
+| Component / Feature | Status | Notes |
 |---|---|---|
 | `LoginPage` — form, non-revealing errors, first-login detection | ✅ | |
-| `SessionExpiredModal` — non-blocking; preserves route; seat-hold countdown | ⚠️ | 401 redirect works; seat-hold timer and route restoration not confirmed |
-| `PasswordResetFlow` — admin-triggered email + time-limited token | ⚠️ | Admin can reset password; email delivery not wired (no `EmailService`) |
-| `AccountLockedBanner` — after N failed attempts; auto-unlock path | ❌ | Rate limiting exists (login attempts), no lockout UI banner |
-| Session persistence across refresh | ✅ | |
-| JWT 7-day expiry, stored in `poker_trainer_jwt` | ✅ | |
+| `RegisterPage` — student self-registration (name, password, optional email/coachId/schoolId) | ⚠️ | Page built, backend `POST /api/auth/register` live; page not in router |
+| `ForgotPasswordPage` | ⚠️ | Page built, linked from LoginPage; not in router; `POST /api/auth/reset-password` requires current password (not email reset link) |
+| `SessionExpiredModal` — non-blocking; preserves route; seat-hold countdown | ⚠️ | 401 redirect works; seat-hold timer and deep-link restoration not confirmed |
+| `PasswordResetFlow` — admin-triggered email + time-limited token | ⚠️ | Self-service password reset wired; email-link flow still requires `EmailService` |
+| `AccountLockedBanner` — after N failed attempts; auto-unlock | ❌ | Rate limiting exists; no lockout UI |
+| Trial accounts — 7-day window + 20 hands; table join blocked after limits | ✅ | `014_trial_and_registration.sql` + backend enforced |
+| Coach application (`POST /api/auth/register-coach`) — admin must approve | ✅ | Backend only; no admin approval UI confirmed |
+| JWT 7-day expiry, `poker_trainer_jwt` localStorage | ✅ | |
 | CORS + rate limiting on `/api/auth/login` | ✅ | |
-
-**Missing backend service:** `EmailService` (needed for password reset, lockout notification, role-change emails)
+| **Missing service:** `EmailService` | ❌ | Needed for email-link reset, role-change notifications, lockout alerts |
 
 ---
 
@@ -49,14 +79,12 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `NavBar` — username, role badge, logout; closes WebSockets | ⚠️ | Top bar exists; explicit WS close on logout not confirmed |
-| `RoleBadge` — pill showing current role | ✅ | Role badge visible in lobby nav |
-| `NotificationBell` — unread count, opens panel | ❌ | Not implemented |
-| `NotificationPanel` — reverse-chron feed, click-to-navigate, persist until dismissed | ❌ | Not implemented |
-| `OnboardingTour` — first-login tooltip overlay, role variants | ❌ | Not implemented |
-| `HelpDrawer` — collapsible, searchable help panel | ❌ | Not implemented |
-
-**Missing backend service:** `NotificationService` (in-app bell), `PresenceService` (online/away status)
+| `NavBar` / `TopBar` — username, role badge, logout | ✅ | |
+| `RoleBadge` — pill showing current role | ✅ | |
+| `NotificationBell` + `NotificationPanel` — unread count feed | ⚠️ | Announcements backend ships unread count (`GET /api/announcements/unread-count`); client bell/panel not wired |
+| `OnboardingTour` — first-login tooltip overlay | ❌ | |
+| `HelpDrawer` — collapsible, searchable help | ❌ | |
+| **Missing service:** `PresenceService` | ❌ | Online/away status for stable roster and NavBar |
 
 ---
 
@@ -65,11 +93,13 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 | Component | Status | Notes |
 |---|---|---|
 | `LobbyPage` — sidebar, stats row, table grid, recent hands, playlists | ✅ | |
+| Navigation tiles — Leaderboard, Multi Table, AI Analysis, Player CRM, Coach Alerts, Stable Report, Hand Scenarios, Tournaments, Referee, Users — role-filtered | ✅ | |
+| Trial banner — upgrade notice at top for trial accounts | ✅ | |
 | `TableGrid` — real-time, join/watch/lock states, Create Table | ✅ | |
-| `StatsRow` — chip count, win rate, hands, session length; click-through | ⚠️ | Stats show; click-through to `/analytics` broken (page missing) |
-| `RecentHandsList` — last 10 hands, click → hand review overlay | ⚠️ | Exists; click-to-replay overlay not fully integrated |
+| `StatsRow` — chip count, win rate, hands, leaderboard rank; click-through | ⚠️ | Stats show; click-through to `/analysis` works; `/analytics` spec route differs |
+| `RecentHandsList` — last 5 hands; tags, net chips | ✅ | Last 5 (spec says 10) |
 | `PlaylistsSection` — assigned playlists with completion %, Start/Continue | ⚠️ | Playlists listed; completion % and Start/Continue CTA not confirmed |
-| `UpgradeModal` — Trial user gate on join-attempt | ❌ | Trial role exists; modal gate not implemented |
+| `UpgradeModal` — Trial user gate on join-attempt | ❌ | Trial role exists; join-gate modal not implemented |
 
 ---
 
@@ -80,7 +110,7 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 | `TablePage` — full canvas, seat layout, auto-rejoin on reload | ✅ | |
 | `BettingControls` — Fold/Check-Call/Bet-Raise, min/max, optimistic UI, timer default | ✅ | |
 | `TurnTimer` — countdown, configurable default action | ✅ | |
-| `HoleCardsDisplay` — own cards, face-down for opponents, hide-my-cards toggle | ⚠️ | Cards display correctly; hide-my-cards toggle UI designed but not fully integrated |
+| `HoleCardsDisplay` — own cards face-down for opponents, hide-my-cards toggle | ⚠️ | Cards display correctly; hide-my-cards toggle designed but integration unconfirmed |
 | `ObserverView` — read-only, hides opponent cards, Join Next Hand queue | ✅ | |
 | `DisconnectionOverlay` — reconnecting spinner, ×5 exponential backoff, state resync | ✅ | |
 
@@ -91,25 +121,25 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 | Component | Status | Notes |
 |---|---|---|
 | `CoachSidebar` — tabbed (Game / Hands / Playlists), Moderator label variant | ✅ | |
-| `GameTab` — Deal, Pause, Undo, Set Blinds, End Session, player list with stack edit | ✅ | |
-| `HandsTab` — library search, history, hand preview, tag picker, load-into-session | ✅ | |
-| `PlaylistsTab` — playlist list, assign-to-player, preview hand sequence | ⚠️ | Playlists list and activate work; assign-to-player notification not wired |
+| `GameTab` — Deal, Pause, Undo, Set Blinds, End Session, player list + stack edit | ✅ | |
+| `HandsTab` — library search, history, tag picker, load-into-session | ✅ | |
+| `PlaylistsTab` — playlist list, activate, assign-to-player | ⚠️ | Activate works; assign-to-player notification not wired |
 | `AutoDealTimer` — post-hand countdown with Deal Now skip | ✅ | |
-| `DealErrorToast` — retry on 5xx from deal; escalates after 30s | ⚠️ | Error toasts exist; 30s escalation logic not confirmed |
-| Stack adjustment absent (not disabled) for Moderator DOM | ❌ | Not confirmed — needs audit |
+| `DealErrorToast` — retry on 5xx; 30s escalation | ⚠️ | Toast exists; 30s escalation not confirmed |
+| Stack adjustment absent (not disabled) in Moderator DOM | ❌ | Needs verification |
 
 ---
 
-## 7. Hand Builder & Scenarios (US-039–042, US-095)
+## 7. Hand Builder & Scenarios (US-039–042)
 
 | Component | Status | Notes |
 |---|---|---|
-| `HandBuilderPage` — full-screen builder | ✅ | |
-| `HandBuilderCanvas` — player count, positions, stacks, hole cards, community cards, board constraints, save with tags | ✅ | |
-| `HandLibrary` — saved hand list, open for edit, version history with revert | ⚠️ | List and open-for-edit work; version history UI not implemented |
-| `HandPlaybackPlayer` — street-by-street with pause/rewind, coach annotations, read-only for Player | ⚠️ | ReplayEngine exists server-side; client playback UI not fully integrated into TablePage |
-| `TagPicker` — multi-select taxonomy, used in HandsTab + auto cash + mod sidebar | ✅ | |
-| Scripted betting actions within scenario builder | ❌ | Not implemented |
+| `HandBuilderPage` (`/admin/hands`) | ✅ | |
+| `HandBuilderCanvas` — players, positions, hole cards, community cards, board constraints, save with tags | ✅ | |
+| `HandLibrary` — saved hand list, open for edit, version history | ⚠️ | List and edit work; version history UI not implemented |
+| `HandPlaybackPlayer` — street-by-street with pause/rewind, coach annotations | ⚠️ | `ReplayEngine` exists server-side; client playback not integrated into TablePage |
+| `TagPicker` | ✅ | |
+| Scripted betting actions within builder | ❌ | |
 
 ---
 
@@ -117,11 +147,11 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `StableManagementPage` — `/stable` route | ❌ | Page does not exist |
-| `StableRoster` — per-player row with online/offline status (WS-updated), current location, quick actions | ❌ | |
-| `SeatAssignmentPanel` — seat-slot grid, assign via dropdown/drag, notifies player | ❌ | |
-| `PrivateTableCreator` — name, mode, invitee picker, invite badge in lobby, expiry | ⚠️ | Basic private table logic exists; invitee picker and lobby badge not confirmed |
-| `SessionTemplateBuilder` — name, goals, playlists, bulk-assign students, reminder push | ❌ | |
+| `StableManagementPage` — `/stable` route | ❌ | Route and page do not exist |
+| `StableRoster` — per-player row with online/offline WS-updated status, quick actions | ❌ | `StableOverviewPage` (`/admin/stable`) exists with mock grade summary but no live roster |
+| `SeatAssignmentPanel` | ❌ | |
+| `PrivateTableCreator` — invitee picker, lobby badge, expiry | ⚠️ | Table privacy modes implemented (`private`/`school`); UI picker not confirmed |
+| `SessionTemplateBuilder` — goals, playlists, bulk-assign, reminders | ❌ | |
 
 ---
 
@@ -129,10 +159,10 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `PlaylistsPage` — `/playlists` route | ❌ | Standalone page does not exist (playlists only accessible via CoachSidebar) |
-| `PlaylistEditor` — ordered hand list, drag-to-reorder, add from library, draft/publish, auto-save | ⚠️ | Create and activate work in sidebar; drag-to-reorder not confirmed; no standalone editor |
-| `PlaylistCard` — completion %, Start/Continue CTA, completed state | ⚠️ | Cards shown in sidebar; completion % UI not confirmed |
-| `PlaylistProgressBar` — completion modal on final hand, coach notified | ❌ | |
+| `PlaylistsPage` — `/playlists` standalone route | ❌ | Playlists only accessible via CoachSidebar |
+| `PlaylistEditor` — ordered hands, drag-to-reorder, draft/publish, auto-save | ⚠️ | Create and activate work in sidebar; drag-to-reorder not confirmed |
+| `PlaylistCard` — completion %, Start/Continue, completed state | ⚠️ | Basic cards shown; completion % not confirmed |
+| `PlaylistProgressBar` + completion modal + coach notified | ❌ | |
 
 ---
 
@@ -140,11 +170,13 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `PlayerCRMPage` — tabbed, header with role/join date/status | ✅ | |
-| `CRM_OverviewTab` — VPIP, PFR, aggression factor, win rate, 30-day chart, frequent tags | ✅ | |
-| `CRM_NotesTab` — rich-text composer, chron feed, author+timestamp, @-mention hand ID, edit/delete own | ⚠️ | Notes exist; rich-text formatting and @-mention not confirmed |
-| `CRM_ScheduleTab` — calendar/list, create session, 30-min reminder, cancel/reschedule with notification | ⚠️ | Schedule structure exists; reminders not wired (no `NotificationService`) |
-| `CRM_HistoryTab` — full history, filters (date/table/session/tags), hand playback, CSV export, pagination | ⚠️ | History and filters exist; hand playback integration and CSV export status unconfirmed |
+| `PlayerCRMPage` (`/admin/crm`) — tabbed, header with role/join date/status | ✅ | No `:id` param in route; player selection within page |
+| `CRM_OverviewTab` — VPIP, PFR, 30-day chart, frequent tags | ✅ | |
+| `CRM_NotesTab` — rich-text composer, chron feed, author+timestamp, @-mention | ⚠️ | Notes work; rich-text and @-mention unconfirmed |
+| `CRM_ScheduleTab` — sessions, 30-min reminder, cancel/reschedule | ⚠️ | Structure exists; reminders require `NotificationService` |
+| `CRM_HistoryTab` — full history, filters, hand playback, CSV export | ⚠️ | History and filters exist; playback integration and CSV export unconfirmed |
+| **PREP BRIEF tab** — `PrepBriefTab.jsx` | ⚠️ | Page built; uses mock data; backend `GET /api/coach/students/:id/prep-brief` is live |
+| **REPORTS tab** — `ReportsTab.jsx` | ⚠️ | Page built; uses mock data; backend `GET /api/coach/students/:id/reports` is live |
 
 ---
 
@@ -152,15 +184,18 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `TournamentMgmtPage` — template library + active control panel | ⚠️ | `TournamentSetup.jsx` exists under `/admin`, not at `/tournament`; Referee access not confirmed |
-| `TournamentTemplateBuilder` — blind schedule, save, launch from template | ⚠️ | UI exists; launching from template not fully tested |
-| `BlindSchedulePanel` — current level highlighted, countdown, manual advance by Referee | ✅ | Blind timer and manual advance implemented |
-| `EliminationTracker` — live chip-ordered list, Eliminate action, finished-position log | ⚠️ | Elimination tracking exists; chip-ordered list and finished-position log unconfirmed |
-| `RuleExceptionPanel` — award/deduct chips, undo elimination, reason field, Admin approval threshold | ❌ | Not implemented |
-| `ConsolidationPanel` — move players to another table, close vacated table | ⚠️ | Experimental structure; not production-ready |
-| Rebuy/add-on game logic | ❌ | |
-| ICM / chip-chop calculation | ❌ | |
-| Late registration window | ❌ | |
+| `TournamentMgmtPage` (`/admin/tournaments`) — template library + control panel | ✅ | |
+| `TournamentTemplateBuilder` — blind schedule, save, launch from template | ⚠️ | UI exists; launch-from-template not fully tested |
+| `TournamentLobby` (`/tournament/:id/lobby`) — pre-game lobby, start CTA | ✅ | New; wired to real API |
+| `TournamentStandings` (`/tournament/:id/standings`) — live standings | ✅ | New; wired to real API |
+| `RefereeDashboard` (`/admin/referee`) — advance blind, end tournament, table view | ✅ | New; wired to real API |
+| `BlindSchedulePanel` — current level highlighted, countdown, manual advance | ✅ | |
+| `EliminationTracker` — chip-ordered list, Eliminate action, position log | ⚠️ | Elimination tracking exists; chip-ordered list and finished-position log unconfirmed |
+| `RuleExceptionPanel` — award/deduct chips, undo elimination, reason + Admin approval | ❌ | |
+| `ConsolidationPanel` — move players to another table | ⚠️ | Experimental; not production-ready |
+| Rebuy / add-on | ❌ | |
+| ICM / chip-chop | ❌ | |
+| Late registration | ❌ | |
 
 ---
 
@@ -168,9 +203,10 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `MultiTablePage` — responsive grid, broadcast bar, All/Tournament filter | ⚠️ | Grid and broadcast bar exist; All/Tournament filter toggle not confirmed |
-| `TableMiniGrid` — per-table cell, hover Referee actions, click → full view | ⚠️ | Tile cells exist; hover Referee actions not implemented |
-| `BroadcastBar` — 280-char message, send to all tables as toast/banner, history, tournament prefix | ⚠️ | Game-control broadcast (Start/Pause/etc.) implemented; text message broadcast not confirmed |
+| `MultiTablePage` — responsive grid, broadcast bar | ✅ | |
+| All/Tournament filter toggle | ⚠️ | Not confirmed |
+| `TableMiniGrid` — per-table cell; hover Referee actions | ⚠️ | Cells exist; hover Referee actions not implemented |
+| `BroadcastBar` — 280-char message broadcast to all tables as toast | ⚠️ | Game-control broadcast works (Start/Pause/etc.); text message broadcast unconfirmed |
 
 ---
 
@@ -178,12 +214,13 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `UserManagementPage` — searchable list, New User, empty state | ✅ | |
-| `UserListTable` — debounced search, filters (role/status/date), URL-persisted filters, virtual scroll | ⚠️ | Search and role filter exist; URL-persisted filters and virtual scroll unconfirmed |
-| `UserDetailPanel` — edit name/email/avatar, Suspend/Reinstate/Delete, Reset Password, per-user Audit Log tab | ⚠️ | Edit and reset exist; avatar upload, per-user Audit Log tab, username-confirm dialog not confirmed |
-| `AuditLogPage` — `/admin/audit`, filters, 90-day retention, CSV export | ❌ | Page does not exist |
-| `PlatformSettingsPage` — `/admin/settings`, configurable session timeout, blind defaults, etc. | ❌ | Page does not exist |
-| `CoachOverview` — coach-filtered view, stable size, reassign student (Superadmin only) | ❌ | Not implemented |
+| `UserManagementPage` — searchable list, New User | ✅ | |
+| `UserListTable` — debounced search, role/status filters, URL-persisted, virtual scroll | ⚠️ | Search + role filter exist; URL-persist and virtual scroll unconfirmed |
+| `UserDetailPanel` — edit, Suspend/Reinstate/Delete, Reset Password | ⚠️ | Core edit and reset work; per-user Audit Log tab missing |
+| Coach application approval flow (admin approves `register-coach` requests) | ❌ | Backend enforces approval; no admin UI for it |
+| `AuditLogPage` (`/admin/audit`) | ❌ | |
+| `PlatformSettingsPage` (`/admin/settings`) | ❌ | |
+| `CoachOverview` — coach-filtered view, stable size, reassign student | ❌ | |
 
 ---
 
@@ -191,10 +228,10 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `RolesPage` — `/admin/roles`, Superadmin only | ❌ | Page does not exist |
-| `PermissionMatrix` — read-only grid, roles × 12 permissions | ❌ | Permission system implemented server-side; no UI matrix |
-| `RoleAssignmentPanel` — assign/revoke role, high-friction Admin promotion, session invalidation, email notify, audit-logged | ❌ | Role can be set in UserDetail; formal role assignment flow not implemented |
-| `ForbiddenPage` — 403 with role-appropriate explanation, attempt logged | ❌ | |
+| RBAC enforced server-side (migration 008) | ✅ | |
+| `RolesPage` (`/admin/roles`) + `PermissionMatrix` — Superadmin only | ❌ | |
+| `RoleAssignmentPanel` — formal role assignment flow, session invalidation, email notify | ❌ | Role settable in UserDetail; formal flow not implemented |
+| `ForbiddenPage` — 403 with explanation; attempt logged | ❌ | Wildcard redirects to `/lobby` |
 
 ---
 
@@ -202,102 +239,176 @@ Legend: ✅ Done · ⚠️ Partial · ❌ Missing
 
 | Component | Status | Notes |
 |---|---|---|
-| `AnalyticsPage` — `/analytics`, tabbed, player self-service + coach/admin views | ❌ | Page does not exist |
-| `LeaderboardTable` — rank, avatar, metric, trend arrow, own row highlighted, top-50 + separator | ⚠️ | Leaderboard data exists in DB; no dedicated analytics page |
-| `HandTagChart` — bar chart of tag frequency, click → filtered history, date filter, CSV export | ❌ | Tag data exists; chart component not in analytics page |
-| `MistakeMatrix` — 6×4 heat map (position × street), click → filtered history | ❌ | |
-| `PlatformAnalyticsDashboard` — Admin/Superadmin only, DAU, active sessions, sparklines, 60s refresh | ❌ | |
-| `PlayerStatsPage` — VPIP/PFR/aggression/win-rate by position, net chips over time, hand history | ⚠️ | Stats computed and stored; no dedicated player stats page |
+| `AnalysisPage` (`/analysis`) — tag analysis, hand filters | ✅ | New — fully wired to real API |
+| `LeaderboardPage` (`/leaderboard`) — ranked table, period filter, search, medals | ✅ | New — wired to real API |
+| `MistakeMatrixPanel` — 6×4 heat map (position × street) | ⚠️ | Component exists (`MistakeMatrixPanel.test.jsx` present); integration in AnalysisPage unconfirmed |
+| `PlayerHeatmap` | ⚠️ | Test file exists; integration unconfirmed |
+| `PlatformAnalyticsDashboard` — Admin/Superadmin only, DAU, sparklines, 60s refresh | ❌ | |
+| `PlayerStatsPage` — dedicated VPIP/PFR/win-rate-by-position page | ❌ | Stats in lobby stats row; no dedicated self-service stats page |
 
 ---
 
-## 16. Backend Services
+## 16. Bot Tables (new — not in original spec)
+
+| Feature | Status | Notes |
+|---|---|---|
+| `BotLobbyPage` (`/bot-lobby`) — create/join bot cash tables | ✅ | |
+| `BotTableController` — autonomous hand lifecycle (start, showdown, reset) | ✅ | |
+| `BotDecisionService` — bot action logic | ✅ | |
+| Socket visibility enforcement (`private` = creator only; `school` = same-school members) | ✅ | |
+| Bot seats indicator on table | ⚠️ | `BotSeatIndicator.test.jsx` present; integration unconfirmed |
+| `BotTableCard` in lobby grid | ⚠️ | Test file present; lobby integration unconfirmed |
+
+---
+
+## 17. School Management (new — not in original spec)
+
+| Feature | Status | Notes |
+|---|---|---|
+| REST API (`/api/admin/schools`) — CRUD, member management, feature toggles | ✅ | |
+| Capacity limits (maxCoaches, maxStudents) | ✅ | |
+| 8 per-school feature toggles (replay, analysis, chip_bank, playlists, tournaments, crm, leaderboard, scenarios) | ✅ | |
+| Admin UI for school management | ❌ | API only; no client page |
+
+---
+
+## 18. Chip Bank (new — not in original spec)
+
+| Feature | Status | Notes |
+|---|---|---|
+| Persistent chip balance in Supabase (`player_chip_bank`) | ✅ | |
+| Atomic buy-in at `join_room`, cash-out on disconnect | ✅ | |
+| REST endpoints (balance, reload, adjust, history) | ✅ | |
+| Client buy-in via `join_room` `buyInAmount` param | ✅ | |
+| Client UI (balance display, reload button) | ❌ | API only; no client wallet UI |
+
+---
+
+## 19. Announcements (new — not in original spec)
+
+| Feature | Status | Notes |
+|---|---|---|
+| REST API (`/api/announcements`) — create, list, unread count, mark read | ✅ | |
+| Per-player and broadcast targeting (`all` / `individual`) | ✅ | |
+| Client `NotificationBell` wired to unread count | ❌ | Backend ready; bell component not wired |
+| Client `NotificationPanel` feed | ❌ | |
+
+---
+
+## 20. Coach Intelligence (new — not in original spec)
+
+| Feature | Status | Notes |
+|---|---|---|
+| `BaselineService` — computes per-player baselines | ✅ | |
+| `SessionQualityService` — session quality scoring | ✅ | |
+| `AlertService` + 6 detectors (MistakeSpike, Inactivity, VolumeDrop, LosingStreak, Regression, Milestone) | ✅ | |
+| `SessionPrepService` — assembles prep brief | ✅ | |
+| `ProgressReportService` — weekly/monthly report generation | ✅ | |
+| `NarratorService` (LLM Tier 2) — narrative text for reports and prep briefs | ✅ | Calls Claude API; fails gracefully if unavailable |
+| `CoachAlertsPage` (`/admin/alerts`) — alert feed UI | ⚠️ | **Mock data only**; backend `GET /api/coach/alerts` not yet wired in client |
+| `PrepBriefTab` (in CRM) | ⚠️ | **Mock data only**; backend `GET /api/coach/students/:id/prep-brief` live but not wired in client |
+| `ReportsTab` (in CRM) | ⚠️ | **Mock data only**; backend `GET /api/coach/students/:id/reports` live but not wired in client |
+| `StableOverviewPage` (`/admin/stable`) | ⚠️ | **Mock data only**; backend `GET /api/coach/reports/stable` not yet wired in client |
+
+---
+
+## 21. Backend Services
 
 | Service | Status | Notes |
 |---|---|---|
-| `AuthService` / `JwtService` | ✅ | |
+| `AuthService` / `JwtService` | ✅ | + register, register-coach, reset-password |
 | `UserService` / `PlayerRoster` | ✅ | |
-| `RBACMiddleware` / `requireRole` | ✅ | |
-| `TableService` | ✅ | Embedded in socket handlers |
+| `RBACMiddleware` / `requireRole` / `requirePermission` | ✅ | |
+| `TableService` (`routes/tables.js`) | ✅ | Full CRUD + privacy modes |
 | `GameEngine` / `GameManager` | ✅ | |
 | `HandService` / repositories | ✅ | |
-| `PlaylistService` / `PlaylistRepository` | ✅ | |
-| `CRMService` | ⚠️ | Notes and schedule stored; no formal CRMService class |
-| `TournamentService` | ⚠️ | Embedded in GameManager; no standalone service |
-| `NotificationService` | ❌ | No in-app notification delivery system |
-| `AnalyticsService` | ⚠️ | `AnalyzerService` for hand tagging; no aggregation service for analytics page |
-| `AuditService` | ❌ | No immutable audit log |
-| `PresenceService` | ❌ | No dedicated online/offline/away tracking service |
-| `WebSocketGateway` | ✅ | Socket.IO handlers |
-| `PlatformConfigService` | ❌ | Hardcoded env vars; no configurable settings store |
-| `EmailService` | ❌ | No email delivery |
+| `PlaylistService` | ✅ | |
+| `AnalysisService` / `AnalyzerService` | ✅ | |
+| `CRMService` (`admin/crm.js`) | ✅ | |
+| `TournamentService` (`admin/tournaments.js`) | ✅ | |
+| `AlertService` + detectors | ✅ | |
+| `BaselineService` | ✅ | |
+| `SessionQualityService` | ✅ | |
+| `SessionPrepService` | ✅ | |
+| `ProgressReportService` | ✅ | |
+| `NarratorService` (LLM) | ✅ | |
+| `BotDecisionService` + `BotTableController` | ✅ | |
+| `AlphaReporter` | ✅ | |
+| **`NotificationService`** — in-app delivery, bell badge, push | ❌ | Announcements API ships data; no client delivery layer |
+| **`AuditService`** — immutable append-only log | ❌ | |
+| **`PresenceService`** — online/offline/away tracking | ❌ | |
+| **`PlatformConfigService`** — configurable settings store | ❌ | Settings still hardcoded env vars |
+| **`EmailService`** — transactional email | ❌ | |
 
 ---
 
-## 17. Cross-Cutting Concerns
+## 22. Cross-Cutting Concerns
 
 | Concern | Status | Notes |
 |---|---|---|
-| All routes require valid session (401 → `/login` with deep-link restore) | ⚠️ | 401 redirect works; deep-link restoration not confirmed |
+| All routes require valid session; 401 → `/login` | ✅ | |
 | RBAC enforced server-side on every endpoint | ✅ | |
-| Coach sidebar absent from Player/Trial/Moderator DOM | ✅ | |
-| WebSocket closed on explicit logout | ⚠️ | Logout clears JWT; explicit WS teardown not confirmed |
+| Deep-link restoration after re-auth | ⚠️ | `RequireAuth` passes `state.from`; restoration not confirmed end-to-end |
+| WebSocket closed on explicit logout | ⚠️ | JWT cleared; explicit WS teardown not confirmed |
 | Disconnection retry ×5 exponential backoff | ✅ | |
-| Page-reload auto-rejoin at table (US-085) | ✅ | |
+| Page-reload auto-rejoin at table | ✅ | |
 | Seat-hold grace period on session expiry | ❌ | |
-| `DealErrorToast` 30s escalation | ⚠️ | Toast exists; escalation timer not confirmed |
-| 503 → full-page maintenance banner with 30s health-check retry | ⚠️ | `/api/health` endpoint exists; client maintenance banner not confirmed |
+| 503 → full-page maintenance banner with health-check retry | ⚠️ | `/api/health` endpoint exists; client banner not confirmed |
 | Audit logging on all admin actions | ❌ | `AuditService` not implemented |
-| Email notifications (invites, resets, role changes, lockout alerts) | ❌ | `EmailService` not implemented |
+| Email notifications (invites, resets, role changes, lockout) | ❌ | `EmailService` not implemented |
+| School-level feature gate (`feature_disabled` 403) | ✅ | Enforced server-side |
 
 ---
 
-## 18. Summary Table
+## 23. Summary Table
 
-| Domain | Spec items | ✅ Done | ⚠️ Partial | ❌ Missing |
+| Domain | Spec/scope items | ✅ Done | ⚠️ Partial | ❌ Missing |
 |---|---|---|---|---|
-| Routes | 16 | 8 | 1 | 7 |
-| Auth & Session | 7 | 5 | 2 | 1 |
+| Routes | 23 | 13 | 3 | 7 |
+| Auth & Session | 8 | 5 | 3 | 1 |
 | Navigation (shared) | 6 | 2 | 1 | 3 |
-| Lobby | 6 | 2 | 3 | 1 |
+| Lobby | 7 | 5 | 2 | 1 |
 | Table — Player | 6 | 4 | 2 | 0 |
 | Table — Coach Sidebar | 7 | 4 | 2 | 1 |
-| Hand Builder | 6 | 3 | 2 | 1 |
+| Hand Builder | 5 | 3 | 1 | 1 |
 | Stable Management | 5 | 0 | 1 | 4 |
 | Playlists | 4 | 0 | 2 | 2 |
-| Player CRM | 5 | 1 | 4 | 0 |
-| Tournament | 9 | 1 | 4 | 4 |
-| Multi-Table | 3 | 0 | 3 | 0 |
+| Player CRM | 7 | 2 | 5 | 0 |
+| Tournament | 10 | 5 | 3 | 3 |
+| Multi-Table | 4 | 1 | 3 | 0 |
 | User Management | 6 | 1 | 2 | 3 |
-| Roles & Permissions | 4 | 0 | 0 | 4 |
-| Stats & Analytics | 6 | 0 | 2 | 4 |
-| Backend Services | 16 | 8 | 4 | 4 |
-| Cross-Cutting | 11 | 4 | 5 | 2 |
-| **Total** | **133** | **43 (32%)** | **39 (29%)** | **51 (38%)** |
+| Roles & Permissions | 4 | 1 | 0 | 3 |
+| Stats & Analytics | 6 | 2 | 2 | 2 |
+| Bot Tables (new) | 5 | 3 | 2 | 0 |
+| School Management (new) | 5 | 4 | 0 | 1 |
+| Chip Bank (new) | 5 | 4 | 0 | 1 |
+| Announcements (new) | 5 | 3 | 0 | 2 |
+| Coach Intelligence (new) | 10 | 6 | 4 | 0 |
+| Backend Services | 19 | 14 | 0 | 5 |
+| Cross-Cutting | 11 | 4 | 4 | 3 |
+| **Total** | **163** | **86 (53%)** | **43 (26%)** | **34 (21%)** |
 
 ---
 
-## 19. Priority Gap List
+## 24. Priority Gap List
 
-These are the highest-impact gaps — either blocking other features or covering critical user-facing functionality.
+### Tier 1 — High-value, backend is ready, just needs client wiring
+1. **Coach Intelligence pages** — `CoachAlertsPage`, `PrepBriefTab`, `ReportsTab`, `StableOverviewPage` all have live backend APIs; client pages use hardcoded mock data. Wire each page to its `apiFetch` call.
+2. **`NotificationBell` / `NotificationPanel`** — `GET /api/announcements/unread-count` and `GET /api/announcements` are live; bell is not wired.
+3. **`RegisterPage` + `ForgotPasswordPage` routes** — pages exist and are linked from LoginPage, but neither is registered in `App.jsx`. Add the two `<Route>` entries.
 
-### Tier 1 — Blocking or high-visibility
-1. **`NotificationService`** — Blocks: playlist completion alerts, seat assignment notify, session reminders, role-change emails, invite delivery
-2. **`AnalyticsPage` + `PlayerStatsPage`** (`/analytics`) — Players have no dedicated stats view; lobby `StatsRow` click-throughs are broken
-3. **`StableManagementPage`** (`/stable`) — Entire coach roster workflow is missing; `SeatAssignmentPanel`, `SessionTemplateBuilder`, presence status all depend on this
-4. **`PlaylistsPage`** (`/playlists`) — No standalone playlist editor; coaches can only manage playlists through the sidebar
-5. **`HandPlaybackPlayer`** — ReplayEngine exists server-side but is not surfaced in the table view for players or the hand builder
+### Tier 2 — New features missing client UI
+4. **School Management admin page** — full REST API exists; no client UI to create/edit schools or manage members/feature toggles.
+5. **Chip Bank wallet UI** — full bank API exists (balance, reload, history); no client balance display or reload button for players/coaches.
+6. **Coach application approval** — `POST /api/auth/register-coach` backend exists; no admin UI to list and approve pending coach applications.
 
-### Tier 2 — Spec-required, no implementation
-6. **`AuditLogPage`** (`/admin/audit`) — Required for compliance; `AuditService` also missing
-7. **`PlatformSettingsPage`** (`/admin/settings`) — No UI for configuring timeouts, blind defaults, turn timer, reconnect grace
-8. **`RolesPage` + `PermissionMatrix`** (`/admin/roles`) — Superadmin can't view or edit permissions through the UI
-9. **`ForbiddenPage`** — 403 state has no dedicated page; unauthorised access attempts not logged
-10. **`AccountLockedBanner`** — Login lockout has no client-side feedback
-
-### Tier 3 — Partially wired, needs completion
-11. **`PasswordResetFlow`** — Admin UI exists; email delivery requires `EmailService`
-12. **`PlaylistProgressBar` + completion modal** — Coach completion notification not wired
-13. **`ConsolidationPanel`** (tournament) — Experimental; not production-ready
-14. **`RuleExceptionPanel`** (tournament) — No chip-award/deduct exception flow
-15. **`CoachOverview`** (User Management) — Coach roster view and student reassignment missing
+### Tier 3 — Spec features not yet built
+7. **`StableManagementPage`** (`/stable`) — `StableRoster`, `SeatAssignmentPanel`, `SessionTemplateBuilder` all missing.
+8. **`PlaylistsPage`** (`/playlists`) — standalone playlist editor with drag-to-reorder.
+9. **`AuditLogPage`** (`/admin/audit`) + `AuditService` — required for compliance stories.
+10. **`PlatformSettingsPage`** (`/admin/settings`) + `PlatformConfigService`.
+11. **`RolesPage`** (`/admin/roles`) + `PermissionMatrix`.
+12. **`ForbiddenPage`** — 403 state currently redirects to `/lobby`.
+13. **`UpgradeModal`** — Trial users can see table tiles but no join-gate modal.
+14. **`PlaylistProgressBar`** + completion modal + coach notification.
+15. **`HandPlaybackPlayer`** — `ReplayEngine` exists server-side; not surfaced in TablePage or HandBuilder.
