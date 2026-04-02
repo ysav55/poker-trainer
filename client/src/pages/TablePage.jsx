@@ -8,6 +8,71 @@ import CoachSidebar from '../components/CoachSidebar.jsx';
 import TournamentInfoPanel from '../components/TournamentInfoPanel.jsx';
 import ModeratorControls from '../components/ModeratorControls.jsx';
 
+// ── Mode badge config ────────────────────────────────────────────────────────
+const MODE_BADGE = {
+  coached_cash:    { label: 'Coached',    bg: 'rgba(212,175,55,0.15)', color: '#d4af37', border: 'rgba(212,175,55,0.4)' },
+  tournament:      { label: 'Tournament', bg: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: 'rgba(59,130,246,0.4)' },
+  uncoached_cash:  { label: 'Auto',       bg: 'rgba(34,197,94,0.12)',  color: '#4ade80', border: 'rgba(34,197,94,0.35)' },
+};
+
+// ── TableTopBar ──────────────────────────────────────────────────────────────
+function TableTopBar({ tableName, tableMode, isSpectator, onBack }) {
+  const badge = MODE_BADGE[tableMode] ?? MODE_BADGE.uncoached_cash;
+  return (
+    <header
+      className="flex items-center justify-between px-4 shrink-0 z-20"
+      style={{
+        height: 44,
+        background: 'rgba(6,10,15,0.97)',
+        borderBottom: '1px solid #21262d',
+        backdropFilter: 'blur(8px)',
+      }}
+    >
+      {/* Left: back + logo + table name + mode badge */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="text-xs px-2 py-1 rounded transition-colors"
+          style={{ color: '#8b949e', border: '1px solid #30363d' }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#6e7681'; e.currentTarget.style.color = '#e6edf3'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#8b949e'; }}
+        >
+          ← Lobby
+        </button>
+        <span className="text-sm font-bold tracking-wide" style={{ color: '#d4af37' }}>
+          ♠ POKER TRAINER
+        </span>
+        {tableName && (
+          <>
+            <span style={{ color: '#30363d' }}>·</span>
+            <span className="text-sm font-medium truncate max-w-[180px]" style={{ color: '#e6edf3' }}>
+              {tableName}
+            </span>
+          </>
+        )}
+        <span
+          className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest"
+          style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}
+        >
+          {badge.label}
+        </span>
+        {isSpectator && (
+          <span
+            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest"
+            style={{
+              background: 'rgba(100,116,139,0.15)',
+              color: '#94a3b8',
+              border: '1px solid rgba(100,116,139,0.4)',
+            }}
+          >
+            Spectating
+          </span>
+        )}
+      </div>
+    </header>
+  );
+}
+
 export default function TablePage() {
   const { tableId } = useParams();
   return (
@@ -26,6 +91,7 @@ function FullTableView() {
   const {
     gameState,          // raw game state object
     isCoach: hookIsCoach,
+    isSpectator: hookIsSpectator,
     actionTimer,
     equityData,
     equityEnabled,
@@ -42,6 +108,8 @@ function FullTableView() {
   const navigate = useNavigate();
 
   const tableMode = gameState?.table_mode ?? gameState?.tableMode ?? hookState?.tableMode ?? 'coached_cash';
+  const tableName = gameState?.table_name ?? gameState?.room ?? null;
+  const isSpectator = hookIsSpectator ?? false;
 
   // A user with the coach role only *acts* as coach (controls the game) in coached_cash mode.
   // In tournament and uncoached_cash they join as a regular seated player.
@@ -101,44 +169,56 @@ function FullTableView() {
     <div
       style={{
         display: 'flex',
+        flexDirection: 'column',
         height: '100vh',
         width: '100vw',
         background: '#0d1117',
         overflow: 'hidden',
       }}
     >
-      {/* Main table — always rendered so all roles see their seat and cards */}
-      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-        <PokerTable
-          gameState={gameState}
-          myId={myId}
-          isCoach={actingAsCoach}
-          actionTimer={actionTimer}
-          emit={emit}
-          bbView={bbView}
-          equityData={equityData}
-          equityEnabled={equityEnabled}
-          sharedRange={sharedRange}
-          equitySettings={hookState?.equitySettings}
-        />
-      </div>
+      {/* Top bar — logo, table name, mode badge, spectating indicator, back button */}
+      <TableTopBar
+        tableName={tableName}
+        tableMode={tableMode}
+        isSpectator={isSpectator}
+        onBack={() => navigate('/lobby')}
+      />
 
-      {/* Coach sidebar — only in coached_cash mode where the coach runs the game */}
-      {actingAsCoach && (
-        <CoachSidebar
-          gameState={gameState ?? {}}
-          emit={emit}
-          isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen((o) => !o)}
-          playlists={playlist?.playlists ?? []}
-          myId={myId}
-          setBlindLevels={emit.setBlindLevels}
-          onOpenScenarioBuilder={() => navigate('/admin/hands')}
-          equityEnabled={equityEnabled ?? false}
-          setEquityEnabled={setEquityEnabled}
-          equitySettings={hookState?.equitySettings}
-        />
-      )}
+      {/* Content row: table + optional sidebar */}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+        {/* Main table — always rendered so all roles see their seat and cards */}
+        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+          <PokerTable
+            gameState={gameState}
+            myId={myId}
+            isCoach={actingAsCoach}
+            actionTimer={actionTimer}
+            emit={emit}
+            bbView={bbView}
+            equityData={equityData}
+            equityEnabled={equityEnabled}
+            sharedRange={sharedRange}
+            equitySettings={hookState?.equitySettings}
+          />
+        </div>
+
+        {/* Coach sidebar — only in coached_cash mode where the coach runs the game */}
+        {actingAsCoach && (
+          <CoachSidebar
+            gameState={gameState ?? {}}
+            emit={emit}
+            isOpen={sidebarOpen}
+            onToggle={() => setSidebarOpen((o) => !o)}
+            playlists={playlist?.playlists ?? []}
+            myId={myId}
+            setBlindLevels={emit.setBlindLevels}
+            onOpenScenarioBuilder={() => navigate('/admin/hands')}
+            equityEnabled={equityEnabled ?? false}
+            setEquityEnabled={setEquityEnabled}
+            equitySettings={hookState?.equitySettings}
+          />
+        )}
+      </div>
 
       {/* Tournament overlay — shows blind timer, eliminations, level info */}
       {tableMode === 'tournament' && (
