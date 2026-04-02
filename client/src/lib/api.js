@@ -21,15 +21,18 @@ export async function apiFetch(path, options = {}) {
     },
   });
   if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try { message = (await res.json()).message || message; } catch { /* not JSON */ }
     if (res.status === 401) {
+      // Only treat as "session expired" if there was a token — means the token was
+      // rejected, not that credentials were wrong on a login attempt.
+      const hadToken = !!localStorage.getItem('poker_trainer_jwt');
       localStorage.removeItem('poker_trainer_jwt');
       localStorage.removeItem('poker_trainer_player_id');
-      const err = new Error('Session expired — please log in again');
+      const err = new Error(hadToken ? 'Session expired — please log in again' : message);
       err.status = 401;
       throw err;
     }
-    let message = `HTTP ${res.status}`;
-    try { message = (await res.json()).message || message; } catch { /* not JSON */ }
     throw new Error(message);
   }
   return res.json();
