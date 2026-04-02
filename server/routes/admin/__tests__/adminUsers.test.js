@@ -37,12 +37,16 @@ jest.mock('../../../db/supabase.js', () => {
     select:       jest.fn(),
     eq:           jest.fn(),
     single:       jest.fn(),
+    maybeSingle:  jest.fn(),
+    delete:       jest.fn(),
   };
   chain.from.mockReturnValue(chain);
   chain.select.mockReturnValue(chain);
   chain.eq.mockReturnValue(chain);
+  chain.delete.mockReturnValue(chain);
   // Default: no role found
   chain.single.mockResolvedValue({ data: null, error: null });
+  chain.maybeSingle.mockResolvedValue({ data: null, error: null });
   return chain;
 });
 
@@ -98,7 +102,9 @@ beforeEach(() => {
   supabase.from.mockReturnValue(supabase);
   supabase.select.mockReturnValue(supabase);
   supabase.eq.mockReturnValue(supabase);
+  supabase.delete.mockReturnValue(supabase);
   supabase.single.mockResolvedValue({ data: null, error: null });
+  supabase.maybeSingle.mockResolvedValue({ data: null, error: null });
   // Default: permission check passes
   mockPermMiddleware.mockImplementation((req, res, next) => next());
 });
@@ -123,7 +129,7 @@ describe('GET /api/admin/users', () => {
 
   test('returns 200 with players array when authorized', async () => {
     const fakePlayers = [
-      { id: 'uuid-001', display_name: 'Alice', status: 'active' },
+      { id: 'uuid-001', display_name: 'Alice', status: 'active', player_roles: [] },
     ];
     listPlayers.mockResolvedValueOnce(fakePlayers);
 
@@ -131,7 +137,11 @@ describe('GET /api/admin/users', () => {
     const res = await request(app).get('/api/admin/users');
 
     expect(res.status).toBe(200);
-    expect(res.body.players).toEqual(fakePlayers);
+    expect(res.body.players).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'uuid-001', display_name: 'Alice', status: 'active' }),
+      ])
+    );
   });
 
   test('passes status query param to listPlayers', async () => {
@@ -320,14 +330,12 @@ describe('POST /api/admin/users/:id/reset-password', () => {
 // ─── GET /api/admin/users/:id ─────────────────────────────────────────────────
 
 describe('GET /api/admin/users/:id', () => {
-  // We need maybeSingle on the supabase mock — add it lazily in each test
+  // Wire eq().maybeSingle() for this test group
   beforeEach(() => {
-    if (!supabase.maybeSingle) {
-      supabase.maybeSingle = jest.fn();
-    }
-    supabase.maybeSingle = jest.fn();
-    // wire chain: from().select().eq().maybeSingle()
-    supabase.eq.mockReturnValue({ maybeSingle: supabase.maybeSingle });
+    supabase.eq.mockReturnValue({
+      maybeSingle: supabase.maybeSingle,
+      eq: supabase.eq,
+    });
   });
 
   test('returns 200 with player data when found', async () => {

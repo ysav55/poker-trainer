@@ -48,6 +48,9 @@ module.exports = {
   // Hand queries
   getHands:             HandRepo.getHands,
   getHandDetail:        HandRepo.getHandDetail,
+  getHandHistory:       HandRepo.getHandHistory,
+  getDistinctHandTags:  HandRepo.getDistinctHandTags,
+  getDistinctTableIds:  HandRepo.getDistinctTableIds,
 
   // Player
   upsertPlayerIdentity:  PlayerRepo.upsertPlayerIdentity,

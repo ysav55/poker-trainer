@@ -1,34 +1,32 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiFetch } from '../lib/api.js';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const GOLD  = '#d4af37';
-const PANEL = { background: '#161b22', border: '1px solid #30363d', borderRadius: 8 };
-
-const TAG_TYPE_LABELS = {
-  '':       'All Types',
-  auto:     'Auto',
-  mistake:  'Mistake',
-  sizing:   'Sizing',
-  coach:    'Coach',
-};
-
-const TAG_TYPE_COLORS = {
-  auto:    { color: '#58a6ff', bg: 'rgba(88,166,255,0.12)',  border: 'rgba(88,166,255,0.3)'  },
-  mistake: { color: '#f85149', bg: 'rgba(248,81,73,0.12)',   border: 'rgba(248,81,73,0.3)'   },
-  sizing:  { color: '#3fb950', bg: 'rgba(63,185,80,0.12)',   border: 'rgba(63,185,80,0.3)'   },
-  coach:   { color: '#d4af37', bg: 'rgba(212,175,55,0.12)', border: 'rgba(212,175,55,0.3)'  },
-};
+const GOLD   = '#d4af37';
+const RED    = '#f85149';
+const BLUE   = '#58a6ff';
+const GREEN  = '#3fb950';
+const PANEL  = { background: '#161b22', border: '1px solid #30363d', borderRadius: 8 };
 
 const COACH_ROLES = new Set(['coach', 'admin', 'superadmin']);
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
+const TAG_TYPE_COLORS = {
+  auto:    '#58a6ff',
+  mistake: '#f85149',
+  sizing:  '#3fb950',
+  coach:   '#d4af37',
+};
+
+// Max mistake tags to fetch hands for in the flagged-hands query
+const MAX_MISTAKE_FETCH = 5;
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -36,437 +34,306 @@ function formatDate(iso) {
   catch { return iso; }
 }
 
-function TagTypePill({ type }) {
-  const c = TAG_TYPE_COLORS[type] || TAG_TYPE_COLORS.auto;
+// ── Custom chart label ─────────────────────────────────────────────────────────
+
+function HorizBarLabel({ x, y, width, height, value }) {
+  if (!value) return null;
   return (
-    <span
-      className="text-[10px] font-bold px-1.5 py-0.5 rounded"
-      style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.color }}
+    <text
+      x={x + width + 6}
+      y={y + height / 2 + 1}
+      fontSize={10}
+      fill="#8b949e"
+      dominantBaseline="middle"
     >
-      {type?.toUpperCase()}
-    </span>
+      {value}
+    </text>
   );
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function FilterBar({ players, filters, onChange }) {
+function FilterBar({ players, filters, onChange, onRun, loading }) {
   return (
     <div
       className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-lg"
       style={{ background: '#161b22', border: '1px solid #30363d' }}
     >
-      {/* Player selector */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Player</span>
-        <select
-          value={filters.playerId}
-          onChange={e => onChange('playerId', e.target.value)}
-          data-testid="filter-player"
-          className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
-          style={{ background: '#0d1117', border: '1px solid #30363d', minWidth: 140 }}
-        >
-          <option value="">All Players</option>
-          {players.map(p => (
-            <option key={p.stableId} value={p.stableId}>{p.name}</option>
-          ))}
-        </select>
-      </div>
+      {/* Student selector */}
+      <select
+        value={filters.playerId}
+        onChange={e => onChange('playerId', e.target.value)}
+        data-testid="filter-player"
+        className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
+        style={{ background: '#0d1117', border: '1px solid #30363d', minWidth: 160 }}
+      >
+        <option value="">Select Student ▾</option>
+        {players.map(p => (
+          <option key={p.stableId} value={p.stableId}>{p.name}</option>
+        ))}
+      </select>
 
       {/* Date range */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">From</span>
-        <input
-          type="date"
-          value={filters.dateFrom}
-          onChange={e => onChange('dateFrom', e.target.value)}
-          data-testid="filter-date-from"
-          className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
-          style={{ background: '#0d1117', border: '1px solid #30363d', colorScheme: 'dark' }}
-        />
-      </div>
+      <input
+        type="date"
+        value={filters.dateFrom}
+        onChange={e => onChange('dateFrom', e.target.value)}
+        data-testid="filter-date-from"
+        className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
+        style={{ background: '#0d1117', border: '1px solid #30363d', colorScheme: 'dark' }}
+      />
+      <span className="text-xs text-gray-600">–</span>
+      <input
+        type="date"
+        value={filters.dateTo}
+        onChange={e => onChange('dateTo', e.target.value)}
+        data-testid="filter-date-to"
+        className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
+        style={{ background: '#0d1117', border: '1px solid #30363d', colorScheme: 'dark' }}
+      />
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">To</span>
-        <input
-          type="date"
-          value={filters.dateTo}
-          onChange={e => onChange('dateTo', e.target.value)}
-          data-testid="filter-date-to"
-          className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
-          style={{ background: '#0d1117', border: '1px solid #30363d', colorScheme: 'dark' }}
-        />
-      </div>
-
-      {/* Tag type filter */}
-      <div className="flex gap-1.5 ml-auto">
-        {Object.entries(TAG_TYPE_LABELS).map(([val, label]) => (
-          <button
-            key={val}
-            onClick={() => onChange('tagType', val)}
-            data-testid={`filter-tagtype-${val || 'all'}`}
-            className="text-xs px-3 py-1 rounded-full font-semibold transition-colors"
-            style={
-              filters.tagType === val
-                ? { background: 'rgba(212,175,55,0.18)', border: `1px solid rgba(212,175,55,0.5)`, color: GOLD }
-                : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#6b7280' }
-            }
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <button
+        onClick={onRun}
+        disabled={loading}
+        data-testid="run-analysis-btn"
+        className="ml-auto rounded px-4 py-1.5 text-sm font-semibold transition-opacity"
+        style={{
+          background: loading ? 'rgba(212,175,55,0.3)' : 'rgba(212,175,55,0.2)',
+          border: `1px solid rgba(212,175,55,0.5)`,
+          color: GOLD,
+          opacity: loading ? 0.7 : 1,
+          cursor: loading ? 'not-allowed' : 'pointer',
+        }}
+      >
+        {loading ? 'Analysing…' : 'Run Analysis'}
+      </button>
     </div>
   );
 }
 
-function TagTable({ tags, selectedTag, onSelectTag, loading }) {
-  if (loading) {
-    return <div className="py-10 text-center text-sm text-gray-600">Loading…</div>;
-  }
-  if (tags.length === 0) {
-    return (
-      <div className="py-10 text-center text-sm text-gray-600" data-testid="tag-table-empty">
-        No tags found for the selected filters.
-      </div>
-    );
-  }
+function ResultsSummary({ playerName, filters, totalHands, tagCount }) {
+  const parts = [];
+  if (playerName) parts.push(playerName);
+  else parts.push('All Students');
+  if (filters.dateFrom && filters.dateTo)
+    parts.push(`${formatDate(filters.dateFrom)} – ${formatDate(filters.dateTo)}`);
+  else if (filters.dateFrom)
+    parts.push(`From ${formatDate(filters.dateFrom)}`);
+  else if (filters.dateTo)
+    parts.push(`Until ${formatDate(filters.dateTo)}`);
 
   return (
-    <div className="overflow-x-auto" data-testid="tag-table">
-      <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid #30363d', background: '#0d1117' }}>
-            {[
-              { label: 'Tag', w: null },
-              { label: 'Type', w: 80 },
-              { label: 'Hands', w: 70 },
-              { label: '% Hands', w: 90 },
-              { label: 'Trend', w: 60 },
-            ].map(({ label, w }) => (
-              <th
-                key={label}
-                style={{
-                  padding: '8px 12px',
-                  textAlign: 'left',
-                  color: '#6e7681',
-                  fontWeight: 600,
-                  fontSize: 10,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  width: w ?? undefined,
-                }}
-              >
-                {label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {tags.map(t => {
-            const isSelected = selectedTag?.tag === t.tag && selectedTag?.tag_type === t.tag_type;
-            return (
-              <tr
-                key={`${t.tag_type}-${t.tag}`}
-                onClick={() => onSelectTag(isSelected ? null : t)}
-                data-testid={`tag-row-${t.tag}`}
-                style={{
-                  borderBottom: '1px solid #21262d',
-                  background: isSelected ? 'rgba(212,175,55,0.07)' : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'background 0.1s',
-                }}
-                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(212,175,55,0.07)' : 'transparent'; }}
-              >
-                <td style={{ padding: '8px 12px', color: '#e6edf3', fontWeight: isSelected ? 700 : 400 }}>
-                  {t.tag}
-                </td>
-                <td style={{ padding: '8px 12px' }}>
-                  <TagTypePill type={t.tag_type} />
-                </td>
-                <td style={{ padding: '8px 12px', color: '#8b949e', fontFamily: 'monospace' }}>
-                  {t.count}
-                </td>
-                <td style={{ padding: '8px 12px' }}>
-                  <div className="flex items-center gap-2">
-                    <div
-                      style={{
-                        width: `${Math.min(t.pct, 100) * 0.6}px`,
-                        height: 4,
-                        background: TAG_TYPE_COLORS[t.tag_type]?.color ?? GOLD,
-                        borderRadius: 2,
-                        minWidth: 2,
-                      }}
-                    />
-                    <span style={{ color: '#8b949e', fontFamily: 'monospace', fontSize: 12 }}>
-                      {t.pct}%
-                    </span>
-                  </div>
-                </td>
-                <td style={{ padding: '8px 12px', color: '#6e7681', fontSize: 12 }}>
-                  {t.pct >= 50 ? '↑' : t.pct >= 20 ? '→' : '↓'}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div
+      className="px-4 py-2.5 rounded-lg text-sm flex items-center gap-4"
+      style={{ background: '#161b22', border: '1px solid #30363d' }}
+      data-testid="summary-bar"
+    >
+      <span className="font-semibold text-gray-300">RESULTS: {parts.join(' · ')}</span>
+      <span className="text-gray-500">
+        <span className="font-mono text-gray-200 font-bold">{totalHands}</span> hands
+      </span>
+      <span className="text-gray-500">
+        <span className="font-mono text-gray-200 font-bold">{tagCount}</span> unique tags
+      </span>
     </div>
   );
 }
 
-function MistakeSpotlight({ tags }) {
-  const top3 = useMemo(
-    () => tags.filter(t => t.tag_type === 'mistake').slice(0, 3),
+function TagDistributionChart({ tags, onBarClick, selectedTag }) {
+  const data = useMemo(() =>
+    tags.slice(0, 12).map(t => ({
+      name: t.tag,
+      count: t.count,
+      pct: t.pct,
+      tag_type: t.tag_type,
+    })),
     [tags]
   );
 
-  if (top3.length === 0) {
+  if (data.length === 0) {
     return (
-      <div
-        className="rounded-lg p-4 text-center"
-        style={{ background: 'rgba(248,81,73,0.05)', border: '1px solid rgba(248,81,73,0.15)' }}
-        data-testid="mistake-spotlight-empty"
-      >
-        <div className="text-xs text-gray-600">No mistakes detected in this sample.</div>
+      <div className="py-8 text-center text-sm text-gray-600" data-testid="tag-dist-empty">
+        No tags found.
       </div>
     );
   }
 
   return (
-    <div
-      className="rounded-lg p-4"
-      style={{ background: 'rgba(248,81,73,0.05)', border: '1px solid rgba(248,81,73,0.2)' }}
-      data-testid="mistake-spotlight"
-    >
-      <div className="text-xs font-bold tracking-wider uppercase mb-3" style={{ color: '#f85149' }}>
-        Mistake Spotlight
-      </div>
-      <div className="flex flex-col gap-2">
-        {top3.map((t, i) => (
-          <div key={t.tag} className="flex items-center gap-3">
-            <span className="text-lg">{['🔴', '🟠', '🟡'][i]}</span>
-            <div className="flex-1">
-              <span className="text-sm font-semibold text-gray-200">{t.tag}</span>
-              <span className="ml-2 text-xs text-gray-500">{t.count} hands ({t.pct}%)</span>
-            </div>
-          </div>
-        ))}
-      </div>
+    <div data-testid="tag-distribution-chart">
+      <ResponsiveContainer width="100%" height={Math.max(200, data.length * 26)}>
+        <BarChart
+          layout="vertical"
+          data={data}
+          margin={{ top: 0, right: 48, left: 8, bottom: 0 }}
+          onClick={e => e?.activePayload?.[0] && onBarClick(e.activePayload[0].payload)}
+        >
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#21262d" />
+          <XAxis
+            type="number"
+            tick={{ fill: '#6e7681', fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={{ fill: '#e6edf3', fontSize: 11 }}
+            width={100}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            contentStyle={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 6 }}
+            labelStyle={{ color: '#e6edf3', fontSize: 12 }}
+            itemStyle={{ color: GOLD, fontSize: 12 }}
+            formatter={(v, _, { payload }) => [`${v} hands (${payload.pct}%)`, payload.tag_type]}
+          />
+          <Bar dataKey="count" radius={[0, 3, 3, 0]} cursor="pointer" label={<HorizBarLabel />}>
+            {data.map((entry) => (
+              <Cell
+                key={entry.name}
+                fill={TAG_TYPE_COLORS[entry.tag_type] ?? GOLD}
+                opacity={!selectedTag || selectedTag === entry.name ? 1 : 0.35}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
 
-function HandBreakdownPanel({ tag, hands, loading, navigate }) {
-  if (!tag) return null;
+function MistakeBreakdownChart({ tags, onBarClick, selectedTag }) {
+  const data = useMemo(() =>
+    tags.filter(t => t.tag_type === 'mistake').slice(0, 10).map(t => ({
+      name: t.tag,
+      count: t.count,
+      pct: t.pct,
+      tag_type: t.tag_type,
+    })),
+    [tags]
+  );
 
-  const c = TAG_TYPE_COLORS[tag.tag_type] || TAG_TYPE_COLORS.auto;
+  if (data.length === 0) {
+    return (
+      <div className="py-8 text-center text-sm text-gray-600" data-testid="mistake-chart-empty">
+        No mistakes detected.
+      </div>
+    );
+  }
 
   return (
-    <div
-      className="rounded-lg p-4"
-      style={{ ...PANEL }}
-      data-testid="hand-breakdown-panel"
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-gray-100">{tag.tag}</span>
-          <TagTypePill type={tag.tag_type} />
-        </div>
-        <span className="text-xs text-gray-500">{tag.count} matching hand{tag.count !== 1 ? 's' : ''}</span>
+    <div data-testid="mistake-breakdown-chart">
+      <ResponsiveContainer width="100%" height={Math.max(160, data.length * 26)}>
+        <BarChart
+          layout="vertical"
+          data={data}
+          margin={{ top: 0, right: 48, left: 8, bottom: 0 }}
+          onClick={e => e?.activePayload?.[0] && onBarClick(e.activePayload[0].payload)}
+        >
+          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#21262d" />
+          <XAxis
+            type="number"
+            tick={{ fill: '#6e7681', fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={{ fill: '#f85149', fontSize: 11 }}
+            width={100}
+            axisLine={false}
+            tickLine={false}
+          />
+          <Tooltip
+            contentStyle={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 6 }}
+            labelStyle={{ color: '#e6edf3', fontSize: 12 }}
+            itemStyle={{ color: RED, fontSize: 12 }}
+            formatter={(v, _, { payload }) => [`${v} hands (${payload.pct}%)`, 'Mistakes']}
+          />
+          <Bar dataKey="count" fill={RED} radius={[0, 3, 3, 0]} cursor="pointer" label={<HorizBarLabel />}>
+            {data.map((entry) => (
+              <Cell
+                key={entry.name}
+                fill={RED}
+                opacity={!selectedTag || selectedTag === entry.name ? 1 : 0.35}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function FlaggedHandsList({ hands, loading, tagFilter }) {
+  const navigate = useNavigate();
+
+  const displayed = useMemo(() => {
+    if (!tagFilter) return hands;
+    return hands.filter(h => h.tags.includes(tagFilter));
+  }, [hands, tagFilter]);
+
+  return (
+    <div style={PANEL} className="rounded-lg overflow-hidden" data-testid="flagged-hands">
+      <div
+        className="px-4 py-2.5 flex items-center justify-between"
+        style={{ borderBottom: '1px solid #21262d' }}
+      >
+        <span className="text-xs font-bold tracking-wider uppercase" style={{ color: RED }}>
+          Flagged Hands {displayed.length > 0 && `(${displayed.length})`}
+        </span>
+        {tagFilter && (
+          <span className="text-xs text-gray-500">Filtered: {tagFilter}</span>
+        )}
       </div>
 
       {loading ? (
-        <div className="py-6 text-center text-sm text-gray-600">Loading hands…</div>
-      ) : hands.length === 0 ? (
-        <div className="py-6 text-center text-sm text-gray-600">No hands found.</div>
+        <div className="py-8 text-center text-sm text-gray-600">Loading hands…</div>
+      ) : displayed.length === 0 ? (
+        <div className="py-8 text-center text-sm text-gray-600" data-testid="flagged-hands-empty">
+          {tagFilter ? `No hands found for ${tagFilter}.` : 'No flagged hands.'}
+        </div>
       ) : (
-        <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
-          {hands.map(h => (
+        <div className="divide-y" style={{ borderColor: '#21262d' }}>
+          {displayed.slice(0, 30).map(h => (
             <div
               key={h.hand_id}
-              className="flex items-center justify-between rounded px-3 py-2 cursor-pointer"
-              style={{ background: '#0d1117', border: '1px solid #21262d' }}
-              onClick={() => h.table_id && navigate(`/table/${h.table_id}`)}
-              data-testid={`hand-row-${h.hand_id}`}
+              className="px-4 py-3 flex items-center justify-between group cursor-pointer"
+              style={{ background: 'transparent', transition: 'background 0.1s' }}
+              onClick={() => navigate(`/review?handId=${h.hand_id}`)}
+              data-testid={`flagged-hand-${h.hand_id}`}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
             >
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-400">{formatDate(h.started_at)}</span>
-                {h.winner_name && (
-                  <span className="text-xs text-gray-600">Won: {h.winner_name}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {h.final_pot != null && (
-                  <span className="text-xs font-mono" style={{ color: c.color }}>
-                    Pot {h.final_pot}
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-mono text-gray-200">
+                    Hand #{h.hand_number ?? h.hand_id?.slice(-6)}
                   </span>
-                )}
-                {h.table_id && (
-                  <span className="text-xs text-gray-600">→</span>
-                )}
+                  {h.mistakeTags.map(tag => (
+                    <span
+                      key={tag}
+                      className="text-[10px] font-bold px-1.5 py-0.5 rounded"
+                      style={{ background: 'rgba(248,81,73,0.12)', border: '1px solid rgba(248,81,73,0.3)', color: RED }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                <span className="text-xs text-gray-600">{formatDate(h.started_at)}</span>
               </div>
+              <span
+                className="text-xs font-semibold ml-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ color: GOLD }}
+              >
+                Open in Review Table →
+              </span>
             </div>
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function SizingChart({ tags }) {
-  const SIZING_ORDER = ['PROBE_BET', 'THIRD_POT_BET', 'HALF_POT_BET', 'POT_BET', 'OVERBET', 'OVERBET_JAM'];
-  const SIZING_LABELS = {
-    PROBE_BET:    '<25%',
-    THIRD_POT_BET:'33%',
-    HALF_POT_BET: '50%',
-    POT_BET:      'Pot',
-    OVERBET:      'Over',
-    OVERBET_JAM:  'Jam',
-  };
-
-  const data = useMemo(() => {
-    const tagMap = new Map(tags.filter(t => t.tag_type === 'sizing').map(t => [t.tag, t]));
-    return SIZING_ORDER.map(key => ({
-      name:  SIZING_LABELS[key] || key,
-      hands: tagMap.get(key)?.count ?? 0,
-      pct:   tagMap.get(key)?.pct ?? 0,
-      tag:   key,
-    }));
-  }, [tags]);
-
-  const hasData = data.some(d => d.hands > 0);
-
-  return (
-    <div style={PANEL} className="p-4 rounded-lg" data-testid="sizing-chart">
-      <div className="text-xs font-bold tracking-wider uppercase mb-3 text-gray-500">
-        Sizing Distribution
-      </div>
-      {!hasData ? (
-        <div className="py-4 text-center text-xs text-gray-600">No sizing data available.</div>
-      ) : (
-        <ResponsiveContainer width="100%" height={140}>
-          <BarChart data={data} margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
-            <XAxis dataKey="name" tick={{ fill: '#6e7681', fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: '#6e7681', fontSize: 10 }} axisLine={false} tickLine={false} />
-            <Tooltip
-              contentStyle={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 6 }}
-              labelStyle={{ color: '#e6edf3', fontSize: 12 }}
-              itemStyle={{ color: '#3fb950', fontSize: 12 }}
-              formatter={(v) => [`${v} hands`, 'Count']}
-            />
-            <Bar dataKey="hands" fill="#3fb950" radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-    </div>
-  );
-}
-
-function ComparePanel({ players, filters }) {
-  const [player2Id, setPlayer2Id] = useState('');
-  const [data2, setData2] = useState(null);
-  const [loading2, setLoading2] = useState(false);
-
-  useEffect(() => {
-    if (!player2Id) { setData2(null); return; }
-    setLoading2(true);
-    const params = new URLSearchParams({ playerId: player2Id });
-    if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
-    if (filters.dateTo)   params.set('dateTo', filters.dateTo);
-    if (filters.tagType)  params.set('tagType', filters.tagType);
-
-    apiFetch(`/api/analysis/tags?${params}`)
-      .then(setData2)
-      .catch(() => setData2(null))
-      .finally(() => setLoading2(false));
-  }, [player2Id, filters.dateFrom, filters.dateTo, filters.tagType]);
-
-  const player1Name = players.find(p => p.stableId === filters.playerId)?.name ?? 'All Players';
-  const player2Name = players.find(p => p.stableId === player2Id)?.name ?? '—';
-
-  return (
-    <div style={PANEL} className="p-4 rounded-lg" data-testid="compare-panel">
-      <div className="text-xs font-bold tracking-wider uppercase mb-3 text-gray-500">
-        Player Comparison
-      </div>
-
-      <div className="mb-4">
-        <select
-          value={player2Id}
-          onChange={e => setPlayer2Id(e.target.value)}
-          data-testid="compare-player2"
-          className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
-          style={{ background: '#0d1117', border: '1px solid #30363d', minWidth: 160 }}
-        >
-          <option value="">Select player to compare…</option>
-          {players
-            .filter(p => p.stableId !== filters.playerId)
-            .map(p => (
-              <option key={p.stableId} value={p.stableId}>{p.name}</option>
-            ))}
-        </select>
-      </div>
-
-      {player2Id && (
-        loading2 ? (
-          <div className="py-4 text-center text-xs text-gray-600">Loading comparison…</div>
-        ) : data2 ? (
-          <CompareGrid player1Name={player1Name} player2Name={player2Name} data2={data2} />
-        ) : null
-      )}
-    </div>
-  );
-}
-
-function CompareGrid({ player1Name, player2Name, data1, data2 }) {
-  // Build unified tag list
-  const tagSet = new Map();
-  (data1?.tags || []).forEach(t => tagSet.set(t.tag, { tag: t.tag, tag_type: t.tag_type, pct1: t.pct, pct2: 0 }));
-  (data2?.tags || []).forEach(t => {
-    if (tagSet.has(t.tag)) tagSet.get(t.tag).pct2 = t.pct;
-    else tagSet.set(t.tag, { tag: t.tag, tag_type: t.tag_type, pct1: 0, pct2: t.pct });
-  });
-
-  const rows = [...tagSet.values()].sort((a, b) => Math.abs(b.pct1 - b.pct2) - Math.abs(a.pct1 - a.pct2));
-
-  if (rows.length === 0) {
-    return <div className="text-xs text-gray-600 text-center">No overlapping tags.</div>;
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 12 }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid #21262d' }}>
-            <th style={{ padding: '6px 8px', textAlign: 'left', color: '#6e7681', fontSize: 10, fontWeight: 600, textTransform: 'uppercase' }}>Tag</th>
-            <th style={{ padding: '6px 8px', textAlign: 'right', color: '#58a6ff', fontSize: 10, fontWeight: 600 }}>{player1Name}</th>
-            <th style={{ padding: '6px 8px', textAlign: 'right', color: '#d4af37', fontSize: 10, fontWeight: 600 }}>{player2Name}</th>
-            <th style={{ padding: '6px 8px', textAlign: 'right', color: '#6e7681', fontSize: 10, fontWeight: 600 }}>Diff</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.slice(0, 15).map(r => {
-            const diff = r.pct1 - r.pct2;
-            const diffColor = diff > 0 ? '#58a6ff' : diff < 0 ? '#d4af37' : '#6e7681';
-            return (
-              <tr key={r.tag} style={{ borderBottom: '1px solid #21262d' }}>
-                <td style={{ padding: '5px 8px', color: '#e6edf3' }}>
-                  <span className="mr-1">{r.tag}</span>
-                  <TagTypePill type={r.tag_type} />
-                </td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#58a6ff' }}>{r.pct1}%</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: '#d4af37' }}>{r.pct2}%</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', fontFamily: 'monospace', color: diffColor, fontWeight: 600 }}>
-                  {diff > 0 ? '+' : ''}{diff}%
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }
@@ -475,73 +342,119 @@ function CompareGrid({ player1Name, player2Name, data1, data2 }) {
 
 export default function AnalysisPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const isCoachPlus = COACH_ROLES.has(user?.role);
 
+  if (!isCoachPlus) return <Navigate to="/lobby" replace />;
+
+  return <AnalysisPageInner />;
+}
+
+function AnalysisPageInner() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const isCoachPlus = COACH_ROLES.has(user?.role);
 
   // Filter state
-  const [filters, setFilters] = useState({ playerId: '', dateFrom: '', dateTo: '', tagType: '' });
+  const [filters, setFilters]   = useState({ playerId: '', dateFrom: '', dateTo: '' });
+  const [players, setPlayers]   = useState([]);
+  const [playersLoaded, setPlayersLoaded] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
 
-  // Data state
-  const [players, setPlayers]     = useState([]);
-  const [tagData, setTagData]     = useState({ totalHands: 0, tags: [] });
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState('');
-
-  // Tag breakdown state
-  const [selectedTag, setSelectedTag]   = useState(null);
-  const [handsForTag, setHandsForTag]   = useState([]);
+  // Results state
+  const [hasRun, setHasRun]         = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState('');
+  const [tagData, setTagData]       = useState({ totalHands: 0, tags: [] });
+  const [flaggedHands, setFlaggedHands] = useState([]);
   const [handsLoading, setHandsLoading] = useState(false);
 
-  // Comparison mode
-  const [compareMode, setCompareMode] = useState(false);
+  // Interaction state
+  const [selectedTag, setSelectedTag] = useState(null);
 
-  // Load players once
-  useEffect(() => {
+  // Load players once on first render (needed for the dropdown)
+  React.useEffect(() => {
+    if (playersLoaded) return;
+    setPlayersLoaded(true);
     apiFetch('/api/players')
       .then(d => setPlayers(d?.players ?? []))
       .catch(() => {});
+  }, [playersLoaded]);
+
+  const handleFilterChange = useCallback((key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
   }, []);
 
-  // Load tag data whenever filters change
-  const fetchTags = useCallback(() => {
+  // Run analysis: fetch tags, then fetch flagged hands for top mistake tags
+  const handleRun = useCallback(async () => {
     setLoading(true);
     setError('');
+    setHasRun(true);
     setSelectedTag(null);
-    setHandsForTag([]);
+    setFlaggedHands([]);
 
     const params = new URLSearchParams();
     if (filters.playerId) params.set('playerId', filters.playerId);
     if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
-    if (filters.dateTo)   params.set('dateTo', filters.dateTo);
-    if (filters.tagType)  params.set('tagType', filters.tagType);
+    if (filters.dateTo)   params.set('dateTo',   filters.dateTo);
 
-    apiFetch(`/api/analysis/tags?${params}`)
-      .then(d => setTagData(d ?? { totalHands: 0, tags: [] }))
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
+    let fetchedTags = { totalHands: 0, tags: [] };
+    try {
+      fetchedTags = await apiFetch(`/api/analysis/tags?${params}`) ?? { totalHands: 0, tags: [] };
+      setTagData(fetchedTags);
+    } catch (err) {
+      setError(err.message ?? 'Failed to load analysis data.');
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
+
+    // Fetch flagged hands (hands with mistake tags)
+    const mistakeTags = fetchedTags.tags
+      .filter(t => t.tag_type === 'mistake')
+      .slice(0, MAX_MISTAKE_FETCH)
+      .map(t => t.tag);
+
+    if (mistakeTags.length === 0) return;
+
+    setHandsLoading(true);
+    try {
+      const results = await Promise.allSettled(
+        mistakeTags.map(tag => {
+          const p = new URLSearchParams({ tag });
+          if (filters.playerId) p.set('playerId', filters.playerId);
+          if (filters.dateFrom) p.set('dateFrom', filters.dateFrom);
+          if (filters.dateTo)   p.set('dateTo',   filters.dateTo);
+          return apiFetch(`/api/analysis/hands-by-tag?${p}`)
+            .then(d => ({ tag, hands: d?.hands ?? [] }));
+        })
+      );
+
+      // Merge + deduplicate hands by hand_id
+      const handMap = new Map();
+      for (const res of results) {
+        if (res.status !== 'fulfilled') continue;
+        const { tag, hands } = res.value;
+        for (const h of hands) {
+          if (!handMap.has(h.hand_id)) {
+            handMap.set(h.hand_id, { ...h, mistakeTags: [] });
+          }
+          handMap.get(h.hand_id).mistakeTags.push(tag);
+        }
+      }
+
+      const merged = [...handMap.values()].sort(
+        (a, b) => new Date(b.started_at) - new Date(a.started_at)
+      );
+      setFlaggedHands(merged);
+    } catch {
+      // non-fatal — flagged hands just stay empty
+    } finally {
+      setHandsLoading(false);
+    }
   }, [filters]);
 
-  useEffect(() => { fetchTags(); }, [fetchTags]);
-
-  // Load hands for selected tag
-  useEffect(() => {
-    if (!selectedTag) { setHandsForTag([]); return; }
-    setHandsLoading(true);
-
-    const params = new URLSearchParams({ tag: selectedTag.tag });
-    if (filters.playerId) params.set('playerId', filters.playerId);
-    if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
-    if (filters.dateTo)   params.set('dateTo', filters.dateTo);
-
-    apiFetch(`/api/analysis/hands-by-tag?${params}`)
-      .then(d => setHandsForTag(d?.hands ?? []))
-      .catch(() => setHandsForTag([]))
-      .finally(() => setHandsLoading(false));
-  }, [selectedTag, filters.playerId, filters.dateFrom, filters.dateTo]);
-
-  const handleFilterChange = useCallback((key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+  const handleBarClick = useCallback((payload) => {
+    setSelectedTag(prev => prev === payload?.name ? null : payload?.name ?? null);
   }, []);
 
   const selectedPlayerName = useMemo(
@@ -551,91 +464,125 @@ export default function AnalysisPage() {
 
   return (
     <div style={{ color: '#e5e7eb' }}>
+      <div className="max-w-5xl mx-auto px-4 py-5 flex flex-col gap-4">
 
-      <div className="max-w-6xl mx-auto px-4 py-5 flex flex-col gap-4">
-
-          {/* Filters */}
-          <FilterBar players={players} filters={filters} onChange={handleFilterChange} />
-
-          {/* Summary bar */}
-          {!loading && tagData.totalHands > 0 && (
-            <div
-              className="flex items-center gap-6 px-4 py-2.5 rounded-lg text-sm"
-              style={{ background: '#161b22', border: '1px solid #30363d' }}
-              data-testid="summary-bar"
+        {/* Page title */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/lobby')}
+            className="text-sm"
+            style={{ color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            data-testid="back-to-lobby"
+          >
+            ← Lobby
+          </button>
+          <h1 className="text-lg font-bold tracking-wide" style={{ color: '#e6edf3' }}>
+            AI Hand Analysis
+          </h1>
+          {isCoachPlus && (
+            <button
+              onClick={() => setShowCompare(v => !v)}
+              className="ml-auto text-xs px-3 py-1.5 rounded font-semibold"
+              style={{
+                background: showCompare ? 'rgba(88,166,255,0.15)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${showCompare ? 'rgba(88,166,255,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                color: showCompare ? BLUE : '#6b7280',
+              }}
+              data-testid="toggle-compare"
             >
-              <span className="text-gray-500">
-                <span className="font-mono text-gray-200 font-bold">{tagData.totalHands}</span>
-                {' '}hands analyzed
-              </span>
-              <span className="text-gray-500">
-                <span className="font-mono text-gray-200 font-bold">{tagData.tags.length}</span>
-                {' '}unique tags
-              </span>
-              {tagData.tags[0] && (
-                <span className="text-gray-500">
-                  Top tag: <span className="text-gray-200 font-semibold">{tagData.tags[0].tag}</span>
-                  <span className="ml-1 font-mono text-gray-400">({tagData.tags[0].pct}%)</span>
-                </span>
-              )}
-            </div>
+              Compare Players
+            </button>
           )}
+        </div>
 
-          {error && (
-            <div
-              className="px-4 py-3 rounded-lg text-sm"
-              style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', color: '#f85149' }}
-            >
-              {error}
-            </div>
-          )}
+        {/* Filter bar */}
+        <FilterBar
+          players={players}
+          filters={filters}
+          onChange={handleFilterChange}
+          onRun={handleRun}
+          loading={loading}
+        />
 
-          {/* Main content grid */}
-          <div className="grid gap-4" style={{ gridTemplateColumns: compareMode ? '1fr 1fr' : '1fr 320px' }}>
+        {/* Error */}
+        {error && (
+          <div
+            className="px-4 py-3 rounded-lg text-sm"
+            style={{ background: 'rgba(248,81,73,0.1)', border: '1px solid rgba(248,81,73,0.3)', color: RED }}
+          >
+            {error}
+          </div>
+        )}
 
-            {/* Left: Tag table + breakdown */}
-            <div className="flex flex-col gap-4">
-              {/* Tag frequency table */}
+        {/* Results */}
+        {hasRun && !loading && (
+          <>
+            {/* Summary line */}
+            <ResultsSummary
+              playerName={selectedPlayerName}
+              filters={filters}
+              totalHands={tagData.totalHands}
+              tagCount={tagData.tags.length}
+            />
+
+            {/* Charts */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Tag Distribution */}
               <div style={PANEL} className="rounded-lg overflow-hidden">
                 <div
                   className="px-4 py-2.5 text-xs font-bold tracking-wider uppercase text-gray-500"
                   style={{ borderBottom: '1px solid #21262d' }}
                 >
-                  Tag Frequency
+                  Tag Distribution
                 </div>
-                <TagTable
-                  tags={tagData.tags}
-                  selectedTag={selectedTag}
-                  onSelectTag={setSelectedTag}
-                  loading={loading}
-                />
+                <div className="px-2 py-3">
+                  <TagDistributionChart
+                    tags={tagData.tags}
+                    onBarClick={handleBarClick}
+                    selectedTag={selectedTag}
+                  />
+                </div>
               </div>
 
-              {/* Tag breakdown */}
-              {selectedTag && (
-                <HandBreakdownPanel
-                  tag={selectedTag}
-                  hands={handsForTag}
-                  loading={handsLoading}
-                  navigate={navigate}
-                />
-              )}
+              {/* Mistake Breakdown */}
+              <div style={PANEL} className="rounded-lg overflow-hidden">
+                <div
+                  className="px-4 py-2.5 text-xs font-bold tracking-wider uppercase"
+                  style={{ borderBottom: '1px solid #21262d', color: RED }}
+                >
+                  Mistake Breakdown
+                </div>
+                <div className="px-2 py-3">
+                  <MistakeBreakdownChart
+                    tags={tagData.tags}
+                    onBarClick={handleBarClick}
+                    selectedTag={selectedTag}
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Right: Spotlight + Chart + Compare */}
-            <div className="flex flex-col gap-4">
-              {compareMode && isCoachPlus ? (
-                <ComparePanel players={players} filters={filters} data1={tagData} />
-              ) : (
-                <>
-                  <MistakeSpotlight tags={tagData.tags} />
-                  <SizingChart tags={tagData.tags} />
-                </>
-              )}
-            </div>
+            {/* Flagged Hands */}
+            <FlaggedHandsList
+              hands={flaggedHands}
+              loading={handsLoading}
+              tagFilter={selectedTag}
+            />
+          </>
+        )}
+
+        {/* Idle state */}
+        {!hasRun && !loading && (
+          <div
+            className="py-16 text-center text-sm text-gray-600 rounded-lg"
+            style={{ border: '1px solid #21262d' }}
+            data-testid="idle-state"
+          >
+            Select a student and date range, then click <strong className="text-gray-500">Run Analysis</strong>.
           </div>
+        )}
 
-        </div>
+      </div>
     </div>
   );
 }

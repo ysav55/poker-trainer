@@ -1,65 +1,5 @@
-import React, { useState } from 'react';
-
-// ─── Mock data (replace with apiFetch when backend ships) ─────────────────────
-
-const MOCK_REPORTS = [
-  {
-    id: 'r1',
-    reportType: 'weekly',
-    periodStart: '2026-03-24',
-    periodEnd:   '2026-03-30',
-    period:      'Week of Mar 24–30, 2026',
-    grade:       72,
-    overview: {
-      sessions:     4,
-      hands:        247,
-      netChips:    -1600,
-      qualityAvg:   68,
-      qualityPrev:  71,
-    },
-    statChanges: [
-      { stat: 'VPIP',       thisWeek: 25.1, lastWeek: 23.8, change: +1.3,  direction: 'regressed' },
-      { stat: 'PFR',        thisWeek: 18.4, lastWeek: 18.1, change: +0.3,  direction: 'stable'    },
-      { stat: '3bet%',      thisWeek: 10.2, lastWeek:  8.7, change: +1.5,  direction: 'improved'  },
-      { stat: 'Fold to CB', thisWeek: 68.0, lastWeek: 61.0, change: +7.0,  direction: 'regressed' },
-      { stat: 'Aggression', thisWeek:  2.1, lastWeek:  2.3, change: -0.2,  direction: 'stable'    },
-    ],
-    mistakeTrends: [
-      { tag: 'EQUITY_FOLD',    thisWeek: 8.2, lastWeek: 6.3, direction: 'worsened' },
-      { tag: 'OPEN_LIMP',      thisWeek: 4.1, lastWeek: 5.8, direction: 'improved' },
-      { tag: 'COLD_CALL_3BET', thisWeek: 5.4, lastWeek: 5.2, direction: 'stable'   },
-    ],
-    topHands: {
-      best:           { date: '2026-03-28', chips:  2200, tags: ['CHECK_RAISE', 'HERO_CALL'] },
-      worst:          { date: '2026-03-30', chips: -1200, tags: ['EQUITY_FOLD']              },
-      mostInstructive:{ date: '2026-03-29', chips:  -800, tags: ['COLD_CALL_3BET', 'C_BET'] },
-    },
-    leakEvolution: [
-      { tag: 'EQUITY_FOLD',    startRate: 6.3, endRate: 8.2, change: 'worsened' },
-      { tag: 'OPEN_LIMP',      startRate: 5.8, endRate: 4.1, change: 'improved' },
-      { tag: 'COLD_CALL_3BET', startRate: 5.2, endRate: 5.4, change: 'stable'   },
-    ],
-  },
-  {
-    id: 'r2',
-    reportType: 'weekly',
-    periodStart: '2026-03-17',
-    periodEnd:   '2026-03-23',
-    period:      'Week of Mar 17–23, 2026',
-    grade:       78,
-    overview: {
-      sessions:    5,
-      hands:       304,
-      netChips:    2100,
-      qualityAvg:  74,
-      qualityPrev: 70,
-    },
-    statChanges: [],
-    mistakeTrends: [],
-    topHands: null,
-    leakEvolution: [],
-  },
-];
+import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/api.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -343,14 +283,45 @@ function ReportDetail({ report, onBack }) {
 // ─── ReportsTab ───────────────────────────────────────────────────────────────
 
 export default function ReportsTab({ player }) {
+  const [reports, setReports]   = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
   const [selected, setSelected] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
+
+  useEffect(() => {
+    if (!player?.id) return;
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await apiFetch(`/api/coach/students/${player.id}/reports?limit=10`);
+        if (!cancelled) setReports(data?.reports ?? []);
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [player?.id]);
 
   if (selected) {
     return <ReportDetail report={selected} onBack={() => setSelected(null)} />;
   }
 
-  const reports = MOCK_REPORTS;
+  if (loading) {
+    return <div className="py-16 text-center text-sm" style={{ color: '#6e7681' }}>Loading reports…</div>;
+  }
+  if (error) {
+    return (
+      <div className="rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.25)', color: '#f85149' }}>
+        {error}
+      </div>
+    );
+  }
 
   return (
     <div data-testid="reports-tab">

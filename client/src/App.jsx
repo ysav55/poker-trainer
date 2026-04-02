@@ -20,6 +20,7 @@ import RegisterPage from './pages/RegisterPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
 import AnalysisPage from './pages/AnalysisPage.jsx';
+import HandHistoryPage from './pages/HandHistoryPage.jsx';
 import LobbyPage from './pages/LobbyPage.jsx';
 import BotLobbyPage from './pages/BotLobbyPage.jsx';
 import TablePage from './pages/TablePage.jsx';
@@ -34,6 +35,7 @@ import PlayerCRM from './pages/admin/PlayerCRM.jsx';
 import RefereeDashboard from './pages/admin/RefereeDashboard.jsx';
 import CoachAlertsPage from './pages/admin/CoachAlertsPage.jsx';
 import StableOverviewPage from './pages/admin/StableOverviewPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
 
 // Tournament pages
 import TournamentLobby from './pages/TournamentLobby.jsx';
@@ -108,10 +110,12 @@ function AppRoutes() {
 
         {/* Lobby-style pages — wrapped in AppLayout (TopBar + SideNav) */}
         <Route element={<AppLayout />}>
+          <Route path="/settings"    element={<SettingsPage />} />
           <Route path="/lobby"       element={<LobbyPage />} />
           <Route path="/bot-lobby"   element={<BotLobbyPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/analysis"    element={<AnalysisPage />} />
+          <Route path="/history"     element={<HandHistoryPage />} />
 
           {/* Admin — require admin:access */}
           <Route element={<RequirePermission permission="admin:access" />}>

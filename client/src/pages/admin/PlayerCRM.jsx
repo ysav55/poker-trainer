@@ -2202,7 +2202,10 @@ export default function PlayerCRM() {
   // Load alerts to compute per-player severity dots
   useEffect(() => {
     apiFetch('/api/admin/alerts')
-      .then((d) => setAlerts(d?.alerts ?? d ?? []))
+      .then((d) => {
+        const raw = d?.alerts ?? d;
+        setAlerts(Array.isArray(raw) ? raw : []);
+      })
       .catch(() => {});
   }, []);
 

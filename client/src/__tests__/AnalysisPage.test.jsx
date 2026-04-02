@@ -2,14 +2,13 @@
  * AnalysisPage.test.jsx
  *
  * Tests for the /analysis route:
- *  - Renders header with AI Analysis title and back button
- *  - Filter bar renders player selector, date inputs, tag type buttons
- *  - Shows summary bar after data loads
- *  - Renders tag frequency table with rows
+ *  - Renders header with AI Hand Analysis title and back button
+ *  - Filter bar renders player selector, date inputs
+ *  - Shows summary bar after data loads (requires Run Analysis click)
+ *  - Renders tag distribution chart
  *  - Shows empty state when no tags
- *  - Mistake spotlight shows top 3 mistakes
- *  - Sizing chart renders
- *  - Clicking a tag row selects it and loads hand breakdown panel
+ *  - Mistake breakdown chart renders
+ *  - Flagged hands panel appears after run
  *  - Compare Players button visible for coach, hidden for player
  *  - Back to lobby navigates to /lobby
  */
@@ -47,6 +46,7 @@ vi.mock('recharts', () => ({
   CartesianGrid:     () => null,
   Tooltip:           () => null,
   ResponsiveContainer: ({ children }) => <div>{children}</div>,
+  Cell:              () => null,
 }));
 
 import AnalysisPage from '../pages/AnalysisPage.jsx';
@@ -72,8 +72,8 @@ const TAG_DATA = {
 
 const HANDS_FOR_TAG = {
   hands: [
-    { hand_id: 'h1', started_at: '2026-03-01T10:00:00Z', winner_name: 'Alice', final_pot: 200, table_id: 'tbl-1', board: [], tags: ['C_BET'] },
-    { hand_id: 'h2', started_at: '2026-03-02T11:00:00Z', winner_name: 'Bob',   final_pot: 150, table_id: 'tbl-1', board: [], tags: ['C_BET'] },
+    { hand_id: 'h1', started_at: '2026-03-01T10:00:00Z', winner_name: 'Alice', final_pot: 200, table_id: 'tbl-1', board: [], tags: ['OPEN_LIMP'] },
+    { hand_id: 'h2', started_at: '2026-03-02T11:00:00Z', winner_name: 'Bob',   final_pot: 150, table_id: 'tbl-1', board: [], tags: ['OPEN_LIMP'] },
   ],
 };
 
@@ -96,12 +96,22 @@ beforeEach(() => {
   });
 });
 
+// ── Helper: run analysis ───────────────────────────────────────────────────────
+
+async function runAnalysis() {
+  renderPage();
+  await waitFor(() => screen.getByTestId('run-analysis-btn'));
+  await act(async () => {
+    fireEvent.click(screen.getByTestId('run-analysis-btn'));
+  });
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe('AnalysisPage', () => {
-  it('renders the AI Analysis header', async () => {
+  it('renders the AI Hand Analysis header', async () => {
     await act(async () => { renderPage(); });
-    expect(screen.getByText('AI Analysis')).toBeTruthy();
+    expect(screen.getByText('AI Hand Analysis')).toBeTruthy();
   });
 
   it('renders back to lobby button that navigates', async () => {
@@ -111,14 +121,11 @@ describe('AnalysisPage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/lobby');
   });
 
-  it('renders filter bar with player selector, date inputs, and tag type buttons', async () => {
+  it('renders filter bar with player selector and date inputs', async () => {
     await act(async () => { renderPage(); });
     expect(screen.getByTestId('filter-player')).toBeTruthy();
     expect(screen.getByTestId('filter-date-from')).toBeTruthy();
     expect(screen.getByTestId('filter-date-to')).toBeTruthy();
-    expect(screen.getByTestId('filter-tagtype-all')).toBeTruthy();
-    expect(screen.getByTestId('filter-tagtype-mistake')).toBeTruthy();
-    expect(screen.getByTestId('filter-tagtype-sizing')).toBeTruthy();
   });
 
   it('populates player dropdown from API', async () => {
@@ -130,45 +137,41 @@ describe('AnalysisPage', () => {
     });
   });
 
-  it('shows summary bar with hand count after load', async () => {
-    await act(async () => { renderPage(); });
+  it('shows summary bar with hand count after running analysis', async () => {
+    await runAnalysis();
     await waitFor(() => {
       expect(screen.getByTestId('summary-bar')).toBeTruthy();
       expect(screen.getByTestId('summary-bar').textContent).toContain('25');
     });
   });
 
-  it('renders tag table with rows', async () => {
-    await act(async () => { renderPage(); });
+  it('renders tag distribution chart after running analysis', async () => {
+    await runAnalysis();
     await waitFor(() => {
-      expect(screen.getByTestId('tag-table')).toBeTruthy();
-      expect(screen.getByTestId('tag-row-C_BET')).toBeTruthy();
-      expect(screen.getByTestId('tag-row-OPEN_LIMP')).toBeTruthy();
+      expect(screen.getByTestId('tag-distribution-chart')).toBeTruthy();
     });
   });
 
-  it('shows empty state when no tags returned', async () => {
+  it('shows empty tag state when no tags returned', async () => {
     mockApiFetch.mockImplementation((url) => {
       if (url.includes('/api/players'))       return Promise.resolve({ players: [] });
       if (url.includes('/api/analysis/tags')) return Promise.resolve({ totalHands: 0, tags: [] });
       return Promise.resolve({});
     });
-    await act(async () => { renderPage(); });
+    await runAnalysis();
     await waitFor(() => {
-      expect(screen.getByTestId('tag-table-empty')).toBeTruthy();
+      expect(screen.getByTestId('tag-dist-empty')).toBeTruthy();
     });
   });
 
-  it('renders mistake spotlight with top 3 mistakes', async () => {
-    await act(async () => { renderPage(); });
+  it('renders mistake breakdown chart after running analysis', async () => {
+    await runAnalysis();
     await waitFor(() => {
-      const spotlight = screen.getByTestId('mistake-spotlight');
-      expect(spotlight.textContent).toContain('OPEN_LIMP');
-      expect(spotlight.textContent).toContain('MIN_RAISE');
+      expect(screen.getByTestId('mistake-breakdown-chart')).toBeTruthy();
     });
   });
 
-  it('shows empty mistake spotlight when no mistake tags', async () => {
+  it('shows empty mistake chart when no mistake tags', async () => {
     mockApiFetch.mockImplementation((url) => {
       if (url.includes('/api/players'))       return Promise.resolve({ players: PLAYERS });
       if (url.includes('/api/analysis/tags')) return Promise.resolve({
@@ -177,43 +180,24 @@ describe('AnalysisPage', () => {
       });
       return Promise.resolve({});
     });
-    await act(async () => { renderPage(); });
+    await runAnalysis();
     await waitFor(() => {
-      expect(screen.getByTestId('mistake-spotlight-empty')).toBeTruthy();
+      expect(screen.getByTestId('mistake-chart-empty')).toBeTruthy();
     });
   });
 
-  it('renders sizing chart', async () => {
-    await act(async () => { renderPage(); });
+  it('shows flagged hands panel after running analysis', async () => {
+    await runAnalysis();
     await waitFor(() => {
-      expect(screen.getByTestId('sizing-chart')).toBeTruthy();
+      expect(screen.getByTestId('flagged-hands')).toBeTruthy();
     });
   });
 
-  it('clicking a tag row shows hand breakdown panel', async () => {
-    await act(async () => { renderPage(); });
-    await waitFor(() => screen.getByTestId('tag-row-C_BET'));
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('tag-row-C_BET'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('hand-breakdown-panel')).toBeTruthy();
-    });
-  });
-
-  it('hand breakdown fetches hands-by-tag API', async () => {
-    await act(async () => { renderPage(); });
-    await waitFor(() => screen.getByTestId('tag-row-C_BET'));
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('tag-row-C_BET'));
-    });
-
+  it('hand breakdown fetches hands-by-tag API after running analysis', async () => {
+    await runAnalysis();
     await waitFor(() => {
       const calls = mockApiFetch.mock.calls.map(c => c[0]);
-      expect(calls.some(u => u.includes('hands-by-tag') && u.includes('tag=C_BET'))).toBe(true);
+      expect(calls.some(u => u.includes('hands-by-tag'))).toBe(true);
     });
   });
 
@@ -224,30 +208,22 @@ describe('AnalysisPage', () => {
 
   it('hides Compare Players button for player role', async () => {
     mockUser = { id: 'user-2', name: 'Bob', role: 'player' };
+    // player role → AnalysisPage redirects to /lobby via <Navigate>, so component renders nothing
+    // We should not see toggle-compare
     await act(async () => { renderPage(); });
     expect(screen.queryByTestId('toggle-compare')).toBeNull();
   });
 
-  it('selecting a tag type filter refetches with tagType param', async () => {
-    await act(async () => { renderPage(); });
-    await waitFor(() => screen.getByTestId('filter-tagtype-mistake'));
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('filter-tagtype-mistake'));
-    });
-
-    await waitFor(() => {
-      const calls = mockApiFetch.mock.calls.map(c => c[0]);
-      expect(calls.some(u => u.includes('/api/analysis/tags') && u.includes('tagType=mistake'))).toBe(true);
-    });
-  });
-
-  it('selecting a player refetches with playerId param', async () => {
-    await act(async () => { renderPage(); });
+  it('selecting a player refetches with playerId param after run', async () => {
+    renderPage();
     await waitFor(() => screen.getByTestId('filter-player'));
 
     await act(async () => {
       fireEvent.change(screen.getByTestId('filter-player'), { target: { value: 'p1' } });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('run-analysis-btn'));
     });
 
     await waitFor(() => {
@@ -257,15 +233,18 @@ describe('AnalysisPage', () => {
   });
 
   it('displays player name in header when player is selected', async () => {
-    await act(async () => { renderPage(); });
+    renderPage();
     await waitFor(() => screen.getByTestId('filter-player'));
 
     await act(async () => {
       fireEvent.change(screen.getByTestId('filter-player'), { target: { value: 'p1' } });
     });
 
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('run-analysis-btn'));
+    });
+
     await waitFor(() => {
-      // The header shows "— Alice" as a subtitle next to "AI Analysis"
       expect(screen.getAllByText(/Alice/).length).toBeGreaterThan(0);
     });
   });

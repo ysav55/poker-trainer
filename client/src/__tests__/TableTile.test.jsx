@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import React from 'react'
+import { MemoryRouter } from 'react-router-dom'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ function makeGameState(overrides = {}) {
     phase: 'waiting',
     players: [],
     pot: 0,
-    tableName: 'Table 1',
+    table_name: 'Table 1',
     table_mode: 'coached_cash',
     myId: 'player-1',
     ...overrides,
@@ -84,8 +85,15 @@ function makeGameState(overrides = {}) {
 }
 
 function setupMocks({ gameState = makeGameState(), role = 'player', focused = false } = {}) {
+  // Component destructures useTable().gameState as "hookState", then reads hookState.gameState
+  // for the raw server state. Nest accordingly.
   useTable.mockReturnValue({
-    gameState,
+    gameState: {
+      gameState,
+      actionTimer: gameState?.actionTimer ?? null,
+      myId: 'player-1',
+      tableMode: gameState?.table_mode ?? 'coached_cash',
+    },
     tableId: 'tbl-1',
     socket: makeSocket(),
     playlist: { playlists: [] },
@@ -104,46 +112,46 @@ beforeEach(() => {
 
 describe('TableTile — unfocused tile', () => {
   it('renders without crashing', () => {
-    expect(() => render(<TableTile focused={false} onFocus={vi.fn()} />)).not.toThrow()
+    expect(() => render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)).not.toThrow()
   })
 
   it('renders TableStatusChip in unfocused mode', () => {
-    render(<TableTile focused={false} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.getByTestId('table-status-chip')).toBeTruthy()
   })
 
   it('passes tableId to TableStatusChip', () => {
-    render(<TableTile focused={false} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     const chip = screen.getByTestId('table-status-chip')
     expect(chip.getAttribute('data-tableid')).toBe('tbl-1')
   })
 
   it('passes tableName from gameState to TableStatusChip', () => {
-    setupMocks({ gameState: makeGameState({ tableName: 'VIP Table' }) })
-    render(<TableTile focused={false} onFocus={vi.fn()} />)
+    setupMocks({ gameState: makeGameState({ table_name: 'VIP Table' }) })
+    render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     const chip = screen.getByTestId('table-status-chip')
     expect(chip.getAttribute('data-tablename')).toBe('VIP Table')
   })
 
   it('passes gameState phase to TableStatusChip', () => {
     setupMocks({ gameState: makeGameState({ phase: 'flop' }) })
-    render(<TableTile focused={false} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.getByTestId('table-status-chip').getAttribute('data-phase')).toBe('flop')
   })
 
   it('does NOT render PokerTable in unfocused mode', () => {
-    render(<TableTile focused={false} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.queryByTestId('poker-table')).toBeNull()
   })
 
   it('does NOT render CoachSidebar in unfocused mode', () => {
-    render(<TableTile focused={false} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.queryByTestId('coach-sidebar')).toBeNull()
   })
 
   it('calls onFocus when the unfocused tile is clicked', () => {
     const onFocus = vi.fn()
-    render(<TableTile focused={false} onFocus={onFocus} />)
+    render(<MemoryRouter><TableTile focused={false} onFocus={onFocus} /></MemoryRouter>)
     // The outer tile div is clickable
     const chip = screen.getByTestId('table-status-chip')
     fireEvent.click(chip)
@@ -153,7 +161,7 @@ describe('TableTile — unfocused tile', () => {
   it('applies pulse-gold class when action timer is urgent (< 15 s)', () => {
     const urgentTimer = { remainingMs: 10000 }
     setupMocks({ gameState: makeGameState({ actionTimer: urgentTimer }) })
-    const { container } = render(<TableTile focused={false} onFocus={vi.fn()} />)
+    const { container } = render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     const tile = container.firstChild
     expect(tile.className).toContain('pulse-gold')
   })
@@ -161,7 +169,7 @@ describe('TableTile — unfocused tile', () => {
   it('does NOT apply pulse-gold class when action timer is not urgent', () => {
     const safeTimer = { remainingMs: 30000 }
     setupMocks({ gameState: makeGameState({ actionTimer: safeTimer }) })
-    const { container } = render(<TableTile focused={false} onFocus={vi.fn()} />)
+    const { container } = render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     const tile = container.firstChild
     expect(tile.className).not.toContain('pulse-gold')
   })
@@ -171,12 +179,12 @@ describe('TableTile — unfocused tile', () => {
 
 describe('TableTile — focused tile', () => {
   it('renders PokerTable in focused mode', () => {
-    render(<TableTile focused={true} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={true} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.getByTestId('poker-table')).toBeTruthy()
   })
 
   it('does NOT render TableStatusChip in focused mode', () => {
-    render(<TableTile focused={true} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={true} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.queryByTestId('table-status-chip')).toBeNull()
   })
 
@@ -185,7 +193,7 @@ describe('TableTile — focused tile', () => {
       gameState: makeGameState({ table_mode: 'coached_cash' }),
       role: 'coach',
     })
-    render(<TableTile focused={true} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={true} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.getByTestId('coach-sidebar')).toBeTruthy()
   })
 
@@ -194,7 +202,7 @@ describe('TableTile — focused tile', () => {
       gameState: makeGameState({ table_mode: 'coached_cash' }),
       role: 'player',
     })
-    render(<TableTile focused={true} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={true} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.queryByTestId('coach-sidebar')).toBeNull()
   })
 
@@ -203,7 +211,7 @@ describe('TableTile — focused tile', () => {
       gameState: makeGameState({ table_mode: 'tournament' }),
       role: 'coach',
     })
-    render(<TableTile focused={true} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={true} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.queryByTestId('coach-sidebar')).toBeNull()
   })
 })
@@ -219,7 +227,7 @@ describe('TableTile — null gameState', () => {
       playlist: { playlists: [] },
       replay: {},
     })
-    expect(() => render(<TableTile focused={false} onFocus={vi.fn()} />)).not.toThrow()
+    expect(() => render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)).not.toThrow()
   })
 
   it('renders TableStatusChip even when gameState is null', () => {
@@ -230,7 +238,7 @@ describe('TableTile — null gameState', () => {
       playlist: { playlists: [] },
       replay: {},
     })
-    render(<TableTile focused={false} onFocus={vi.fn()} />)
+    render(<MemoryRouter><TableTile focused={false} onFocus={vi.fn()} /></MemoryRouter>)
     expect(screen.getByTestId('table-status-chip')).toBeTruthy()
   })
 })

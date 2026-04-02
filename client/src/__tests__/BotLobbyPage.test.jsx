@@ -60,7 +60,7 @@ describe('BotLobbyPage header', () => {
   it('shows "Play vs Bots" title', async () => {
     renderPage();
     await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
-    expect(screen.getByText(/Play vs Bots/i)).toBeTruthy();
+    expect(screen.getByText(/Bot Tables/i)).toBeTruthy();
   });
 
   it('back-to-lobby button navigates to /lobby', async () => {

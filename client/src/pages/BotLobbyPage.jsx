@@ -190,6 +190,14 @@ export default function BotLobbyPage() {
           {/* Header row */}
           <div className="flex items-center justify-between">
             <div>
+              <button
+                onClick={() => navigate('/lobby')}
+                className="text-sm"
+                style={{ color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', marginRight: 8 }}
+                data-testid="back-to-lobby"
+              >
+                ← Lobby
+              </button>
               <h1 className="text-lg font-bold text-white">Bot Tables</h1>
               <p className="text-xs text-gray-500 mt-0.5">Practice against AI opponents at any difficulty</p>
             </div>

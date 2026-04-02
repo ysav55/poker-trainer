@@ -203,7 +203,7 @@ describe('MainLobby header leaderboard nav', () => {
   it('renders leaderboard button in header', async () => {
     renderLobby('player', false);
     await waitFor(() => expect(screen.queryByText(/Loading stats/i)).toBeNull());
-    const btn = screen.getByTestId('nav-leaderboard');
+    const btn = screen.getByTestId('nav-tile-leaderboard');
     expect(btn).toBeTruthy();
     fireEvent.click(btn);
     expect(mockNavigate).toHaveBeenCalledWith('/leaderboard');

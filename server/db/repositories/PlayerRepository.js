@@ -188,6 +188,7 @@ async function updatePlayer(id, patch) {
   if (patch.email       !== undefined) dbPatch.email        = patch.email;
   if (patch.status      !== undefined) dbPatch.status       = patch.status;
   if (patch.avatarUrl   !== undefined) dbPatch.avatar_url   = patch.avatarUrl;
+  if (patch.coachId     !== undefined) dbPatch.coach_id     = patch.coachId;
   const { error } = await supabase.from('player_profiles').update(dbPatch).eq('id', id);
   if (error) throw error;
 }
@@ -223,7 +224,7 @@ async function removeRole(playerId, roleId) {
 async function listPlayers({ status, role, limit = 50, offset = 0 } = {}) {
   let query = supabase
     .from('player_profiles')
-    .select('id, display_name, email, status, avatar_url, created_at, player_roles(roles(name))')
+    .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, player_roles(roles(name))')
     .order('display_name')
     .range(offset, offset + limit - 1);
   if (status) query = query.eq('status', status);

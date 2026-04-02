@@ -2,7 +2,7 @@
 
 A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history and player stats survive restarts and are accessible from any device.
 
-**Last updated:** 2026-04-01 — **Play vs Bot Phase 2 (POK-58):** Socket visibility enforcement for `bot_cash` tables (`privacy=private` → creator only; `privacy=school` → same-school members). Bot sockets use `role='bot'` JWT and bypass visibility checks. `BotTableController` now owns the full hand lifecycle autonomously: `_startHand()` calls `startGame()`, logs to HandLogger, and broadcasts state; showdown detection via `_onGameState()` triggers `_completeHand()` which resets, logs `endHand`, and emits `hand_complete`. End-to-end socket integration test added (`server/db/__tests__/botTable.integration.test.js`). Previously: **Play vs Bot Phase 1-B (POK-56):** `BotDecisionService` + `BotTableController`. **Coach Intelligence Layer (POK-43–47):** BaselineService, SessionQualityService, AlertService, SessionPrepService, ProgressReportService, NarratorService. School Management, Announcements, Chip Bank, Auth & Registration Backend, Table Privacy also shipped.
+**Last updated:** 2026-04-02 — **New UI (POK-60):** Complete page-by-page UI overhaul. 18 routes implemented matching the full UI spec. New global layout (AppLayout with icon SideNav + GlobalTopBar). 5 role-variant Lobby, 4 role-variant Table View, 8-tab Player CRM, 5-tab Settings page, Review Table (new), Hand History browser (new), Tournament system (Lobby/Standings/Setup/Referee), Scenario Builder, Stable Overview, Coach Alerts, AI Analysis, User Management, Leaderboard, Multi-Table. 45 components, 26 page files, 142 files changed, 26K+ lines added. Previously: Play vs Bot (POK-56/58), Coach Intelligence (POK-43–47), School Management, Announcements, Chip Bank, Auth & Registration, Table Privacy.
 
 ---
 
@@ -289,18 +289,31 @@ When the backend ships these endpoints, update the mock constants in each compon
 
 ---
 
+## 6. Global Layout & Navigation
+
+All authenticated pages (except auth and full-screen table views) use the **AppLayout**: a persistent icon-only **SideNav** on the left and a **GlobalTopBar** across the top.
+
+- **GlobalTopBar** — shows the app logo, current page context, role pill (Coach/Student/Admin/Trial), chip bank balance (students), and user dropdown menu.
+- **SideNav** — icon-only sidebar with role-based items. Coaches see: Lobby, Tables, CRM, Scenarios, Hand History, AI Analysis, Stats, Leaderboard, Tournaments, Alerts, Settings. Students see a reduced set (no CRM, no Scenarios, no Analysis, no Alerts).
+- **Quick Stats Bar** — role-dependent stat pills below the TopBar (e.g., Active Tables / Students Online / Hands This Week for coaches; Chip Bank / Hands Played / VPIP / Leaderboard Rank for students).
+
 ## 6. Lobby & Tables
 
 After logging in you land on the **Lobby** (`/lobby`).
 
-### Lobby layout
-- **Trial banner** — shown at top for trial-role accounts with an upgrade notice
-- **Stats row** — hands played, net chips, VPIP%; plus leaderboard rank for non-admin users
-- **Navigation tiles** — role-filtered quick links: Leaderboard, Multi Table, AI Analysis (coach+), Player CRM, Coach Alerts, Stable Report, Hand Scenarios, Tournaments, Referee, Users
-- **Active Tables** — live card grid of open tables with a **Join** button on each tile
-- **Recent Hands** — last 5 completed hands with tags and net chips
-- **Playlists** — visible to coaches; quick access to activate drills
-- **Leaderboard** (`/leaderboard`) — full ranked player table sortable with medal ranks, period filter tabs, and search. Accessible from the lobby header (🏆 button) or the Leaderboard navigation tile.
+### Lobby layout (role-variant)
+
+**Coach view:** Quick stats row (5 pills), Needs Attention alert feed, table card grid with filter tabs (All/Cash/Tournament/My Tables/School/Open), "+ New Table" ghost card, Recent Activity feed.
+
+**Coached Student view:** Quick stats (Chip Bank, Hands, VPIP, PFR, Rank), Announcement banner, Upcoming Sessions widget, table grid with JOIN/PLAYING/SPECTATE buttons.
+
+**Solo Student view:** Simplified stats (3 pills), no announcements, minimal sidebar. Same table grid.
+
+**Trial view:** Trial countdown banner (days + hands remaining), Subscribe/Join Coach CTAs, only Open tables visible.
+
+**Admin view:** Like Coach but with platform-wide stats, all tables across all coaches visible, full sidebar.
+
+- **Leaderboard** (`/leaderboard`) — full ranked player table sortable with medal ranks, period filter tabs, and search. Accessible from the SideNav.
 
 ### Joining a table
 Click **Join** on any table tile in the lobby, or navigate directly to `/table/:tableId`.
@@ -528,41 +541,85 @@ The poker table and coach sidebar are each wrapped in a React **error boundary**
 
 ## 10. Admin Features
 
-Admin pages are accessible from the lobby nav pills (require `admin:access` permission).
+Admin pages are accessible from the SideNav (require `admin:access` permission).
 
 ### User Management (`/admin/users`)
-- Create users with name, password, role, optional email, and notes
-- Edit role, status (active/archived), and profile details
-- Reset passwords
-- Assign/remove roles
+- Searchable user table with Name, Email, Roles (pill), Status (pill), Coach, Joined columns
+- Per-row actions menu: View Profile, Change Role, Assign to Coach, Reset Password, Reload Chips, Suspend/Delete Account
+- Add User modal: name, email, temp password, role, coach, initial chip balance
+- Super Admin: Login as User (impersonation with audit log)
+- Pagination (15 per page), CSV export
 
 ### Scenario Builder (`/admin/hands`)
-- Build hand scenarios for drill playlists
-- Configure hole cards, board, stacks, and positions with a vertical flow UI
-- Save scenarios to playlists — students replay them as ordered drills
+- Two-panel layout: Library (left) + Builder (right)
+- **Library — Scenarios tab:** search, tag/player filters, scenario cards with mode indicator (Fixed/Range)
+- **Library — Playlists tab:** playlist cards with scenario count and tags
+- **Builder — Scenario:** name, tags, mode toggle, blind mode, player config with card pickers or range selectors, board state, mini preview
+- **Builder — Playlist:** name, tags, execution settings (ordering, advance mode), drag-reorderable scenario list, student/group assignments
 - Also accessible from CoachSidebar → HANDS tab → "+ Build Scenario"
 
 ### Player CRM (`/admin/crm`)
-Requires `crm:view` / `crm:edit` permissions.
-- **Left panel**: search/filter player list; assign tags; quick actions
-- **OVERVIEW tab**: stats (hands, net chips, VPIP, PFR) + line chart of weekly snapshots
-- **NOTES tab**: append-only coach notes with type badges (general / session_review / goal / weakness)
-- **SCHEDULE tab**: upcoming coaching sessions; create / update status
-- **HISTORY tab**: paginated hand history with tag filters
+Requires `crm:view` / `crm:edit` permissions. Master-detail layout.
+- **Left panel (StudentRoster):** color-coded alert dots (red/orange/green/grey), search, group/tag filters, + Add Student, Bulk Actions
+- **8-tab detail panel:**
+  - **INFO:** profile, chip bank balance, reload, recent transactions
+  - **SESSIONS:** session history table (date, table, hands, net, score), attendance tracking
+  - **STATS:** 5 stat pills (VPIP, PFR, 3bet%, WTSD, Agg) with trends, TrendChart, mistakes per 100 hands, vs school average
+  - **NOTES:** coach notes with tags, filterable, new note input
+  - **STAKING:** staking ledger, contract terms, monthly P&L summary
+  - **SCENARIOS:** assigned playlists with completion rates, scenario history
+  - **REPORTS:** weekly/monthly progress reports with grade, stat changes, leak progress
+  - **PREP BRIEF:** session prep: top leaks, stats snapshot, hands to review, recent notes/sessions
+
+### Stable Overview (`/admin/stable`)
+- Aggregate view of all students — 4 stat pills (Avg Grade, Active Students, Total Hands, Avg Hands/Student)
+- Top Improvers and Needs Attention panels
+- All Students table (sortable, searchable, filterable by group)
+- Group Breakdown table — click any row to navigate to CRM
+
+### Coach Alerts (`/admin/alerts`)
+- Active/Dismissed toggle tabs, type/severity filters
+- Alert cards: Mistake Spike (red), Inactivity (orange), Losing Streak (yellow), Milestone (green)
+- Actions: Review in CRM, View Hands/Sessions, Dismiss
+- Configurable alert thresholds (inactivity days, mistake spike multiplier, losing streak sessions, regression sigma)
+
+### AI Analysis (`/analysis`)
+- Coach/Admin only. Student selector, date range, Run Analysis button
+- Tag distribution and mistake breakdown bar charts
+- Flagged hands list with links to Review Table
 
 ### Tournament Setup (`/admin/tournaments`)
-Requires `tournament:manage` permission.
-- Create a tournament: name, blind schedule (level rows with SB/BB/ante/duration), starting stack, rebuy settings
-- After creation you are navigated to the **Tournament Lobby** (`/tournament/:tableId/lobby`)
-- From the lobby, start the tournament with the "START TOURNAMENT" button
+- Filter tabs: Upcoming / Active / Completed. Tournament cards with status, player count, buy-in
+- 5-step creation wizard: Basic Info → Blind Structure → Payout Structure → Rules → Review & Create
 
 ### Referee Dashboard (`/admin/referee`)
-Requires `tournament:manage` permission.
-- Live overview of all active tournament tables
-- Per-table: player list with chip counts, current blind level, active player count
-- **Advance Level** button — force-advance to the next blind level immediately
-- **End** button (confirm required) — end the tournament immediately, recording the chip leader as winner
-- **Move Player** — opens a modal to move a player from one tournament table to another (for balancing)
+- Full-width live tournament control. Tournament info bar with timer
+- Controls: Next Level, Pause Clock, End Tournament
+- Tables grid with player stacks and Move Player dropdown
+- Eliminations list, Blind Schedule table (current level highlighted)
+
+## 10b. New Pages
+
+### Review Table (`/review`)
+- Two-panel read-only hand replay: poker table visualization (left) + Review Panel (right)
+- Review Panel: expandable timeline (street sections with actions), step-through controls (first/prev/play/next/last), scrubber bar
+- Coach: annotation input + Save Note. Student: read-only annotations.
+- Prev/Next Hand navigation
+
+### Hand History (`/history`)
+- Filterable hand browser: Student, Table, Date range, Tags multi-select, Scenarios only / Mistakes only checkboxes
+- Results table: Hand #, Date, Table, Tags (pills), Net
+- Click any hand → opens in Review Table
+- Coach sees all students. Student sees own hands only.
+- Pagination (25 per page)
+
+### Settings (`/settings`)
+Tabbed page with role-dependent tab visibility:
+- **Table Defaults** (Coach/Admin): default game type, blinds, buy-in, rebuy, time bank, showdown, disconnection settings
+- **School** (Coach): school name/description, leaderboard config, groups/cohorts, announcements
+- **Org** (Admin): default blind structures, platform limits, open table auto-spawn, leaderboard defaults
+- **Platform** (Super Admin): school agreements (student caps, AI quotas, feature toggles, branding), system health
+- **Profile** (all roles): avatar, name, email, password change
 
 ---
 

@@ -1,43 +1,5 @@
-import React, { useState } from 'react';
-
-// ─── Mock data (replace with apiFetch when backend ships) ─────────────────────
-
-const MOCK_PREP_BRIEF = {
-  generatedAt: '2026-04-01T10:00:00Z',
-  leaks: [
-    { tag: 'EQUITY_FOLD',    studentRate: 8.2, schoolAvg: 3.1, delta: 5.1, trend: 'worsening' },
-    { tag: 'COLD_CALL_3BET', studentRate: 5.4, schoolAvg: 2.8, delta: 2.6, trend: 'stable'    },
-    { tag: 'OPEN_LIMP',      studentRate: 7.1, schoolAvg: 5.3, delta: 1.8, trend: 'improving' },
-  ],
-  flaggedHands: [
-    { handId: 'h1', date: '2026-03-30', tags: ['EQUITY_FOLD', 'WENT_TO_SHOWDOWN'], netResult: -1200, reviewScore: 9 },
-    { handId: 'h2', date: '2026-03-29', tags: ['COLD_CALL_3BET', 'C_BET'],          netResult:  -800, reviewScore: 7 },
-    { handId: 'h3', date: '2026-03-28', tags: ['CHECK_RAISE', 'HERO_CALL'],          netResult:  2200, reviewScore: 6 },
-    { handId: 'h4', date: '2026-03-27', tags: ['OPEN_LIMP', 'RIVER_RAISE'],          netResult:  -400, reviewScore: 5 },
-    { handId: 'h5', date: '2026-03-26', tags: ['3BET_POT', 'SQUEEZE_POT'],           netResult:  1800, reviewScore: 4 },
-  ],
-  coachNotes: [
-    { date: '2026-03-28', type: 'session_review', body: 'Showed improvement in PF aggression. Still folding too much to river bets.' },
-    { date: '2026-03-21', type: 'weakness',       body: 'Equity folds are a major leak — 8/100 vs stable avg of 3/100. Focus here.' },
-  ],
-  statsSnapshot: [
-    { stat: 'VPIP',       current: 25.1, previous: 23.8, delta:  1.3, direction: 'up'   },
-    { stat: 'PFR',        current: 18.4, previous: 18.1, delta:  0.3, direction: 'up'   },
-    { stat: '3bet%',      current: 10.2, previous:  8.7, delta:  1.5, direction: 'up'   },
-    { stat: 'Fold to CB', current: 68.0, previous: 61.0, delta:  7.0, direction: 'up'   },
-    { stat: 'Aggression', current:  2.1, previous:  2.3, delta: -0.2, direction: 'down' },
-  ],
-  sessionHistory: [
-    { date: '2026-03-30', hands: 68, netChips:  -400, qualityScore: 62 },
-    { date: '2026-03-28', hands: 55, netChips:  1200, qualityScore: 74 },
-    { date: '2026-03-26', hands: 72, netChips:  -800, qualityScore: 58 },
-    { date: '2026-03-24', hands: 44, netChips:   300, qualityScore: 70 },
-    { date: '2026-03-22', hands: 61, netChips:  -900, qualityScore: 65 },
-  ],
-  activeAlerts: [
-    { type: 'mistake_spike', detail: 'EQUITY_FOLD 2.6× baseline', severity: 0.87 },
-  ],
-};
+import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/api.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,13 +55,46 @@ function Section({ title, children }) {
 // ─── PrepBriefTab ─────────────────────────────────────────────────────────────
 
 export default function PrepBriefTab({ player }) {
+  const [brief, setBrief]         = useState(null);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const brief = MOCK_PREP_BRIEF;
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 800);
+  const fetchBrief = async (refresh = false) => {
+    if (!player?.id) return;
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
+    setError('');
+    try {
+      const url    = `/api/coach/students/${player.id}/prep-brief`;
+      const method = refresh ? 'POST' : 'GET';
+      const data   = await apiFetch(refresh ? `${url}/refresh` : url, refresh ? { method } : undefined);
+      setBrief(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
+
+  useEffect(() => { fetchBrief(false); }, [player?.id]);
+
+  const handleRefresh = () => fetchBrief(true);
+
+  if (loading) {
+    return <div className="py-16 text-center text-sm" style={{ color: '#6e7681' }}>Loading prep brief…</div>;
+  }
+  if (error) {
+    return (
+      <div className="rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.25)', color: '#f85149' }}>
+        {error}
+      </div>
+    );
+  }
+  if (!brief) {
+    return <div className="py-16 text-center text-sm" style={{ color: '#6e7681' }}>No prep brief available.</div>;
+  }
 
   return (
     <div data-testid="prep-brief-tab">
@@ -107,7 +102,7 @@ export default function PrepBriefTab({ player }) {
       {/* Refresh + timestamp */}
       <div className="flex items-center justify-between mb-5">
         <span className="text-xs" style={{ color: '#6e7681' }}>
-          Generated {formatDate(brief.generatedAt)}
+          Generated {formatDate(brief.generatedAt ?? brief.generated_at ?? brief.created_at)}
         </span>
         <button
           onClick={handleRefresh}
@@ -127,9 +122,9 @@ export default function PrepBriefTab({ player }) {
       </div>
 
       {/* Active Alerts */}
-      {brief.activeAlerts.length > 0 && (
+      {(brief.activeAlerts ?? brief.active_alerts ?? []).length > 0 && (
         <Section title="Active Alerts">
-          {brief.activeAlerts.map((a, i) => (
+          {(brief.activeAlerts ?? brief.active_alerts ?? []).map((a, i) => (
             <div
               key={i}
               className="flex items-center gap-3 rounded-lg px-3 py-2 mb-2"
@@ -154,7 +149,7 @@ export default function PrepBriefTab({ player }) {
       {/* Top Leaks */}
       <Section title="Top Leaks">
         <div className="flex flex-col gap-2">
-          {brief.leaks.map((leak, i) => (
+          {(brief.leaks ?? brief.top_leaks ?? []).map((leak, i) => (
             <div
               key={leak.tag}
               className="rounded-lg px-3 py-2.5"
@@ -171,13 +166,13 @@ export default function PrepBriefTab({ player }) {
               </div>
               <div className="flex items-center gap-4 mt-1">
                 <span className="text-xs" style={{ color: '#f85149' }}>
-                  Student: {leak.studentRate}/100
+                  Student: {(leak.studentRate ?? leak.student_rate ?? 0)}/100
                 </span>
                 <span className="text-xs" style={{ color: '#6e7681' }}>
-                  Avg: {leak.schoolAvg}/100
+                  Avg: {(leak.schoolAvg ?? leak.school_avg ?? 0)}/100
                 </span>
                 <span className="text-xs font-semibold" style={{ color: '#f85149' }}>
-                  +{leak.delta.toFixed(1)} above avg
+                  +{(leak.delta ?? 0).toFixed(1)} above avg
                 </span>
               </div>
             </div>
@@ -201,7 +196,7 @@ export default function PrepBriefTab({ player }) {
               </tr>
             </thead>
             <tbody>
-              {brief.statsSnapshot.map((s, i) => (
+              {(brief.statsSnapshot ?? brief.stats_snapshot ?? []).map((s, i) => (
                 <tr
                   key={s.stat}
                   style={{
@@ -237,7 +232,7 @@ export default function PrepBriefTab({ player }) {
       {/* Hands to Review */}
       <Section title="Hands to Review">
         <div className="flex flex-col gap-2">
-          {brief.flaggedHands.map((hand, i) => (
+          {(brief.flaggedHands ?? brief.flagged_hands ?? brief.hands_to_review ?? []).map((hand, i) => (
             <div
               key={hand.handId}
               className="flex items-center gap-3 rounded-lg px-3 py-2.5"
@@ -269,12 +264,12 @@ export default function PrepBriefTab({ player }) {
               <div className="text-right flex-shrink-0">
                 <div
                   className="text-sm font-bold font-mono"
-                  style={{ color: hand.netResult >= 0 ? '#3fb950' : '#f85149' }}
+                  style={{ color: (hand.netResult ?? hand.net_result ?? hand.net_chips ?? 0) >= 0 ? '#3fb950' : '#f85149' }}
                 >
-                  {formatNet(hand.netResult)}
+                  {formatNet(hand.netResult ?? hand.net_result ?? hand.net_chips)}
                 </div>
                 <div className="text-xs" style={{ color: '#6e7681' }}>
-                  score {hand.reviewScore}
+                  score {hand.reviewScore ?? hand.review_score ?? '—'}
                 </div>
               </div>
             </div>
@@ -285,7 +280,7 @@ export default function PrepBriefTab({ player }) {
       {/* Coach's Last Notes */}
       <Section title="Coach's Last Notes">
         <div className="flex flex-col gap-2">
-          {brief.coachNotes.map((note, i) => {
+          {(brief.coachNotes ?? brief.coach_notes ?? brief.last_notes ?? []).map((note, i) => {
             const c = NOTE_TYPE_COLORS[note.type] ?? NOTE_TYPE_COLORS.general;
             return (
               <div
@@ -327,7 +322,7 @@ export default function PrepBriefTab({ player }) {
               </tr>
             </thead>
             <tbody>
-              {brief.sessionHistory.map((s, i) => (
+              {(brief.sessionHistory ?? brief.session_history ?? brief.recent_sessions ?? []).map((s, i) => (
                 <tr
                   key={s.date}
                   style={{
@@ -336,16 +331,16 @@ export default function PrepBriefTab({ player }) {
                   }}
                   data-testid={`session-row-${i}`}
                 >
-                  <td className="px-3 py-2" style={{ color: '#8b949e' }}>{formatDate(s.date)}</td>
-                  <td className="px-3 py-2 text-right font-mono" style={{ color: '#f0ece3' }}>{s.hands}</td>
+                  <td className="px-3 py-2" style={{ color: '#8b949e' }}>{formatDate(s.date ?? s.ended_at)}</td>
+                  <td className="px-3 py-2 text-right font-mono" style={{ color: '#f0ece3' }}>{s.hands ?? s.hands_played ?? '—'}</td>
                   <td
                     className="px-3 py-2 text-right font-mono font-semibold"
-                    style={{ color: s.netChips >= 0 ? '#3fb950' : '#f85149' }}
+                    style={{ color: (s.netChips ?? s.net_chips ?? 0) >= 0 ? '#3fb950' : '#f85149' }}
                   >
-                    {formatNet(s.netChips)}
+                    {formatNet(s.netChips ?? s.net_chips)}
                   </td>
                   <td className="px-3 py-2 text-right font-mono" style={{ color: '#d4af37' }}>
-                    {s.qualityScore}
+                    {s.qualityScore ?? s.quality_score ?? '—'}
                   </td>
                 </tr>
               ))}

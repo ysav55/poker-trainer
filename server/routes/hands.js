@@ -2,6 +2,60 @@
 
 module.exports = function registerHandRoutes(app, { requireAuth, HandLogger, EquityService }) {
 
+  // GET /api/hands/tags — distinct tags for the history filter UI
+  app.get('/api/hands/tags', requireAuth, async (req, res) => {
+    try {
+      const tags = await HandLogger.getDistinctHandTags();
+      res.json({ tags });
+    } catch (err) {
+      res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
+  // GET /api/hands/tables — distinct table IDs for the history filter UI
+  app.get('/api/hands/tables', requireAuth, async (req, res) => {
+    try {
+      const tableIds = await HandLogger.getDistinctTableIds();
+      res.json({ tableIds });
+    } catch (err) {
+      res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
+  // GET /api/hands/history — filterable hand browser with pagination
+  // Query params: playerId, tableId, startDate, endDate, tags (comma-sep),
+  //               scenariosOnly, mistakesOnly, limit (max 100), offset
+  app.get('/api/hands/history', requireAuth, async (req, res) => {
+    try {
+      const { user } = req;
+      const isCoach = ['coach', 'admin', 'superadmin'].includes(user.role);
+
+      // Students can only view their own hands
+      let playerId = req.query.playerId || null;
+      if (!isCoach) playerId = user.stableId;
+
+      const tableId      = req.query.tableId   || null;
+      const startDate    = req.query.startDate  || null;
+      const endDate      = req.query.endDate    || null;
+      const tags         = req.query.tags
+        ? req.query.tags.split(',').map(t => t.trim()).filter(Boolean)
+        : [];
+      const scenariosOnly = req.query.scenariosOnly === 'true';
+      const mistakesOnly  = req.query.mistakesOnly  === 'true';
+      const limit  = Math.min(parseInt(req.query.limit)  || 25, 100);
+      const offset = parseInt(req.query.offset) || 0;
+
+      const result = await HandLogger.getHandHistory({
+        playerId, tableId, startDate, endDate,
+        tags, scenariosOnly, mistakesOnly,
+        limit, offset,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
   // GET /api/hands
   app.get('/api/hands', requireAuth, async (req, res) => {
     try {
