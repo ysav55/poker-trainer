@@ -15,6 +15,25 @@
  *   - destroy() disconnects all bot sockets
  */
 
+// ─── Mock HandLoggerSupabase (prevents supabase.js from loading) ──────────────
+
+jest.mock('../../../db/HandLoggerSupabase', () => ({
+  startHand: jest.fn().mockResolvedValue(undefined),
+  endHand:   jest.fn().mockResolvedValue(undefined),
+  recordAction: jest.fn().mockResolvedValue(undefined),
+}));
+
+// ─── Mock SharedState (prevents TournamentRepository → supabase.js load) ──────
+
+jest.mock('../../../state/SharedState', () => ({
+  tables:                new Map(),
+  activeHands:           new Map(),
+  stableIdMap:           new Map(),
+  getOrCreateController: jest.fn(),
+  getController:         jest.fn(),
+  destroyController:     jest.fn(),
+}));
+
 // ─── Mock socket.io-client ────────────────────────────────────────────────────
 
 const mockBotSocket = {
@@ -47,8 +66,13 @@ const ioClientMock            = require('socket.io-client');
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeIo() {
-  const room = { emit: jest.fn() };
-  return { to: jest.fn().mockReturnValue(room), _room: room };
+  const room  = { emit: jest.fn() };
+  const rooms = new Map();
+  return {
+    to:      jest.fn().mockReturnValue(room),
+    _room:   room,
+    sockets: { adapter: { rooms }, sockets: new Map() },
+  };
 }
 
 function makeGm(playerCount = 2) {
