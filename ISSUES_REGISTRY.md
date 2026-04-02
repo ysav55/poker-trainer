@@ -1,6 +1,6 @@
 # Issues Registry — Poker Trainer
 
-**Last updated:** 2026-04-01 — **Play vs Bot Phase 1-B (POK-56) shipped:** `BotDecisionService`, `BotTableController`, `bot_cash` factory in SharedState, `joinRoomBotVisibility` enforcement. 2145 server tests across 84 suites. Previously: **Coach Intelligence Layer fully shipped (POK-43–47):** AlertService (6 detector types with configurable thresholds + dedup upsert), ProgressReportService (8 sections: period_stats, comparison, mistake_trends, top_hands, leak_evolution, session_summary, scenario_results, overall_grade 0–100 composite; weekly/monthly/custom periods; `GET/POST /api/coach/students/:id/reports`, `GET /api/coach/reports/stable`), NarratorService (Tier 2 LLM via Claude Haiku — narrateAlerts, narratePrepBrief, narrateProgressReport, narrateStableOverview; returns null gracefully when `ANTHROPIC_API_KEY` absent). 2051 server tests across 79 suites. Previously: BaselineService, SessionQualityService, School Management, SessionPrepService, Coach Intelligence UI, Announcements, Chip Bank, Auth & Registration.
+**Last updated:** 2026-04-01 — **Play vs Bot Phase 2 (POK-58) shipped:** Socket visibility enforcement for `bot_cash` tables (private/school privacy rules), `role='bot'` JWT bypass for server-side bot sockets, `BotTableController` autonomous hand lifecycle (`_startHand`, `_completeHand`, showdown detection), end-to-end socket integration test (3 tests covering full hand, unauthenticated rejection, non-creator rejection). 2148 server tests across 85 suites. Previously: POK-56 shipped BotDecisionService, BotTableController. Previously: **Coach Intelligence Layer fully shipped (POK-43–47):** AlertService (6 detector types with configurable thresholds + dedup upsert), ProgressReportService (8 sections: period_stats, comparison, mistake_trends, top_hands, leak_evolution, session_summary, scenario_results, overall_grade 0–100 composite; weekly/monthly/custom periods; `GET/POST /api/coach/students/:id/reports`, `GET /api/coach/reports/stable`), NarratorService (Tier 2 LLM via Claude Haiku — narrateAlerts, narratePrepBrief, narrateProgressReport, narrateStableOverview; returns null gracefully when `ANTHROPIC_API_KEY` absent). 2051 server tests across 79 suites. Previously: BaselineService, SessionQualityService, School Management, SessionPrepService, Coach Intelligence UI, Announcements, Chip Bank, Auth & Registration.
 
 ## Severity Legend
 - 🔴 CRITICAL — crash or incorrect game outcome
@@ -14,6 +14,7 @@
 
 | ID | Sev | Description | Notes |
 |----|-----|-------------|-------|
+| ISS-140 | 🟢 | `BotTableController` hand lifecycle bypasses `SessionManager.startGame()` — calls raw `GameManager.startGame()` then logs to HandLogger directly. Session-level VPIP/PFR stats are not incremented for bot-table hands. No user impact yet; bot stats are excluded from coach dashboards by the `is_bot` guard. Fix: route through `SessionManager.startGame()`. | Low priority until session stats are surfaced for bot players. |
 | ISS-104 | 🟡 | `poker-odds-calculator` is ESM-only. In Jest (CJS) tests it is replaced by a deterministic stub (`__mocks__/poker-odds-calculator.js`). The stub returns equal-split equity for any inputs. Equity-analyzer tests run against the stub, not real equity values. | Non-breaking at runtime — Node.js loads the real package fine. Tests pass. Real equity accuracy is verified manually. |
 | ISS-105 | 🟢 | `MistakeMatrixPanel` tooltip shows mistake tags on hover only if the consuming component passes a `onHover` or a tooltip library. Currently the tooltip state is internal but there is no visual hover trigger — the hover detection is unused. | Minor. The mistake cells are still red; tooltip text renders below the matrix on hover. |
 | ISS-99 | 🟡 | `players.csv` auth is still the primary login mechanism. Migration to DB-backed user accounts (`player_profiles.password_hash`) is implemented (migration 009) but `PlayerRoster.authenticate()` still falls back to CSV if no DB record exists. Full cutover requires admin to re-provision all users via `/admin/users`. | Non-breaking. Both paths work simultaneously. |
@@ -23,6 +24,14 @@
 | ~~ISS-75~~ | ~~🟡~~ | ~~Supabase anon read policies on all tables expose all hand/player data to any unauthenticated browser client.~~ | **RESOLVED 2026-03-19** — Anon key removed from browser entirely. All data access goes through Express (JWT-authenticated). Supabase RLS can now be simplified to service-role-only. |
 
 ---
+
+## Resolved — 2026-04-01 (Play vs Bot Phase 2 — POK-58)
+
+| ID | Sev | Description | Fixed |
+|----|-----|-------------|-------|
+| ISS-141 | 🟠 | Bot sockets blocked by `privacy=private` visibility check — `BotTableController` spawned bots with `role='player'` JWT, so they hit the same creator-only gate as humans and could not join the table. Fixed by signing bot JWTs with `role='bot'` and adding an `isBot` check in `socketAuthMiddleware` + `joinRoom.js` to bypass the visibility block for server-side bots. | 2026-04-01 |
+| ISS-142 | 🟠 | First hand never auto-started in bot_cash tables — `BotTableController` had no trigger for the initial hand. `start_game` socket event requires a coach role (unavailable in bot mode). Fixed by adding `_tryAutoStart()` (called on bot's `room_joined`) and `_startHand()` which calls `startGame()`, logs to HandLogger, and broadcasts state. | 2026-04-01 |
+| ISS-143 | 🟠 | Hand lifecycle never completed in bot_cash tables — no mechanism to call `endHand` or emit `hand_complete` without a coach emitting `reset_hand`. Fixed by adding `_onGameState` showdown detection that calls `_completeHand()` once per hand (guarded by `_handActive` flag). | 2026-04-01 |
 
 ## Resolved — 2026-04-01 (Coach Intelligence — POK-44/46/47)
 

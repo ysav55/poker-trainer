@@ -31,6 +31,11 @@ jest.mock('../../auth/requireAuth.js', () =>
   })
 );
 
+// featureGate shim — requireFeature always passes through in tests
+jest.mock('../../auth/featureGate', () => ({
+  requireFeature: jest.fn(() => (_req, _res, next) => next()),
+}));
+
 // requireRole shim — returns a middleware that checks req.user.role
 jest.mock('../../auth/requireRole.js', () =>
   jest.fn((minRole) => (req, res, next) => {

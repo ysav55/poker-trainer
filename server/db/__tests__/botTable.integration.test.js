@@ -171,8 +171,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (humanSocket?.connected) humanSocket.disconnect();
+  // Destroy the BotTableController so its bot sockets disconnect before we close
+  // the HTTP server (otherwise httpServer.close() waits indefinitely for them).
+  const { destroyController } = require('../../state/SharedState');
+  destroyController(TABLE_ID);
   await new Promise(resolve => httpServer.close(resolve));
-});
+}, 15_000);
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -197,6 +201,22 @@ test('human joins bot table, bots auto-join and complete a hand', async () => {
   // Human should receive room_joined
   const roomJoined = await waitFor(humanSocket, 'room_joined', 5000);
   expect(roomJoined.tableId).toBe(TABLE_ID);
+
+  // Human auto-acts: call/check whenever it is their turn so the hand progresses.
+  // The human socket id is only known after connection, so we compare inside the listener.
+  const BETTING_PHASES = ['preflop', 'flop', 'turn', 'river'];
+  humanSocket.on('game_state', (state) => {
+    if (!BETTING_PHASES.includes(state.phase)) return;
+    if (state.current_turn !== humanSocket.id) return;
+    // Prefer check if available; otherwise call.
+    const me = (state.players ?? []).find(p => p.id === humanSocket.id);
+    const toCall = Math.max(0, (state.current_bet ?? 0) - (me?.total_bet_this_round ?? 0));
+    if (toCall === 0) {
+      humanSocket.emit('place_bet', { action: 'check', amount: 0 });
+    } else {
+      humanSocket.emit('place_bet', { action: 'call', amount: 0 });
+    }
+  });
 
   // Wait for hand_complete — bots will auto-act and finish the hand
   const handResult = await waitFor(humanSocket, 'hand_complete', HAND_TIMEOUT);
