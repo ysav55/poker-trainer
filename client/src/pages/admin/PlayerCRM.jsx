@@ -10,8 +10,16 @@ import ReportsTab from './ReportsTab';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ROLES = ['', 'superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
-const SUB_TABS = ['OVERVIEW', 'NOTES', 'SCHEDULE', 'HISTORY', 'PREP BRIEF', 'REPORTS'];
+const SUB_TABS = ['INFO', 'SESSIONS', 'STATS', 'NOTES', 'STAKING', 'SCENARIOS', 'REPORTS', 'PREP BRIEF'];
 const NOTE_TYPES = ['general', 'session_review', 'goal', 'weakness'];
+
+// Alert dot colors keyed by severity band
+const ALERT_DOT = {
+  high:     { color: '#f85149', title: 'High alert' },
+  moderate: { color: '#d4af37', title: 'Moderate alert' },
+  healthy:  { color: '#3fb950', title: 'Healthy' },
+  inactive: { color: '#6e7681', title: 'Inactive / no data' },
+};
 
 const NOTE_TYPE_COLORS = {
   general:        { bg: 'rgba(88,166,255,0.1)',   border: 'rgba(88,166,255,0.25)',   text: '#58a6ff' },
@@ -295,6 +303,166 @@ function PlayerTagManager({ playerId, tags: initialTags }) {
           style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
           onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
         />
+      </div>
+    </div>
+  );
+}
+
+// ─── InfoTab ─────────────────────────────────────────────────────────────────
+
+function InfoTab({ player, crm }) {
+  const [reloadAmount, setReloadAmount] = useState('');
+  const [reloading, setReloading]       = useState(false);
+  const [reloadMsg, setReloadMsg]       = useState('');
+  const transactions = crm?.transactions ?? [];
+  const chipBank     = crm?.chip_bank ?? crm?.chipBank ?? null;
+
+  const handleReload = async () => {
+    const amount = Number(reloadAmount);
+    if (!amount || amount <= 0) return;
+    setReloading(true);
+    setReloadMsg('');
+    try {
+      await apiFetch(`/api/admin/players/${player.id}/chips`, {
+        method: 'POST',
+        body: JSON.stringify({ amount, reason: 'coach_reload' }),
+      });
+      setReloadMsg(`Added ${amount.toLocaleString()} chips.`);
+      setReloadAmount('');
+    } catch (err) {
+      setReloadMsg(err.message || 'Failed to reload chips');
+    } finally {
+      setReloading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Profile section */}
+      <div className="rounded-lg p-4 flex flex-col gap-3" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+        <h3 className="text-xs font-bold tracking-widest uppercase" style={{ color: '#6e7681' }}>Profile</h3>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <InfoRow label="Name" value={player.display_name} />
+          <InfoRow label="Email" value={player.email ?? '—'} />
+          <InfoRow label="Status" value={player.status ?? 'active'} />
+          <InfoRow label="Joined" value={formatDate(player.created_at)} />
+          <InfoRow label="Role" value={player.role} />
+          <InfoRow label="Last Seen" value={formatDate(player.last_seen)} />
+        </div>
+        <PlayerTagManager playerId={player.id} tags={crm?.tags ?? []} />
+      </div>
+
+      {/* Chip bank */}
+      <div className="rounded-lg p-4 flex flex-col gap-3" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+        <h3 className="text-xs font-bold tracking-widest uppercase" style={{ color: '#6e7681' }}>Chip Bank</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-xl font-bold" style={{ color: '#d4af37' }}>
+            🪙 {chipBank != null ? Number(chipBank).toLocaleString() : '—'}
+          </span>
+        </div>
+        <div className="flex gap-2 items-center">
+          <input
+            type="number"
+            placeholder="Amount"
+            value={reloadAmount}
+            onChange={(e) => setReloadAmount(e.target.value)}
+            className="rounded px-3 py-1.5 text-sm w-28 outline-none"
+            style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
+          />
+          <GoldBtn onClick={handleReload} disabled={reloading}>
+            {reloading ? 'Adding…' : 'Reload Chips'}
+          </GoldBtn>
+          {reloadMsg && <span className="text-xs" style={{ color: '#6e7681' }}>{reloadMsg}</span>}
+        </div>
+        {transactions.length > 0 && (
+          <div className="flex flex-col gap-1 mt-1">
+            <span className="text-xs uppercase tracking-widest mb-1" style={{ color: '#6e7681' }}>Recent transactions</span>
+            {transactions.slice(0, 5).map((tx, i) => (
+              <div key={i} className="flex items-center justify-between text-xs py-1"
+                style={{ borderBottom: '1px solid #21262d', color: '#8b949e' }}>
+                <span>{tx.description ?? tx.reason ?? '—'}</span>
+                <span style={{ color: tx.amount >= 0 ? '#3fb950' : '#f85149' }}>
+                  {tx.amount >= 0 ? '+' : ''}{Number(tx.amount).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <>
+      <span className="text-xs" style={{ color: '#6e7681' }}>{label}</span>
+      <span className="text-xs" style={{ color: '#f0ece3' }}>{value ?? '—'}</span>
+    </>
+  );
+}
+
+// ─── StatsTab ─────────────────────────────────────────────────────────────────
+
+function StatsTab({ crm }) {
+  const stats    = crm?.stats    ?? {};
+  const trend    = crm?.trend    ?? [];
+  const mistakes = crm?.mistakes ?? [];
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-3 flex-wrap">
+        <StatCard label="HANDS PLAYED" value={stats.hands_played ?? '—'} />
+        <StatCard
+          label="NET CHIPS"
+          value={
+            <span style={{ color: stats.net_chips >= 0 ? '#3fb950' : '#f85149' }}>
+              {formatNetChips(stats.net_chips)}
+            </span>
+          }
+        />
+        <StatCard label="VPIP%" value={stats.vpip != null ? `${stats.vpip}%` : '—'} />
+        <StatCard label="PFR%" value={stats.pfr != null ? `${stats.pfr}%` : '—'} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <PlayerStatsChart trend={trend} />
+        <PlayerMistakeBreakdown mistakes={mistakes} />
+      </div>
+    </div>
+  );
+}
+
+// ─── StakingTab ───────────────────────────────────────────────────────────────
+
+function StakingTab({ player }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-lg p-5 flex flex-col gap-2" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+        <h3 className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: '#6e7681' }}>Staking Ledger</h3>
+        <p className="text-sm" style={{ color: '#6e7681' }}>
+          Staking management for {player.display_name} — coming soon.
+        </p>
+        <p className="text-xs mt-1" style={{ color: '#484f58' }}>
+          Tracked in sub-issue POK-81.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── ScenariosTab ─────────────────────────────────────────────────────────────
+
+function ScenariosTab({ player }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-lg p-5 flex flex-col gap-2" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+        <h3 className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: '#6e7681' }}>Scenarios</h3>
+        <p className="text-sm" style={{ color: '#6e7681' }}>
+          Assigned hand scenarios for {player.display_name} — coming soon.
+        </p>
+        <p className="text-xs mt-1" style={{ color: '#484f58' }}>
+          Tracked in sub-issue POK-82.
+        </p>
       </div>
     </div>
   );
@@ -1060,12 +1228,14 @@ function PlayerDetail({ player, crm, crmLoading, onBack }) {
           </div>
         ) : (
           <>
-            {activeTab === 'OVERVIEW'    && <OverviewTab    player={player} crm={crm} />}
-            {activeTab === 'NOTES'       && <NotesTab       player={player} />}
-            {activeTab === 'SCHEDULE'    && <ScheduleTab    player={player} />}
-            {activeTab === 'HISTORY'     && <HistoryTab     player={player} />}
-            {activeTab === 'PREP BRIEF'  && <PrepBriefTab   player={player} />}
-            {activeTab === 'REPORTS'     && <ReportsTab     player={player} />}
+            {activeTab === 'INFO'       && <InfoTab       player={player} crm={crm} />}
+            {activeTab === 'SESSIONS'   && <ScheduleTab   player={player} />}
+            {activeTab === 'STATS'      && <StatsTab      crm={crm} />}
+            {activeTab === 'NOTES'      && <NotesTab      player={player} />}
+            {activeTab === 'STAKING'    && <StakingTab    player={player} />}
+            {activeTab === 'SCENARIOS'  && <ScenariosTab  player={player} />}
+            {activeTab === 'REPORTS'    && <ReportsTab    player={player} />}
+            {activeTab === 'PREP BRIEF' && <PrepBriefTab  player={player} />}
           </>
         )}
       </div>
@@ -1090,6 +1260,25 @@ export default function PlayerCRM() {
   const [crm, setCrm]                   = useState(null);
   const [crmLoading, setCrmLoading]     = useState(false);
 
+  const [alerts, setAlerts]             = useState([]);
+  const [bulkOpen, setBulkOpen]         = useState(false);
+
+  // Compute per-player alert severity band
+  const getAlertDot = useCallback((player) => {
+    if (!player) return ALERT_DOT.inactive;
+    const playerAlerts = alerts.filter(
+      (a) => a.player_id === player.id || a.player_name === player.display_name,
+    );
+    if (playerAlerts.length > 0) {
+      const maxSev = Math.max(...playerAlerts.map((a) => a.severity ?? 0));
+      if (maxSev >= 0.75) return ALERT_DOT.high;
+      if (maxSev >= 0.4)  return ALERT_DOT.moderate;
+    }
+    if (player.status === 'archived') return ALERT_DOT.inactive;
+    if (!player.last_seen && !player.hands_played) return ALERT_DOT.inactive;
+    return ALERT_DOT.healthy;
+  }, [alerts]);
+
   // Load player list on mount
   useEffect(() => {
     (async () => {
@@ -1110,6 +1299,13 @@ export default function PlayerCRM() {
   useEffect(() => {
     apiFetch('/api/players')
       .then(d => setPlayerStats(d?.players ?? []))
+      .catch(() => {});
+  }, []);
+
+  // Load alerts to compute per-player severity dots
+  useEffect(() => {
+    apiFetch('/api/admin/alerts')
+      .then((d) => setAlerts(d?.alerts ?? d ?? []))
       .catch(() => {});
   }, []);
 
@@ -1146,7 +1342,7 @@ export default function PlayerCRM() {
   return (
     <div
       className="flex"
-      style={{ height: '100vh', background: '#060a0f', color: '#f0ece3', overflow: 'hidden' }}
+      style={{ height: '100%', minHeight: '100vh', background: '#060a0f', color: '#f0ece3', overflow: 'hidden' }}
     >
       {/* ── Left column ────────────────────────────────────────────────────── */}
       <div
@@ -1240,6 +1436,7 @@ export default function PlayerCRM() {
           )}
           {!playersLoading && filtered.map((p) => {
             const selected = selectedPlayer?.id === p.id;
+            const dot = getAlertDot(p);
             return (
               <button
                 key={p.id}
@@ -1255,18 +1452,14 @@ export default function PlayerCRM() {
                 onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
                 onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
               >
-                {/* Avatar */}
-                <div
-                  className="flex items-center justify-center rounded-full text-xs font-bold flex-shrink-0"
-                  style={{
-                    width: 32, height: 32,
-                    background: 'rgba(212,175,55,0.15)',
-                    color: '#d4af37',
-                    border: '1px solid rgba(212,175,55,0.2)',
-                  }}
+                {/* Alert dot */}
+                <span
+                  className="flex-shrink-0"
+                  style={{ color: dot.color, fontSize: 8, lineHeight: 1, marginTop: 1 }}
+                  title={dot.title}
                 >
-                  {getInitials(p.display_name)}
-                </div>
+                  ●
+                </span>
 
                 {/* Info */}
                 <div className="flex flex-col gap-0.5 min-w-0 flex-1">
@@ -1290,20 +1483,47 @@ export default function PlayerCRM() {
           })}
         </div>
 
-        {/* Quick actions */}
-        {selectedPlayer && (
-          <div
-            className="flex gap-2 px-3 py-3 flex-shrink-0"
-            style={{ borderTop: '1px solid #30363d' }}
-          >
-            <GhostBtn style={{ flex: 1, textAlign: 'center' }}>
-              + Add Note
+        {/* Roster footer: Add Student + Bulk Actions */}
+        <div
+          className="flex gap-2 px-3 py-3 flex-shrink-0"
+          style={{ borderTop: '1px solid #30363d' }}
+        >
+          <GhostBtn style={{ flex: 1, textAlign: 'center', fontSize: 11 }}>
+            + Add Student
+          </GhostBtn>
+          <div className="relative">
+            <GhostBtn
+              onClick={() => setBulkOpen((v) => !v)}
+              style={{ whiteSpace: 'nowrap', fontSize: 11 }}
+            >
+              Bulk Actions ▾
             </GhostBtn>
-            <GhostBtn style={{ flex: 1, textAlign: 'center' }}>
-              Schedule Session
-            </GhostBtn>
+            {bulkOpen && (
+              <div
+                className="absolute bottom-full left-0 mb-1 rounded-lg overflow-hidden z-20"
+                style={{
+                  background: '#161b22',
+                  border: '1px solid #30363d',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                  minWidth: 160,
+                }}
+              >
+                {['Assign Playlist', 'Send Announcement', 'Schedule Session'].map((label) => (
+                  <button
+                    key={label}
+                    onClick={() => setBulkOpen(false)}
+                    className="w-full text-left px-4 py-2.5 text-xs transition-colors"
+                    style={{ color: '#8b949e', background: 'transparent' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#f0ece3'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#8b949e'; }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* ── Right column ───────────────────────────────────────────────────── */}

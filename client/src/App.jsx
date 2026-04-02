@@ -20,10 +20,11 @@ import RegisterPage from './pages/RegisterPage.jsx';
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
 import AnalysisPage from './pages/AnalysisPage.jsx';
-import MainLobby from './pages/MainLobby.jsx';
+import LobbyPage from './pages/LobbyPage.jsx';
 import BotLobbyPage from './pages/BotLobbyPage.jsx';
 import TablePage from './pages/TablePage.jsx';
 import MultiTablePage from './pages/MultiTablePage.jsx';
+import ReviewTablePage from './pages/ReviewTablePage.jsx';
 
 // Admin pages
 import UserManagement from './pages/admin/UserManagement.jsx';
@@ -101,12 +102,13 @@ function AppRoutes() {
         {/* Full-screen pages — no global layout */}
         <Route path="/table/:tableId"  element={<TablePage />} />
         <Route path="/multi"           element={<MultiTablePage />} />
+        <Route path="/review"          element={<ReviewTablePage />} />
         <Route path="/tournament/:tableId/lobby"     element={<TournamentLobby />} />
         <Route path="/tournament/:tableId/standings" element={<TournamentStandings />} />
 
         {/* Lobby-style pages — wrapped in AppLayout (TopBar + SideNav) */}
         <Route element={<AppLayout />}>
-          <Route path="/lobby"       element={<MainLobby />} />
+          <Route path="/lobby"       element={<LobbyPage />} />
           <Route path="/bot-lobby"   element={<BotLobbyPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/analysis"    element={<AnalysisPage />} />
