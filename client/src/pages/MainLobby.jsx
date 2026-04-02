@@ -408,48 +408,13 @@ export default function MainLobby() {
   const netColor  = netNum == null ? '#fff' : netNum >= 0 ? '#4ade80' : '#f87171';
 
   return (
-    <div className="min-h-screen w-screen" style={{ background: '#0d1117', color: '#e5e7eb' }}>
+    <div style={{ color: '#e5e7eb' }}>
 
       {/* Ambient glow */}
       <div
         className="fixed inset-0 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse 80% 40% at 50% 0%, rgba(212,175,55,0.03) 0%, transparent 60%)' }}
       />
-
-      {/* ── Top Bar ──────────────────────────────────────────────────────────── */}
-      <header
-        className="sticky top-0 z-40 flex items-center justify-between px-6"
-        style={{ height: 48, background: '#0d1117', borderBottom: '1px solid #30363d' }}
-      >
-        {/* Left: wordmark */}
-        <div className="flex items-center gap-3">
-          <span className="text-base font-black tracking-[0.15em] uppercase" style={{ color: GOLD }}>
-            E-POKER
-          </span>
-          <span className="text-xs text-gray-500 tracking-widest">TRAINING PLATFORM</span>
-        </div>
-
-        {/* Right: nav + user info + logout */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/leaderboard')}
-            data-testid="nav-leaderboard"
-            className="text-xs px-3 py-1.5 rounded-lg font-semibold uppercase tracking-wider transition-opacity hover:opacity-80 hidden sm:flex items-center gap-1"
-            style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.25)', color: GOLD }}
-          >
-            🏆 Leaderboard
-          </button>
-          <span className="text-sm text-gray-300 hidden sm:inline">{user?.name}</span>
-          <Pill style={roleBadgeStyle}>{ROLE_LABEL[user?.role] ?? user?.role}</Pill>
-          <button
-            onClick={handleLogout}
-            className="text-xs px-3 py-1.5 rounded-lg font-medium uppercase tracking-wider transition-opacity hover:opacity-80"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af' }}
-          >
-            Log Out
-          </button>
-        </div>
-      </header>
 
       <div className="relative max-w-5xl mx-auto px-4 py-6 flex flex-col gap-6">
 

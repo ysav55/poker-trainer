@@ -245,7 +245,7 @@ export default function TournamentSetup() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen p-6" style={{ background: '#0d1117', color: '#f0ece3' }}>
+    <div className="p-6" style={{ color: '#f0ece3' }}>
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div>

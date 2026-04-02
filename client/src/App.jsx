@@ -11,8 +11,13 @@ import {
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import { LobbyProvider } from './contexts/LobbyContext.jsx';
 
+// Layout
+import AppLayout from './components/AppLayout.jsx';
+
 // Pages
 import LoginPage from './pages/LoginPage.jsx';
+import RegisterPage from './pages/RegisterPage.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
 import AnalysisPage from './pages/AnalysisPage.jsx';
 import MainLobby from './pages/MainLobby.jsx';
@@ -87,29 +92,35 @@ function AppRoutes() {
     <Routes>
       {/* Public */}
       <Route path="/login"           element={<LoginPage />} />
+      <Route path="/register"        element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
       {/* Authenticated */}
       <Route element={<RequireAuth />}>
-        <Route path="/lobby"          element={<MainLobby />} />
-        <Route path="/bot-lobby"      element={<BotLobbyPage />} />
-        <Route path="/leaderboard"    element={<LeaderboardPage />} />
-        <Route path="/analysis"       element={<AnalysisPage />} />
+
+        {/* Full-screen pages — no global layout */}
         <Route path="/table/:tableId"  element={<TablePage />} />
         <Route path="/multi"           element={<MultiTablePage />} />
-
-        {/* Tournament pages — any authenticated user */}
         <Route path="/tournament/:tableId/lobby"     element={<TournamentLobby />} />
         <Route path="/tournament/:tableId/standings" element={<TournamentStandings />} />
 
-        {/* Admin — require admin:access */}
-        <Route element={<RequirePermission permission="admin:access" />}>
-          <Route path="/admin/users"        element={<UserManagement />} />
-          <Route path="/admin/hands"        element={<HandBuilder />} />
-          <Route path="/admin/crm"          element={<PlayerCRM />} />
-          <Route path="/admin/tournaments"  element={<TournamentSetup />} />
-          <Route path="/admin/referee"      element={<RefereeDashboard />} />
-          <Route path="/admin/alerts"       element={<CoachAlertsPage />} />
-          <Route path="/admin/stable"       element={<StableOverviewPage />} />
+        {/* Lobby-style pages — wrapped in AppLayout (TopBar + SideNav) */}
+        <Route element={<AppLayout />}>
+          <Route path="/lobby"       element={<MainLobby />} />
+          <Route path="/bot-lobby"   element={<BotLobbyPage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
+          <Route path="/analysis"    element={<AnalysisPage />} />
+
+          {/* Admin — require admin:access */}
+          <Route element={<RequirePermission permission="admin:access" />}>
+            <Route path="/admin/users"        element={<UserManagement />} />
+            <Route path="/admin/hands"        element={<HandBuilder />} />
+            <Route path="/admin/crm"          element={<PlayerCRM />} />
+            <Route path="/admin/tournaments"  element={<TournamentSetup />} />
+            <Route path="/admin/referee"      element={<RefereeDashboard />} />
+            <Route path="/admin/alerts"       element={<CoachAlertsPage />} />
+            <Route path="/admin/stable"       element={<StableOverviewPage />} />
+          </Route>
         </Route>
       </Route>
 

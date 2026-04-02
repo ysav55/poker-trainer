@@ -120,28 +120,7 @@ export default function StableOverviewPage() {
   const gradeDelta = avg.avgGrade - avg.prevAvgGrade;
 
   return (
-    <div className="min-h-screen" style={{ background: '#0d1117', color: '#e5e7eb' }}>
-
-      {/* Header */}
-      <header
-        className="sticky top-0 z-40 flex items-center gap-4 px-6"
-        style={{ height: 48, background: '#0d1117', borderBottom: '1px solid #30363d' }}
-      >
-        <button
-          onClick={() => navigate('/lobby')}
-          className="text-xs"
-          style={{ color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-          data-testid="back-to-lobby"
-        >
-          ← Lobby
-        </button>
-        <span className="text-sm font-bold tracking-widest uppercase" style={{ color: GOLD }}>
-          Stable Overview
-        </span>
-        <span className="text-xs" style={{ color: '#6e7681' }}>
-          {data.weekLabel}
-        </span>
-      </header>
+    <div style={{ color: '#e5e7eb' }}>
 
       <div className="max-w-xl mx-auto px-4 py-6 flex flex-col gap-4">
 

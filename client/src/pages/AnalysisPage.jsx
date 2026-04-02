@@ -550,59 +550,9 @@ export default function AnalysisPage() {
   );
 
   return (
-    <div
-      className="min-h-screen w-screen flex flex-col"
-      style={{ background: '#0d1117', color: '#e5e7eb' }}
-    >
-      {/* Ambient glow */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse 80% 40% at 50% 0%, rgba(212,175,55,0.02) 0%, transparent 60%)' }}
-      />
+    <div style={{ color: '#e5e7eb' }}>
 
-      {/* Top bar */}
-      <header
-        className="relative z-40 flex items-center justify-between px-5 flex-shrink-0"
-        style={{ height: 48, background: '#0d1117', borderBottom: '1px solid #30363d' }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/lobby')}
-            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-            data-testid="back-to-lobby"
-          >
-            ← Lobby
-          </button>
-          <span style={{ color: '#30363d' }}>|</span>
-          <span className="text-base font-black tracking-[0.15em] uppercase" style={{ color: GOLD }}>
-            AI Analysis
-          </span>
-          {selectedPlayerName && (
-            <span className="text-xs text-gray-500">— {selectedPlayerName}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {isCoachPlus && (
-            <button
-              onClick={() => setCompareMode(m => !m)}
-              data-testid="toggle-compare"
-              className="text-xs px-3 py-1 rounded-full transition-colors font-semibold"
-              style={
-                compareMode
-                  ? { background: 'rgba(212,175,55,0.18)', border: `1px solid rgba(212,175,55,0.5)`, color: GOLD }
-                  : { background: 'rgba(255,255,255,0.05)', border: '1px solid #30363d', color: '#8b949e' }
-              }
-            >
-              Compare Players
-            </button>
-          )}
-          <span className="text-sm text-gray-400 hidden sm:inline">{user?.name}</span>
-        </div>
-      </header>
-
-      {/* Body */}
-      <main className="relative flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-4 py-5 flex flex-col gap-4">
+      <div className="max-w-6xl mx-auto px-4 py-5 flex flex-col gap-4">
 
           {/* Filters */}
           <FilterBar players={players} filters={filters} onChange={handleFilterChange} />
@@ -686,7 +636,6 @@ export default function AnalysisPage() {
           </div>
 
         </div>
-      </main>
     </div>
   );
 }

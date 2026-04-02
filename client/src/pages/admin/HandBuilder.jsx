@@ -105,44 +105,10 @@ export default function HandBuilder() {
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="min-h-screen"
-      style={{ background: '#060a0f', color: '#f0ece3' }}
-    >
-      {/* Top bar */}
-      <div
-        style={{
-          background: '#0d1117',
-          borderBottom: '1px solid #30363d',
-          padding: '12px 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/lobby')}
-            style={{
-              background: 'none', border: '1px solid #30363d', borderRadius: 4,
-              color: '#6e7681', padding: '4px 10px', fontSize: 11, cursor: 'pointer',
-              transition: 'all 0.1s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#8b949e'; e.currentTarget.style.color = '#8b949e'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#6e7681'; }}
-          >
-            ← Lobby
-          </button>
-          <span
-            style={{
-              fontSize: 12, fontWeight: 700, letterSpacing: '0.18em',
-              textTransform: 'uppercase', color: '#d4af37',
-            }}
-          >
-            Hand Builder
-          </span>
-        </div>
+    <div style={{ color: '#f0ece3' }}>
 
+      {/* Build Scenario action bar */}
+      <div className="flex items-center justify-end px-6 py-3" style={{ borderBottom: '1px solid #21262d' }}>
         <button
           onClick={openNewBuilder}
           style={{

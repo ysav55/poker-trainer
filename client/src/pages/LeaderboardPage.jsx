@@ -79,39 +79,10 @@ export default function LeaderboardPage() {
   }, [players, period, search]);
 
   return (
-    <div
-      className="min-h-screen w-screen flex flex-col"
-      style={{ background: '#0d1117', color: '#e5e7eb' }}
-    >
-      {/* Ambient glow */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{ background: 'radial-gradient(ellipse 80% 40% at 50% 0%, rgba(212,175,55,0.025) 0%, transparent 60%)' }}
-      />
-
-      {/* Top bar */}
-      <header
-        className="relative z-40 flex items-center justify-between px-5 flex-shrink-0"
-        style={{ height: 48, background: '#0d1117', borderBottom: '1px solid #30363d' }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/lobby')}
-            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-          >
-            ← Lobby
-          </button>
-          <span style={{ color: '#30363d' }}>|</span>
-          <span className="text-base font-black tracking-[0.15em] uppercase" style={{ color: GOLD }}>
-            Leaderboard
-          </span>
-        </div>
-        <span className="text-sm text-gray-400 hidden sm:inline">{user?.name}</span>
-      </header>
+    <div style={{ color: '#e5e7eb' }}>
 
       {/* Body */}
-      <main className="relative flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-5">
+      <div className="max-w-4xl mx-auto px-4 py-6 flex flex-col gap-5">
 
           {/* Controls row */}
           <div className="flex flex-wrap items-center gap-3 justify-between">
@@ -314,7 +285,6 @@ export default function LeaderboardPage() {
             {search ? ` matching "${search}"` : ''}
           </p>
         </div>
-      </main>
     </div>
   );
 }

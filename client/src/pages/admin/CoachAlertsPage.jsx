@@ -1,51 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../lib/api.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const GOLD = '#d4af37';
 
 const ALERT_TYPE_LABELS = {
-  mistake_spike:   'Mistake spike',
-  inactivity:      'Inactive',
-  volume_drop:     'Volume drop',
-  losing_streak:   'Losing streak',
-  stat_regression: 'Stat regression',
+  mistake_spike:      'Mistake spike',
+  inactivity:         'Inactive',
+  volume_drop:        'Volume drop',
+  losing_streak:      'Losing streak',
+  stat_regression:    'Stat regression',
+  positive_milestone: 'Milestone',
 };
 
-// ─── Mock data (replace with apiFetch('/api/coach/alerts') when backend ships) ─
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const MOCK_ALERTS = [
-  {
-    id: 'a1',
-    studentName: 'Alex K.',
-    type: 'mistake_spike',
-    detail: 'EQUITY_FOLD 2.6× baseline — 3 hands flagged',
-    severity: 0.87,
-    dismissed: false,
-  },
-  {
-    id: 'a2',
-    studentName: 'Jordan L.',
-    type: 'inactivity',
-    detail: 'Inactive 7 days — last played Mar 24',
-    severity: 0.71,
-    dismissed: false,
-  },
-  {
-    id: 'a3',
-    studentName: 'Marcus T.',
-    type: 'losing_streak',
-    detail: '4-session losing streak, −12,400 chips',
-    severity: 0.54,
-    dismissed: false,
-  },
-];
-
-const MOCK_MILESTONES = [
-  { id: 'm1', studentName: 'Sam P.',    detail: 'First profitable week (+4,200 chips)' },
-  { id: 'm2', studentName: 'Taylor W.', detail: 'VPIP improved 31% → 24%' },
-];
+function humanDetail(alertType, data) {
+  if (!data) return '';
+  switch (alertType) {
+    case 'mistake_spike': {
+      const top = data.spikes?.[0];
+      if (!top) return 'Mistake frequency spike detected';
+      return `${top.tag} ${top.ratio}× baseline — ${data.spikes.length} tag${data.spikes.length !== 1 ? 's' : ''} flagged`;
+    }
+    case 'inactivity':
+      return `Inactive ${data.days_inactive ?? '?'} days`;
+    case 'losing_streak':
+      return `${data.streak_sessions ?? '?'}-session losing streak, ${Number(data.total_loss ?? 0).toLocaleString()} chips`;
+    case 'volume_drop':
+      return `Volume down ${Math.round((data.drop_pct ?? 0) * 100)}% — ${data.this_week_hands ?? 0} hands this week`;
+    case 'stat_regression': {
+      const top = data.regressions?.[0];
+      return top ? `${top.stat} regression — ${top.z_score?.toFixed(1) ?? '?'} std dev` : 'Stat regression detected';
+    }
+    case 'positive_milestone': {
+      const first = data.milestones?.[0];
+      return first?.detail ?? first?.type ?? 'Milestone achieved';
+    }
+    default:
+      return '';
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -159,14 +156,65 @@ function MilestoneRow({ milestone }) {
 
 export default function CoachAlertsPage() {
   const navigate = useNavigate();
-  const [alerts, setAlerts] = useState(MOCK_ALERTS);
+  const [alerts, setAlerts]       = useState([]);
+  const [milestones, setMilestones] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const [alertsData, playersData] = await Promise.all([
+          apiFetch('/api/coach/alerts'),
+          apiFetch('/api/players'),
+        ]);
+
+        if (cancelled) return;
+
+        // Build player_id → name map
+        const players = playersData?.players ?? playersData ?? [];
+        const nameMap = new Map(players.map(p => [p.id ?? p.stable_id, p.name ?? p.display_name ?? p.stable_id]));
+
+        const rows = alertsData?.alerts ?? [];
+        const normalized = rows.map(r => ({
+          id:          r.id,
+          studentName: nameMap.get(r.player_id) ?? r.player_id?.slice(0, 8) ?? '—',
+          type:        r.alert_type,
+          detail:      humanDetail(r.alert_type, r.data),
+          severity:    r.severity ?? 0,
+          dismissed:   r.status === 'dismissed',
+        }));
+
+        setAlerts(normalized.filter(a => a.type !== 'positive_milestone'));
+        setMilestones(normalized.filter(a => a.type === 'positive_milestone'));
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   const visible = alerts
     .filter((a) => !a.dismissed)
     .sort((a, b) => b.severity - a.severity);
 
-  const handleDismiss = (id) => {
+  const handleDismiss = async (id) => {
     setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, dismissed: true } : a)));
+    try {
+      await apiFetch(`/api/coach/alerts/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'dismissed' }),
+      });
+    } catch (_) {
+      // Re-show alert if the PATCH failed
+      setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, dismissed: false } : a)));
+    }
   };
 
   const handleReview = () => {
@@ -174,90 +222,89 @@ export default function CoachAlertsPage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: '#0d1117', color: '#e5e7eb' }}>
-
-      {/* Header */}
-      <header
-        className="sticky top-0 z-40 flex items-center gap-4 px-6"
-        style={{ height: 48, background: '#0d1117', borderBottom: '1px solid #30363d' }}
-      >
-        <button
-          onClick={() => navigate('/lobby')}
-          className="text-xs"
-          style={{ color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-          data-testid="back-to-lobby"
-        >
-          ← Lobby
-        </button>
-        <span className="text-sm font-bold tracking-widest uppercase" style={{ color: GOLD }}>
-          Coach Alerts
-        </span>
-      </header>
+    <div style={{ color: '#e5e7eb' }}>
 
       <div className="max-w-xl mx-auto px-4 py-6">
-        <div
-          className="rounded-xl overflow-hidden"
-          style={{ background: '#161b22', border: '1px solid #30363d' }}
-        >
 
-          {/* Needs Attention header */}
-          <div
-            className="px-4 py-3 flex items-center justify-between"
-            style={{ borderBottom: '1px solid #30363d', background: '#1a2233' }}
-          >
-            <span
-              className="text-xs font-bold tracking-widest uppercase"
-              style={{ color: '#f85149' }}
-              data-testid="alerts-header"
-            >
-              ⚠ NEEDS ATTENTION ({visible.length})
-            </span>
+        {error && (
+          <div className="mb-4 rounded-lg px-4 py-3 text-sm" style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.25)', color: '#f85149' }}>
+            {error}
           </div>
+        )}
 
-          {/* Alert rows */}
-          {visible.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-16 text-sm" style={{ color: '#6e7681' }}>Loading alerts…</div>
+        ) : (
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{ background: '#161b22', border: '1px solid #30363d' }}
+          >
+
+            {/* Needs Attention header */}
             <div
-              className="px-4 py-10 text-center text-sm"
-              style={{ color: '#6e7681' }}
-              data-testid="no-alerts"
+              className="px-4 py-3 flex items-center justify-between"
+              style={{ borderBottom: '1px solid #30363d', background: '#1a2233' }}
             >
-              No active alerts — all students are on track.
+              <span
+                className="text-xs font-bold tracking-widest uppercase"
+                style={{ color: '#f85149' }}
+                data-testid="alerts-header"
+              >
+                ⚠ NEEDS ATTENTION ({visible.length})
+              </span>
             </div>
-          ) : (
-            visible.map((alert) => (
-              <AlertRow
-                key={alert.id}
-                alert={alert}
-                onDismiss={handleDismiss}
-                onReview={handleReview}
-              />
-            ))
-          )}
 
-          {/* Milestones header */}
-          <div
-            className="px-4 py-3"
-            style={{
-              borderTop: visible.length > 0 ? '1px solid #30363d' : undefined,
-              borderBottom: '1px solid #30363d',
-              background: '#1a2233',
-            }}
-          >
-            <span
-              className="text-xs font-bold tracking-widest uppercase"
-              style={{ color: '#3fb950' }}
-              data-testid="milestones-header"
+            {/* Alert rows */}
+            {visible.length === 0 ? (
+              <div
+                className="px-4 py-10 text-center text-sm"
+                style={{ color: '#6e7681' }}
+                data-testid="no-alerts"
+              >
+                No active alerts — all students are on track.
+              </div>
+            ) : (
+              visible.map((alert) => (
+                <AlertRow
+                  key={alert.id}
+                  alert={alert}
+                  onDismiss={handleDismiss}
+                  onReview={handleReview}
+                />
+              ))
+            )}
+
+            {/* Milestones header */}
+            <div
+              className="px-4 py-3"
+              style={{
+                borderTop: visible.length > 0 ? '1px solid #30363d' : undefined,
+                borderBottom: '1px solid #30363d',
+                background: '#1a2233',
+              }}
             >
-              ✅ MILESTONES
-            </span>
+              <span
+                className="text-xs font-bold tracking-widest uppercase"
+                style={{ color: '#3fb950' }}
+                data-testid="milestones-header"
+              >
+                ✅ MILESTONES
+              </span>
+            </div>
+
+            {/* Milestone rows */}
+            {milestones.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm" style={{ color: '#6e7681' }}>
+                No milestones this week.
+              </div>
+            ) : (
+              milestones.map((m) => (
+                <MilestoneRow key={m.id} milestone={m} />
+              ))
+            )}
+
           </div>
-
-          {/* Milestone rows */}
-          {MOCK_MILESTONES.map((m) => (
-            <MilestoneRow key={m.id} milestone={m} />
-          ))}
-
-        </div>
+        )}
       </div>
     </div>
   );
