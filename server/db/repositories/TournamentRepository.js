@@ -67,7 +67,6 @@ const TournamentRepository = {
     if (error) throw error;
     return data ?? [];
   },
-};
 
   // ── Standalone tournament management (POK-95) ─────────────────────────────
 
