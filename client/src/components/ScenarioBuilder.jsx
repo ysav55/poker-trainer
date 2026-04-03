@@ -879,7 +879,6 @@ export default function ScenarioBuilder({
             </button>
           </div>
         </div>
-      </div>
 
       {/* ── CardPicker modal ────────────────────────────────────────────────────── */}
       {pickerTarget && (
