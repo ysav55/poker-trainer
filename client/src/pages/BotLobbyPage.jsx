@@ -32,9 +32,8 @@ function CreateBotTableModal({ onClose, onCreated }) {
         method: 'POST',
         body: JSON.stringify({
           difficulty,
-          human_seat_count: humanSeats,
-          small_blind: smallBlind,
-          big_blind: bigBlind,
+          humanSeats,
+          blinds: { small: smallBlind, big: bigBlind },
         }),
       });
       onCreated(table);

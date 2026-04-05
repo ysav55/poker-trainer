@@ -7,6 +7,7 @@ const { TournamentController } = require('../game/controllers/TournamentControll
 const { BotTableController }   = require('../game/controllers/BotTableController');
 
 const controllers = new Map(); // tableId → TableController
+const groupControllers = new Map(); // groupId → TournamentGroupController
 
 function getOrCreateController(tableId, mode, gm, io, tableConfig = {}) {
   if (controllers.has(tableId)) return controllers.get(tableId);
@@ -80,4 +81,5 @@ module.exports = Object.assign(instance, {
   getOrCreateController,
   getController,
   destroyController,
+  groupControllers,
 });

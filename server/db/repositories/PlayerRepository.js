@@ -70,14 +70,63 @@ async function getPlayerHoverStats(stableId, sessionId) {
   };
 }
 
-async function getPlayerHands(stableId, { limit = 20, offset = 0 } = {}) {
-  const data = await q(
-    supabase.from('hand_players')
-      .select('*, hands(hand_id, started_at, ended_at, final_pot, winner_id, winner_name, phase_ended, board, table_id, hand_tags(tag, tag_type))')
-      .eq('player_id', stableId)
-      .order('started_at', { foreignTable: 'hands', ascending: false })
-      .range(offset, offset + limit - 1)
-  );
+/**
+ * Return hand records for a player.
+ * mode: 'overall' (default) — all hands
+ *       'bot'     — only hands from bot_cash tables
+ *       'human'   — only hands from non-bot tables
+ */
+async function getPlayerHands(stableId, { limit = 20, offset = 0, mode = 'overall' } = {}) {
+  // Step 1: fetch hand_players with just enough join info to resolve table mode
+  const { data: hpRaw, error: hpErr } = await supabase
+    .from('hand_players')
+    .select('hand_id, vpip, pfr, wtsd, wsd, is_winner, stack_start, stack_end, seat, hole_cards, hands(table_id)')
+    .eq('player_id', stableId);
+  if (hpErr) throw hpErr;
+  if (!hpRaw || hpRaw.length === 0) return [];
+
+  let filteredHp = hpRaw;
+
+  if (mode !== 'overall') {
+    // Step 2: resolve table modes for all distinct table_ids
+    const tableIds = [...new Set(hpRaw.map(hp => hp.hands?.table_id).filter(Boolean))];
+    if (tableIds.length > 0) {
+      const { data: tablesData } = await supabase
+        .from('tables')
+        .select('id, mode')
+        .in('id', tableIds);
+      const tableMode = {};
+      (tablesData || []).forEach(t => { tableMode[t.id] = t.mode; });
+
+      filteredHp = hpRaw.filter(hp => {
+        const tMode = tableMode[hp.hands?.table_id] ?? null;
+        return mode === 'bot' ? tMode === 'bot_cash' : tMode !== 'bot_cash';
+      });
+    } else {
+      filteredHp = [];
+    }
+  }
+
+  if (filteredHp.length === 0) return [];
+
+  // Step 3: paginate on filtered hand_ids, then fetch full hand data
+  const sortedHandIds = filteredHp.map(hp => hp.hand_id);
+  const pageIds = sortedHandIds.slice(offset, offset + limit);
+  if (pageIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('hand_players')
+    .select('*, hands(hand_id, started_at, ended_at, final_pot, winner_id, winner_name, phase_ended, board, table_id, hand_tags(tag, tag_type))')
+    .eq('player_id', stableId)
+    .in('hand_id', pageIds);
+  if (error) throw error;
+
+  // Sort by started_at descending
+  (data || []).sort((a, b) => {
+    const ta = new Date(a.hands?.started_at || 0).getTime();
+    const tb = new Date(b.hands?.started_at || 0).getTime();
+    return tb - ta;
+  });
 
   return (data || []).map(hp => ({
     hand_id:     hp.hands?.hand_id,
@@ -100,6 +149,61 @@ async function getPlayerHands(stableId, { limit = 20, offset = 0 } = {}) {
     wsd:         hp.wsd,
     seat:        hp.seat,
   }));
+}
+
+/**
+ * Compute player stats filtered by game mode.
+ * mode: 'overall' — reads from leaderboard view (same as getPlayerStats)
+ *       'bot'     — only bot_cash table hands
+ *       'human'   — only non-bot table hands
+ */
+async function getPlayerStatsByMode(stableId, mode = 'overall') {
+  if (mode === 'overall') return getPlayerStats(stableId);
+
+  // Fetch hand_players with table_id via hands join
+  const { data: hpRaw, error: hpErr } = await supabase
+    .from('hand_players')
+    .select('hand_id, vpip, pfr, wtsd, wsd, is_winner, stack_start, stack_end, hands(table_id)')
+    .eq('player_id', stableId);
+  if (hpErr) throw hpErr;
+  if (!hpRaw || hpRaw.length === 0) {
+    return { player_id: stableId, total_hands: 0, total_wins: 0, total_net_chips: 0, vpip_percent: 0, pfr_percent: 0 };
+  }
+
+  // Resolve table modes
+  const tableIds = [...new Set(hpRaw.map(hp => hp.hands?.table_id).filter(Boolean))];
+  const tableMode = {};
+  if (tableIds.length > 0) {
+    const { data: tablesData } = await supabase
+      .from('tables')
+      .select('id, mode')
+      .in('id', tableIds);
+    (tablesData || []).forEach(t => { tableMode[t.id] = t.mode; });
+  }
+
+  const filtered = hpRaw.filter(hp => {
+    const tMode = tableMode[hp.hands?.table_id] ?? null;
+    return mode === 'bot' ? tMode === 'bot_cash' : tMode !== 'bot_cash';
+  });
+
+  const totalHands = filtered.length;
+  if (totalHands === 0) {
+    return { player_id: stableId, total_hands: 0, total_wins: 0, total_net_chips: 0, vpip_percent: 0, pfr_percent: 0 };
+  }
+
+  const vpipCount = filtered.filter(hp => hp.vpip).length;
+  const pfrCount  = filtered.filter(hp => hp.pfr).length;
+  const totalWins = filtered.filter(hp => hp.is_winner).length;
+  const netChips  = filtered.reduce((sum, hp) => sum + ((hp.stack_end ?? 0) - (hp.stack_start ?? 0)), 0);
+
+  return {
+    player_id:       stableId,
+    total_hands:     totalHands,
+    total_wins:      totalWins,
+    total_net_chips: netChips,
+    vpip_percent:    Math.round(vpipCount / totalHands * 100),
+    pfr_percent:     Math.round(pfrCount  / totalHands * 100),
+  };
 }
 
 // ─── Auth / RBAC ─────────────────────────────────────────────────────────────
@@ -222,15 +326,44 @@ async function removeRole(playerId, roleId) {
  * @param {{ status?: string, role?: string, limit?: number, offset?: number }} opts
  */
 async function listPlayers({ status, role, limit = 50, offset = 0 } = {}) {
+  const ROLE_PRIORITY = ['superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
+
   let query = supabase
     .from('player_profiles')
-    .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, player_roles(roles(name))')
+    .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at')
     .order('display_name')
     .range(offset, offset + limit - 1);
   if (status) query = query.eq('status', status);
   const { data, error } = await query;
   if (error) throw error;
-  return data ?? [];
+  const players = data ?? [];
+
+  if (players.length === 0) return players;
+
+  // Two-step role fetch: avoids nested PostgREST join that can fail on schema
+  // cache mismatches. Queries roles and player_roles independently, then merges.
+  const playerIds = players.map(p => p.id);
+  const [rolesRes, prRes] = await Promise.all([
+    supabase.from('roles').select('id, name'),
+    supabase.from('player_roles').select('player_id, role_id').in('player_id', playerIds),
+  ]);
+
+  const roleNameById = {};
+  (rolesRes.data ?? []).forEach(r => { roleNameById[r.id] = r.name; });
+
+  const playerRoleMap = {};
+  (prRes.data ?? []).forEach(({ player_id, role_id }) => {
+    const roleName = roleNameById[role_id];
+    if (!roleName) return;
+    const current = playerRoleMap[player_id];
+    const newPriority = ROLE_PRIORITY.indexOf(roleName);
+    const curPriority = ROLE_PRIORITY.indexOf(current);
+    if (!current || (newPriority !== -1 && newPriority < curPriority)) {
+      playerRoleMap[player_id] = roleName;
+    }
+  });
+
+  return players.map(p => ({ ...p, role: playerRoleMap[p.id] ?? null }));
 }
 
 // ─── Roster Auth (legacy) ─────────────────────────────────────────────────────
@@ -277,7 +410,7 @@ async function isRegisteredPlayer(stableId) {
 
 module.exports = {
   // Identity / stats (existing)
-  upsertPlayerIdentity, getPlayerStats, getAllPlayersWithStats,
+  upsertPlayerIdentity, getPlayerStats, getPlayerStatsByMode, getAllPlayersWithStats,
   getPlayerHoverStats, getPlayerHands, loginRosterPlayer, isRegisteredPlayer,
   // Auth / RBAC (new — requires migration 009)
   findByDisplayName, findById, getPrimaryRole,

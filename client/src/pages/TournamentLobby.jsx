@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import { apiFetch } from '../lib/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+
+const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -186,7 +189,7 @@ function Card({ title, children, titleColor = '#6e7681', action }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function TournamentLobby() {
-  const { tableId } = useParams();
+  const { tableId, groupId } = useParams();
   const navigate    = useNavigate();
   const { hasPermission } = useAuth();
 
@@ -196,6 +199,8 @@ export default function TournamentLobby() {
   const [starting, setStarting]     = useState(false);
   const [registered, setRegistered] = useState(false);
   const [countdown, setCountdown]   = useState(null);
+  const [lateRegOpen, setLateRegOpen] = useState(false);
+  const socketRef = useRef(null);
 
   // Role flags
   const canManage   = hasPermission('tournament:manage');
@@ -226,6 +231,32 @@ export default function TournamentLobby() {
   }, [tableId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Socket connection for live late-reg events
+  useEffect(() => {
+    const token = localStorage.getItem('poker_trainer_jwt') || '';
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      auth: (cb) => cb({ token }),
+    });
+    socketRef.current = socket;
+
+    socket.on('tournament:late_reg_open', () => setLateRegOpen(true));
+    socket.on('tournament:late_reg_closed', () => setLateRegOpen(false));
+    socket.on('tournament:late_reg_rejected', ({ reason }) => {
+      setError(reason ?? 'Cannot join: tournament is already in progress');
+    });
+
+    socket.on('connect', () => {
+      // Join the tournament room to receive table-scoped events
+      socket.emit('join_room', { name: '_lobby_observer', tableId, isSpectator: true });
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [tableId]);
 
   // Countdown ticker
   const [, setTick] = useState(0);
@@ -302,6 +333,14 @@ export default function TournamentLobby() {
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {canManage && groupId && (
+            <Link
+              to={`/admin/tournaments/group/${groupId}/balancer`}
+              style={{ background: 'none', border: '1px solid rgba(88,166,255,0.3)', borderRadius: 6, color: '#58a6ff', cursor: 'pointer', padding: '6px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}
+            >
+              Table Balancer
+            </Link>
+          )}
           {canManage && (
             <button onClick={() => navigate(`/admin/tournaments`)}
               style={{ background: 'none', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 6, color: '#d4af37', cursor: 'pointer', padding: '6px 14px', fontSize: 12, fontWeight: 600 }}
@@ -387,10 +426,23 @@ export default function TournamentLobby() {
                   </div>
                 )}
                 {/* Join table button */}
-                {t.status === 'running' && (
+                {t.status === 'running' && !lateRegOpen && (
                   <button onClick={() => navigate(`/table/${tableId}`)}
                     style={{ padding: '10px 20px', borderRadius: 8, background: '#d4af37', border: 'none', color: '#0d1117', fontWeight: 900, fontSize: 13, cursor: 'pointer' }}>
                     Join Table →
+                  </button>
+                )}
+                {/* Late registration button */}
+                {lateRegOpen && !registered && (
+                  <button onClick={() => navigate(`/table/${tableId}`)}
+                    style={{
+                      padding: '10px 20px', borderRadius: 8,
+                      background: 'rgba(227,179,65,0.15)', border: '1px solid rgba(227,179,65,0.5)',
+                      color: '#e3b341', fontWeight: 900, fontSize: 13, cursor: 'pointer',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(227,179,65,0.25)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(227,179,65,0.15)'; }}>
+                    Join Late →
                   </button>
                 )}
                 {/* Start button (coach/admin) */}

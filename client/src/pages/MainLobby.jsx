@@ -39,7 +39,7 @@ const NAV_TILES = [
   { icon: '🧠', label: 'AI Analysis',   desc: 'Tag insights & mistakes',        path: '/analysis',          permission: null,           roles: ['coach', 'admin', 'superadmin'] },
   { icon: '👥', label: 'Stable / CRM',   desc: 'Roster & player management',   path: '/admin/crm',         permission: 'admin:access', roles: null },
   { icon: '⚠️', label: 'Coach Alerts',  desc: 'Students needing attention',    path: '/admin/alerts',      permission: 'admin:access', roles: null },
-  { icon: '📊', label: 'Stable Report', desc: 'Weekly overview — all students', path: '/admin/stable',      permission: 'admin:access', roles: null },
+  { icon: '📊', label: 'Stable Report', desc: 'Weekly overview — all students', path: '/admin/crm',         permission: 'admin:access', roles: null },
   { icon: '📖', label: 'Hand Scenarios', desc: 'Build & review hands',          path: '/admin/hands',       permission: 'admin:access', roles: null },
   { icon: '🏅', label: 'Tournaments',    desc: 'Setup & manage',                path: '/admin/tournaments', permission: 'admin:access', roles: null },
   { icon: '🦺', label: 'Referee',        desc: 'Tournament referee',            path: '/admin/referee',     permission: 'admin:access', roles: null },

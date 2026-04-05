@@ -34,7 +34,9 @@ import TournamentSetup from './pages/admin/TournamentSetup.jsx';
 import PlayerCRM from './pages/admin/PlayerCRM.jsx';
 import RefereeDashboard from './pages/admin/RefereeDashboard.jsx';
 import CoachAlertsPage from './pages/admin/CoachAlertsPage.jsx';
-import StableOverviewPage from './pages/admin/StableOverviewPage.jsx';
+import StakingPage from './pages/admin/StakingPage.jsx';
+import TournamentBalancer from './pages/admin/TournamentBalancer.jsx';
+import StakingPlayerPage from './pages/StakingPlayerPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 
 // Tournament pages
@@ -105,8 +107,9 @@ function AppRoutes() {
         <Route path="/table/:tableId"  element={<TablePage />} />
         <Route path="/multi"           element={<MultiTablePage />} />
         <Route path="/review"          element={<ReviewTablePage />} />
-        <Route path="/tournament/:tableId/lobby"     element={<TournamentLobby />} />
-        <Route path="/tournament/:tableId/standings" element={<TournamentStandings />} />
+        <Route path="/tournament/:tableId/lobby"         element={<TournamentLobby />} />
+        <Route path="/tournament/:tableId/standings"     element={<TournamentStandings />} />
+        <Route path="/tournament-group/:groupId/lobby"   element={<TournamentLobby />} />
 
         {/* Lobby-style pages — wrapped in AppLayout (TopBar + SideNav) */}
         <Route element={<AppLayout />}>
@@ -117,6 +120,9 @@ function AppRoutes() {
           <Route path="/analysis"    element={<AnalysisPage />} />
           <Route path="/history"     element={<HandHistoryPage />} />
 
+          {/* Player staking view */}
+          <Route path="/staking" element={<StakingPlayerPage />} />
+
           {/* Admin — require admin:access */}
           <Route element={<RequirePermission permission="admin:access" />}>
             <Route path="/admin/users"        element={<UserManagement />} />
@@ -125,7 +131,9 @@ function AppRoutes() {
             <Route path="/admin/tournaments"  element={<TournamentSetup />} />
             <Route path="/admin/referee"      element={<RefereeDashboard />} />
             <Route path="/admin/alerts"       element={<CoachAlertsPage />} />
-            <Route path="/admin/stable"       element={<StableOverviewPage />} />
+            <Route path="/admin/stable"       element={<Navigate to="/admin/crm" replace />} />
+            <Route path="/admin/staking"      element={<StakingPage />} />
+            <Route path="/admin/tournaments/group/:groupId/balancer" element={<TournamentBalancer />} />
           </Route>
         </Route>
       </Route>

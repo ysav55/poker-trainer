@@ -14,10 +14,12 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
     }
   });
 
-  // GET /api/players/:stableId/stats
+  // GET /api/players/:stableId/stats?mode=overall|bot|human
   app.get('/api/players/:stableId/stats', requireAuth, async (req, res) => {
     try {
-      const stats = await HandLogger.getPlayerStats(req.params.stableId);
+      const rawMode = req.query.mode;
+      const mode = ['bot', 'human', 'overall'].includes(rawMode) ? rawMode : 'overall';
+      const stats = await HandLogger.getPlayerStatsByMode(req.params.stableId, mode);
       if (!stats) return res.status(404).json({ error: 'Player not found' });
       res.json(stats);
     } catch (err) {
@@ -35,12 +37,14 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
     }
   });
 
-  // GET /api/players/:stableId/hands
+  // GET /api/players/:stableId/hands?limit=&offset=&mode=overall|bot|human
   app.get('/api/players/:stableId/hands', requireAuth, async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit) || 20, 100);
       const offset = parseInt(req.query.offset) || 0;
-      const hands = await HandLogger.getPlayerHands(req.params.stableId, { limit, offset });
+      const rawMode = req.query.mode;
+      const mode = ['bot', 'human', 'overall'].includes(rawMode) ? rawMode : 'overall';
+      const hands = await HandLogger.getPlayerHands(req.params.stableId, { limit, offset, mode });
       res.json({ hands, limit, offset });
     } catch (err) {
       res.status(500).json({ error: 'internal_error' });

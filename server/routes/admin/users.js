@@ -180,10 +180,10 @@ router.post('/users', async (req, res) => {
       displayName,
       email:     email || null,
       passwordHash,
-      createdBy: req.user?.id || null,
+      createdBy: req.user?.stableId ?? req.user?.id ?? null,
     });
 
-    await setPlayerRole(newId, roleName, req.user?.id || null);
+    await setPlayerRole(newId, roleName, req.user?.stableId ?? req.user?.id ?? null);
 
     res.status(201).json({ id: newId });
   } catch (err) {

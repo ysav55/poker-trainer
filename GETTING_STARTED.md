@@ -2,7 +2,7 @@
 
 A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history and player stats survive restarts and are accessible from any device.
 
-**Last updated:** 2026-04-02 — **New UI (POK-60):** Complete page-by-page UI overhaul. 18 routes implemented matching the full UI spec. New global layout (AppLayout with icon SideNav + GlobalTopBar). 5 role-variant Lobby, 4 role-variant Table View, 8-tab Player CRM, 5-tab Settings page, Review Table (new), Hand History browser (new), Tournament system (Lobby/Standings/Setup/Referee), Scenario Builder, Stable Overview, Coach Alerts, AI Analysis, User Management, Leaderboard, Multi-Table. 45 components, 26 page files, 142 files changed, 26K+ lines added. Previously: Play vs Bot (POK-56/58), Coach Intelligence (POK-43–47), School Management, Announcements, Chip Bank, Auth & Registration, Table Privacy.
+**Last updated:** 2026-04-05 — **Bug fixes:** Bot game creation now works without a name (auto-generates "Bot Game — \<timestamp\>"); bot lobby form field names corrected to match server contract. CRM player list (`/stable/crm`) no longer returns HTTP 500 — role resolution rewritten as a two-step query; player roles now display correctly in the roster. Scenario builder stays on the saved scenario after saving instead of resetting to the empty splash. Creating a new student from the CRM no longer returns 500 (invalid `role` column removed from post-creation SELECT). Previously (2026-04-05): **Tournament v2 (all 9 phases):** Full tournament system overhaul. Blind structure presets (system + school), payout presets + ICM calculator (Malmuth-Harville), deal proposals, late registration windows, re-entry & add-on support, tournament referee appointments (per-table or per-group), multi-table MTT groups (auto-provision tables, shared blind timer, cross-table eliminations), and drag-and-drop table balancer. Migrations 029–039 applied. New pages: TournamentBalancer (`/admin/tournaments/group/:id/balancer`). New socket events: `tournament:late_reg_open/closed/rejected`, `tournament:reentry_available/confirmed/rejected`, `tournament:addon_open/closed/confirmed`, `tournament:icm_update`, `tournament:blind_up`, `tournament_group:started/blind_up/final_table/ended/balance_needed`. Previously (2026-04-04): **Groups & Add Student:** Full group management system — coaches create/rename/recolor/delete groups in Settings → School; admins set platform-wide group limits (groups on/off, max groups per school, max players per group) and can override per school in Settings → Org. Add Student modal in Player CRM (name, password, role, school, initial group assignment). Group-aware roster view in CRM (filter by group, BY GROUP sectioned view). Server enforcement of all limits. Migration 024 required (`supabase/migrations/024_groups.sql`). Previously (2026-04-02): Complete page-by-page UI overhaul (POK-60). 18 routes, 45 components, 26 page files. UI bug fixes: settings role strings, page titles, bot lobby access, permissions fallback for CSV players, school settings scroll, hand_annotations migration.
 
 ---
 
@@ -167,6 +167,8 @@ Superadmins and admins with the `school:manage` permission can create and manage
 | DELETE | `/api/admin/schools/:id/members/:playerId` | Remove player from school |
 | GET | `/api/admin/schools/:id/features` | Get feature toggle states |
 | PUT | `/api/admin/schools/:id/features` | Bulk update features `{ replay: true, analysis: false, … }` |
+| GET | `/api/admin/schools/:id/group-policy` | Get this school's group policy (enabled, max_groups, max_players_per_group) |
+| PUT | `/api/admin/schools/:id/group-policy` | Override group policy for this school |
 
 ### Feature Toggles
 
@@ -182,10 +184,69 @@ Each school can disable specific features. Disabled features return `403 feature
 | `crm` | Coach CRM/player notes |
 | `leaderboard` | Leaderboard visibility |
 | `scenarios` | Scenario/drill mode |
+| `groups` | Student groups / cohorts |
 
 ### Capacity Limits
 
 Set `maxCoaches` and `maxStudents` on a school to enforce member limits. Attempting to add a member over the limit returns `409`. Registration via `POST /api/auth/register` with a `schoolId` also checks student capacity before creating the account.
+
+---
+
+## 5a. Groups / Cohorts
+
+Groups let coaches organise students into named, color-coded buckets (e.g. "Monday Night", "Advanced Heads-Up"). A student can belong to multiple groups. Groups belong to a school.
+
+> **Requires migration 024.** Run `supabase db push` or paste `supabase/migrations/024_groups.sql` into the Supabase SQL editor before using groups.
+
+### Group policy (three-level config)
+
+1. **Org defaults** — set by admins in **Settings → Org → Group Policy**: groups on/off, max groups per school, max players per group. Stored in `settings` table with `scope='org'`.
+2. **School override** — per-school override set by admins in the same panel (expand a school row). Stored with `scope='school'`. Blank field = inherit org default.
+3. **Enforcement** — `POST /api/admin/groups` returns `403` if groups are disabled; `409` if the school is at its group limit. `POST /api/admin/groups/:id/members` returns `409 group_full` if the group is at its player limit.
+
+### Group management UI
+
+**Settings → School tab** (coaches + admins):
+- Lists all groups with color dot, member count, Rename (double-click name or Rename button), color picker (click the dot), and ✕ delete.
+- **+ Create Group** opens an inline form: name + 10 color swatches.
+- Limit hint shown ("Up to 5 groups · 20 players each"). Create button hidden when limit is reached.
+
+**Settings → Org tab** (admins + superadmins):
+- **Group Policy** section: platform-wide toggle + numeric limits.
+- Expandable per-school rows to override any limit independently.
+
+### Group management in CRM
+
+- **Roster filter** — "All groups" dropdown + "BY GROUP" toggle button. Grouped view shows colored section headers with student count; ungrouped students appear in an "UNGROUPED" section at the bottom.
+- **InfoTab → Groups card** — shows a player's current groups as colored pills with ✕ to remove. Dropdown to add from available groups.
+- **Add Student modal** — group assignment is included in the creation form (toggle pills).
+
+### Groups API (`/api/admin/groups` — requires `crm:view` / `crm:edit`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/groups/my-school` | Current user's school groups + policy (used by Settings) |
+| GET | `/api/admin/groups` | All groups. `?schoolId=uuid` to filter. `?includeMembers=1` to embed member list. |
+| POST | `/api/admin/groups` | Create group `{ name, color?, schoolId? }` — enforces policy |
+| PATCH | `/api/admin/groups/:id` | Rename or recolor `{ name?, color? }` |
+| DELETE | `/api/admin/groups/:id` | Delete group (cascades memberships) |
+| GET | `/api/admin/groups/:id/members` | List members |
+| POST | `/api/admin/groups/:id/members` | Add player `{ playerId }` — enforces max_players_per_group |
+| DELETE | `/api/admin/groups/:id/members/:playerId` | Remove player from group |
+| GET | `/api/admin/players/:id/groups` | All groups a player belongs to |
+
+### Student creation API
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/admin/students` | `crm:edit` | Create a student directly. Body: `{ name, password (≥6), email?, role?, schoolId?, groupIds? }`. Bcrypt-hashes the password, assigns role, school, and groups atomically. Returns the new player profile. |
+
+### Org settings API
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/admin/org-settings/groups` | `user:manage` | Get org-level group policy defaults |
+| PUT | `/api/admin/org-settings/groups` | `user:manage` | Set org-level group policy `{ enabled, max_groups, max_players_per_group }` — `null` = unlimited |
 
 ---
 
@@ -226,7 +287,7 @@ const { unreadCount }   = await apiFetch('/api/announcements/unread-count').then
 
 ---
 
-## 6. Coach Intelligence
+## 7. Coach Intelligence
 
 The Coach Intelligence Layer surfaces prioritized, actionable insights to the coach across four admin pages (accessible to `admin` / `superadmin` / `coach` roles).
 
@@ -276,20 +337,18 @@ Accessed via the **Stable Report** nav tile on the lobby. Coach-level weekly sum
 - **Needs Attention** — bottom 3 by grade or flagged as inactive
 - Click any student row to navigate to their CRM profile
 
-### Wiring to real APIs
+### API endpoints (all live)
 
-When the backend ships these endpoints, update the mock constants in each component file:
-
-| Surface | File | Endpoint |
-|---|---|---|
-| Alert feed | `CoachAlertsPage.jsx` | `GET /api/coach/alerts`, `PATCH /api/coach/alerts/:id` |
-| Prep brief | `PrepBriefTab.jsx` | `GET /api/coach/students/:id/prep-brief` |
-| Reports | `ReportsTab.jsx` | `GET /api/coach/students/:id/reports` |
-| Stable overview | `StableOverviewPage.jsx` | `GET /api/coach/reports/stable` |
+| Surface | Endpoint |
+|---|---|
+| Alert feed | `GET /api/coach/alerts`, `PATCH /api/coach/alerts/:id`, `GET/PUT /api/coach/alerts/config` |
+| Prep brief | `GET /api/coach/students/:id/prep-brief`, `POST .../prep-brief/refresh` |
+| Progress reports | `GET /api/coach/students/:id/reports`, `POST .../reports` |
+| Stable overview | `GET /api/coach/reports/stable` |
 
 ---
 
-## 6. Global Layout & Navigation
+## 8. Global Layout & Navigation
 
 All authenticated pages (except auth and full-screen table views) use the **AppLayout**: a persistent icon-only **SideNav** on the left and a **GlobalTopBar** across the top.
 
@@ -297,7 +356,7 @@ All authenticated pages (except auth and full-screen table views) use the **AppL
 - **SideNav** — icon-only sidebar with role-based items. Coaches see: Lobby, Tables, CRM, Scenarios, Hand History, AI Analysis, Stats, Leaderboard, Tournaments, Alerts, Settings. Students see a reduced set (no CRM, no Scenarios, no Analysis, no Alerts).
 - **Quick Stats Bar** — role-dependent stat pills below the TopBar (e.g., Active Tables / Students Online / Hands This Week for coaches; Chip Bank / Hands Played / VPIP / Leaderboard Rank for students).
 
-## 6. Lobby & Tables
+## 9. Lobby & Tables
 
 After logging in you land on the **Lobby** (`/lobby`).
 
@@ -338,7 +397,7 @@ Coaches and admins can open `/multi` for a grid overview of all active tables. F
 
 ---
 
-## 6. Coach Controls (coached_cash mode only)
+## 10. Coach Controls (coached_cash mode only)
 
 The **coach sidebar** appears on the right (collapsible). It has three tabs:
 
@@ -435,7 +494,7 @@ Last 10 hands with expandable detail: full board, player stacks, hole cards, and
 
 ---
 
-## 6. Configuring a Hand (Manual / Hybrid Mode)
+## 11. Configuring a Hand (Manual / Hybrid Mode)
 
 1. Click **Configure Hand** in Section 1 (only visible between hands).
 2. For each player, use the **Cards / Range / Matrix** toggle:
@@ -461,7 +520,7 @@ Last 10 hands with expandable detail: full board, player stacks, hole cards, and
 
 ---
 
-## 7. Equity Overlays & Range Tools
+## 12. Equity Overlays & Range Tools
 
 ### Live Equity (EV Overlay)
 
@@ -493,7 +552,7 @@ The hand analyzer now includes equity-based tags:
 
 ---
 
-## 8. Playing as a Player
+## 13. Playing as a Player
 
 - Your hole cards are visible only to you (face-down to others).
 - **BB view toggle** — click the **Chips / BB** pill button in the **top bar (top-left)** to switch between flat chip counts (e.g. "1,000") and big-blind units (e.g. "100bb"). This is a personal setting — it only affects your view and is remembered across sessions via `localStorage`.
@@ -507,7 +566,7 @@ The hand analyzer now includes equity-based tags:
 
 ---
 
-## 8. Stats Dashboard
+## 14. Stats Dashboard
 
 Click the **Stats** button (top bar, coach only) to open the full stats dashboard.
 
@@ -518,7 +577,7 @@ Stats are stored in Supabase (PostgreSQL) and persist across server restarts and
 
 ---
 
-## 9. Error Recovery
+## 15. Error Recovery
 
 The poker table and coach sidebar are each wrapped in a React **error boundary**. If an unexpected JavaScript error occurs inside one of those panels:
 
@@ -529,7 +588,7 @@ The poker table and coach sidebar are each wrapped in a React **error boundary**
 
 ---
 
-## 10. Disconnection Handling
+## 16. Disconnection Handling
 
 - A disconnected player's seat shows an amber **OFFLINE** badge at 50% opacity.
 - If it is their turn when they disconnect, the timer is paused.
@@ -539,7 +598,7 @@ The poker table and coach sidebar are each wrapped in a React **error boundary**
 
 ---
 
-## 10. Admin Features
+## 17. Admin Features
 
 Admin pages are accessible from the SideNav (require `admin:access` permission).
 
@@ -560,9 +619,9 @@ Admin pages are accessible from the SideNav (require `admin:access` permission).
 
 ### Player CRM (`/admin/crm`)
 Requires `crm:view` / `crm:edit` permissions. Master-detail layout.
-- **Left panel (StudentRoster):** color-coded alert dots (red/orange/green/grey), search, group/tag filters, + Add Student, Bulk Actions
+- **Left panel (StudentRoster):** color-coded alert dots (red/orange/green/grey), search by name, role filter, archived toggle, group filter dropdown, **BY GROUP toggle** (sections with colored headers), **+ Add Student** (opens modal — name, password, email, role, school, group assignment), Bulk Actions
 - **8-tab detail panel:**
-  - **INFO:** profile, chip bank balance, reload, recent transactions
+  - **INFO:** profile, chip bank balance, reload, recent transactions, player tags, **Groups card** (current group pills with remove, add-to-group dropdown)
   - **SESSIONS:** session history table (date, table, hands, net, score), attendance tracking
   - **STATS:** 5 stat pills (VPIP, PFR, 3bet%, WTSD, Agg) with trends, TrendChart, mistakes per 100 hands, vs school average
   - **NOTES:** coach notes with tags, filterable, new note input
@@ -598,7 +657,7 @@ Requires `crm:view` / `crm:edit` permissions. Master-detail layout.
 - Tables grid with player stacks and Move Player dropdown
 - Eliminations list, Blind Schedule table (current level highlighted)
 
-## 10b. New Pages
+## 17b. New Pages
 
 ### Review Table (`/review`)
 - Two-panel read-only hand replay: poker table visualization (left) + Review Panel (right)
@@ -615,15 +674,15 @@ Requires `crm:view` / `crm:edit` permissions. Master-detail layout.
 
 ### Settings (`/settings`)
 Tabbed page with role-dependent tab visibility:
-- **Table Defaults** (Coach/Admin): default game type, blinds, buy-in, rebuy, time bank, showdown, disconnection settings
-- **School** (Coach): school name/description, leaderboard config, groups/cohorts, announcements
-- **Org** (Admin): default blind structures, platform limits, open table auto-spawn, leaderboard defaults
-- **Platform** (Super Admin): school agreements (student caps, AI quotas, feature toggles, branding), system health
+- **Table Defaults** (Coach/Admin/Superadmin): default game type, blinds, buy-in, rebuy, time bank, showdown, disconnection settings
+- **School** (Coach/Admin/Superadmin): school name/description, leaderboard config, **live group management** (create/rename/recolor/delete groups with real API calls), announcements
+- **Org** (Admin/Superadmin): default blind structures, platform limits, open table auto-spawn, leaderboard defaults, **Group Policy** (groups on/off, max groups, max players per group — platform defaults + per-school overrides)
+- **Platform** (Superadmin): school agreements (student caps, AI quotas, feature toggles, branding), system health
 - **Profile** (all roles): avatar, name, email, password change
 
 ---
 
-## 11. Tournament Mode
+## 18. Tournament Mode
 
 ### Tournament Lifecycle
 
@@ -666,7 +725,7 @@ The Referee Dashboard provides a UI for this via the "Move Player" button on eac
 
 ---
 
-## 12. Running Tests
+## 19. Running Tests
 
 Server tests (Jest):
 ```bash
@@ -691,7 +750,7 @@ Expected: 0 crashes, 0 anomalies.
 
 ---
 
-## 11. Environment Variables
+## 20. Environment Variables
 
 ### Server (`.env` at project root)
 
@@ -708,7 +767,7 @@ Expected: 0 crashes, 0 anomalies.
 
 ---
 
-## 12. Resetting the Database
+## 21. Resetting the Database
 
 The database lives in Supabase. To clear hand history:
 
@@ -721,7 +780,7 @@ The database lives in Supabase. To clear hand history:
 
 ---
 
-## 13. Cloud Deployment
+## 22. Cloud Deployment
 
 The app runs as a single service on port 3001. Deploy to Render, Railway, Fly.io, or any Node.js host:
 

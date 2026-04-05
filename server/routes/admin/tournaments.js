@@ -15,11 +15,13 @@
 const express = require('express');
 
 const { requirePermission } = require('../../auth/requirePermission.js');
+const { requireTournamentAccess } = require('../../auth/tournamentAuth.js');
 const requireAuth            = require('../../auth/requireAuth.js');
 const { requireFeature }     = require('../../auth/featureGate.js');
 const { TableRepository }      = require('../../db/repositories/TableRepository.js');
 const { TournamentRepository } = require('../../db/repositories/TournamentRepository.js');
 const { getController }        = require('../../state/SharedState.js');
+const { computeIcmPrizes }     = require('../../services/IcmService.js');
 
 const gateTournaments = requireFeature('tournaments');
 
@@ -105,7 +107,7 @@ function registerTournamentRoutes(app) {
     '/api/tables/:id/tournament/start',
     requireAuth,
     gateTournaments,
-    requirePermission('tournament:manage'),
+    requireTournamentAccess(),
     async (req, res) => {
       try {
         const config = await TournamentRepository.getConfig(req.params.id);
@@ -131,7 +133,7 @@ function registerTournamentRoutes(app) {
     '/api/tables/:id/tournament/advance-level',
     requireAuth,
     gateTournaments,
-    requirePermission('tournament:manage'),
+    requireTournamentAccess(),
     async (req, res) => {
       try {
         const ctrl = getController(req.params.id);
@@ -151,7 +153,7 @@ function registerTournamentRoutes(app) {
     '/api/tables/:id/tournament/end',
     requireAuth,
     gateTournaments,
-    requirePermission('tournament:manage'),
+    requireTournamentAccess(),
     async (req, res) => {
       try {
         const ctrl = getController(req.params.id);
@@ -163,6 +165,79 @@ function registerTournamentRoutes(app) {
         const winner = active.sort((a, b) => b.stack - a.stack)[0] ?? null;
         await ctrl._endTournament(winner?.id ?? null);
         res.json({ ended: true });
+      } catch (err) {
+        res.status(500).json({ error: 'internal_error', message: err.message });
+      }
+    }
+  );
+
+  // GET /api/tables/:id/tournament/deal-proposal — compute ICM deal amounts
+  app.get(
+    '/api/tables/:id/tournament/deal-proposal',
+    requireAuth,
+    gateTournaments,
+    async (req, res) => {
+      try {
+        const ctrl = getController(req.params.id);
+        if (!ctrl || ctrl.getMode() !== 'tournament') {
+          return res.status(400).json({ error: 'Table is not a tournament table' });
+        }
+
+        const config = await TournamentRepository.getConfig(req.params.id);
+        if (!config) return res.status(404).json({ error: 'Tournament config not found' });
+
+        const payout = ctrl.resolvedPayoutStructure ?? config.payout_structure ?? null;
+        if (!payout) {
+          return res.status(400).json({ error: 'No payout structure configured' });
+        }
+
+        const state = ctrl.gm.getState ? ctrl.gm.getState() : {};
+        const activePlayers = (state.seated ?? state.players ?? [])
+          .filter(p => (p.stack ?? 0) > 0)
+          .map(p => ({ playerId: p.id, chips: p.stack ?? 0 }));
+
+        if (activePlayers.length < 2) {
+          return res.status(400).json({ error: 'Need at least 2 active players for a deal' });
+        }
+
+        const totalPool = (ctrl.entrantCount || activePlayers.length) *
+          (config.starting_stack ?? 10000);
+
+        const prizes = computeIcmPrizes(activePlayers, payout, totalPool);
+        res.json({ prizes, totalPool, playerCount: activePlayers.length });
+      } catch (err) {
+        res.status(500).json({ error: 'internal_error', message: err.message });
+      }
+    }
+  );
+
+  // POST /api/tables/:id/tournament/deal-proposal/accept — accept ICM deal and end tournament
+  app.post(
+    '/api/tables/:id/tournament/deal-proposal/accept',
+    requireAuth,
+    gateTournaments,
+    requireTournamentAccess(),
+    async (req, res) => {
+      try {
+        const ctrl = getController(req.params.id);
+        if (!ctrl || ctrl.getMode() !== 'tournament') {
+          return res.status(400).json({ error: 'Table is not a tournament table' });
+        }
+
+        // Mark as a deal in config
+        const supabase = require('../../db/supabase');
+        await supabase
+          .from('tournament_configs')
+          .update({ is_deal: true })
+          .eq('table_id', req.params.id);
+
+        // End tournament — chip leader is nominal winner but all prizes are ICM-split
+        const state = ctrl.gm.getState ? ctrl.gm.getState() : {};
+        const active = (state.seated ?? state.players ?? []).filter(p => (p.stack ?? 0) > 0);
+        const winner = active.sort((a, b) => b.stack - a.stack)[0] ?? null;
+        await ctrl._endTournament(winner?.id ?? null);
+
+        res.json({ accepted: true });
       } catch (err) {
         res.status(500).json({ error: 'internal_error', message: err.message });
       }

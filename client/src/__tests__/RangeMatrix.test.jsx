@@ -283,12 +283,16 @@ describe('RangeMatrix — colorMode=mistake + highlightHand', () => {
 })
 
 // ── readOnly prop ─────────────────────────────────────────────────────────────
+//
+// RangeMatrix uses pointer events (onPointerDown/Move/Up) for drag-select, so
+// onSelect is always passed as undefined to HandMatrix regardless of readOnly.
+// Interaction capability is controlled by whether the pointer handlers are wired.
 
 describe('RangeMatrix — readOnly prop', () => {
-  it('passes onSelect handler to HandMatrix when readOnly=false', () => {
+  it('always passes undefined as onSelect to HandMatrix (pointer events used instead)', () => {
     renderMatrix({ readOnly: false, onToggle: vi.fn() })
-    // capturedOnSelect should be a function (not undefined)
-    expect(typeof capturedOnSelect).toBe('function')
+    // onSelect is intentionally undefined — drag-select uses onPointerDown/Move
+    expect(capturedOnSelect).toBeUndefined()
   })
 
   it('passes undefined as onSelect to HandMatrix when readOnly=true', () => {
@@ -298,33 +302,46 @@ describe('RangeMatrix — readOnly prop', () => {
 })
 
 // ── onToggle interaction ──────────────────────────────────────────────────────
+//
+// Drag-select relies on document.elementsFromPoint which jsdom does not
+// implement. Tests mock it so pointerdown events trigger onToggle correctly.
 
 describe('RangeMatrix — onToggle interaction', () => {
-  it('calls onToggle with the combo when a cell is clicked (readOnly=false)', () => {
+  // Helper: stub jsdom's missing pointer-capture API and elementsFromPoint,
+  // then fire pointerdown on the RangeMatrix container div.
+  function firePointerDownOverCell(cellTestId) {
+    const cellEl = screen.getByTestId(cellTestId)
+    document.elementsFromPoint = vi.fn(() => [cellEl])
+    const container = screen.getByTestId('hand-matrix').parentElement
+    // jsdom doesn't implement setPointerCapture — stub it so the handler runs
+    container.setPointerCapture = vi.fn()
+    fireEvent.pointerDown(container, { clientX: 10, clientY: 10, pointerId: 1 })
+  }
+
+  it('calls onToggle with the combo when pointerdown over a cell (readOnly=false)', () => {
     const onToggle = vi.fn()
-    renderMatrix({ readOnly: false, onToggle })
-    fireEvent.click(screen.getByTestId('cell-AA'))
+    renderMatrix({ readOnly: false, onToggle, selected: new Set() })
+    firePointerDownOverCell('cell-AA')
     expect(onToggle).toHaveBeenCalledWith('AA')
   })
 
-  it('does not call onToggle when readOnly=true (no click handler attached)', () => {
+  it('does not call onToggle when readOnly=true (pointer handlers not attached)', () => {
     const onToggle = vi.fn()
     renderMatrix({ readOnly: true, onToggle })
-    // readOnly=true → onSelect is undefined → clicking the cell does nothing
-    fireEvent.click(screen.getByTestId('cell-AA'))
+    firePointerDownOverCell('cell-AA')
     expect(onToggle).not.toHaveBeenCalled()
   })
 
-  it('calls onToggle with "AKs" when AKs cell is clicked', () => {
+  it('calls onToggle with "AKs" when pointerdown over AKs cell (readOnly=false)', () => {
     const onToggle = vi.fn()
-    renderMatrix({ readOnly: false, onToggle })
-    fireEvent.click(screen.getByTestId('cell-AKs'))
+    renderMatrix({ readOnly: false, onToggle, selected: new Set() })
+    firePointerDownOverCell('cell-AKs')
     expect(onToggle).toHaveBeenCalledWith('AKs')
   })
 
   it('does not throw when onToggle is undefined (optional chaining)', () => {
     renderMatrix({ readOnly: false, onToggle: undefined })
-    expect(() => fireEvent.click(screen.getByTestId('cell-AA'))).not.toThrow()
+    expect(() => firePointerDownOverCell('cell-AA')).not.toThrow()
   })
 })
 

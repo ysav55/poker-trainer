@@ -1,6 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+
+const PAGE_TITLE_MAP = {
+  '/lobby':             'Lobby',
+  '/bot-lobby':         'Bot Games',
+  '/history':           'Hand History',
+  '/review':            'Review Table',
+  '/leaderboard':       'Leaderboard',
+  '/analysis':          'Analysis',
+  '/settings':          'Settings',
+  '/admin/crm':         'Player CRM',
+  '/admin/hands':       'Scenario Builder',
+  '/admin/users':       'User Management',
+  '/admin/alerts':      'Coach Alerts',
+  '/admin/tournaments': 'Tournament Setup',
+  '/admin/referee':     'Referee Dashboard',
+};
 
 const ROLE_PILL = {
   coach:      { label: 'Coach',      bg: 'rgba(212,175,55,0.15)', color: '#d4af37', border: 'rgba(212,175,55,0.4)' },
@@ -23,8 +39,11 @@ const ROLE_PILL = {
 export default function GlobalTopBar({ chipBalance, pageTitle, onBack }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
+
+  const resolvedTitle = pageTitle ?? PAGE_TITLE_MAP[location.pathname] ?? null;
 
   const role = user?.role ?? 'player';
   const pill = ROLE_PILL[role] ?? ROLE_PILL.player;
@@ -80,11 +99,11 @@ export default function GlobalTopBar({ chipBalance, pageTitle, onBack }) {
           ♠ POKER TRAINER
         </button>
 
-        {pageTitle && (
+        {resolvedTitle && (
           <>
             <span style={{ color: '#30363d' }}>·</span>
             <span className="text-sm font-medium" style={{ color: '#e6edf3' }}>
-              {pageTitle}
+              {resolvedTitle}
             </span>
           </>
         )}

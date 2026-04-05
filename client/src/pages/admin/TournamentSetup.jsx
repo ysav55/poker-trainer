@@ -147,6 +147,11 @@ function WizardModal({ onClose, onCreated }) {
     { sb: 50, bb: 100, ante: 0, durationMin: 20 },
     { sb: 100, bb: 200, ante: 25, durationMin: 20 },
   ]);
+  const [blindPresets, setBlindPresets]     = useState({ system: [], school: [] });
+  const [selectedPresetId, setSelectedPresetId] = useState('custom');
+  const [showLevelEditor, setShowLevelEditor]   = useState(false);
+  const [saveAsPreset, setSaveAsPreset]         = useState(false);
+  const [newPresetName, setNewPresetName]       = useState('');
 
   // Step 3 — Payout Structure
   const [payouts, setPayouts] = useState([
@@ -154,10 +159,18 @@ function WizardModal({ onClose, onCreated }) {
     { place: 2, percent: 30 },
     { place: 3, percent: 20 },
   ]);
+  const [payoutPresets, setPayoutPresets]         = useState({ system: [], school: [] });
+  const [payoutPresetId, setPayoutPresetId]       = useState('custom');
+  const [payoutMethod, setPayoutMethod]           = useState('flat');   // 'flat' | 'icm'
+  const [showIcmOverlay, setShowIcmOverlay]       = useState(false);
+  const [dealThreshold, setDealThreshold]         = useState(0);
 
   // Step 4 — Rules
   const [rebuyAllowed, setRebuy]  = useState(false);
   const [addonAllowed, setAddon]  = useState(false);
+
+  // Referee
+  const [refPlayerId, setRefPlayerId] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState(null);
@@ -168,9 +181,30 @@ function WizardModal({ onClose, onCreated }) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
+  useEffect(() => {
+    apiFetch('/api/blind-presets')
+      .then(data => {
+        setBlindPresets({
+          system: Array.isArray(data?.system) ? data.system : [],
+          school: Array.isArray(data?.school) ? data.school : [],
+        });
+      })
+      .catch(() => {}); // non-fatal — presets are optional
+
+    apiFetch('/api/payout-presets')
+      .then(data => {
+        setPayoutPresets({
+          system: Array.isArray(data?.system) ? data.system : [],
+          school: Array.isArray(data?.school) ? data.school : [],
+        });
+      })
+      .catch(() => {}); // non-fatal — presets are optional
+  }, []);
+
   // Level helpers
   function handleLevelChange(idx, updated) {
     setLevels(prev => prev.map((l, i) => i === idx ? updated : l));
+    setSelectedPresetId('custom'); // manual edit breaks preset binding
   }
   function handleLevelMove(idx, dir) {
     setLevels(prev => {
@@ -210,10 +244,36 @@ function WizardModal({ onClose, onCreated }) {
         ante: l.ante,
         duration_minutes: l.durationMin,
       }));
+      const payoutStructure = payouts.map(p => ({ position: p.place, percentage: p.percent }));
       const data = await apiFetch('/api/tournaments', {
         method: 'POST',
-        body: JSON.stringify({ name, blindStructure, startingStack, rebuyAllowed, addonAllowed }),
+        body: JSON.stringify({
+          name,
+          blindStructure,
+          startingStack,
+          rebuyAllowed,
+          addonAllowed,
+          payoutStructure,
+          payoutPresetId: payoutPresetId !== 'custom' ? payoutPresetId : null,
+          payoutMethod,
+          showIcmOverlay,
+          dealThreshold,
+        }),
       });
+      // Fire-and-forget: save blind structure as a named preset if requested
+      if (saveAsPreset && newPresetName.trim() && levels.length > 0) {
+        apiFetch('/api/blind-presets', {
+          method: 'POST',
+          body: JSON.stringify({ name: newPresetName.trim(), levels: blindStructure }),
+        }).catch(() => {}); // non-fatal
+      }
+      // Appoint referee if provided
+      if (refPlayerId.trim()) {
+        apiFetch(`/api/tournaments/${data.id}/referee`, {
+          method: 'POST',
+          body: JSON.stringify({ refPlayerId: refPlayerId.trim() }),
+        }).catch(() => {}); // non-fatal — tournament is created regardless
+      }
       onCreated(data.id);
       onClose();
     } catch (err) {
@@ -299,30 +359,185 @@ function WizardModal({ onClose, onCreated }) {
           {/* Step 1: Blind Structure */}
           {step === 1 && (
             <div>
-              {sectionLabel('Blind Levels')}
-              <div className="flex flex-col gap-2 mb-3">
-                {levels.map((lvl, i) => (
-                  <LevelRow key={i} index={i} level={lvl}
-                    isFirst={i === 0} isLast={i === levels.length - 1}
-                    onChange={handleLevelChange}
-                    onMove={handleLevelMove}
-                    onRemove={handleLevelRemove}
-                  />
-                ))}
+              {/* Preset selector */}
+              {sectionLabel('Blind Structure Preset')}
+              <div className="mb-4">
+                <select
+                  value={selectedPresetId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    setSelectedPresetId(id);
+                    if (id !== 'custom') {
+                      const all = [...blindPresets.system, ...blindPresets.school];
+                      const preset = all.find(p => String(p.id) === id);
+                      if (preset?.levels) {
+                        setLevels(preset.levels.map(l => ({
+                          sb: l.sb,
+                          bb: l.bb,
+                          ante: l.ante ?? 0,
+                          durationMin: l.duration_minutes ?? 20,
+                        })));
+                        setShowLevelEditor(false);
+                      }
+                    }
+                  }}
+                  className="w-full rounded px-3 py-2 text-sm outline-none"
+                  style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3', appearance: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%236e7681\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#30363d'; }}
+                >
+                  {blindPresets.system.length > 0 && (
+                    <optgroup label="System Presets">
+                      {blindPresets.system.map(p => (
+                        <option key={p.id} value={String(p.id)}>{p.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {blindPresets.school.length > 0 && (
+                    <optgroup label="School Presets">
+                      {blindPresets.school.map(p => (
+                        <option key={p.id} value={String(p.id)}>{p.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <option value="custom">Custom</option>
+                </select>
               </div>
-              <button onClick={handleAddLevel}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
-                style={{ background: 'none', border: '1px dashed rgba(212,175,55,0.35)', color: '#d4af37', cursor: 'pointer', width: '100%', justifyContent: 'center' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.65)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.35)'; }}>
-                + Add Level
-              </button>
+
+              {/* Read-only preview table when a preset is active */}
+              {selectedPresetId !== 'custom' && !showLevelEditor && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    {sectionLabel('Preview')}
+                    <button
+                      onClick={() => setShowLevelEditor(true)}
+                      style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#d4af37', background: 'none', border: '1px solid rgba(212,175,55,0.35)', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', textTransform: 'uppercase' }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.65)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.35)'; }}
+                    >
+                      Edit levels
+                    </button>
+                  </div>
+                  <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: 6, overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, color: '#c9d1d9' }}>
+                      <thead>
+                        <tr style={{ background: 'rgba(212,175,55,0.07)', borderBottom: '1px solid #30363d' }}>
+                          {['Lvl', 'SB', 'BB', 'Ante', 'Duration'].map(h => (
+                            <th key={h} style={{ padding: '6px 10px', textAlign: 'center', fontWeight: 700, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6e7681' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {levels.map((lvl, i) => (
+                          <tr key={i} style={{ borderBottom: i < levels.length - 1 ? '1px solid #21262d' : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(22,27,34,0.5)' }}>
+                            <td style={{ padding: '5px 10px', textAlign: 'center', color: '#d4af37', fontWeight: 700 }}>{i + 1}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>{lvl.sb.toLocaleString()}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>{lvl.bb.toLocaleString()}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>{lvl.ante.toLocaleString()}</td>
+                            <td style={{ padding: '5px 10px', textAlign: 'center' }}>{lvl.durationMin} min</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Manual level editor — shown when custom OR after clicking "Edit levels" */}
+              {(selectedPresetId === 'custom' || showLevelEditor) && (
+                <div>
+                  {sectionLabel('Blind Levels')}
+                  <div className="flex flex-col gap-2 mb-3">
+                    {levels.map((lvl, i) => (
+                      <LevelRow key={i} index={i} level={lvl}
+                        isFirst={i === 0} isLast={i === levels.length - 1}
+                        onChange={handleLevelChange}
+                        onMove={handleLevelMove}
+                        onRemove={handleLevelRemove}
+                      />
+                    ))}
+                  </div>
+                  <button onClick={handleAddLevel}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                    style={{ background: 'none', border: '1px dashed rgba(212,175,55,0.35)', color: '#d4af37', cursor: 'pointer', width: '100%', justifyContent: 'center' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.65)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.35)'; }}>
+                    + Add Level
+                  </button>
+                </div>
+              )}
+
+              {/* Save as preset — only when custom and at least one level exists */}
+              {selectedPresetId === 'custom' && levels.length > 0 && (
+                <div style={{ marginTop: 16, padding: '12px 14px', background: '#161b22', border: '1px solid #30363d', borderRadius: 6 }}>
+                  <label className="flex items-center gap-3 cursor-pointer" style={{ userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={saveAsPreset}
+                      onChange={e => setSaveAsPreset(e.target.checked)}
+                      style={{ accentColor: '#d4af37', width: 14, height: 14, cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: 11, color: '#c9d1d9' }}>Save this structure as a preset for future use</span>
+                  </label>
+                  {saveAsPreset && (
+                    <input
+                      type="text"
+                      value={newPresetName}
+                      onChange={e => setNewPresetName(e.target.value)}
+                      placeholder="e.g. Friday Night Turbo"
+                      className="w-full rounded px-3 py-2 text-sm outline-none mt-3"
+                      style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
+                      onFocus={e => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                      onBlur={e => { e.currentTarget.style.borderColor = '#30363d'; }}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           )}
 
           {/* Step 2: Payout Structure */}
           {step === 2 && (
             <div>
+              {/* Payout preset selector */}
+              {sectionLabel('Payout Preset')}
+              <div className="mb-4">
+                <select
+                  value={payoutPresetId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    setPayoutPresetId(id);
+                    if (id !== 'custom') {
+                      const all = [...payoutPresets.system, ...payoutPresets.school];
+                      const preset = all.find(p => String(p.id) === id);
+                      if (preset?.tiers) {
+                        setPayouts(preset.tiers.map(t => ({ place: t.position, percent: t.percentage })));
+                      }
+                    }
+                  }}
+                  className="w-full rounded px-3 py-2 text-sm outline-none"
+                  style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3', appearance: 'none', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'10\' height=\'6\'%3E%3Cpath d=\'M0 0l5 6 5-6z\' fill=\'%236e7681\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#30363d'; }}
+                >
+                  {payoutPresets.system.length > 0 && (
+                    <optgroup label="System Presets">
+                      {payoutPresets.system.map(p => (
+                        <option key={p.id} value={String(p.id)}>{p.name}{p.description ? ` — ${p.description}` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {payoutPresets.school.length > 0 && (
+                    <optgroup label="School Presets">
+                      {payoutPresets.school.map(p => (
+                        <option key={p.id} value={String(p.id)}>{p.name}{p.description ? ` — ${p.description}` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
               {sectionLabel('Payout Places')}
               <div className="flex flex-col gap-2 mb-3">
                 {payouts.map((p, i) => (
@@ -342,8 +557,48 @@ function WizardModal({ onClose, onCreated }) {
                 style={{ background: 'none', border: '1px dashed rgba(212,175,55,0.35)', borderRadius: 6, color: '#d4af37', cursor: 'pointer', width: '100%', padding: '8px', fontSize: 12 }}>
                 + Add Place
               </button>
-              <div style={{ fontSize: 10, color: '#6e7681', marginTop: 8 }}>
+              <div style={{ fontSize: 10, color: '#6e7681', marginTop: 8, marginBottom: 16 }}>
                 Total: {payouts.reduce((s, p) => s + (Number(p.percent) || 0), 0)}%
+              </div>
+
+              {/* Payout method toggle */}
+              {sectionLabel('Payout Method')}
+              <div className="flex gap-3 mb-4">
+                {[['flat', 'Flat'], ['icm', 'ICM']].map(([val, label]) => (
+                  <label key={val} className="flex items-center gap-2 cursor-pointer" style={{ userSelect: 'none' }}>
+                    <input
+                      type="radio"
+                      name="payoutMethod"
+                      value={val}
+                      checked={payoutMethod === val}
+                      onChange={() => setPayoutMethod(val)}
+                      style={{ accentColor: '#d4af37', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: 12, color: payoutMethod === val ? '#f0ece3' : '#8b949e' }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+
+              {/* Show ICM overlay toggle */}
+              <div style={{ marginBottom: 16 }}>
+                <label className="flex items-center gap-3 cursor-pointer" style={{ userSelect: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={showIcmOverlay}
+                    onChange={e => setShowIcmOverlay(e.target.checked)}
+                    style={{ accentColor: '#d4af37', width: 14, height: 14, cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: 12, color: '#c9d1d9' }}>Show live ICM equity to players during play</span>
+                </label>
+              </div>
+
+              {/* Deal threshold */}
+              {sectionLabel('Deal Threshold')}
+              <div className="mb-2">
+                <NumberInput value={dealThreshold} onChange={v => setDealThreshold(Number(v))} width={80} min={0} placeholder="0" />
+                <div style={{ fontSize: 10, color: '#6e7681', marginTop: 6 }}>
+                  Allow deal when X players remain (0 = disabled)
+                </div>
               </div>
             </div>
           )}
@@ -373,6 +628,29 @@ function WizardModal({ onClose, onCreated }) {
                   <span style={{ fontSize: 13, color: '#c9d1d9' }}>{label}</span>
                 </label>
               ))}
+
+              {sectionLabel('Referee')}
+              <div className="mb-2">
+                <label style={{ fontSize: 12, color: '#8b949e', display: 'block', marginBottom: 6 }}>
+                  Referee Player ID <span style={{ color: '#6e7681' }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={refPlayerId}
+                  onChange={e => setRefPlayerId(e.target.value)}
+                  placeholder="UUID of referee player"
+                  style={{
+                    width: '100%', background: '#0d1117', border: '1px solid #30363d',
+                    borderRadius: 4, color: '#f0ece3', padding: '7px 10px', fontSize: 12,
+                    outline: 'none', boxSizing: 'border-box',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#30363d'; }}
+                />
+                <div style={{ fontSize: 11, color: '#6e7681', marginTop: 4 }}>
+                  The appointed referee can start, advance levels, and end this tournament.
+                </div>
+              </div>
             </div>
           )}
 

@@ -202,7 +202,7 @@ describe('TournamentController', () => {
       expect(TableRepository.closeTable).toHaveBeenCalledWith('tbl-1');
     });
 
-    test('emits tournament:ended', async () => {
+    test('emits tournament:ended with winnerId', async () => {
       const io       = makeIo();
       const gm       = makeGm([]);
       const ctrl     = new TournamentController('tbl-1', gm, io);
@@ -213,6 +213,43 @@ describe('TournamentController', () => {
       expect(io.to).toHaveBeenCalledWith('tbl-1');
       expect(io._room.emit).toHaveBeenCalledWith('tournament:ended', expect.objectContaining({
         winnerId,
+      }));
+    });
+
+    test('emits tournament:ended with winnerName from standings', async () => {
+      const { TournamentRepository } = require('../db/repositories/TournamentRepository');
+      TournamentRepository.getStandings.mockResolvedValueOnce([
+        {
+          player_id: 'winner-uuid',
+          finish_position: 1,
+          player_profiles: { display_name: 'Alice' },
+        },
+      ]);
+
+      const io       = makeIo();
+      const gm       = makeGm([]);
+      const ctrl     = new TournamentController('tbl-1', gm, io);
+
+      await ctrl._endTournament('winner-uuid');
+
+      expect(io._room.emit).toHaveBeenCalledWith('tournament:ended', expect.objectContaining({
+        winnerId:   'winner-uuid',
+        winnerName: 'Alice',
+      }));
+    });
+
+    test('emits winnerName as Unknown when standings are empty', async () => {
+      const { TournamentRepository } = require('../db/repositories/TournamentRepository');
+      TournamentRepository.getStandings.mockResolvedValueOnce([]);
+
+      const io   = makeIo();
+      const gm   = makeGm([]);
+      const ctrl = new TournamentController('tbl-1', gm, io);
+
+      await ctrl._endTournament('missing-uuid');
+
+      expect(io._room.emit).toHaveBeenCalledWith('tournament:ended', expect.objectContaining({
+        winnerName: 'Unknown',
       }));
     });
   });

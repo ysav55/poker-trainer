@@ -185,10 +185,129 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
   app.get('/api/auth/permissions', requireAuth, async (req, res) => {
     try {
       const { getPlayerPermissions } = require('../auth/requirePermission.js');
-      const perms = await getPlayerPermissions(req.user.id);
+      const perms = await getPlayerPermissions(req.user.id, req.user.role);
       res.json({ permissions: [...perms] });
     } catch (err) {
       res.status(500).json({ error: 'Failed to load permissions' });
+    }
+  });
+
+  // ── GET /api/auth/profile ────────────────────────────────────────────────────
+  // Returns the authenticated user's own profile (no password_hash).
+  app.get('/api/auth/profile', requireAuth, async (req, res) => {
+    const { findById } = require('../db/repositories/PlayerRepository');
+    try {
+      const player = await findById(req.user.stableId);
+      if (!player) return res.status(404).json({ error: 'not_found', message: 'Player not found.' });
+      return res.json({
+        id:           player.id,
+        display_name: player.display_name,
+        email:        player.email ?? null,
+        role:         req.user.role ?? null,
+        school_id:    player.school_id ?? null,
+      });
+    } catch (err) {
+      log.error('auth', 'profile_get_error', err.message, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Failed to load profile.' });
+    }
+  });
+
+  // ── POST /api/auth/verify-password ──────────────────────────────────────────
+  // Verifies the caller's current password without side effects.
+  // Used by the client to gate destructive actions behind a password prompt.
+  app.post('/api/auth/verify-password', requireAuth, async (req, res) => {
+    const { password } = req.body || {};
+    if (!password || typeof password !== 'string')
+      return res.status(400).json({ error: 'invalid_body', message: 'password is required.' });
+
+    const { findById } = require('../db/repositories/PlayerRepository');
+    try {
+      const player = await findById(req.user.stableId);
+      if (!player || !player.password_hash)
+        return res.status(404).json({ error: 'not_found', message: 'Account not found.' });
+
+      const valid = await bcrypt.compare(password, player.password_hash);
+      if (!valid) return res.status(401).json({ error: 'invalid_credentials', message: 'Password is incorrect.' });
+
+      return res.json({ verified: true });
+    } catch (err) {
+      log.error('auth', 'verify_password_error', err.message, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Verification failed.' });
+    }
+  });
+
+  // ── POST /api/auth/deactivate ────────────────────────────────────────────────
+  // Soft-deletes the caller's account by setting status = 'archived'.
+  // Requires the caller's current password for confirmation.
+  app.post('/api/auth/deactivate', requireAuth, async (req, res) => {
+    const { password } = req.body || {};
+    if (!password || typeof password !== 'string')
+      return res.status(400).json({ error: 'invalid_body', message: 'password is required to confirm deactivation.' });
+
+    const { findById, archivePlayer } = require('../db/repositories/PlayerRepository');
+    try {
+      const player = await findById(req.user.stableId);
+      if (!player || !player.password_hash)
+        return res.status(404).json({ error: 'not_found', message: 'Account not found.' });
+
+      const valid = await bcrypt.compare(password, player.password_hash);
+      if (!valid) return res.status(401).json({ error: 'invalid_credentials', message: 'Password is incorrect.' });
+
+      await archivePlayer(req.user.stableId);
+
+      log.info('auth', 'account_deactivated', `${req.user.name} deactivated their account`, { playerId: req.user.stableId });
+      return res.json({ success: true });
+    } catch (err) {
+      log.error('auth', 'deactivate_error', err.message, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Deactivation failed.' });
+    }
+  });
+
+  // ── PUT /api/auth/profile ────────────────────────────────────────────────────
+  // Updates the authenticated user's display_name and/or email.
+  app.put('/api/auth/profile', requireAuth, async (req, res) => {
+    const { display_name, email } = req.body || {};
+
+    const hasName  = display_name !== undefined;
+    const hasEmail = email        !== undefined;
+
+    if (!hasName && !hasEmail)
+      return res.status(400).json({ error: 'no_fields', message: 'Provide display_name or email to update.' });
+
+    if (hasName) {
+      if (typeof display_name !== 'string' || display_name.trim().length < 2)
+        return res.status(400).json({ error: 'invalid_name', message: 'Name must be at least 2 characters.' });
+    }
+    if (hasEmail && email !== '') {
+      if (typeof email !== 'string' || !email.includes('@'))
+        return res.status(400).json({ error: 'invalid_email', message: 'Email is not valid.' });
+    }
+
+    const { findByDisplayName, updatePlayer } = require('../db/repositories/PlayerRepository');
+
+    try {
+      if (hasName) {
+        const trimmed  = display_name.trim();
+        const existing = await findByDisplayName(trimmed);
+        if (existing && existing.id !== req.user.stableId)
+          return res.status(409).json({ error: 'name_taken', message: 'That name is already taken.' });
+      }
+
+      const patch = {};
+      if (hasName)  patch.displayName = display_name.trim();
+      if (hasEmail) patch.email       = email === '' ? null : email.trim().toLowerCase();
+
+      await updatePlayer(req.user.stableId, patch);
+
+      log.info('auth', 'profile_update_ok', `${req.user.name} updated profile`, { playerId: req.user.stableId });
+      return res.json({
+        id:           req.user.stableId,
+        display_name: patch.displayName ?? req.user.name,
+        email:        patch.email       ?? undefined,
+      });
+    } catch (err) {
+      log.error('auth', 'profile_update_error', err.message, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Failed to update profile.' });
     }
   });
 };

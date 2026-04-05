@@ -204,7 +204,7 @@ export default function PokerTable({
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Table container — fills available vertical space ─────────────── */}
       <div className="flex-1 relative flex items-center justify-center min-h-0">
@@ -212,8 +212,8 @@ export default function PokerTable({
         <div
           className="table-felt relative"
           style={{
-            width: 'min(75%, 900px)',
-            height: 'min(48vh, 500px)',
+            width: 'min(90%, 1000px)',
+            height: 'min(82%, 680px)',
             borderRadius: '50%',
           }}
         >
@@ -440,7 +440,7 @@ export default function PokerTable({
               zIndex: 1,
             }}
           >
-            <img src="/epoker-logo.png" alt="" style={{ width: '100%', filter: 'grayscale(20%)' }} />
+            <img src="/epoker-logo.svg" alt="" style={{ width: '100%', filter: 'grayscale(20%)' }} />
           </div>
         </div>{/* closes oval */}
 

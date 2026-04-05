@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import CollapsibleSection from '../CollapsibleSection';
+import { apiFetch } from '../../lib/api';
 
 export default function PlaylistsSection({
   playlists,
@@ -12,6 +13,11 @@ export default function PlaylistsSection({
   const [coachPlaylistMode, setCoachPlaylistMode] = useState('play'); // 'play' | 'monitor'
   const [autoStartCountdown, setAutoStartCountdown] = useState(null); // null | number
   const prevConfigPhaseRef = useRef(false);
+
+  // Drill Mode state
+  const [drillStatus, setDrillStatus] = useState(null);   // null | drill session object
+  const [drillLoading, setDrillLoading] = useState(false);
+  const [drillError, setDrillError] = useState(null);
 
   // Fetch playlists on mount
   useEffect(() => { emit.getPlaylists?.(); }, []);
@@ -42,6 +48,62 @@ export default function PlaylistsSection({
     const t = setTimeout(() => setAutoStartCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [autoStartCountdown]);
+
+  // Poll drill status every 3s while there is an active table
+  useEffect(() => {
+    const tableId = gameState?.table_id;
+    if (!tableId) return;
+    const interval = setInterval(async () => {
+      try {
+        const data = await apiFetch(`/api/tables/${tableId}/drill`);
+        setDrillStatus(data?.active ? data : null);
+      } catch { /* ignore network errors */ }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [gameState?.table_id]);
+
+  async function handleStartDrill(playlistId) {
+    const tableId = gameState?.table_id;
+    if (!tableId) return;
+    setDrillLoading(true);
+    setDrillError(null);
+    try {
+      const data = await apiFetch(`/api/tables/${tableId}/drill`, {
+        method: 'POST',
+        body: JSON.stringify({ playlist_id: playlistId }),
+      });
+      setDrillStatus(data?.active ? data : null);
+    } catch (err) {
+      setDrillError(err?.message ?? 'Failed to start drill');
+    } finally {
+      setDrillLoading(false);
+    }
+  }
+
+  async function handleDrillAction(action) {
+    const tableId = gameState?.table_id;
+    if (!tableId) return;
+    setDrillLoading(true);
+    setDrillError(null);
+    try {
+      let data;
+      if (action === 'stop') {
+        await apiFetch(`/api/tables/${tableId}/drill`, { method: 'DELETE' });
+        setDrillStatus(null);
+      } else {
+        data = await apiFetch(`/api/tables/${tableId}/drill/${action}`, { method: 'PATCH' });
+        if (data?.status === 'completed' || data?.status === 'cancelled') {
+          setDrillStatus(null);
+        } else {
+          setDrillStatus(data?.active ? data : null);
+        }
+      }
+    } catch (err) {
+      setDrillError(err?.message ?? `Failed to ${action} drill`);
+    } finally {
+      setDrillLoading(false);
+    }
+  }
 
   function handleCreatePlaylist() {
     if (!newPlaylistName.trim()) return;
@@ -275,6 +337,183 @@ export default function PlaylistsSection({
             )}
           </div>
         )}
+        {/* ── Drill Mode ─────────────────────────────────────── */}
+        <div style={{ borderTop: '1px solid #21262d', marginTop: 12, paddingTop: 10 }}>
+          <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: '0.08em', marginBottom: 6 }}>
+            DRILL MODE
+          </div>
+
+          {/* Error banner */}
+          {drillError && (
+            <div style={{
+              fontSize: 9,
+              color: '#f87171',
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: 3,
+              padding: '3px 6px',
+              marginBottom: 6,
+            }}>
+              {drillError}
+            </div>
+          )}
+
+          {/* Active drill status panel */}
+          {drillStatus ? (
+            <div style={{
+              padding: '8px 10px',
+              borderRadius: 4,
+              border: '1px solid rgba(212,175,55,0.3)',
+              background: 'rgba(212,175,55,0.06)',
+            }}>
+              {/* Header row: scenario name + position */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, color: '#f0ece3', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {drillStatus.current_scenario?.name ?? 'Scenario'}
+                </span>
+                <span style={{ fontSize: 9, color: '#6e7681', marginLeft: 6, whiteSpace: 'nowrap' }}>
+                  {typeof drillStatus.current_position === 'number' ? drillStatus.current_position + 1 : '?'}
+                  {drillStatus.playlist_hand_count ? ` / ${drillStatus.playlist_hand_count}` : ''}
+                </span>
+              </div>
+
+              {/* Status badge */}
+              <div style={{ marginBottom: 8 }}>
+                <span style={{
+                  fontSize: 9,
+                  padding: '1px 5px',
+                  borderRadius: 2,
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  background: drillStatus.status === 'paused' ? 'rgba(234,179,8,0.15)' : 'rgba(74,222,128,0.12)',
+                  color: drillStatus.status === 'paused' ? '#facc15' : '#4ade80',
+                  border: drillStatus.status === 'paused' ? '1px solid rgba(234,179,8,0.3)' : '1px solid rgba(74,222,128,0.3)',
+                }}>
+                  {drillStatus.status === 'paused' ? '⏸ PAUSED' : '▶ ACTIVE'}
+                </span>
+                {drillStatus.next_scenario && (
+                  <span style={{ fontSize: 9, color: '#6e7681', marginLeft: 6 }}>
+                    Next: {drillStatus.next_scenario.name}
+                  </span>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button
+                  disabled={drillLoading}
+                  onClick={() => handleDrillAction('advance')}
+                  style={{
+                    flex: 1,
+                    padding: '2px 6px',
+                    fontSize: 9,
+                    borderRadius: 3,
+                    border: '1px solid rgba(74,222,128,0.4)',
+                    color: '#4ade80',
+                    background: 'none',
+                    cursor: drillLoading ? 'not-allowed' : 'pointer',
+                    opacity: drillLoading ? 0.5 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!drillLoading) e.currentTarget.style.background = 'rgba(34,197,94,0.1)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                >
+                  ▶▶ Deal Next
+                </button>
+                <button
+                  disabled={drillLoading}
+                  onClick={() => handleDrillAction(drillStatus.status === 'paused' ? 'resume' : 'pause')}
+                  style={{
+                    flex: 1,
+                    padding: '2px 6px',
+                    fontSize: 9,
+                    borderRadius: 3,
+                    border: '1px solid rgba(234,179,8,0.4)',
+                    color: '#facc15',
+                    background: 'none',
+                    cursor: drillLoading ? 'not-allowed' : 'pointer',
+                    opacity: drillLoading ? 0.5 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!drillLoading) e.currentTarget.style.background = 'rgba(234,179,8,0.1)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                >
+                  {drillStatus.status === 'paused' ? '▶ Resume' : '⏸ Pause'}
+                </button>
+                <button
+                  disabled={drillLoading}
+                  onClick={() => handleDrillAction('stop')}
+                  style={{
+                    padding: '2px 6px',
+                    fontSize: 9,
+                    borderRadius: 3,
+                    border: '1px solid rgba(153,27,27,0.4)',
+                    color: 'rgba(239,68,68,0.7)',
+                    background: 'none',
+                    cursor: drillLoading ? 'not-allowed' : 'pointer',
+                    opacity: drillLoading ? 0.5 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!drillLoading) { e.currentTarget.style.borderColor = 'rgba(220,38,38,0.5)'; e.currentTarget.style.color = '#f87171'; } }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(153,27,27,0.4)'; e.currentTarget.style.color = 'rgba(239,68,68,0.7)'; }}
+                >
+                  ✕ Stop
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Per-playlist "Start Drill" buttons */
+            playlists.length === 0 ? (
+              <p style={{ fontSize: 10, color: '#444', fontStyle: 'italic' }}>No playlists to drill</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {playlists.map(pl => {
+                  const hasTable = !!gameState?.table_id;
+                  return (
+                    <div
+                      key={pl.playlist_id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '5px 8px',
+                        borderRadius: 4,
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        background: 'rgba(255,255,255,0.02)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                        <span style={{ fontSize: 11, color: '#e0ddd6', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {pl.name}
+                        </span>
+                        <span style={{ fontSize: 9, color: '#6e7681' }}>{pl.hand_count ?? 0} hands</span>
+                      </div>
+                      <button
+                        disabled={!hasTable || drillLoading}
+                        title={!hasTable ? 'No active table' : undefined}
+                        onClick={() => hasTable && handleStartDrill(pl.playlist_id)}
+                        style={{
+                          marginLeft: 8,
+                          padding: '2px 6px',
+                          fontSize: 9,
+                          borderRadius: 3,
+                          border: hasTable ? '1px solid rgba(212,175,55,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                          color: hasTable ? '#d4af37' : '#6e7681',
+                          background: 'none',
+                          cursor: hasTable && !drillLoading ? 'pointer' : 'not-allowed',
+                          opacity: hasTable && !drillLoading ? 1 : 0.45,
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                        }}
+                        onMouseEnter={(e) => { if (hasTable && !drillLoading) e.currentTarget.style.background = 'rgba(212,175,55,0.1)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                      >
+                        ▶ Start Drill
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          )}
+        </div>
       </div>
     </CollapsibleSection>
   );

@@ -36,9 +36,9 @@ const TRIAL_TABLE_TABS = [
 ];
 
 const MODE_OPTIONS = [
-  { value: 'coached',    label: 'Coached Cash' },
-  { value: 'auto',       label: 'Auto Cash' },
-  { value: 'tournament', label: 'Tournament' },
+  { value: 'coached_cash',   label: 'Coached Cash' },
+  { value: 'uncoached_cash', label: 'Auto Cash' },
+  { value: 'tournament',     label: 'Tournament' },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ function fmtStat(v, pct = false) {
 
 function CreateTableModal({ onClose, onCreated }) {
   const [name, setName]   = useState('');
-  const [mode, setMode]   = useState('coached');
+  const [mode, setMode]   = useState('coached_cash');
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState('');
 

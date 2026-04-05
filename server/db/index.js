@@ -55,6 +55,7 @@ module.exports = {
   // Player
   upsertPlayerIdentity:  PlayerRepo.upsertPlayerIdentity,
   getPlayerStats:        PlayerRepo.getPlayerStats,
+  getPlayerStatsByMode:  PlayerRepo.getPlayerStatsByMode,
   getAllPlayersWithStats: PlayerRepo.getAllPlayersWithStats,
   getPlayerHoverStats:   PlayerRepo.getPlayerHoverStats,
   getPlayerHands:        PlayerRepo.getPlayerHands,

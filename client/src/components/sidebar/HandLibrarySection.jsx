@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import CollapsibleSection from '../CollapsibleSection';
-import { RangeMatrix } from '../RangeMatrix';
+import RangePicker from '../RangePicker';
 import { comboToHandGroup } from '../../utils/comboUtils';
 
 function formatPot(n) {
@@ -12,7 +12,7 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
   const [scenarioSearch, setScenarioSearch] = useState('');
   const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState('');
   const [scenarioStackMode, setScenarioStackMode] = useState('keep');
-  const [rangeFilterOpen, setRangeFilterOpen] = useState(false);
+  const [rangePickerOpen, setRangePickerOpen] = useState(false);
   const [rangeFilter, setRangeFilter] = useState(new Set());
 
   const filteredHands = useMemo(() => {
@@ -74,50 +74,51 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
         />
 
         {/* Range filter toggle */}
-        <div>
+        <div className="flex gap-1">
           <button
-            onClick={() => setRangeFilterOpen(o => !o)}
+            onClick={() => setRangePickerOpen(true)}
             style={{
-              width: '100%', padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
+              flex: 1, padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
               background: rangeFilter.size ? 'rgba(212,175,55,0.12)' : 'transparent',
               border: `1px solid ${rangeFilter.size ? 'rgba(212,175,55,0.4)' : '#30363d'}`,
               color: rangeFilter.size ? '#d4af37' : '#6e7681',
               fontSize: '9px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
-              textAlign: 'left', display: 'flex', justifyContent: 'space-between',
+              textAlign: 'left',
             }}
           >
-            <span>⬡ Filter by Range {rangeFilter.size > 0 ? `(${rangeFilter.size})` : ''}</span>
-            <span>{rangeFilterOpen ? '▲' : '▼'}</span>
+            ⬡ Filter by Range {rangeFilter.size > 0 ? `(${rangeFilter.size} groups)` : ''}
           </button>
-          {rangeFilterOpen && (
-            <div style={{ marginTop: 6 }}>
-              <RangeMatrix
-                selected={rangeFilter}
-                onToggle={(handGroup) => {
-                  setRangeFilter((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(handGroup)) next.delete(handGroup);
-                    else next.add(handGroup);
-                    return next;
-                  });
-                }}
-                colorMode="selected"
-              />
-              {rangeFilter.size > 0 && (
-                <button
-                  onClick={() => setRangeFilter(new Set())}
-                  style={{
-                    marginTop: 4, width: '100%', padding: '2px 0', borderRadius: 3,
-                    background: 'transparent', border: '1px solid #30363d',
-                    color: '#6e7681', fontSize: '9px', cursor: 'pointer',
-                  }}
-                >
-                  Clear filter
-                </button>
-              )}
-            </div>
+          {rangeFilter.size > 0 && (
+            <button
+              onClick={() => setRangeFilter(new Set())}
+              style={{
+                padding: '3px 6px', borderRadius: 4, cursor: 'pointer',
+                background: 'transparent', border: '1px solid #30363d',
+                color: '#6e7681', fontSize: '9px',
+              }}
+              title="Clear filter"
+            >
+              ✕
+            </button>
           )}
         </div>
+        {rangePickerOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.72)' }}
+            onClick={(e) => { if (e.target === e.currentTarget) setRangePickerOpen(false); }}
+          >
+            <RangePicker
+              seatLabel="Filter by Range"
+              initialRange={[...rangeFilter].join(',')}
+              onApply={(rangeStr) => {
+                setRangeFilter(new Set(rangeStr ? rangeStr.split(',').map(s => s.trim()).filter(Boolean) : []));
+                setRangePickerOpen(false);
+              }}
+              onCancel={() => setRangePickerOpen(false)}
+            />
+          </div>
+        )}
 
         {/* Hand list */}
         <div style={{ maxHeight: '14rem', overflowY: 'auto' }} className="space-y-1">

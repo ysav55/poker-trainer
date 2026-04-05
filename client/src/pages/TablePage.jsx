@@ -187,7 +187,7 @@ function FullTableView() {
       {/* Content row: table + optional sidebar */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
         {/* Main table — always rendered so all roles see their seat and cards */}
-        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <PokerTable
             gameState={gameState}
             myId={myId}
@@ -222,7 +222,7 @@ function FullTableView() {
 
       {/* Tournament overlay — shows blind timer, eliminations, level info */}
       {tableMode === 'tournament' && (
-        <TournamentInfoPanel socket={socket} />
+        <TournamentInfoPanel />
       )}
 
       {/* Moderator controls — pause/resume for uncoached sessions */}

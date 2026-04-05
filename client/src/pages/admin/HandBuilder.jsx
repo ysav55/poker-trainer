@@ -16,6 +16,17 @@ const STREET_COLORS = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+function flattenFolders(folders, depth = 0) {
+  const result = [];
+  for (const f of folders) {
+    result.push({ ...f, depth });
+    if (f.children?.length) {
+      result.push(...flattenFolders(f.children, depth + 1));
+    }
+  }
+  return result;
+}
+
 function StreetBadge({ street }) {
   const c = STREET_COLORS[street] ?? STREET_COLORS.preflop;
   const label = { preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River' }[street] ?? street;
@@ -70,7 +81,7 @@ function ScenarioCard({ scenario, selected, onClick }) {
       }}
     >
       <div style={{ fontSize: 12, color: '#f0ece3', fontWeight: 500, marginBottom: 4 }}>
-        {scenario.name || `Scenario ${scenario.scenario_id?.slice(0, 6)}`}
+        {scenario.name || `Scenario ${(scenario.id ?? scenario.scenario_id)?.slice(0, 6)}`}
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <StreetBadge street={scenario.starting_street} />
@@ -154,8 +165,10 @@ function EmptyBuilder({ activeTab, onNewScenario, onNewPlaylist }) {
 export default function HandBuilder() {
   const [activeTab, setActiveTab]           = useState('Scenarios');
   const [searchQuery, setSearchQuery]       = useState('');
+  const [folderFilter, setFolderFilter]     = useState('');
   const [scenarios, setScenarios]           = useState([]);
   const [playlists, setPlaylists]           = useState([]);
+  const [folders, setFolders]               = useState([]);
   const [scenariosLoading, setScenariosLoading] = useState(true);
   const [playlistsLoading, setPlaylistsLoading] = useState(true);
 
@@ -168,7 +181,7 @@ export default function HandBuilder() {
   const fetchScenarios = useCallback(async () => {
     setScenariosLoading(true);
     try {
-      const data = await apiFetch('/api/admin/scenarios');
+      const data = await apiFetch('/api/scenarios');
       setScenarios(
         Array.isArray(data) ? data :
         Array.isArray(data?.configs) ? data.configs :
@@ -178,6 +191,15 @@ export default function HandBuilder() {
       setScenarios([]);
     } finally {
       setScenariosLoading(false);
+    }
+  }, []);
+
+  const fetchFolders = useCallback(async () => {
+    try {
+      const data = await apiFetch('/api/scenarios/folders');
+      setFolders(Array.isArray(data?.folders) ? data.folders : []);
+    } catch {
+      setFolders([]);
     }
   }, []);
 
@@ -198,15 +220,16 @@ export default function HandBuilder() {
 
   useEffect(() => {
     fetchScenarios();
+    fetchFolders();
     fetchPlaylists();
-  }, [fetchScenarios, fetchPlaylists]);
+  }, [fetchScenarios, fetchFolders, fetchPlaylists]);
 
   // ── Filtered lists ─────────────────────────────────────────────────────────
 
   const filteredScenarios = scenarios.filter(sc => {
+    if (folderFilter && sc.folder_id !== folderFilter) return false;
     if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (sc.name ?? '').toLowerCase().includes(q);
+    return (sc.name ?? '').toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const filteredPlaylists = playlists.filter(pl => {
@@ -236,9 +259,23 @@ export default function HandBuilder() {
     setSelectedScenario(null);
   }
 
-  function handleBuilderClose() {
+  function handleScenarioSaved(savedScenario) {
+    // Stay on the saved scenario — do NOT reset to the empty splash.
+    // fetchScenarios refreshes the sidebar list so the updated name/state appears.
+    if (savedScenario) setSelectedScenario(savedScenario);
+    fetchScenarios();
+  }
+
+  async function handleDeleteScenario(id) {
+    await apiFetch(`/api/scenarios/${id}`, { method: 'DELETE' });
     setSelectedScenario(null);
     fetchScenarios();
+  }
+
+  async function handleDuplicateScenario(id) {
+    const copy = await apiFetch(`/api/scenarios/${id}/duplicate`, { method: 'POST' });
+    fetchScenarios();
+    setSelectedScenario(copy);
   }
 
   function handlePlaylistSaved() {
@@ -249,6 +286,7 @@ export default function HandBuilder() {
   function handleTabChange(tab) {
     setActiveTab(tab);
     setSearchQuery('');
+    setFolderFilter('');
     setSelectedScenario(null);
     setSelectedPlaylist(null);
   }
@@ -259,20 +297,24 @@ export default function HandBuilder() {
     if (selectedScenario === 'new') {
       return (
         <ScenarioBuilder
-          inline
-          playlists={playlists}
-          initialScenario={null}
-          onClose={handleBuilderClose}
+          scenario={null}
+          folders={folders}
+          onSaved={handleScenarioSaved}
+          onDelete={handleDeleteScenario}
+          onDuplicate={handleDuplicateScenario}
+          onClose={handleScenarioSaved}
         />
       );
     }
     if (selectedScenario) {
       return (
         <ScenarioBuilder
-          inline
-          playlists={playlists}
-          initialScenario={selectedScenario}
-          onClose={handleBuilderClose}
+          scenario={selectedScenario}
+          folders={folders}
+          onSaved={handleScenarioSaved}
+          onDelete={handleDeleteScenario}
+          onDuplicate={handleDuplicateScenario}
+          onClose={handleScenarioSaved}
         />
       );
     }
@@ -304,6 +346,8 @@ export default function HandBuilder() {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  const flatFolders = flattenFolders(folders);
 
   return (
     <div
@@ -347,7 +391,7 @@ export default function HandBuilder() {
         </div>
 
         {/* Search */}
-        <div style={{ padding: '10px 12px', flexShrink: 0 }}>
+        <div style={{ padding: '10px 12px 6px', flexShrink: 0 }}>
           <input
             type="search"
             value={searchQuery}
@@ -363,6 +407,29 @@ export default function HandBuilder() {
           />
         </div>
 
+        {/* Folder filter (Scenarios tab only) */}
+        {activeTab === 'Scenarios' && (
+          <div style={{ padding: '0 12px 8px', flexShrink: 0 }}>
+            <select
+              value={folderFilter}
+              onChange={e => setFolderFilter(e.target.value)}
+              style={{
+                width: '100%', padding: '5px 8px', borderRadius: 4,
+                border: '1px solid #30363d', background: '#0d1117',
+                color: folderFilter ? '#f0ece3' : '#6e7681',
+                fontSize: 11, outline: 'none', boxSizing: 'border-box', cursor: 'pointer',
+              }}
+            >
+              <option value="">All folders</option>
+              {flatFolders.map(f => (
+                <option key={f.id} value={f.id}>
+                  {'\u00a0'.repeat(f.depth * 2)}{f.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* List */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
           {activeTab === 'Scenarios' ? (
@@ -372,16 +439,18 @@ export default function HandBuilder() {
               </div>
             ) : filteredScenarios.length === 0 ? (
               <div style={{ color: '#444', fontSize: 11, padding: '20px', textAlign: 'center' }}>
-                {searchQuery ? 'No matches.' : 'No scenarios yet.'}
+                {searchQuery || folderFilter ? 'No matches.' : 'No scenarios yet.'}
               </div>
             ) : (
               filteredScenarios.map(sc => (
                 <ScenarioCard
-                  key={sc.scenario_id ?? sc.id}
+                  key={sc.id ?? sc.scenario_id}
                   scenario={sc}
                   selected={
-                    selectedScenario && selectedScenario !== 'new' &&
-                    selectedScenario.scenario_id === sc.scenario_id
+                    selectedScenario && selectedScenario !== 'new' && (
+                      selectedScenario.id === sc.id ||
+                      (selectedScenario.scenario_id && selectedScenario.scenario_id === sc.scenario_id)
+                    )
                   }
                   onClick={() => handleSelectScenario(sc)}
                 />

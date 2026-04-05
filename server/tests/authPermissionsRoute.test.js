@@ -127,7 +127,7 @@ describe('GET /api/auth/permissions', () => {
       .get('/api/auth/permissions')
       .set('Authorization', 'Bearer valid-token');
 
-    expect(getPlayerPermissions).toHaveBeenCalledWith(userId);
+    expect(getPlayerPermissions).toHaveBeenCalledWith(userId, 'player');
   });
 
   test('returns empty permissions array when user has no permissions', async () => {

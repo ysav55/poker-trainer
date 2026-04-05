@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LineChart, Line, BarChart, Bar,
@@ -309,9 +309,109 @@ function PlayerTagManager({ playerId, tags: initialTags }) {
   );
 }
 
+// ─── GroupAssignSection ───────────────────────────────────────────────────────
+
+function GroupAssignSection({ playerId, allGroups }) {
+  const [playerGroups, setPlayerGroups] = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [addingGroup, setAddingGroup]   = useState('');
+  const [saving, setSaving]             = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    apiFetch(`/api/admin/players/${playerId}/groups`)
+      .then((d) => { if (!cancelled) setPlayerGroups(d?.groups ?? []); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [playerId]);
+
+  const assignedIds = new Set(playerGroups.map((g) => g.id));
+  const available   = (allGroups ?? []).filter((g) => !assignedIds.has(g.id));
+
+  async function addToGroup(groupId) {
+    if (!groupId) return;
+    setSaving(true);
+    try {
+      await apiFetch(`/api/admin/groups/${groupId}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ playerId }),
+      });
+      const group = allGroups.find((g) => g.id === groupId);
+      if (group) setPlayerGroups((prev) => [...prev, group]);
+      setAddingGroup('');
+    } catch { /* silently ignore */ }
+    finally { setSaving(false); }
+  }
+
+  async function removeFromGroup(groupId) {
+    try {
+      await apiFetch(`/api/admin/groups/${groupId}/members/${playerId}`, { method: 'DELETE' });
+      setPlayerGroups((prev) => prev.filter((g) => g.id !== groupId));
+    } catch { /* silently ignore */ }
+  }
+
+  return (
+    <div className="rounded-lg p-4 flex flex-col gap-3" style={{ background: '#161b22', border: '1px solid #30363d' }}>
+      <p className="text-xs font-bold tracking-widest" style={{ color: '#6e7681' }}>GROUPS</p>
+
+      {loading ? (
+        <span className="text-xs" style={{ color: '#6e7681' }}>Loading…</span>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {playerGroups.length === 0 && (
+            <span className="text-xs" style={{ color: '#6e7681' }}>Not in any group</span>
+          )}
+          {playerGroups.map((g) => (
+            <span
+              key={g.id}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+              style={{
+                background: `${g.color ?? '#58a6ff'}18`,
+                border: `1px solid ${g.color ?? '#58a6ff'}44`,
+                color: g.color ?? '#58a6ff',
+              }}
+            >
+              {g.name}
+              <button
+                onClick={() => removeFromGroup(g.id)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, lineHeight: 1, opacity: 0.7 }}
+                title="Remove from group"
+              >×</button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {available.length > 0 && (
+        <div className="flex gap-2 items-center">
+          <select
+            value={addingGroup}
+            onChange={(e) => setAddingGroup(e.target.value)}
+            disabled={saving}
+            className="flex-1 rounded px-2 py-1.5 text-xs outline-none"
+            style={{ background: '#0d1117', border: '1px solid #30363d', color: addingGroup ? '#f0ece3' : '#6e7681', cursor: 'pointer' }}
+            onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+            onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+          >
+            <option value="" style={{ background: '#161b22', color: '#6e7681' }}>Add to group…</option>
+            {available.map((g) => (
+              <option key={g.id} value={g.id} style={{ background: '#161b22', color: '#f0ece3' }}>{g.name}</option>
+            ))}
+          </select>
+          <GoldBtn onClick={() => addToGroup(addingGroup)} disabled={saving || !addingGroup}>
+            {saving ? '…' : 'Add'}
+          </GoldBtn>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── InfoTab ─────────────────────────────────────────────────────────────────
 
-function InfoTab({ player, crm, onPlayerUpdate }) {
+function InfoTab({ player, crm, onPlayerUpdate, allGroups }) {
   const [reloadAmount, setReloadAmount]   = useState('');
   const [reloading, setReloading]         = useState(false);
   const [reloadMsg, setReloadMsg]         = useState('');
@@ -419,7 +519,6 @@ function InfoTab({ player, crm, onPlayerUpdate }) {
           <InfoRow label="Joined"    value={formatDate(player.created_at)} />
           <InfoRow label="Role"      value={player.role} />
           <InfoRow label="Last Seen" value={formatDate(player.last_seen)} />
-          <InfoRow label="Groups"    value={crm?.groups?.join(', ') || '—'} />
         </div>
 
         {/* Reset password inline panel */}
@@ -452,6 +551,9 @@ function InfoTab({ player, crm, onPlayerUpdate }) {
 
         <PlayerTagManager playerId={player.id} tags={crm?.tags ?? []} />
       </div>
+
+      {/* Groups */}
+      <GroupAssignSection playerId={player.id} allGroups={allGroups} />
 
       {/* Chip bank */}
       <div className="rounded-lg p-4 flex flex-col gap-3" style={{ background: '#161b22', border: '1px solid #30363d' }}>
@@ -2033,7 +2135,7 @@ function StableTab({ players, playerStats = [], onSelectPlayer }) {
 
 // ─── PlayerDetail (right panel) ───────────────────────────────────────────────
 
-function PlayerDetail({ player, crm, crmLoading, onBack, onPlayerUpdate }) {
+function PlayerDetail({ player, crm, crmLoading, onBack, onPlayerUpdate, allGroups }) {
   const [activeTab, setActiveTab] = useState('INFO');
 
   return (
@@ -2114,7 +2216,7 @@ function PlayerDetail({ player, crm, crmLoading, onBack, onPlayerUpdate }) {
           </div>
         ) : (
           <>
-            {activeTab === 'INFO'       && <InfoTab       player={player} crm={crm} onPlayerUpdate={onPlayerUpdate} />}
+            {activeTab === 'INFO'       && <InfoTab       player={player} crm={crm} onPlayerUpdate={onPlayerUpdate} allGroups={allGroups} />}
             {activeTab === 'SESSIONS'   && <SessionsTab   player={player} />}
             {activeTab === 'STATS'      && <StatsTab      player={player} crm={crm} />}
             {activeTab === 'NOTES'      && <NotesTab      player={player} />}
@@ -2124,6 +2226,183 @@ function PlayerDetail({ player, crm, crmLoading, onBack, onPlayerUpdate }) {
             {activeTab === 'PREP BRIEF' && <PrepBriefTab  player={player} />}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── AddStudentModal ──────────────────────────────────────────────────────────
+
+function AddStudentModal({ allGroups, schools, onClose, onCreated }) {
+  const [name, setName]         = useState('');
+  const [password, setPassword] = useState('');
+  const [email, setEmail]       = useState('');
+  const [role, setRole]         = useState('player');
+  const [schoolId, setSchoolId] = useState('');
+  const [groupIds, setGroupIds] = useState([]);
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState('');
+
+  function toggleGroup(id) {
+    setGroupIds((prev) => prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!name.trim()) { setError('Name is required.'); return; }
+    if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const player = await apiFetch('/api/admin/students', {
+        method: 'POST',
+        body: JSON.stringify({
+          name:     name.trim(),
+          password,
+          email:    email.trim() || undefined,
+          role,
+          schoolId: schoolId || undefined,
+          groupIds,
+        }),
+      });
+      onCreated(player);
+    } catch (err) {
+      setError(err.message || 'Failed to create student.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle = {
+    background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3',
+    borderRadius: 6, padding: '8px 12px', fontSize: 13, width: '100%', outline: 'none',
+  };
+  const labelStyle = { fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#6e7681', textTransform: 'uppercase' };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="flex flex-col"
+        style={{
+          background: '#161b22', border: '1px solid #30363d', borderRadius: 12,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.6)', width: 480, maxHeight: '90vh', overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid #30363d' }}>
+          <h2 className="text-sm font-bold tracking-widest" style={{ color: '#d4af37' }}>ADD STUDENT</h2>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: '#6e7681', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+          >×</button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-6 py-5 overflow-y-auto">
+          {/* Name */}
+          <div className="flex flex-col gap-1">
+            <label style={labelStyle}>Name *</label>
+            <input
+              type="text" value={name} onChange={(e) => setName(e.target.value)}
+              placeholder="Display name" autoFocus style={inputStyle}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+            />
+          </div>
+
+          {/* Password */}
+          <div className="flex flex-col gap-1">
+            <label style={labelStyle}>Temporary Password *</label>
+            <input
+              type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min 6 characters" style={inputStyle}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+            />
+          </div>
+
+          {/* Email */}
+          <div className="flex flex-col gap-1">
+            <label style={labelStyle}>Email (optional)</label>
+            <input
+              type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="student@example.com" style={inputStyle}
+              onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+            />
+          </div>
+
+          {/* Role + School row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label style={labelStyle}>Role</label>
+              <select
+                value={role} onChange={(e) => setRole(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+              >
+                <option value="player" style={{ background: '#161b22' }}>Player</option>
+                <option value="trial" style={{ background: '#161b22' }}>Trial</option>
+                <option value="moderator" style={{ background: '#161b22' }}>Moderator</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label style={labelStyle}>School</label>
+              <select
+                value={schoolId} onChange={(e) => setSchoolId(e.target.value)}
+                style={{ ...inputStyle, cursor: 'pointer', color: schoolId ? '#f0ece3' : '#6e7681' }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+              >
+                <option value="" style={{ background: '#161b22', color: '#6e7681' }}>No school</option>
+                {(schools ?? []).map((s) => (
+                  <option key={s.id} value={s.id} style={{ background: '#161b22', color: '#f0ece3' }}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Groups */}
+          {(allGroups ?? []).length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label style={labelStyle}>Groups</label>
+              <div className="flex flex-wrap gap-2">
+                {allGroups.map((g) => {
+                  const on = groupIds.includes(g.id);
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      onClick={() => toggleGroup(g.id)}
+                      className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
+                      style={{
+                        background: on ? `${g.color ?? '#58a6ff'}22` : 'transparent',
+                        border: `1px solid ${on ? (g.color ?? '#58a6ff') : '#30363d'}`,
+                        color: on ? (g.color ?? '#58a6ff') : '#6e7681',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {g.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && <p className="text-xs" style={{ color: '#f85149' }}>{error}</p>}
+
+          {/* Actions */}
+          <div className="flex justify-end gap-3 pt-1">
+            <GhostBtn onClick={onClose}>Cancel</GhostBtn>
+            <GoldBtn type="submit" disabled={saving}>{saving ? 'Creating…' : 'Create Student'}</GoldBtn>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -2140,9 +2419,13 @@ export default function PlayerCRM() {
 
   const [search, setSearch]             = useState('');
   const [filterRole, setFilterRole]     = useState('');
+  const [filterGroup, setFilterGroup]   = useState('');
   const [filterArchived, setFilterArchived] = useState(false);
+  const [groupView, setGroupView]       = useState(false);
 
   const [playerStats, setPlayerStats]   = useState([]);
+  const [groups, setGroups]             = useState([]);
+  const [schools, setSchools]           = useState([]);
 
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [crm, setCrm]                   = useState(null);
@@ -2150,6 +2433,7 @@ export default function PlayerCRM() {
 
   const [alerts, setAlerts]             = useState([]);
   const [bulkOpen, setBulkOpen]         = useState(false);
+  const [addStudentOpen, setAddStudentOpen] = useState(false);
 
   // Compute per-player alert severity band
   const getAlertDot = useCallback((player) => {
@@ -2176,8 +2460,6 @@ export default function PlayerCRM() {
         const data = await apiFetch('/api/admin/players');
         const list = Array.isArray(data) ? data : (data.players ?? []);
         setPlayers(list);
-        // Deep-link: leaderboard (and other pages) can navigate here with
-        // location.state.playerId to pre-select a player.
         const preselect = location.state?.playerId;
         if (preselect) {
           const match = list.find((p) => p.id === preselect);
@@ -2192,15 +2474,17 @@ export default function PlayerCRM() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load player stats (VPIP/PFR/hands) for stable overview
+  // Load player stats, groups, schools, and alerts in parallel
   useEffect(() => {
     apiFetch('/api/players')
       .then(d => setPlayerStats(d?.players ?? []))
       .catch(() => {});
-  }, []);
-
-  // Load alerts to compute per-player severity dots
-  useEffect(() => {
+    apiFetch('/api/admin/groups?includeMembers=1')
+      .then(d => setGroups(d?.groups ?? []))
+      .catch(() => {});
+    apiFetch('/api/admin/schools')
+      .then(d => setSchools(d?.schools ?? []))
+      .catch(() => {});
     apiFetch('/api/admin/alerts')
       .then((d) => {
         const raw = d?.alerts ?? d;
@@ -2228,16 +2512,80 @@ export default function PlayerCRM() {
     return () => { cancelled = true; };
   }, [selectedPlayer]);
 
+  // Build { playerId → groupId[] } map from groups with members
+  const playerGroupMap = useMemo(() => {
+    const map = {};
+    groups.forEach((g) => {
+      (g.members ?? []).forEach((m) => {
+        if (!map[m.id]) map[m.id] = [];
+        map[m.id].push(g.id);
+      });
+    });
+    return map;
+  }, [groups]);
+
   // Filter player list
-  const filtered = players.filter((p) => {
+  const filtered = useMemo(() => players.filter((p) => {
     if (!filterArchived && p.status === 'archived') return false;
     if (filterRole && p.role !== filterRole) return false;
+    if (filterGroup) {
+      const gids = playerGroupMap[p.id] ?? [];
+      if (!gids.includes(filterGroup)) return false;
+    }
     if (search) {
       const q = search.toLowerCase();
       if (!(p.display_name || '').toLowerCase().includes(q)) return false;
     }
     return true;
-  });
+  }), [players, filterArchived, filterRole, filterGroup, search, playerGroupMap]);
+
+  // Grouped list: array of { group, players } + ungrouped section
+  const groupedSections = useMemo(() => {
+    if (!groupView) return null;
+    const sections = [];
+    groups.forEach((g) => {
+      const members = filtered.filter((p) => (playerGroupMap[p.id] ?? []).includes(g.id));
+      if (members.length > 0) sections.push({ group: g, players: members });
+    });
+    const ungrouped = filtered.filter((p) => !(playerGroupMap[p.id]?.length));
+    if (ungrouped.length > 0) sections.push({ group: null, players: ungrouped });
+    return sections;
+  }, [groupView, groups, filtered, playerGroupMap]);
+
+  // Render a single player row (shared between flat + grouped views)
+  function PlayerRow({ p }) {
+    const selected = selectedPlayer?.id === p.id;
+    const dot = getAlertDot(p);
+    return (
+      <button
+        key={p.id}
+        onClick={() => setSelectedPlayer(p)}
+        className="w-full text-left px-3 py-3 flex items-center gap-3 transition-colors"
+        style={{
+          background: selected ? 'rgba(212,175,55,0.06)' : 'transparent',
+          borderLeft: selected ? '2px solid #d4af37' : '2px solid transparent',
+          borderBottom: '1px solid #21262d',
+          cursor: 'pointer',
+          outline: 'none',
+        }}
+        onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+        onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
+      >
+        <span className="flex-shrink-0" style={{ color: dot.color, fontSize: 8, lineHeight: 1, marginTop: 1 }} title={dot.title}>●</span>
+        <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+          <span className="text-sm font-medium truncate" style={{ color: selected ? '#d4af37' : '#f0ece3' }}>
+            {p.display_name || '—'}
+          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <RolePill role={p.role} />
+            {(p.last_seen || p.created_at) && (
+              <span className="text-xs" style={{ color: '#6e7681' }}>{formatDate(p.last_seen || p.created_at)}</span>
+            )}
+          </div>
+        </div>
+      </button>
+    );
+  }
 
   return (
     <div
@@ -2247,13 +2595,7 @@ export default function PlayerCRM() {
       {/* ── Left column ────────────────────────────────────────────────────── */}
       <div
         className="flex flex-col flex-shrink-0"
-        style={{
-          width: 280,
-          background: '#161b22',
-          borderRight: '1px solid #30363d',
-          height: '100%',
-          overflow: 'hidden',
-        }}
+        style={{ width: 280, background: '#161b22', borderRight: '1px solid #30363d', height: '100%', overflow: 'hidden' }}
       >
         {/* Left header */}
         <div className="px-4 pt-5 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid #30363d' }}>
@@ -2265,18 +2607,13 @@ export default function PlayerCRM() {
         <div className="px-3 py-3 flex flex-col gap-2 flex-shrink-0" style={{ borderBottom: '1px solid #30363d' }}>
           {/* Search input */}
           <div className="relative">
-            <svg
-              width="12" height="12" viewBox="0 0 14 14" fill="none"
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ color: '#6e7681' }}
-            >
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#6e7681' }}>
               <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4" />
               <path d="M9.5 9.5l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
             <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search players…"
               className="w-full rounded pl-8 pr-3 py-1.5 text-sm outline-none"
               style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
@@ -2285,11 +2622,10 @@ export default function PlayerCRM() {
             />
           </div>
 
-          {/* Filter row */}
+          {/* Role filter + archived toggle */}
           <div className="flex gap-2 items-center">
             <select
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
+              value={filterRole} onChange={(e) => setFilterRole(e.target.value)}
               className="flex-1 rounded px-2 py-1.5 text-xs outline-none"
               style={{ background: '#0d1117', border: '1px solid #30363d', color: filterRole ? '#f0ece3' : '#6e7681', cursor: 'pointer' }}
               onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
@@ -2304,91 +2640,95 @@ export default function PlayerCRM() {
             </select>
             <button
               onClick={() => setFilterArchived((v) => !v)}
-              className="px-2 py-1.5 rounded text-xs font-medium transition-colors"
+              className="px-2 py-1.5 rounded text-xs font-medium"
               style={{
                 background: filterArchived ? 'rgba(110,118,129,0.15)' : 'transparent',
                 border: `1px solid ${filterArchived ? '#6e7681' : '#30363d'}`,
-                color: filterArchived ? '#6e7681' : '#6e7681',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
+                color: '#6e7681', cursor: 'pointer', whiteSpace: 'nowrap',
               }}
               title="Toggle archived players"
             >
-              {filterArchived ? 'HIDE ARCHIVED' : 'SHOW ARCHIVED'}
+              {filterArchived ? 'HIDE ARCH' : 'ARCHIVED'}
             </button>
           </div>
+
+          {/* Group filter + grouped view toggle */}
+          {groups.length > 0 && (
+            <div className="flex gap-2 items-center">
+              <select
+                value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)}
+                className="flex-1 rounded px-2 py-1.5 text-xs outline-none"
+                style={{ background: '#0d1117', border: '1px solid #30363d', color: filterGroup ? '#f0ece3' : '#6e7681', cursor: 'pointer' }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+              >
+                <option value="" style={{ background: '#161b22', color: '#6e7681' }}>All groups</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id} style={{ background: '#161b22', color: '#f0ece3' }}>{g.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setGroupView((v) => !v)}
+                className="px-2 py-1.5 rounded text-xs font-medium"
+                style={{
+                  background: groupView ? 'rgba(88,166,255,0.12)' : 'transparent',
+                  border: `1px solid ${groupView ? '#58a6ff' : '#30363d'}`,
+                  color: groupView ? '#58a6ff' : '#6e7681',
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+                title="Toggle grouped view"
+              >
+                BY GROUP
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Player list */}
         <div className="flex-1 overflow-y-auto">
           {playersLoading && (
-            <div className="flex items-center justify-center py-8 text-xs" style={{ color: '#6e7681' }}>
-              Loading players…
-            </div>
+            <div className="flex items-center justify-center py-8 text-xs" style={{ color: '#6e7681' }}>Loading players…</div>
           )}
           {playersError && (
             <div className="px-4 py-3 text-xs" style={{ color: '#f85149' }}>{playersError}</div>
           )}
           {!playersLoading && filtered.length === 0 && (
-            <div className="flex items-center justify-center py-8 text-xs" style={{ color: '#6e7681' }}>
-              No players found
-            </div>
+            <div className="flex items-center justify-center py-8 text-xs" style={{ color: '#6e7681' }}>No players found</div>
           )}
-          {!playersLoading && filtered.map((p) => {
-            const selected = selectedPlayer?.id === p.id;
-            const dot = getAlertDot(p);
-            return (
-              <button
-                key={p.id}
-                onClick={() => setSelectedPlayer(p)}
-                className="w-full text-left px-3 py-3 flex items-center gap-3 transition-colors"
-                style={{
-                  background: selected ? 'rgba(212,175,55,0.06)' : 'transparent',
-                  borderLeft: selected ? '2px solid #d4af37' : '2px solid transparent',
-                  borderBottom: '1px solid #21262d',
-                  cursor: 'pointer',
-                  outline: 'none',
-                }}
-                onMouseEnter={(e) => { if (!selected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-                onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
-              >
-                {/* Alert dot */}
-                <span
-                  className="flex-shrink-0"
-                  style={{ color: dot.color, fontSize: 8, lineHeight: 1, marginTop: 1 }}
-                  title={dot.title}
-                >
-                  ●
-                </span>
 
-                {/* Info */}
-                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+          {/* Grouped view */}
+          {!playersLoading && groupView && groupedSections && groupedSections.map((section, i) => (
+            <div key={section.group?.id ?? 'ungrouped'}>
+              <div
+                className="px-3 py-1.5 flex items-center gap-2"
+                style={{ background: '#0d1117', borderBottom: '1px solid #21262d' }}
+              >
+                {section.group ? (
                   <span
-                    className="text-sm font-medium truncate"
-                    style={{ color: selected ? '#d4af37' : '#f0ece3' }}
+                    className="text-xs font-bold tracking-widest"
+                    style={{ color: section.group.color ?? '#58a6ff' }}
                   >
-                    {p.display_name || '—'}
+                    ● {section.group.name.toUpperCase()}
                   </span>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <RolePill role={p.role} />
-                    {(p.last_seen || p.created_at) && (
-                      <span className="text-xs" style={{ color: '#6e7681' }}>
-                        {formatDate(p.last_seen || p.created_at)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+                ) : (
+                  <span className="text-xs font-bold tracking-widest" style={{ color: '#6e7681' }}>UNGROUPED</span>
+                )}
+                <span className="text-xs ml-auto" style={{ color: '#6e7681' }}>{section.players.length}</span>
+              </div>
+              {section.players.map((p) => <PlayerRow key={p.id} p={p} />)}
+            </div>
+          ))}
+
+          {/* Flat view */}
+          {!playersLoading && !groupView && filtered.map((p) => <PlayerRow key={p.id} p={p} />)}
         </div>
 
         {/* Roster footer: Add Student + Bulk Actions */}
-        <div
-          className="flex gap-2 px-3 py-3 flex-shrink-0"
-          style={{ borderTop: '1px solid #30363d' }}
-        >
-          <GhostBtn style={{ flex: 1, textAlign: 'center', fontSize: 11 }}>
+        <div className="flex gap-2 px-3 py-3 flex-shrink-0" style={{ borderTop: '1px solid #30363d' }}>
+          <GhostBtn
+            onClick={() => setAddStudentOpen(true)}
+            style={{ flex: 1, textAlign: 'center', fontSize: 11 }}
+          >
             + Add Student
           </GhostBtn>
           <div className="relative">
@@ -2401,12 +2741,7 @@ export default function PlayerCRM() {
             {bulkOpen && (
               <div
                 className="absolute bottom-full left-0 mb-1 rounded-lg overflow-hidden z-20"
-                style={{
-                  background: '#161b22',
-                  border: '1px solid #30363d',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                  minWidth: 160,
-                }}
+                style={{ background: '#161b22', border: '1px solid #30363d', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', minWidth: 160 }}
               >
                 {['Assign Playlist', 'Send Announcement', 'Schedule Session'].map((label) => (
                   <button
@@ -2437,9 +2772,24 @@ export default function PlayerCRM() {
             crmLoading={crmLoading}
             onBack={() => setSelectedPlayer(null)}
             onPlayerUpdate={(updated) => setSelectedPlayer(updated)}
+            allGroups={groups}
           />
         )}
       </div>
+
+      {/* Add Student modal */}
+      {addStudentOpen && (
+        <AddStudentModal
+          allGroups={groups}
+          schools={schools}
+          onClose={() => setAddStudentOpen(false)}
+          onCreated={(newPlayer) => {
+            setPlayers((prev) => [newPlayer, ...prev]);
+            setSelectedPlayer(newPlayer);
+            setAddStudentOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

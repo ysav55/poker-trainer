@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import CardPicker from './CardPicker';
-import Card from './Card';
+import RangePicker from './RangePicker';
 import { apiFetch } from '../lib/api';
 
 // ── Position calculation (mirrors server/game/positions.js) ──────────────────
@@ -16,36 +16,18 @@ const POSITION_NAMES = {
   9: ['BTN', 'SB', 'BB', 'UTG', 'UTG+1', 'UTG+2', 'MP', 'HJ', 'CO'],
 };
 
-/**
- * Compute position labels for N players given the dealer slot (0-indexed into players array).
- * Returns array of position strings indexed by player slot.
- */
-function computePositions(playerCount, dealerSlot) {
+function computePositions(playerCount, btnSeat) {
   if (playerCount < 2) return [];
   const n = playerCount;
   const names = POSITION_NAMES[n] ?? POSITION_NAMES[9];
   const result = new Array(n);
   for (let offset = 0; offset < n; offset++) {
-    const slotIdx = (dealerSlot + offset) % n;
-    result[slotIdx] = names[offset] ?? `P${offset}`;
+    result[(btnSeat + offset) % n] = names[offset] ?? `P${offset}`;
   }
   return result;
 }
 
-// ── Auto-name generation ─────────────────────────────────────────────────────
-
-const STREET_LABELS = { preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River' };
-
-function generateName(players, board, startingStreet) {
-  const n = players.length;
-  const streetLabel = STREET_LABELS[startingStreet] ?? 'Preflop';
-  const boardCards = board.filter(Boolean);
-  const boardStr = boardCards.length > 0 ? ` ${boardCards.slice(0, 3).join('')}` : '';
-  const date = new Date().toISOString().slice(0, 10);
-  return `${n}-player ${streetLabel}${boardStr} ${date}`;
-}
-
-// ── Card slot UI (replicates HandConfigPanel's ConfigCardSlot, wider variant) ─
+// ── Card rendering primitives ─────────────────────────────────────────────────
 
 const SUIT_COLOR = { h: '#dc2626', d: '#dc2626', c: '#8b949e', s: '#8b949e' };
 
@@ -56,198 +38,64 @@ function cardLabel(card) {
   return { rank, suit, color: SUIT_COLOR[card[1]] ?? '#f0ece3' };
 }
 
-function ScenarioCardSlot({ card, label, onClick, wide = false, dimmed = false }) {
-  const isEmpty = card === null || card === undefined;
+function CardSlot({ card, label, onClick, dimmed = false }) {
+  const isEmpty = !card;
   const parsed = !isEmpty ? cardLabel(card) : null;
-  const w = wide ? '44px' : '32px';
-  const h = wide ? '60px' : '44px';
   return (
     <button
       onClick={onClick}
       disabled={dimmed}
       title={label}
-      aria-label={isEmpty ? `${label} — click to assign` : `${label} — ${card}`}
-      className="flex items-center justify-center rounded transition-all duration-150 relative"
       style={{
-        width: w, height: h,
-        background: dimmed ? 'rgba(255,255,255,0.01)' : isEmpty ? 'rgba(255,255,255,0.03)' : 'rgba(212,175,55,0.06)',
+        width: 36, height: 50, borderRadius: 4, cursor: dimmed ? 'not-allowed' : 'pointer',
+        background: dimmed ? 'rgba(255,255,255,0.01)' : isEmpty ? 'rgba(255,255,255,0.03)' : 'rgba(212,175,55,0.07)',
         border: dimmed ? '1.5px dashed #21262d' : isEmpty ? '1.5px dashed #30363d' : '1.5px solid rgba(212,175,55,0.35)',
-        cursor: dimmed ? 'not-allowed' : 'pointer',
-        padding: 0,
-        flexShrink: 0,
-        opacity: dimmed ? 0.35 : 1,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0, padding: 0, opacity: dimmed ? 0.35 : 1, transition: 'all 0.1s',
       }}
-      onMouseEnter={(e) => {
-        if (dimmed) return;
-        e.currentTarget.style.borderColor = '#d4af37';
-        e.currentTarget.style.background = 'rgba(212,175,55,0.1)';
-        e.currentTarget.style.boxShadow = '0 0 0 1px rgba(212,175,55,0.22)';
-      }}
-      onMouseLeave={(e) => {
-        if (dimmed) return;
-        e.currentTarget.style.borderColor = isEmpty ? '#30363d' : 'rgba(212,175,55,0.35)';
-        e.currentTarget.style.borderStyle = isEmpty ? 'dashed' : 'solid';
-        e.currentTarget.style.background = isEmpty ? 'rgba(255,255,255,0.03)' : 'rgba(212,175,55,0.06)';
-        e.currentTarget.style.boxShadow = 'none';
-      }}
+      onMouseEnter={e => { if (!dimmed) { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.background = 'rgba(212,175,55,0.12)'; } }}
+      onMouseLeave={e => { if (!dimmed) { e.currentTarget.style.borderColor = isEmpty ? '#30363d' : 'rgba(212,175,55,0.35)'; e.currentTarget.style.borderStyle = isEmpty ? 'dashed' : 'solid'; e.currentTarget.style.background = isEmpty ? 'rgba(255,255,255,0.03)' : 'rgba(212,175,55,0.07)'; } }}
     >
       {parsed ? (
         <div className="flex flex-col items-center" style={{ lineHeight: 1.1 }}>
-          <span style={{ fontSize: wide ? '13px' : '11px', fontWeight: 700, color: parsed.color, fontFamily: 'monospace' }}>
-            {parsed.rank}
-          </span>
-          <span style={{ fontSize: wide ? '15px' : '12px', color: parsed.color }}>
-            {parsed.suit}
-          </span>
+          <span style={{ fontSize: 11, fontWeight: 700, color: parsed.color, fontFamily: 'monospace' }}>{parsed.rank}</span>
+          <span style={{ fontSize: 13, color: parsed.color }}>{parsed.suit}</span>
         </div>
       ) : (
-        <span style={{ color: dimmed ? '#333' : '#444', fontSize: wide ? '22px' : '18px', fontWeight: 300, lineHeight: 1, userSelect: 'none' }}>?</span>
+        <span style={{ color: dimmed ? '#333' : '#444', fontSize: 18, lineHeight: 1 }}>?</span>
       )}
     </button>
   );
 }
 
-// ── ScenarioPlayerRow ────────────────────────────────────────────────────────
+// ── Small helpers ─────────────────────────────────────────────────────────────
 
-function ScenarioPlayerRow({ player, positionLabel, onStackChange, onCardSlotClick, onRemove, isDealer }) {
+function SectionLabel({ text }) {
   return (
-    <tr style={{ borderBottom: '1px solid #21262d' }}>
-      {/* SEAT */}
-      <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-        <span
-          className="inline-flex items-center justify-center rounded-full"
-          style={{
-            width: 26, height: 26, fontSize: 11, fontWeight: 700,
-            background: isDealer ? 'rgba(212,175,55,0.18)' : '#161b22',
-            border: isDealer ? '1px solid #d4af37' : '1px solid #30363d',
-            color: isDealer ? '#d4af37' : '#8b949e',
-            flexShrink: 0,
-          }}
-          title={isDealer ? 'Dealer' : undefined}
-        >
-          {player.slot + 1}
-        </span>
-      </td>
-
-      {/* STACK */}
-      <td style={{ padding: '6px 8px' }}>
-        <input
-          type="number"
-          min={1}
-          value={player.stack}
-          onChange={e => onStackChange(player.slot, Math.max(1, parseInt(e.target.value, 10) || 1))}
-          style={{
-            width: 70, padding: '3px 6px', borderRadius: 4, border: '1px solid #30363d',
-            background: '#0d1117', color: '#f0ece3', fontSize: 11, outline: 'none',
-            textAlign: 'right',
-          }}
-          onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.4)'; }}
-          onBlur={e => { e.target.style.borderColor = '#30363d'; }}
-        />
-      </td>
-
-      {/* CARDS */}
-      <td style={{ padding: '6px 8px' }}>
-        <div className="flex gap-1">
-          <ScenarioCardSlot
-            card={player.holeCards[0]}
-            label={`Seat ${player.slot + 1} Card 1`}
-            onClick={() => onCardSlotClick(player.slot, 0)}
-          />
-          <ScenarioCardSlot
-            card={player.holeCards[1]}
-            label={`Seat ${player.slot + 1} Card 2`}
-            onClick={() => onCardSlotClick(player.slot, 1)}
-          />
-        </div>
-      </td>
-
-      {/* POSITION */}
-      <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-        <span
-          className="inline-flex items-center justify-center rounded px-1.5 py-0.5"
-          style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-            background: 'rgba(88,166,255,0.1)',
-            border: '1px solid rgba(88,166,255,0.25)',
-            color: '#58a6ff',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {positionLabel ?? '—'}
-        </span>
-      </td>
-
-      {/* REMOVE */}
-      <td style={{ padding: '6px 4px', textAlign: 'center' }}>
-        <button
-          onClick={() => onRemove(player.slot)}
-          style={{
-            width: 20, height: 20, borderRadius: 3, border: '1px solid rgba(153,27,27,0.4)',
-            background: 'none', color: 'rgba(239,68,68,0.6)', cursor: 'pointer', fontSize: 12,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.1s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(220,38,38,0.6)'; e.currentTarget.style.color = '#f87171'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(153,27,27,0.4)'; e.currentTarget.style.color = 'rgba(239,68,68,0.6)'; }}
-          title="Remove seat"
-        >
-          ×
-        </button>
-      </td>
-    </tr>
-  );
-}
-
-// ── ScenarioPreview strip ─────────────────────────────────────────────────────
-
-function ScenarioPreview({ players, board, startingStreet, positions }) {
-  const filledCards = board.filter(Boolean);
-  const boardStr = filledCards.length > 0 ? filledCards.join(' ') : '—';
-  const btnPlayer = positions.findIndex(p => p === 'BTN');
-  const btnDesc = btnPlayer >= 0 ? `Seat ${btnPlayer + 1} BTN` : '';
-
-  return (
-    <div
-      style={{
-        padding: '8px 12px', borderRadius: 6,
-        background: 'rgba(212,175,55,0.04)',
-        border: '1px solid rgba(212,175,55,0.12)',
-        fontSize: 10, color: '#8b949e', lineHeight: 1.6,
-      }}
-    >
-      <span style={{ color: '#d4af37', fontWeight: 600 }}>{players.length}</span>
-      {' '}players · {btnDesc}{btnDesc ? ' · ' : ''}
-      <span style={{ color: '#d4af37', fontWeight: 600 }}>{STREET_LABELS[startingStreet]}</span>
-      {' '}· Board: {boardStr}
+    <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#6e7681', marginBottom: 8 }}>
+      {text}
     </div>
   );
 }
 
-// ── Pill selector (PREFLOP / FLOP / TURN / RIVER) ────────────────────────────
-
-const STREETS = ['preflop', 'flop', 'turn', 'river'];
-
-function StreetPills({ value, onChange }) {
+function ToggleGroup({ options, value, onChange }) {
   return (
     <div className="flex gap-1">
-      {STREETS.map(s => {
-        const active = value === s;
+      {options.map(opt => {
+        const active = value === opt.value;
         return (
           <button
-            key={s}
-            onClick={() => onChange(s)}
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
             style={{
-              padding: '3px 10px', borderRadius: 4,
-              background: active ? '#d4af37' : '#161b22',
-              color: active ? '#000' : '#6e7681',
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
-              textTransform: 'uppercase', cursor: 'pointer',
-              border: active ? 'none' : '1px solid #30363d',
-              transition: 'all 0.12s',
+              padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+              cursor: 'pointer', transition: 'all 0.1s',
+              background: active ? 'rgba(212,175,55,0.15)' : 'none',
+              border: active ? '1px solid rgba(212,175,55,0.5)' : '1px solid #30363d',
+              color: active ? '#d4af37' : '#6e7681',
             }}
           >
-            {s === 'preflop' ? 'PRE' : s.charAt(0).toUpperCase() + s.slice(1)}
+            {opt.label}
           </button>
         );
       })}
@@ -255,658 +103,839 @@ function StreetPills({ value, onChange }) {
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Tag pill editor ───────────────────────────────────────────────────────────
 
-function sectionLabel(text) {
+function TagEditor({ tags, onChange }) {
+  const [input, setInput] = useState('');
+
+  function addTag(raw) {
+    const tag = raw.trim().toLowerCase().replace(/\s+/g, '_');
+    if (!tag || tags.includes(tag)) { setInput(''); return; }
+    onChange([...tags, tag]);
+    setInput('');
+  }
+
   return (
-    <div style={{ fontSize: 9, color: '#6e7681', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 700 }}>
-      {text}
+    <div className="flex flex-wrap gap-1 items-center" style={{ minHeight: 28 }}>
+      {tags.map(t => (
+        <span
+          key={t}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 3,
+            background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.25)', color: '#d4af37',
+          }}
+        >
+          {t}
+          <button
+            onClick={() => onChange(tags.filter(x => x !== t))}
+            style={{ background: 'none', border: 'none', color: '#a07a20', cursor: 'pointer', padding: 0, fontSize: 11, lineHeight: 1 }}
+          >×</button>
+        </span>
+      ))}
+      <input
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(input); }
+        }}
+        onBlur={() => { if (input.trim()) addTag(input); }}
+        placeholder="+ tag"
+        style={{
+          fontSize: 10, background: 'none', border: 'none', outline: 'none',
+          color: '#f0ece3', width: 60, padding: '2px 0',
+        }}
+      />
     </div>
   );
 }
 
-function buildInitialPlayers() {
-  return [
-    { slot: 0, stack: 1000, holeCards: [null, null] },
-    { slot: 1, stack: 1000, holeCards: [null, null] },
-  ];
+// ── Board texture options ─────────────────────────────────────────────────────
+
+const TEXTURES = [
+  { value: 'monotone',  label: 'Monotone'  },
+  { value: 'two_tone',  label: 'Two-tone'  },
+  { value: 'rainbow',   label: 'Rainbow'   },
+  { value: 'paired',    label: 'Paired'    },
+  { value: 'connected', label: 'Connected' },
+  { value: 'dry',       label: 'Dry'       },
+  { value: 'wet',       label: 'Wet'       },
+];
+
+// ── Parse board_flop string to array and back ─────────────────────────────────
+
+function flopToCards(flop) {
+  if (!flop || flop.length < 6) return [null, null, null];
+  return [flop.slice(0, 2), flop.slice(2, 4), flop.slice(4, 6)];
 }
 
-// Active board slot count by street
-const ACTIVE_SLOTS = { preflop: 0, flop: 3, turn: 4, river: 5 };
-
-// ── Validation ────────────────────────────────────────────────────────────────
-
-function validateScenario(players, board, startingStreet) {
-  const errors = [];
-  if (players.length < 2) errors.push('At least 2 players required.');
-  const activeCount = ACTIVE_SLOTS[startingStreet];
-  if (activeCount > 0) {
-    const filled = board.slice(0, activeCount).filter(Boolean).length;
-    if (filled < activeCount) {
-      errors.push(`${STREET_LABELS[startingStreet]} requires ${activeCount} board card${activeCount > 1 ? 's' : ''}.`);
-    }
-  }
-  return errors;
+function cardsToFlop(cards) {
+  if (!cards || cards.some(c => !c)) return null;
+  return cards.join('');
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+// ── Build default seat/stack configs for N seats ─────────────────────────────
 
-export default function ScenarioBuilder({
-  onClose,
-  socket = null,
-  playlists = [],
-  initialScenario = null,
-  inline = false,
-}) {
-  // ── Local state ──────────────────────────────────────────────────────────────
+function buildDefaultSeats(n) {
+  return Array.from({ length: n }, (_, i) => ({
+    seat: i, seatMode: 'fixed', cards: [null, null], range: '',
+  }));
+}
 
-  const [players, setPlayers] = useState(() =>
-    initialScenario
-      ? (initialScenario.config_json?.player_setup ?? []).map((p, i) => ({
-          slot: i,
-          stack: p.stack ?? 1000,
-          holeCards: initialScenario.config_json?.hole_cards?.[String(i)] ?? [null, null],
-        }))
-      : buildInitialPlayers()
-  );
+function buildDefaultStacks(n) {
+  return Array.from({ length: n }, (_, i) => ({ seat: i, stack_bb: 100 }));
+}
 
-  const [dealerSlot, setDealerSlot] = useState(
-    initialScenario?.dealer_position ?? 0
-  );
-
-  const [board, setBoard] = useState(
-    initialScenario?.config_json?.board ?? [null, null, null, null, null]
-  );
-
-  const [startingStreet, setStartingStreet] = useState(
-    initialScenario?.starting_street ?? 'preflop'
-  );
-
-  const [pickerTarget, setPickerTarget] = useState(null);
-  // pickerTarget: null | { type: 'player', slot, position } | { type: 'board', position }
-
-  const [scenarioName, setScenarioName] = useState(
-    initialScenario?.name ?? ''
-  );
-
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState(
-    playlists[0]?.playlist_id ?? 'new'
-  );
-
-  const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-
-  // ── Derived ───────────────────────────────────────────────────────────────────
-
-  const positions = useMemo(
-    () => computePositions(players.length, dealerSlot),
-    [players.length, dealerSlot]
-  );
-
-  const usedCards = useMemo(() => {
-    const s = new Set();
-    board.forEach(c => { if (c) s.add(c); });
-    players.forEach(p => p.holeCards.forEach(c => { if (c) s.add(c); }));
-    return s;
-  }, [board, players]);
-
-  const pickerUsedCards = useMemo(() => {
-    if (!pickerTarget) return usedCards;
-    const s = new Set(usedCards);
-    if (pickerTarget.type === 'board') {
-      const existing = board[pickerTarget.position];
-      if (existing) s.delete(existing);
-    } else {
-      const existing = players[pickerTarget.slot]?.holeCards[pickerTarget.position];
-      if (existing) s.delete(existing);
-    }
-    return s;
-  }, [pickerTarget, usedCards, board, players]);
-
-  const pickerTitle = useMemo(() => {
-    if (!pickerTarget) return 'Select a card';
-    if (pickerTarget.type === 'board') {
-      const labels = ['Flop 1', 'Flop 2', 'Flop 3', 'Turn', 'River'];
-      return `Board — ${labels[pickerTarget.position] ?? `Slot ${pickerTarget.position}`}`;
-    }
-    return `Seat ${pickerTarget.slot + 1} — Card ${pickerTarget.position + 1}`;
-  }, [pickerTarget]);
-
-  const autoName = useMemo(
-    () => generateName(players, board, startingStreet),
-    [players, board, startingStreet]
-  );
-
-  const effectiveName = scenarioName.trim() || autoName;
-
-  const canSave = players.length >= 2 && !saving;
-  const validationErrors = validateScenario(players, board, startingStreet);
-
-  const activeSlotCount = ACTIVE_SLOTS[startingStreet];
-
-  // ── Keyboard shortcut: Ctrl+Enter → save ─────────────────────────────────────
-
-  useEffect(() => {
-    function handleKeyDown(e) {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        if (canSave && validationErrors.length === 0) handleSave();
-      }
-      if (e.key === 'Escape' && !pickerTarget && !inline) {
-        onClose();
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canSave, validationErrors.length, pickerTarget]);
-
-  // ── Player manipulation ───────────────────────────────────────────────────────
-
-  const addPlayer = useCallback(() => {
-    setPlayers(prev => {
-      if (prev.length >= 9) return prev;
-      return [...prev, { slot: prev.length, stack: 1000, holeCards: [null, null] }];
-    });
-  }, []);
-
-  const removePlayer = useCallback((slotToRemove) => {
-    setPlayers(prev => {
-      if (prev.length <= 2) return prev;
-      const filtered = prev.filter(p => p.slot !== slotToRemove);
-      // Re-index slots
-      return filtered.map((p, i) => ({ ...p, slot: i }));
-    });
-    // If dealer slot was removed or beyond new length, clamp it
-    setDealerSlot(prev => {
-      const newLen = players.length - 1;
-      return prev >= newLen ? Math.max(0, newLen - 1) : prev;
-    });
-  }, [players.length]);
-
-  const updateStack = useCallback((slot, stack) => {
-    setPlayers(prev => prev.map(p => p.slot === slot ? { ...p, stack } : p));
-  }, []);
-
-  // ── Card picker handlers ──────────────────────────────────────────────────────
-
-  const handlePlayerCardClick = useCallback((slot, position) => {
-    setPickerTarget({ type: 'player', slot, position });
-  }, []);
-
-  const handleBoardSlotClick = useCallback((position) => {
-    setPickerTarget({ type: 'board', position });
-  }, []);
-
-  const handlePickerSelect = useCallback((card) => {
-    if (!pickerTarget) return;
-    if (pickerTarget.type === 'board') {
-      setBoard(prev => {
-        const next = [...prev];
-        next[pickerTarget.position] = card;
-        return next;
-      });
-    } else {
-      setPlayers(prev => prev.map(p => {
-        if (p.slot !== pickerTarget.slot) return p;
-        const nextCards = [...p.holeCards];
-        nextCards[pickerTarget.position] = card;
-        return { ...p, holeCards: nextCards };
-      }));
-    }
-    setPickerTarget(null);
-  }, [pickerTarget]);
-
-  const handlePickerClose = useCallback(() => setPickerTarget(null), []);
-
-  // ── Dealer navigation ─────────────────────────────────────────────────────────
-
-  const shiftDealer = useCallback((dir) => {
-    setDealerSlot(prev => (prev + dir + players.length) % players.length);
-  }, [players.length]);
-
-  // ── Street change ─────────────────────────────────────────────────────────────
-
-  const handleStreetChange = useCallback((street) => {
-    setStartingStreet(street);
-    // Clear board slots beyond the active count
-    const needed = ACTIVE_SLOTS[street];
-    setBoard(prev => prev.map((c, i) => (i < needed ? c : null)));
-  }, []);
-
-  // ── Save ──────────────────────────────────────────────────────────────────────
-
-  async function handleSave() {
-    if (!canSave || validationErrors.length > 0) return;
-    setSaving(true);
-    setSaveError(null);
-
-    const holeCards = {};
-    players.forEach(p => {
-      if (p.holeCards.some(Boolean)) {
-        holeCards[String(p.slot)] = p.holeCards;
-      }
-    });
-
-    const payload = {
-      name: effectiveName,
-      playlistId: selectedPlaylistId,
-      newPlaylistName: selectedPlaylistId === 'new' ? newPlaylistName.trim() : undefined,
-      playerCount: players.length,
-      dealerPosition: dealerSlot,
-      startingStreet,
-      smallBlind: 5,
-      bigBlind: 10,
-      config: {
-        mode: 'hybrid',
-        hole_cards: holeCards,
-        hole_cards_range: {},
-        hole_cards_combos: {},
-        board,
-        board_texture: [],
-        player_setup: players.map(p => ({ slot: p.slot, stack: p.stack })),
-        dealer_position: dealerSlot,
-        starting_street: startingStreet,
-      },
-    };
-
-    try {
-      if (socket) {
-        socket.emit('save_scenario_to_playlist', payload);
-        // Success handled by socket event; just close
-        setSaveSuccess(true);
-        setTimeout(() => { onClose(); }, 800);
+// Hydrate from existing scenario for editing
+function hydrateSeats(seatConfigs, playerCount) {
+  const base = buildDefaultSeats(playerCount);
+  (seatConfigs || []).forEach((sc, i) => {
+    if (base[i]) {
+      if (sc.range) {
+        base[i].seatMode = 'range';
+        base[i].range = sc.range;
       } else {
-        await apiFetch('/api/admin/scenarios', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        setSaveSuccess(true);
-        setTimeout(() => { onClose(); }, 800);
+        base[i].seatMode = 'fixed';
+        base[i].cards = sc.cards ?? [null, null];
       }
-    } catch (err) {
-      setSaveError(err.message ?? 'Save failed');
-      setSaving(false);
     }
-  }
+  });
+  return base;
+}
 
-  // ── Render ────────────────────────────────────────────────────────────────────
+function hydrateStacks(stackConfigs, playerCount) {
+  const base = buildDefaultStacks(playerCount);
+  (stackConfigs || []).forEach((sc, i) => {
+    if (base[i]) base[i].stack_bb = sc.stack_bb ?? 100;
+  });
+  return base;
+}
 
-  const innerContent = (
-      <div
-        className="flex flex-col"
-        style={{
-          width: '100%',
-          maxWidth: inline ? undefined : '42rem',
-          height: inline ? '100%' : '90vh',
-          background: '#0d1117',
-          border: inline ? 'none' : '1px solid #30363d',
-          borderRadius: inline ? 0 : 10,
-          boxShadow: inline ? 'none' : '0 24px 80px rgba(0,0,0,0.7)',
-          overflow: 'hidden',
-          position: 'relative',
-        }}
-      >
-        {/* ── Sticky header ─────────────────────────────────────────────────── */}
-        <div
-          className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{
-            background: '#0d1117',
-            borderBottom: '1px solid #30363d',
-            position: 'sticky', top: 0, zIndex: 10,
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <span style={{ color: '#d4af37', fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>
-              Build Scenario
-            </span>
-            <span
-              style={{
-                fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                padding: '2px 7px', borderRadius: 4,
-                background: socket ? 'rgba(63,185,80,0.12)' : 'rgba(110,118,129,0.12)',
-                border: `1px solid ${socket ? 'rgba(63,185,80,0.35)' : 'rgba(110,118,129,0.3)'}`,
-                color: socket ? '#3fb950' : '#6e7681',
-              }}
-            >
-              {socket ? 'LIVE TABLE' : 'STANDALONE'}
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              width: 28, height: 28, borderRadius: 4, border: '1px solid #30363d',
-              background: 'none', color: '#6e7681', cursor: 'pointer', fontSize: 16,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'all 0.1s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.color = '#d4af37'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#6e7681'; }}
-            title="Close (Esc)"
-            aria-label="Close builder"
-          >
-            ×
-          </button>
-        </div>
+// ── Mini preview table ─────────────────────────────────────────────────────────
 
-        {/* ── Scrollable body ────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto" style={{ padding: '16px 16px 0' }}>
+function Preview({ seats, stacks, positions, btnSeat, boardFlop, boardTurn, boardRiver, boardMode }) {
+  const flopCards = flopToCards(boardFlop);
+  const showBoard = boardMode !== 'none';
 
-          {/* ── Section 1: Players ─────────────────────────────────────────── */}
-          <div className="mb-5">
-            {sectionLabel('Players')}
-
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #30363d' }}>
-                    {['SEAT', 'STACK', 'CARDS', 'POSITION', ''].map(h => (
-                      <th
-                        key={h}
-                        style={{
-                          padding: '4px 8px', fontSize: 9, fontWeight: 700,
-                          letterSpacing: '0.1em', color: '#6e7681', textAlign: h === 'STACK' ? 'right' : 'center',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {players.map((player) => (
-                    <ScenarioPlayerRow
-                      key={player.slot}
-                      player={player}
-                      positionLabel={positions[player.slot]}
-                      isDealer={player.slot === dealerSlot}
-                      onStackChange={updateStack}
-                      onCardSlotClick={handlePlayerCardClick}
-                      onRemove={removePlayer}
-                    />
-                  ))}
-                </tbody>
-              </table>
+  return (
+    <div
+      style={{
+        background: 'rgba(13,17,23,0.8)', border: '1px solid #21262d', borderRadius: 8,
+        padding: '12px', minHeight: 120,
+      }}
+    >
+      {/* Seats row */}
+      <div className="flex flex-wrap gap-3 justify-center mb-3">
+        {seats.map((s, i) => {
+          const pos = positions[i] ?? `S${i}`;
+          const stack = stacks[i]?.stack_bb ?? 100;
+          return (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <span style={{
+                fontSize: 8, fontWeight: 700, letterSpacing: '0.1em',
+                padding: '1px 5px', borderRadius: 3,
+                background: i === btnSeat ? 'rgba(212,175,55,0.15)' : 'rgba(88,166,255,0.08)',
+                border: i === btnSeat ? '1px solid rgba(212,175,55,0.4)' : '1px solid rgba(88,166,255,0.2)',
+                color: i === btnSeat ? '#d4af37' : '#58a6ff',
+              }}>{pos}</span>
+              <div className="flex gap-1">
+                {s.seatMode === 'range' ? (
+                  <span style={{ fontSize: 9, color: '#8b949e', padding: '2px 4px', border: '1px dashed #30363d', borderRadius: 3 }}>Range</span>
+                ) : (
+                  <>
+                    {[0, 1].map(ci => {
+                      const parsed = s.cards[ci] ? cardLabel(s.cards[ci]) : null;
+                      return (
+                        <span key={ci} style={{
+                          width: 18, height: 24, fontSize: 8, fontWeight: 700,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          border: '1px solid #30363d', borderRadius: 2,
+                          color: parsed?.color ?? '#444',
+                          background: parsed ? 'rgba(212,175,55,0.06)' : 'transparent',
+                        }}>
+                          {parsed ? `${parsed.rank}${parsed.suit}` : '?'}
+                        </span>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+              <span style={{ fontSize: 8, color: '#6e7681' }}>{stack}bb</span>
             </div>
-
-            {/* Dealer controls */}
-            <div className="flex items-center gap-2 mt-3">
-              <span style={{ fontSize: 10, color: '#6e7681', letterSpacing: '0.08em' }}>Dealer at seat:</span>
-              <button
-                onClick={() => shiftDealer(-1)}
-                style={{
-                  width: 22, height: 22, borderRadius: 3, border: '1px solid #30363d',
-                  background: 'none', color: '#8b949e', cursor: 'pointer', fontSize: 13,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.color = '#d4af37'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#8b949e'; }}
-                aria-label="Previous dealer"
-              >
-                ‹
-              </button>
-              <span
-                style={{
-                  minWidth: 28, textAlign: 'center', fontSize: 12, fontWeight: 700,
-                  color: '#d4af37', fontFamily: 'monospace',
-                }}
-              >
-                {dealerSlot + 1}
+          );
+        })}
+      </div>
+      {/* Board */}
+      {showBoard && (
+        <div className="flex justify-center gap-1">
+          {flopCards.map((c, i) => {
+            const parsed = c ? cardLabel(c) : null;
+            return (
+              <span key={`f${i}`} style={{
+                width: 22, height: 30, fontSize: 9, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px solid #30363d', borderRadius: 3,
+                color: parsed?.color ?? '#444',
+                background: parsed ? 'rgba(255,255,255,0.04)' : 'transparent',
+              }}>
+                {parsed ? `${parsed.rank}${parsed.suit}` : '?'}
               </span>
-              <button
-                onClick={() => shiftDealer(1)}
-                style={{
-                  width: 22, height: 22, borderRadius: 3, border: '1px solid #30363d',
-                  background: 'none', color: '#8b949e', cursor: 'pointer', fontSize: 13,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.color = '#d4af37'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#8b949e'; }}
-                aria-label="Next dealer"
-              >
-                ›
-              </button>
-            </div>
-
-            {/* Add / remove seat */}
-            {players.length < 9 && (
-              <button
-                onClick={addPlayer}
-                style={{
-                  marginTop: 8, padding: '4px 12px', borderRadius: 4,
-                  border: '1px solid rgba(63,185,80,0.3)', background: 'none',
-                  color: '#3fb950', fontSize: 10, fontWeight: 600,
-                  letterSpacing: '0.06em', cursor: 'pointer',
-                  transition: 'all 0.1s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(63,185,80,0.08)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-              >
-                + Add Seat
-              </button>
-            )}
-          </div>
-
-          {/* ── Section 2: Board ────────────────────────────────────────────── */}
-          <div
-            className="mb-5"
-            style={{ paddingTop: 14, borderTop: '1px solid #21262d' }}
-          >
-            {sectionLabel('Board')}
-
-            <div className="flex gap-2 items-end mb-3">
-              {board.map((card, idx) => {
-                const dimmed = idx >= activeSlotCount;
-                const labels = ['Flop 1', 'Flop 2', 'Flop 3', 'Turn', 'River'];
-                return (
-                  <div key={idx} className="flex flex-col items-center gap-1">
-                    <ScenarioCardSlot
-                      card={card}
-                      label={labels[idx]}
-                      onClick={() => handleBoardSlotClick(idx)}
-                      wide
-                      dimmed={dimmed}
-                    />
-                    <span
-                      style={{
-                        fontSize: 8, color: dimmed ? '#333' : '#555',
-                        letterSpacing: '0.05em', userSelect: 'none',
-                      }}
-                    >
-                      {['F1', 'F2', 'F3', 'TN', 'RV'][idx]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span style={{ fontSize: 9, color: '#6e7681', letterSpacing: '0.08em' }}>Starting from:</span>
-              <StreetPills value={startingStreet} onChange={handleStreetChange} />
-            </div>
-          </div>
-
-          {/* ── Section 3: Preview ──────────────────────────────────────────── */}
-          <div className="mb-4" style={{ paddingTop: 14, borderTop: '1px solid #21262d' }}>
-            {sectionLabel('Preview')}
-            <ScenarioPreview
-              players={players}
-              board={board}
-              startingStreet={startingStreet}
-              positions={positions}
-            />
-          </div>
-
-        </div>
-
-        {/* ── Sticky save bar ────────────────────────────────────────────────── */}
-        <div
-          className="flex-shrink-0"
-          style={{
-            position: 'sticky',
-            bottom: 0,
-            background: '#161b22',
-            borderTop: '1px solid #30363d',
-            padding: '12px 16px',
-            zIndex: 10,
-          }}
-        >
-          {/* Validation errors */}
-          {validationErrors.length > 0 && (
-            <div
-              style={{
-                marginBottom: 10, padding: '6px 10px', borderRadius: 4,
-                background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.25)',
-                fontSize: 10, color: '#f85149',
-              }}
-            >
-              {validationErrors.map((e, i) => <div key={i}>{e}</div>)}
-            </div>
+            );
+          })}
+          {boardTurn && (() => { const p = cardLabel(boardTurn); return (
+            <span style={{ width: 22, height: 30, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #30363d', borderRadius: 3, color: p?.color ?? '#444', background: 'rgba(255,255,255,0.04)' }}>
+              {p ? `${p.rank}${p.suit}` : '?'}
+            </span>
+          ); })()}
+          {boardRiver && (() => { const p = cardLabel(boardRiver); return (
+            <span style={{ width: 22, height: 30, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #30363d', borderRadius: 3, color: p?.color ?? '#444', background: 'rgba(255,255,255,0.04)' }}>
+              {p ? `${p.rank}${p.suit}` : '?'}
+            </span>
+          ); })()}
+          {boardMode === 'texture' && !boardTurn && (
+            <span style={{ width: 22, height: 30, fontSize: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #30363d', borderRadius: 3, color: '#444' }}>T?</span>
           )}
-
-          {saveError && (
-            <div
-              style={{
-                marginBottom: 10, padding: '6px 10px', borderRadius: 4,
-                background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.25)',
-                fontSize: 10, color: '#f85149',
-              }}
-            >
-              {saveError}
-            </div>
+          {boardMode === 'texture' && !boardRiver && (
+            <span style={{ width: 22, height: 30, fontSize: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #30363d', borderRadius: 3, color: '#444' }}>R?</span>
           )}
-
-          {saveSuccess && (
-            <div
-              style={{
-                marginBottom: 10, padding: '6px 10px', borderRadius: 4,
-                background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.25)',
-                fontSize: 10, color: '#3fb950',
-              }}
-            >
-              Saved successfully!
-            </div>
-          )}
-
-          {/* Name + playlist row */}
-          <div className="flex gap-2 mb-2">
-            {/* Scenario name */}
-            <input
-              type="text"
-              placeholder={autoName}
-              value={scenarioName}
-              onChange={e => setScenarioName(e.target.value)}
-              style={{
-                flex: 1, minWidth: 0, padding: '5px 8px', borderRadius: 4,
-                border: '1px solid #30363d', background: '#0d1117', color: '#f0ece3',
-                fontSize: 11, outline: 'none',
-              }}
-              onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.4)'; }}
-              onBlur={e => { e.target.style.borderColor = '#30363d'; }}
-            />
-
-            {/* Playlist select */}
-            <select
-              value={selectedPlaylistId}
-              onChange={e => setSelectedPlaylistId(e.target.value)}
-              style={{
-                padding: '5px 8px', borderRadius: 4, border: '1px solid #30363d',
-                background: '#0d1117', color: '#f0ece3', fontSize: 11,
-                cursor: 'pointer', outline: 'none', flexShrink: 0,
-              }}
-            >
-              {playlists.length === 0 && (
-                <option value="new">— Create new —</option>
-              )}
-              {playlists.map(pl => (
-                <option key={pl.playlist_id} value={pl.playlist_id}>{pl.name}</option>
-              ))}
-              {playlists.length > 0 && <option value="new">— Create new —</option>}
-            </select>
-          </div>
-
-          {/* New playlist name input (conditional) */}
-          {selectedPlaylistId === 'new' && (
-            <input
-              type="text"
-              placeholder="New playlist name..."
-              value={newPlaylistName}
-              onChange={e => setNewPlaylistName(e.target.value)}
-              style={{
-                width: '100%', padding: '5px 8px', borderRadius: 4,
-                border: '1px solid rgba(212,175,55,0.3)', background: '#0d1117',
-                color: '#f0ece3', fontSize: 11, outline: 'none', marginBottom: 8,
-                boxSizing: 'border-box',
-              }}
-              onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.6)'; }}
-              onBlur={e => { e.target.style.borderColor = 'rgba(212,175,55,0.3)'; }}
-            />
-          )}
-
-          {/* Action buttons */}
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={!canSave || validationErrors.length > 0 || saving}
-              style={{
-                flex: 1, padding: '7px 0', borderRadius: 4,
-                background: (canSave && validationErrors.length === 0 && !saving) ? '#d4af37' : '#2a2a1a',
-                color: (canSave && validationErrors.length === 0 && !saving) ? '#000' : '#555',
-                border: 'none', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
-                textTransform: 'uppercase', cursor: (canSave && validationErrors.length === 0 && !saving) ? 'pointer' : 'not-allowed',
-                transition: 'all 0.12s',
-              }}
-              title="Ctrl+Enter"
-            >
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              onClick={onClose}
-              style={{
-                padding: '7px 14px', borderRadius: 4,
-                background: 'none', border: '1px solid #30363d',
-                color: '#6e7681', fontSize: 11, fontWeight: 600,
-                letterSpacing: '0.06em', cursor: 'pointer',
-                transition: 'all 0.1s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#8b949e'; e.currentTarget.style.color = '#8b949e'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#6e7681'; }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-
-      {/* ── CardPicker modal ────────────────────────────────────────────────────── */}
-      {pickerTarget && (
-        <div
-          className="fixed inset-0 z-[400] flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(4px)' }}
-          onClick={e => { if (e.target === e.currentTarget) handlePickerClose(); }}
-        >
-          <CardPicker
-            usedCards={pickerUsedCards}
-            title={pickerTitle}
-            onSelect={handlePickerSelect}
-            onClose={handlePickerClose}
-          />
         </div>
       )}
     </div>
   );
+}
 
-  if (inline) return innerContent;
+// ── Main Component ─────────────────────────────────────────────────────────────
+
+/**
+ * ScenarioBuilder
+ *
+ * Props:
+ *   scenario        — existing scenario object (null for new)
+ *   onSaved(sc)     — called after successful save with the saved scenario
+ *   onDelete()      — called after delete
+ *   onDuplicate(sc) — called after duplicate
+ *   onClose()       — cancel / close without saving
+ *   folders         — array of folder tree nodes for the folder dropdown
+ */
+export default function ScenarioBuilder({
+  scenario = null,
+  onSaved,
+  onDelete,
+  onDuplicate,
+  onClose,
+  folders = [],
+  // Legacy props accepted but ignored (old HandBuilder passes these)
+  // eslint-disable-next-line no-unused-vars
+  playlists, initialScenario, inline, socket,
+}) {
+  const isNew = !scenario?.id;
+
+  // ── Form state ────────────────────────────────────────────────────────────
+
+  const [name, setName]               = useState(scenario?.name ?? '');
+  const [description, setDescription] = useState(scenario?.description ?? '');
+  const [tags, setTags]               = useState(scenario?.tags ?? []);
+  const [folderId, setFolderId]       = useState(scenario?.folder_id ?? null);
+  const [playerCount, setPlayerCount] = useState(scenario?.player_count ?? 6);
+  const [btnSeat, setBtnSeat]         = useState(scenario?.btn_seat ?? 0);
+  const [blindMode, setBlindMode]     = useState(scenario?.blind_mode ?? false);
+
+  const [seats, setSeats] = useState(() =>
+    isNew
+      ? buildDefaultSeats(scenario?.player_count ?? 6)
+      : hydrateSeats(scenario?.seat_configs, scenario?.player_count ?? 6)
+  );
+
+  const [stacks, setStacks] = useState(() =>
+    isNew
+      ? buildDefaultStacks(scenario?.player_count ?? 6)
+      : hydrateStacks(scenario?.stack_configs, scenario?.player_count ?? 6)
+  );
+
+  const [boardMode, setBoardMode]     = useState(scenario?.board_mode ?? 'none');
+  const [boardFlop, setBoardFlop]     = useState(flopToCards(scenario?.board_flop));  // [c1,c2,c3]|[null,null,null]
+  const [boardTurn, setBoardTurn]     = useState(scenario?.board_turn ?? null);
+  const [boardRiver, setBoardRiver]   = useState(scenario?.board_river ?? null);
+  const [boardTexture, setBoardTexture] = useState(scenario?.board_texture ?? 'monotone');
+  const [textureTurn, setTextureTurn]  = useState(scenario?.texture_turn ?? null);
+  const [textureRiver, setTextureRiver] = useState(scenario?.texture_river ?? null);
+
+  // ── UI state ──────────────────────────────────────────────────────────────
+
+  const [pickerTarget, setPickerTarget]       = useState(null);
+  // { type: 'seat', seatIdx, cardIdx } | { type: 'board', idx } | { type: 'texture_turn' } | { type: 'texture_river' }
+  const [rangePickerSeat, setRangePickerSeat] = useState(null);  // seat index with open range picker
+  const [saving, setSaving]                   = useState(false);
+  const [deleting, setDeleting]               = useState(false);
+  const [error, setError]                     = useState(null);
+  const [success, setSuccess]                 = useState(null);
+
+  // ── Sync seat/stack arrays when playerCount changes ───────────────────────
+
+  useEffect(() => {
+    setSeats(prev => {
+      if (prev.length === playerCount) return prev;
+      if (prev.length < playerCount) {
+        return [...prev, ...buildDefaultSeats(playerCount - prev.length).map((s, i) => ({ ...s, seat: prev.length + i }))];
+      }
+      return prev.slice(0, playerCount).map((s, i) => ({ ...s, seat: i }));
+    });
+    setStacks(prev => {
+      if (prev.length === playerCount) return prev;
+      if (prev.length < playerCount) {
+        return [...prev, ...buildDefaultStacks(playerCount - prev.length).map((s, i) => ({ ...s, seat: prev.length + i }))];
+      }
+      return prev.slice(0, playerCount).map((s, i) => ({ ...s, seat: i }));
+    });
+    if (btnSeat >= playerCount) setBtnSeat(0);
+  }, [playerCount]);
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+
+  const positions = useMemo(() => computePositions(playerCount, btnSeat), [playerCount, btnSeat]);
+
+  // Set of all cards currently assigned (for CardPicker exclusions)
+  const allUsedCards = useMemo(() => {
+    const s = new Set();
+    seats.forEach(seat => {
+      if (seat.seatMode === 'fixed') seat.cards.forEach(c => { if (c) s.add(c); });
+    });
+    if (boardMode === 'specific') {
+      boardFlop.forEach(c => { if (c) s.add(c); });
+      if (boardTurn) s.add(boardTurn);
+      if (boardRiver) s.add(boardRiver);
+    } else if (boardMode === 'texture') {
+      if (textureTurn) s.add(textureTurn);
+      if (textureRiver) s.add(textureRiver);
+    }
+    return s;
+  }, [seats, boardMode, boardFlop, boardTurn, boardRiver, textureTurn, textureRiver]);
+
+  // Exclude the currently-targeted card slot so re-picking same card is allowed
+  const pickerUsedCards = useMemo(() => {
+    if (!pickerTarget) return allUsedCards;
+    const s = new Set(allUsedCards);
+    if (pickerTarget.type === 'seat') {
+      const existing = seats[pickerTarget.seatIdx]?.cards[pickerTarget.cardIdx];
+      if (existing) s.delete(existing);
+    } else if (pickerTarget.type === 'board') {
+      const existing = boardFlop[pickerTarget.idx];
+      if (existing) s.delete(existing);
+    } else if (pickerTarget.type === 'board_turn') {
+      if (boardTurn) s.delete(boardTurn);
+    } else if (pickerTarget.type === 'board_river') {
+      if (boardRiver) s.delete(boardRiver);
+    } else if (pickerTarget.type === 'texture_turn') {
+      if (textureTurn) s.delete(textureTurn);
+    } else if (pickerTarget.type === 'texture_river') {
+      if (textureRiver) s.delete(textureRiver);
+    }
+    return s;
+  }, [pickerTarget, allUsedCards, seats, boardFlop, boardTurn, boardRiver, textureTurn, textureRiver]);
+
+  // ── Card picker dispatch ───────────────────────────────────────────────────
+
+  function handleCardPicked(card) {
+    if (!pickerTarget) return;
+    const t = pickerTarget;
+    if (t.type === 'seat') {
+      setSeats(prev => prev.map((s, i) => {
+        if (i !== t.seatIdx) return s;
+        const cards = [...s.cards];
+        cards[t.cardIdx] = card;
+        return { ...s, cards };
+      }));
+    } else if (t.type === 'board') {
+      setBoardFlop(prev => { const next = [...prev]; next[t.idx] = card; return next; });
+    } else if (t.type === 'board_turn') {
+      setBoardTurn(card);
+    } else if (t.type === 'board_river') {
+      setBoardRiver(card);
+    } else if (t.type === 'texture_turn') {
+      setTextureTurn(card);
+    } else if (t.type === 'texture_river') {
+      setTextureRiver(card);
+    }
+    setPickerTarget(null);
+  }
+
+  // ── Range apply ───────────────────────────────────────────────────────────
+
+  function handleRangeApply(seatIdx, rangeStr) {
+    setSeats(prev => prev.map((s, i) => i === seatIdx ? { ...s, range: rangeStr } : s));
+    setRangePickerSeat(null);
+  }
+
+  // ── Seat mode toggle ──────────────────────────────────────────────────────
+
+  function toggleSeatMode(seatIdx) {
+    setSeats(prev => prev.map((s, i) => {
+      if (i !== seatIdx) return s;
+      const next = s.seatMode === 'fixed' ? 'range' : 'fixed';
+      return { ...s, seatMode: next, cards: [null, null], range: '' };
+    }));
+    if (rangePickerSeat === seatIdx) setRangePickerSeat(null);
+  }
+
+  // ── Save ──────────────────────────────────────────────────────────────────
+
+  async function handleSave() {
+    const trimmedName = name.trim();
+    if (!trimmedName) { setError('Name is required'); return; }
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    // Build seat_configs + stack_configs
+    const seatConfigs = seats.map(s => ({
+      seat: s.seat,
+      ...(s.seatMode === 'range' ? { range: s.range } : { cards: s.cards }),
+    }));
+    const stackConfigs = stacks.map(s => ({ seat: s.seat, stack_bb: s.stack_bb }));
+
+    // Determine effective card_mode: 'range' if any seat is range, else 'fixed'
+    const effectiveCardMode = seats.some(s => s.seatMode === 'range') ? 'range' : 'fixed';
+
+    const payload = {
+      name:         trimmedName,
+      description:  description || null,
+      tags,
+      folder_id:    folderId,
+      player_count: playerCount,
+      btn_seat:     btnSeat,
+      card_mode:    effectiveCardMode,
+      seat_configs: seatConfigs,
+      stack_configs: stackConfigs,
+      board_mode:   boardMode,
+      board_flop:   boardMode === 'specific' ? cardsToFlop(boardFlop) : null,
+      board_turn:   boardMode === 'specific' ? boardTurn : null,
+      board_river:  boardMode === 'specific' ? boardRiver : null,
+      board_texture: boardMode === 'texture' ? boardTexture : null,
+      texture_turn:  boardMode === 'texture' ? textureTurn : null,
+      texture_river: boardMode === 'texture' ? textureRiver : null,
+      blind_mode:   blindMode,
+    };
+
+    try {
+      const result = isNew
+        ? await apiFetch('/api/scenarios', { method: 'POST', body: JSON.stringify(payload) })
+        : await apiFetch(`/api/scenarios/${scenario.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+      const versionMsg = result.version > 1 ? ` (saved as v${result.version})` : '';
+      setSuccess(`Saved${versionMsg}`);
+      setTimeout(() => onSaved?.(result), 700);
+    } catch (err) {
+      setError(err.message ?? 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!scenario?.id) return;
+    if (!window.confirm(`Delete "${scenario.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/scenarios/${scenario.id}`, { method: 'DELETE' });
+      onDelete?.();
+    } catch (err) {
+      setError(err.message ?? 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleDuplicate() {
+    if (!scenario?.id) return;
+    try {
+      const copy = await apiFetch(`/api/scenarios/${scenario.id}/duplicate`, { method: 'POST' });
+      onDuplicate?.(copy);
+    } catch (err) {
+      setError(err.message ?? 'Duplicate failed');
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="fixed inset-0 z-[300] flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(3px)' }}
-      onClick={e => { if (e.target === e.currentTarget && !pickerTarget) onClose(); }}
-    >
-      {innerContent}
+    <div className="flex flex-col h-full" style={{ background: '#0d1117', overflow: 'hidden' }}>
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-3 flex-shrink-0" style={{ borderBottom: '1px solid #21262d' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: '#d4af37' }}>
+          {isNew ? 'New Scenario' : 'Edit Scenario'}
+        </span>
+        <div className="flex items-center gap-2">
+          {!isNew && (
+            <span style={{ fontSize: 10, color: '#6e7681' }}>
+              v{scenario.version} · played {scenario.play_count}×
+            </span>
+          )}
+          {onClose && (
+            <button onClick={onClose} style={{ width: 26, height: 26, borderRadius: 4, border: '1px solid #30363d', background: 'none', color: '#6e7681', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Body ───────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto" style={{ padding: '16px' }}>
+
+        {/* Identity */}
+        <div className="mb-5">
+          <SectionLabel text="Identity" />
+          <div className="mb-3">
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Scenario name…"
+              style={{ width: '100%', padding: '7px 10px', borderRadius: 4, border: '1px solid #30363d', background: '#0d1117', color: '#f0ece3', fontSize: 12, outline: 'none', boxSizing: 'border-box' }}
+              onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.5)'; }}
+              onBlur={e => { e.target.style.borderColor = '#30363d'; }}
+            />
+          </div>
+          <div className="mb-3">
+            <TagEditor tags={tags} onChange={setTags} />
+          </div>
+          {folders.length > 0 && (
+            <div className="mb-3">
+              <select
+                value={folderId ?? ''}
+                onChange={e => setFolderId(e.target.value || null)}
+                style={{ padding: '5px 8px', borderRadius: 4, border: '1px solid #30363d', background: '#0d1117', color: '#f0ece3', fontSize: 11, outline: 'none' }}
+              >
+                <option value="">No folder</option>
+                {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </div>
+          )}
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Optional description…"
+            rows={2}
+            style={{ width: '100%', padding: '6px 10px', borderRadius: 4, border: '1px solid #30363d', background: '#0d1117', color: '#f0ece3', fontSize: 11, outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+            onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.5)'; }}
+            onBlur={e => { e.target.style.borderColor = '#30363d'; }}
+          />
+        </div>
+
+        {/* Hand Configuration */}
+        <div className="mb-5">
+          <SectionLabel text="Hand Configuration" />
+          <div className="flex flex-wrap gap-4 mb-3">
+            <div>
+              <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Players</div>
+              <div className="flex gap-1">
+                {[2,3,4,5,6,7,8,9].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setPlayerCount(n)}
+                    style={{
+                      width: 26, height: 26, borderRadius: 4, fontSize: 11, fontWeight: 700,
+                      cursor: 'pointer', transition: 'all 0.1s',
+                      background: playerCount === n ? 'rgba(212,175,55,0.15)' : 'none',
+                      border: playerCount === n ? '1px solid rgba(212,175,55,0.5)' : '1px solid #30363d',
+                      color: playerCount === n ? '#d4af37' : '#6e7681',
+                    }}
+                  >{n}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Blind Mode</div>
+              <ToggleGroup
+                options={[{ value: false, label: 'Visible' }, { value: true, label: 'Hidden' }]}
+                value={blindMode}
+                onChange={setBlindMode}
+              />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>BTN Seat</div>
+            <div className="flex gap-1">
+              {Array.from({ length: playerCount }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setBtnSeat(i)}
+                  style={{
+                    width: 28, height: 26, borderRadius: 4, fontSize: 11, fontWeight: 600,
+                    cursor: 'pointer',
+                    background: btnSeat === i ? 'rgba(212,175,55,0.15)' : 'none',
+                    border: btnSeat === i ? '1px solid rgba(212,175,55,0.5)' : '1px solid #30363d',
+                    color: btnSeat === i ? '#d4af37' : '#6e7681',
+                  }}
+                >{i + 1}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Seat Assignments */}
+        <div className="mb-5">
+          <SectionLabel text="Seat Assignments" />
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {['Seat', 'Pos', 'Mode', 'Cards / Range', 'Stack (BB)'].map(h => (
+                  <th key={h} style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6e7681', padding: '4px 6px', textAlign: 'left', borderBottom: '1px solid #21262d' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {seats.map((seat, i) => (
+                <React.Fragment key={i}>
+                  <tr style={{ borderBottom: rangePickerSeat === i ? 'none' : '1px solid #21262d' }}>
+                    {/* Seat # */}
+                    <td style={{ padding: '6px' }}>
+                      <span style={{
+                        width: 22, height: 22, borderRadius: '50%', fontSize: 10, fontWeight: 700,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        background: i === btnSeat ? 'rgba(212,175,55,0.15)' : '#161b22',
+                        border: i === btnSeat ? '1px solid #d4af37' : '1px solid #30363d',
+                        color: i === btnSeat ? '#d4af37' : '#8b949e',
+                      }}>{i + 1}</span>
+                    </td>
+                    {/* Position */}
+                    <td style={{ padding: '6px' }}>
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: 'rgba(88,166,255,0.08)', border: '1px solid rgba(88,166,255,0.2)', color: '#58a6ff' }}>
+                        {positions[i] ?? '—'}
+                      </span>
+                    </td>
+                    {/* Mode toggle */}
+                    <td style={{ padding: '6px' }}>
+                      <button
+                        onClick={() => toggleSeatMode(i)}
+                        style={{
+                          fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 3,
+                          cursor: 'pointer',
+                          background: seat.seatMode === 'range' ? 'rgba(88,166,255,0.08)' : 'rgba(212,175,55,0.08)',
+                          border: seat.seatMode === 'range' ? '1px solid rgba(88,166,255,0.3)' : '1px solid rgba(212,175,55,0.3)',
+                          color: seat.seatMode === 'range' ? '#58a6ff' : '#d4af37',
+                        }}
+                      >
+                        {seat.seatMode === 'range' ? 'Range' : 'Fixed'}
+                      </button>
+                    </td>
+                    {/* Cards / Range */}
+                    <td style={{ padding: '6px' }}>
+                      {seat.seatMode === 'fixed' ? (
+                        <div className="flex gap-1">
+                          <CardSlot card={seat.cards[0]} label={`Seat ${i+1} C1`} onClick={() => setPickerTarget({ type: 'seat', seatIdx: i, cardIdx: 0 })} />
+                          <CardSlot card={seat.cards[1]} label={`Seat ${i+1} C2`} onClick={() => setPickerTarget({ type: 'seat', seatIdx: i, cardIdx: 1 })} />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setRangePickerSeat(rangePickerSeat === i ? null : i)}
+                          style={{
+                            fontSize: 10, fontWeight: 600, padding: '4px 10px', borderRadius: 4,
+                            cursor: 'pointer',
+                            background: rangePickerSeat === i ? 'rgba(88,166,255,0.12)' : 'none',
+                            border: '1px solid rgba(88,166,255,0.3)', color: '#58a6ff',
+                          }}
+                        >
+                          {seat.range ? `${seat.range.split(',').length} groups` : '+ Set Range'}
+                        </button>
+                      )}
+                    </td>
+                    {/* Stack */}
+                    <td style={{ padding: '6px' }}>
+                      <input
+                        type="number"
+                        min={1}
+                        value={stacks[i]?.stack_bb ?? 100}
+                        onChange={e => setStacks(prev => prev.map((s, si) => si === i ? { ...s, stack_bb: Math.max(1, parseInt(e.target.value, 10) || 1) } : s))}
+                        style={{ width: 64, padding: '3px 6px', borderRadius: 4, border: '1px solid #30363d', background: '#0d1117', color: '#f0ece3', fontSize: 11, textAlign: 'right', outline: 'none' }}
+                        onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.4)'; }}
+                        onBlur={e => { e.target.style.borderColor = '#30363d'; }}
+                      />
+                    </td>
+                  </tr>
+                  {/* Inline range picker row */}
+                  {rangePickerSeat === i && (
+                    <tr style={{ borderBottom: '1px solid #21262d' }}>
+                      <td colSpan={5} style={{ padding: '8px 6px' }}>
+                        <RangePicker
+                          seatLabel={`Seat ${i + 1} (${positions[i] ?? '—'}) — Range`}
+                          initialRange={seat.range}
+                          onApply={(rangeStr) => handleRangeApply(i, rangeStr)}
+                          onCancel={() => setRangePickerSeat(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Board Configuration */}
+        <div className="mb-5">
+          <SectionLabel text="Board Configuration" />
+          <div className="mb-3">
+            <ToggleGroup
+              options={[{ value: 'none', label: 'None' }, { value: 'specific', label: 'Specific' }, { value: 'texture', label: 'Texture' }]}
+              value={boardMode}
+              onChange={setBoardMode}
+            />
+          </div>
+
+          {boardMode === 'specific' && (
+            <div className="space-y-3">
+              <div>
+                <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase' }}>Flop</div>
+                <div className="flex gap-2">
+                  {[0, 1, 2].map(idx => (
+                    <CardSlot
+                      key={idx}
+                      card={boardFlop[idx]}
+                      label={`Flop ${idx + 1}`}
+                      onClick={() => setPickerTarget({ type: 'board', idx })}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="flex gap-6">
+                <div>
+                  <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase' }}>Turn <span style={{ color: '#444' }}>(optional)</span></div>
+                  <CardSlot card={boardTurn} label="Turn" onClick={() => setPickerTarget({ type: 'board_turn' })} />
+                  {boardTurn && <button onClick={() => setBoardTurn(null)} style={{ fontSize: 9, color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', marginTop: 3 }}>clear</button>}
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase' }}>River <span style={{ color: '#444' }}>(optional)</span></div>
+                  <CardSlot card={boardRiver} label="River" onClick={() => setPickerTarget({ type: 'board_river' })} />
+                  {boardRiver && <button onClick={() => setBoardRiver(null)} style={{ fontSize: 9, color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', marginTop: 3 }}>clear</button>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {boardMode === 'texture' && (
+            <div className="space-y-3">
+              <div>
+                <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase' }}>Flop Texture</div>
+                <select
+                  value={boardTexture}
+                  onChange={e => setBoardTexture(e.target.value)}
+                  style={{ padding: '5px 8px', borderRadius: 4, border: '1px solid #30363d', background: '#0d1117', color: '#f0ece3', fontSize: 11, outline: 'none' }}
+                >
+                  {TEXTURES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-6">
+                <div>
+                  <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase' }}>Turn <span style={{ color: '#444' }}>(pin, optional)</span></div>
+                  <CardSlot card={textureTurn} label="Pinned Turn" onClick={() => setPickerTarget({ type: 'texture_turn' })} />
+                  {textureTurn && <button onClick={() => setTextureTurn(null)} style={{ fontSize: 9, color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', marginTop: 3 }}>clear</button>}
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: '#6e7681', marginBottom: 5, fontWeight: 600, textTransform: 'uppercase' }}>River <span style={{ color: '#444' }}>(pin, optional)</span></div>
+                  <CardSlot card={textureRiver} label="Pinned River" onClick={() => setPickerTarget({ type: 'texture_river' })} />
+                  {textureRiver && <button onClick={() => setTextureRiver(null)} style={{ fontSize: 9, color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', marginTop: 3 }}>clear</button>}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Preview */}
+        <div className="mb-5">
+          <SectionLabel text="Preview" />
+          <Preview
+            seats={seats}
+            stacks={stacks}
+            positions={positions}
+            btnSeat={btnSeat}
+            boardFlop={cardsToFlop(boardFlop)}
+            boardTurn={boardMode === 'specific' ? boardTurn : (boardMode === 'texture' ? textureTurn : null)}
+            boardRiver={boardMode === 'specific' ? boardRiver : (boardMode === 'texture' ? textureRiver : null)}
+            boardMode={boardMode}
+          />
+        </div>
+
+        {/* Source hand link */}
+        {scenario?.source_hand_id && (
+          <div style={{ fontSize: 10, color: '#6e7681', marginBottom: 12 }}>
+            Source: Hand #{scenario.source_hand_id.slice(0, 8)}
+          </div>
+        )}
+
+        {/* Error / success */}
+        {error && (
+          <div style={{ marginBottom: 10, padding: '7px 10px', borderRadius: 4, background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.25)', fontSize: 11, color: '#f85149' }}>
+            {error}
+          </div>
+        )}
+        {success && (
+          <div style={{ marginBottom: 10, padding: '7px 10px', borderRadius: 4, background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.25)', fontSize: 11, color: '#3fb950' }}>
+            {success}
+          </div>
+        )}
+      </div>
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-4 py-3 flex-shrink-0" style={{ borderTop: '1px solid #21262d' }}>
+        {!isNew && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid rgba(248,81,73,0.3)', background: 'none', color: '#f85149', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        )}
+        {!isNew && (
+          <button
+            onClick={handleDuplicate}
+            style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid #30363d', background: 'none', color: '#8b949e', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Duplicate
+          </button>
+        )}
+        <div style={{ flex: 1 }} />
+        {onClose && (
+          <button
+            onClick={onClose}
+            style={{ padding: '6px 14px', borderRadius: 4, border: '1px solid #30363d', background: 'none', color: '#6e7681', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          style={{ padding: '6px 18px', borderRadius: 4, background: saving ? '#a07a20' : '#d4af37', color: '#000', border: 'none', fontSize: 11, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', letterSpacing: '0.06em' }}
+        >
+          {saving ? 'Saving…' : isNew ? 'Create' : 'Save'}
+        </button>
+      </div>
+
+      {/* ── Card picker overlay ─────────────────────────────────────────── */}
+      {pickerTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setPickerTarget(null)}
+        >
+          <div onClick={e => e.stopPropagation()}>
+            <CardPicker
+              usedCards={pickerUsedCards}
+              onSelect={handleCardPicked}
+              onClose={() => setPickerTarget(null)}
+              title={
+                pickerTarget.type === 'seat'
+                  ? `Seat ${pickerTarget.seatIdx + 1} — Card ${pickerTarget.cardIdx + 1}`
+                  : pickerTarget.type === 'board'
+                  ? `Flop ${pickerTarget.idx + 1}`
+                  : pickerTarget.type === 'board_turn' ? 'Turn'
+                  : pickerTarget.type === 'board_river' ? 'River'
+                  : pickerTarget.type === 'texture_turn' ? 'Pinned Turn'
+                  : 'Pinned River'
+              }
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

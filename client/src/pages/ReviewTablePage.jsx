@@ -538,7 +538,7 @@ export default function ReviewTablePage() {
 
         {/* Left: table + controls */}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <PokerTable
               gameState={gameState}
               myId={null}

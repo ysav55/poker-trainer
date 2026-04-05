@@ -144,6 +144,26 @@ module.exports = function registerJoinRoom(socket, ctx) {
       }
     }
 
+    // Tournament late-registration gate
+    if (mode === 'tournament' && !isReconnect) {
+      const { getController } = require('../../state/SharedState');
+      const ctrl = getController(tableId);
+      // If a tournament controller exists AND the game has started, check late reg
+      if (ctrl && ctrl.getMode?.() === 'tournament' && ctrl.startedAt) {
+        if (!ctrl.isLateRegOpen()) {
+          socket.emit('tournament:late_reg_rejected', {
+            reason: ctrl.lateRegMinutes > 0 ? 'Late registration has closed' : 'Tournament is already in progress',
+          });
+          return;
+        }
+        // Late reg is open — mark them as a late registrant (no special flag needed, they just join normally)
+        socket.emit('notification', {
+          type: 'info',
+          message: 'You have joined during the late registration period',
+        });
+      }
+    }
+
     const joinAsSpectator = (reason) => {
       socket.data.tableId = tableId;
       socket.data.isCoach = false;

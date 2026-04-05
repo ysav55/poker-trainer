@@ -27,8 +27,6 @@ RUN npm ci --prefix server --omit=dev
 # Copy server source
 COPY server/ ./server/
 
-# Copy player roster (gitignored but needed at runtime)
-COPY players.csv ./players.csv
 
 # Copy built React assets from Stage 1
 COPY --from=builder /app/client/dist ./client/dist

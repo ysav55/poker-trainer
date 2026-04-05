@@ -69,6 +69,8 @@ export function MistakeMatrixPanel({ stableId, visible = true }) {
             colorMode="mistake"
             mistakeTags={mistakeTags}
             readOnly
+            onHover={(combo) => setHoveredGroup(combo)}
+            onHoverEnd={() => setHoveredGroup(null)}
           />
           {/* Tooltip area */}
           <div style={{ minHeight: 20, marginTop: 6 }}>

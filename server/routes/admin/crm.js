@@ -12,10 +12,12 @@
  *   POST /snapshots/compute — requirePermission('user:manage')  (admin-only)
  */
 
+const bcrypt  = require('bcrypt');
 const express = require('express');
 const { requirePermission } = require('../../auth/requirePermission.js');
 const CRMRepo    = require('../../db/repositories/CRMRepository.js');
 const PlayerRepo = require('../../db/repositories/PlayerRepository.js');
+const supabase   = require('../../db/supabase.js');
 const { computeAllSnapshots } = require('../../jobs/snapshotJob.js');
 
 const router = express.Router();
@@ -38,6 +40,7 @@ router.get('/players', canView, async (req, res) => {
     });
     res.json({ players });
   } catch (err) {
+    console.error('[crm] GET /players error:', err.message ?? err);
     res.status(500).json({ error: 'internal_error' });
   }
 });
@@ -240,6 +243,88 @@ router.post('/snapshots/compute', canManage, async (req, res) => {
     res.json({ started: true });
   } catch (err) {
     res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// ─── Student creation ─────────────────────────────────────────────────────────
+
+// POST /api/admin/students
+// Admin creates a student account directly (no email verification needed).
+// Body: { name, password, email?, role?, schoolId?, groupIds? }
+router.post('/students', canEdit, async (req, res) => {
+  const { name, password, email, role = 'player', schoolId, groupIds = [] } = req.body || {};
+
+  if (!name || typeof name !== 'string' || name.trim().length < 2)
+    return res.status(400).json({ error: 'invalid_name', message: 'Name must be at least 2 characters.' });
+  if (!password || typeof password !== 'string' || password.length < 6)
+    return res.status(400).json({ error: 'invalid_password', message: 'Password must be at least 6 characters.' });
+  if (email && (typeof email !== 'string' || !email.includes('@')))
+    return res.status(400).json({ error: 'invalid_email', message: 'Email is not valid.' });
+
+  const allowedRoles = ['player', 'trial', 'moderator'];
+  if (!allowedRoles.includes(role))
+    return res.status(400).json({ error: 'invalid_role', message: `Role must be one of: ${allowedRoles.join(', ')}.` });
+
+  try {
+    // Uniqueness check
+    const existing = await PlayerRepo.findByDisplayName(name.trim());
+    if (existing)
+      return res.status(409).json({ error: 'name_taken', message: 'That name is already registered.' });
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const createdBy    = req.user?.stableId ?? req.user?.id ?? null;
+
+    const newId = await PlayerRepo.createPlayer({
+      displayName: name.trim(),
+      email:       email ? email.trim().toLowerCase() : undefined,
+      passwordHash,
+      createdBy,
+    });
+
+    // Assign role
+    const { data: roleRow } = await supabase
+      .from('roles').select('id').eq('name', role).single();
+    if (roleRow?.id)
+      await PlayerRepo.assignRole(newId, roleRow.id, createdBy);
+
+    // Assign school if provided
+    if (schoolId) {
+      await supabase.from('player_profiles').update({ school_id: schoolId }).eq('id', newId);
+    }
+
+    // Assign groups if provided
+    if (Array.isArray(groupIds) && groupIds.length > 0) {
+      const rows = groupIds.map((gid) => ({ player_id: newId, group_id: gid }));
+      await supabase.from('player_groups').insert(rows);
+    }
+
+    const { data: player } = await supabase
+      .from('player_profiles')
+      .select('id, display_name, status, created_at, email')
+      .eq('id', newId)
+      .single();
+
+    res.status(201).json(player ? { ...player, role } : { id: newId, display_name: name.trim(), role, status: 'active' });
+  } catch (err) {
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ─── Player groups ────────────────────────────────────────────────────────────
+
+// GET /api/admin/players/:id/groups
+router.get('/players/:id/groups', canView, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('player_groups')
+      .select('group_id, added_at, groups(id, name, color, school_id)')
+      .eq('player_id', req.params.id);
+
+    if (error) throw error;
+    const groups = (data ?? []).map((r) => ({ ...r.groups, added_at: r.added_at }));
+    res.json({ groups });
+  } catch (err) {
+    res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
 

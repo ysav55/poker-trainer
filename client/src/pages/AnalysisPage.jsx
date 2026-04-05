@@ -338,6 +338,218 @@ function FlaggedHandsList({ hands, loading, tagFilter }) {
   );
 }
 
+// ── Compare Players panel ──────────────────────────────────────────────────────
+
+const COMPARE_COLORS = ['#58a6ff', '#3fb950', '#d4af37', '#f85149'];
+
+function ComparePlayersPanel({ players }) {
+  const MAX = 4;
+  const [selectedIds, setSelectedIds] = useState(['', '']);
+  const [results, setResults]         = useState([]); // [{ name, totalHands, tags }]
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState('');
+
+  function setPlayer(idx, id) {
+    setSelectedIds(prev => {
+      const next = [...prev];
+      next[idx] = id;
+      return next;
+    });
+  }
+
+  function addSlot() {
+    if (selectedIds.length < MAX) setSelectedIds(prev => [...prev, '']);
+  }
+
+  function removeSlot(idx) {
+    setSelectedIds(prev => prev.filter((_, i) => i !== idx));
+    setResults([]);
+  }
+
+  async function handleCompare() {
+    const ids = selectedIds.filter(Boolean);
+    if (ids.length < 2) { setError('Select at least 2 players.'); return; }
+    if (new Set(ids).size !== ids.length) { setError('Duplicate players selected.'); return; }
+    setLoading(true);
+    setError('');
+    setResults([]);
+    try {
+      const fetches = ids.map(id =>
+        apiFetch(`/api/analysis/tags?playerId=${id}`)
+          .then(d => ({
+            name: players.find(p => p.stableId === id)?.name ?? id,
+            totalHands: d?.totalHands ?? 0,
+            tags: d?.tags ?? [],
+          }))
+      );
+      const data = await Promise.all(fetches);
+      setResults(data);
+    } catch (err) {
+      setError(err.message ?? 'Failed to compare players.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Build a unified tag list from all players (top 10 by max occurrence across any player)
+  const allTagNames = useMemo(() => {
+    if (results.length === 0) return [];
+    const tagMap = new Map();
+    for (const r of results) {
+      for (const t of r.tags) {
+        const prev = tagMap.get(t.tag) ?? { maxPct: 0, tag_type: t.tag_type };
+        tagMap.set(t.tag, { maxPct: Math.max(prev.maxPct, t.pct), tag_type: t.tag_type });
+      }
+    }
+    return [...tagMap.entries()]
+      .sort((a, b) => b[1].maxPct - a[1].maxPct)
+      .slice(0, 12)
+      .map(([tag, meta]) => ({ tag, tag_type: meta.tag_type }));
+  }, [results]);
+
+  return (
+    <div style={PANEL} className="rounded-lg overflow-hidden">
+      <div
+        className="px-4 py-2.5 flex items-center justify-between"
+        style={{ borderBottom: '1px solid #21262d' }}
+      >
+        <span className="text-xs font-bold tracking-wider uppercase" style={{ color: BLUE }}>
+          Compare Players
+        </span>
+        {selectedIds.length < MAX && (
+          <button
+            onClick={addSlot}
+            className="text-xs px-2 py-1 rounded"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #30363d', color: '#8b949e' }}
+          >
+            + Add Player
+          </button>
+        )}
+      </div>
+
+      <div className="p-4 flex flex-col gap-4">
+        {/* Player selectors */}
+        <div className="flex flex-wrap gap-2 items-center">
+          {selectedIds.map((id, idx) => (
+            <div key={idx} className="flex items-center gap-1">
+              <div
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ background: COMPARE_COLORS[idx] }}
+              />
+              <select
+                value={id}
+                onChange={e => setPlayer(idx, e.target.value)}
+                className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
+                style={{ background: '#0d1117', border: `1px solid ${COMPARE_COLORS[idx]}44`, minWidth: 150 }}
+              >
+                <option value="">Player {idx + 1} ▾</option>
+                {players.map(p => (
+                  <option key={p.stableId} value={p.stableId}>{p.name}</option>
+                ))}
+              </select>
+              {selectedIds.length > 2 && (
+                <button
+                  onClick={() => removeSlot(idx)}
+                  style={{ color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+
+          <button
+            onClick={handleCompare}
+            disabled={loading}
+            className="ml-auto rounded px-4 py-1.5 text-sm font-semibold transition-opacity"
+            style={{
+              background: loading ? 'rgba(88,166,255,0.15)' : 'rgba(88,166,255,0.2)',
+              border: '1px solid rgba(88,166,255,0.4)',
+              color: BLUE,
+              opacity: loading ? 0.7 : 1,
+              cursor: loading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {loading ? 'Loading…' : 'Compare'}
+          </button>
+        </div>
+
+        {error && (
+          <div className="text-xs px-3 py-2 rounded" style={{ background: 'rgba(248,81,73,0.1)', color: RED }}>
+            {error}
+          </div>
+        )}
+
+        {/* Results table */}
+        {results.length > 0 && (
+          <div className="overflow-x-auto">
+            {/* Header row — player names + hand counts */}
+            <div
+              className="grid gap-px text-xs font-bold uppercase tracking-wider"
+              style={{ gridTemplateColumns: `180px repeat(${results.length}, 1fr)`, color: '#6e7681' }}
+            >
+              <div className="px-2 py-2">Tag</div>
+              {results.map((r, i) => (
+                <div key={i} className="px-2 py-2 text-center" style={{ color: COMPARE_COLORS[i] }}>
+                  {r.name}
+                  <span className="block text-[9px] font-normal mt-0.5" style={{ color: '#6e7681' }}>
+                    {r.totalHands} hands
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ border: '1px solid #21262d', borderRadius: 6, overflow: 'hidden' }}>
+              {allTagNames.map(({ tag, tag_type }, rowIdx) => (
+                <div
+                  key={tag}
+                  className="grid gap-px text-sm"
+                  style={{
+                    gridTemplateColumns: `180px repeat(${results.length}, 1fr)`,
+                    background: rowIdx % 2 === 0 ? 'rgba(255,255,255,0.01)' : 'transparent',
+                    borderBottom: rowIdx < allTagNames.length - 1 ? '1px solid #21262d' : 'none',
+                  }}
+                >
+                  <div className="px-3 py-2 flex items-center gap-2">
+                    <span
+                      className="text-[9px] font-bold px-1 py-0.5 rounded uppercase"
+                      style={{
+                        background: `${TAG_TYPE_COLORS[tag_type] ?? GOLD}18`,
+                        border: `1px solid ${TAG_TYPE_COLORS[tag_type] ?? GOLD}44`,
+                        color: TAG_TYPE_COLORS[tag_type] ?? GOLD,
+                      }}
+                    >
+                      {tag_type}
+                    </span>
+                    <span className="text-xs text-gray-300 font-mono">{tag}</span>
+                  </div>
+                  {results.map((r, ci) => {
+                    const entry = r.tags.find(t => t.tag === tag);
+                    return (
+                      <div
+                        key={ci}
+                        className="px-3 py-2 text-center text-xs font-mono"
+                        style={{ color: entry ? COMPARE_COLORS[ci] : '#3d444d' }}
+                      >
+                        {entry ? `${entry.pct}%` : '—'}
+                        {entry && (
+                          <span className="block text-[9px]" style={{ color: '#6e7681' }}>
+                            {entry.count}×
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function AnalysisPage() {
@@ -495,14 +707,19 @@ function AnalysisPageInner() {
           )}
         </div>
 
-        {/* Filter bar */}
-        <FilterBar
-          players={players}
-          filters={filters}
-          onChange={handleFilterChange}
-          onRun={handleRun}
-          loading={loading}
-        />
+        {/* Filter bar — hidden in compare mode */}
+        {!showCompare && (
+          <FilterBar
+            players={players}
+            filters={filters}
+            onChange={handleFilterChange}
+            onRun={handleRun}
+            loading={loading}
+          />
+        )}
+
+        {/* Compare panel */}
+        {showCompare && <ComparePlayersPanel players={players} />}
 
         {/* Error */}
         {error && (
@@ -514,8 +731,8 @@ function AnalysisPageInner() {
           </div>
         )}
 
-        {/* Results */}
-        {hasRun && !loading && (
+        {/* Results — hidden in compare mode */}
+        {!showCompare && hasRun && !loading && (
           <>
             {/* Summary line */}
             <ResultsSummary
@@ -571,8 +788,8 @@ function AnalysisPageInner() {
           </>
         )}
 
-        {/* Idle state */}
-        {!hasRun && !loading && (
+        {/* Idle state — hidden in compare mode */}
+        {!showCompare && !hasRun && !loading && (
           <div
             className="py-16 text-center text-sm text-gray-600 rounded-lg"
             style={{ border: '1px solid #21262d' }}

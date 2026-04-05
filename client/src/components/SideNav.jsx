@@ -33,7 +33,7 @@ const NAV_ITEMS = [
     icon: '📋',
     label: 'CRM',
     path: '/admin/crm',
-    roles: ['coach', 'admin', 'superadmin', 'moderator'],
+    roles: ['coach', 'admin', 'superadmin'],
     badgeKey: 'crm',
   },
   {
@@ -49,10 +49,10 @@ const NAV_ITEMS = [
     roles: ['coach', 'player', 'admin', 'superadmin'],
   },
   {
-    icon: '🔬',
-    label: 'Review',
-    path: '/review',
-    roles: ['coach', 'player'],
+    icon: '🤖',
+    label: 'Bot Games',
+    path: '/bot-lobby',
+    roles: ['player', 'coach', 'admin', 'superadmin'],
   },
   {
     icon: '📊',
@@ -71,6 +71,18 @@ const NAV_ITEMS = [
     label: 'Leaderboard',
     path: '/leaderboard',
     roles: ['coach', 'player', 'trial', 'admin', 'superadmin', 'moderator', 'referee'],
+  },
+  {
+    icon: '💰',
+    label: 'Staking',
+    path: '/admin/staking',
+    roles: ['coach', 'admin', 'superadmin'],
+  },
+  {
+    icon: '💰',
+    label: 'Staking',
+    path: '/staking',
+    roles: ['player'],
   },
   {
     icon: '📢',

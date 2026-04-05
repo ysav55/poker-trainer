@@ -23,7 +23,7 @@ export default function AppLayout({ chipBalance, pageTitle, onBack, badges }) {
   return (
     <div
       className="flex flex-col"
-      style={{ minHeight: '100vh', background: '#060a0f' }}
+      style={{ height: '100vh', background: '#060a0f' }}
     >
       <GlobalTopBar
         chipBalance={chipBalance}

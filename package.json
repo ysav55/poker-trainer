@@ -12,6 +12,7 @@
     "start": "node server/index.js",
     "dev:server": "node server/index.js",
     "dev:client": "npm run dev --prefix client",
+    "test": "npx jest && npm test --prefix client",
     "test:server": "npm test --prefix server",
     "test:client": "npm test --prefix client",
     "simulate": "node simulate_game.js",

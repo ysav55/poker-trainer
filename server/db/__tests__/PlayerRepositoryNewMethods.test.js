@@ -371,7 +371,7 @@ describe('listPlayers', () => {
     expect(result).toEqual([]);
   });
 
-  test('returns player rows when found', async () => {
+  test('returns player rows when found (with role: null when no role data)', async () => {
     const fakePlayers = [
       { id: 'uuid-001', display_name: 'Alice', status: 'active' },
       { id: 'uuid-002', display_name: 'Bob',   status: 'active' },
@@ -379,8 +379,26 @@ describe('listPlayers', () => {
     supabase.then.mockImplementationOnce((resolve) =>
       resolve({ data: fakePlayers, error: null })
     );
+    // roles and player_roles queries return empty (default mock)
     const result = await listPlayers();
-    expect(result).toEqual(fakePlayers);
+    expect(result).toEqual([
+      { ...fakePlayers[0], role: null },
+      { ...fakePlayers[1], role: null },
+    ]);
+  });
+
+  test('maps highest-priority role onto each player', async () => {
+    const fakePlayers = [{ id: 'p-1', display_name: 'Alice', status: 'active' }];
+    supabase.then
+      // player_profiles query
+      .mockImplementationOnce((resolve) => resolve({ data: fakePlayers, error: null }))
+      // roles query
+      .mockImplementationOnce((resolve) => resolve({ data: [{ id: 'r-coach', name: 'coach' }, { id: 'r-player', name: 'player' }], error: null }))
+      // player_roles query
+      .mockImplementationOnce((resolve) => resolve({ data: [{ player_id: 'p-1', role_id: 'r-coach' }], error: null }));
+
+    const result = await listPlayers();
+    expect(result[0].role).toBe('coach');
   });
 
   test('uses default limit of 50 and offset 0 via range()', async () => {

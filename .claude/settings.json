@@ -1,17 +1,4 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous-git.sh"
-          }
-        ]
-      }
-    ]
-  },
   "permissions": {
     "allow": [
       "Bash(node simulate_game.js)",
@@ -86,7 +73,13 @@
       "Bash(paperclipai --help)",
       "Bash(npx paperclipai:*)",
       "WebFetch(domain:docs.paperclip.ing)",
-      "Read(//c/Users/user/**)"
+      "Read(//c/Users/user/**)",
+      "Bash(grep -h \"app\\\\.\\\\\\(get\\\\|post\\\\|put\\\\|delete\\\\|patch\\\\\\)\" /c/Users/user/poker-trainer/server/routes/*.js)",
+      "Bash(grep -h \"^-- Migration\\\\|^-- supabase\" /c/Users/user/poker-trainer/supabase/migrations/*.sql)",
+      "Bash(grep -n \"ALTER TABLE tables\\\\|ADD.*NOT NULL\" /c/Users/user/poker-trainer/supabase/migrations/*.sql)",
+      "Bash(node --input-type=module)",
+      "Bash(node -e ':*)",
+      "Bash(git -C /c/Users/user/poker-trainer diff --stat HEAD)"
     ],
     "additionalDirectories": [
       "C:\\Users\\user\\.claude\\skills\\design-an-interface",
@@ -107,6 +100,19 @@
       "C:\\Users\\user\\.claude\\skills\\write-a-skill",
       "C:\\Users\\user\\.claude",
       "C:\\Users\\user\\Desktop"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous-git.sh"
+          }
+        ]
+      }
     ]
   }
 }

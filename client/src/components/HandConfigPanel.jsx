@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import Card from './Card';
 import CardPicker from './CardPicker';
 import { validateRange, parseRange } from '../utils/rangeParser';
-import { RangeMatrix } from './RangeMatrix';
+import RangePicker from './RangePicker';
 import { comboArrayToHandGroups, selectedHandGroupsToComboArray } from '../utils/comboUtils';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -231,6 +231,7 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
 
   // Per-player matrix selected hand groups: configKey → Set<string>
   const [playerMatrixGroups, setPlayerMatrixGroups] = useState({});
+  const [matrixPickerOpen, setMatrixPickerOpen]     = useState({});
 
   // pickerTarget: null | { type: 'player'|'board', playerId?, position }
   const [pickerTarget, setPickerTarget] = useState(null);
@@ -591,24 +592,49 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
                         />
                       </div>
                     ) : inputMode === 'matrix' ? (
-                      // MATRIX PICKER: 13×13 visual hand grid
+                      // MATRIX PICKER: opens RangePicker popup
                       <div className="mt-1">
-                        <RangeMatrix
-                          selected={playerMatrixGroups[configKey] ?? new Set()}
-                          onToggle={(handGroup) => handleMatrixToggle(configKey, handGroup)}
-                          colorMode="selected"
-                        />
                         {(() => {
                           const groups = playerMatrixGroups[configKey];
                           const count = groups?.size ? selectedHandGroupsToComboArray(groups).length : 0;
-                          return count > 0 ? (
-                            <div style={{ fontSize: '9px', color: '#3fb950', marginTop: '4px', textAlign: 'center' }}>
-                              ✓ {count} combo{count !== 1 ? 's' : ''}
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: '9px', color: '#444', marginTop: '4px', textAlign: 'center' }}>
-                              Click cells to select hands
-                            </div>
+                          return (
+                            <>
+                              <button
+                                onClick={() => setMatrixPickerOpen(prev => ({ ...prev, [configKey]: true }))}
+                                style={{
+                                  width: '100%', padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+                                  background: count > 0 ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
+                                  border: `1px solid ${count > 0 ? 'rgba(34,197,94,0.35)' : '#30363d'}`,
+                                  color: count > 0 ? '#3fb950' : '#6e7681',
+                                  fontSize: '10px', fontWeight: 600, textAlign: 'center',
+                                }}
+                              >
+                                {count > 0 ? `✓ ${count} combo${count !== 1 ? 's' : ''} selected` : 'Pick Range…'}
+                              </button>
+                              {matrixPickerOpen[configKey] && (
+                                <div
+                                  className="fixed inset-0 z-50 flex items-center justify-center"
+                                  style={{ background: 'rgba(0,0,0,0.72)' }}
+                                  onClick={(e) => { if (e.target === e.currentTarget) setMatrixPickerOpen(prev => ({ ...prev, [configKey]: false })); }}
+                                >
+                                  <RangePicker
+                                    seatLabel={player.name || `Seat ${player.seat}`}
+                                    initialRange={[...(groups ?? new Set())].join(',')}
+                                    onApply={(rangeStr) => {
+                                      const newGroups = new Set(rangeStr ? rangeStr.split(',').map(s => s.trim()).filter(Boolean) : []);
+                                      const combos = selectedHandGroupsToComboArray(newGroups);
+                                      setPlayerMatrixGroups(prev => ({ ...prev, [configKey]: newGroups }));
+                                      setMatrixPickerOpen(prev => ({ ...prev, [configKey]: false }));
+                                      // Notify server: emit updated config with new combos
+                                      const nextCombos = { ...(config.hole_cards_combos ?? {}), [configKey]: combos };
+                                      emitConfig({ ...config, hole_cards_combos: nextCombos });
+                                      setConfig(prev => ({ ...prev, hole_cards_combos: { ...(prev.hole_cards_combos ?? {}), [configKey]: combos } }));
+                                    }}
+                                    onCancel={() => setMatrixPickerOpen(prev => ({ ...prev, [configKey]: false }))}
+                                  />
+                                </div>
+                              )}
+                            </>
                           );
                         })()}
                       </div>

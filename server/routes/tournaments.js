@@ -20,7 +20,7 @@ const { TournamentRepository } = require('../db/repositories/TournamentRepositor
 
 const VALID_STATUSES = new Set(['pending', 'running', 'paused', 'finished']);
 
-module.exports = function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
+function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
   const coachOnly = [requireAuth, requireRole('coach')];
 
   // POST /api/tournaments — create tournament
@@ -166,4 +166,109 @@ module.exports = function registerTournamentStandaloneRoutes(app, { requireAuth,
       res.status(500).json({ error: 'internal_error', message: err.message });
     }
   });
-};
+}
+
+// ─── Referee routes ───────────────────────────────────────────────────────────
+
+function registerRefereeRoutes(app, { requireAuth }) {
+  const { requirePermission } = require('../auth/requirePermission.js');
+  const supabase = require('../db/supabase.js');
+
+  // GET /api/tournaments/:tableId/referee — get active ref
+  app.get('/api/tournaments/:tableId/referee', requireAuth, async (req, res) => {
+    try {
+      const { data } = await supabase
+        .from('tournament_referees')
+        .select('*, player_profiles!player_id(display_name)')
+        .eq('table_id', req.params.tableId)
+        .eq('active', true)
+        .maybeSingle();
+      res.json({ referee: data ?? null });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/tournaments/:tableId/referee — appoint/replace ref
+  app.post('/api/tournaments/:tableId/referee', requireAuth, requirePermission('tournament:manage'), async (req, res) => {
+    try {
+      const { refPlayerId } = req.body;
+      if (!refPlayerId) return res.status(400).json({ error: 'refPlayerId is required' });
+      const appointerId = req.user?.stableId ?? req.user?.id;
+
+      // Revoke existing active ref
+      await supabase
+        .from('tournament_referees')
+        .update({ active: false, revoked_at: new Date().toISOString(), revoked_by: appointerId })
+        .eq('table_id', req.params.tableId)
+        .eq('active', true);
+
+      // Insert new ref
+      const { data, error } = await supabase
+        .from('tournament_referees')
+        .insert({
+          table_id:     req.params.tableId,
+          player_id:    refPlayerId,
+          appointed_by: appointerId,
+          active:       true,
+        })
+        .select('*')
+        .single();
+      if (error) throw error;
+
+      res.status(201).json({ referee: data });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/tournament-refs/:refId — revoke
+  app.delete('/api/tournament-refs/:refId', requireAuth, requirePermission('tournament:manage'), async (req, res) => {
+    try {
+      const revokerId = req.user?.stableId ?? req.user?.id;
+      const { error } = await supabase
+        .from('tournament_referees')
+        .update({ active: false, revoked_at: new Date().toISOString(), revoked_by: revokerId })
+        .eq('id', req.params.refId);
+      if (error) throw error;
+      res.json({ revoked: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin-referee-defaults
+  app.get('/api/admin-referee-defaults', requireAuth, async (req, res) => {
+    try {
+      const adminId = req.user?.stableId ?? req.user?.id;
+      const { data, error } = await supabase
+        .from('admin_referee_defaults')
+        .select('*, player_profiles!ref_id(display_name)')
+        .eq('admin_id', adminId);
+      if (error) throw error;
+      res.json({ defaults: data ?? [] });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/admin-referee-defaults
+  app.put('/api/admin-referee-defaults', requireAuth, async (req, res) => {
+    try {
+      const adminId = req.user?.stableId ?? req.user?.id;
+      const { refId, schoolId = null } = req.body;
+      if (!refId) return res.status(400).json({ error: 'refId is required' });
+      const { error } = await supabase
+        .from('admin_referee_defaults')
+        .upsert({ admin_id: adminId, school_id: schoolId, ref_id: refId }, { onConflict: 'admin_id,school_id' });
+      if (error) throw error;
+      res.json({ saved: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+}
+
+module.exports = registerTournamentStandaloneRoutes;
+module.exports.registerTournamentStandaloneRoutes = registerTournamentStandaloneRoutes;
+module.exports.registerRefereeRoutes = registerRefereeRoutes;

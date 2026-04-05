@@ -19,9 +19,10 @@ module.exports = function registerBotTableRoutes(app, { requireAuth }) {
     const { name, difficulty, humanSeats, blinds } = req.body || {};
     const user = req.user;
 
-    // ── Validate ──────────────────────────────────────────────────────────────
-    if (!name || typeof name !== 'string' || name.trim().length === 0)
-      return res.status(400).json({ error: 'invalid_name', message: 'name is required.' });
+    // ── Auto-generate name if not provided ────────────────────────────────────
+    const resolvedName = (name && typeof name === 'string' && name.trim().length > 0)
+      ? name.trim()
+      : `Bot Game — ${new Date().toISOString().replace('T', ' ').slice(0, 16)}`;
 
     if (!VALID_DIFFICULTIES.includes(difficulty))
       return res.status(400).json({ error: 'invalid_difficulty', message: `difficulty must be one of: ${VALID_DIFFICULTIES.join(', ')}.` });
@@ -36,7 +37,7 @@ module.exports = function registerBotTableRoutes(app, { requireAuth }) {
 
     try {
       const table = await createBotTable({
-        name:        name.trim(),
+        name:        resolvedName,
         creatorId:   user.stableId || user.id,
         creatorRole: user.role,
         difficulty,

@@ -89,4 +89,40 @@ module.exports = function registerTournamentHandlers(socket, ctx) {
       message: `${name} moved from ${fromTableId} to ${toTableId}`,
     });
   });
+
+  // tournament:request_reentry
+  socket.on('tournament:request_reentry', async () => {
+    const tableId = socket.data.tableId;
+    if (!tableId) return sendError(socket, 'Not in a table');
+
+    const { getController } = require('../../state/SharedState');
+    const ctrl = getController(tableId);
+    if (!ctrl || ctrl.getMode?.() !== 'tournament') {
+      return socket.emit('tournament:reentry_rejected', { reason: 'Not a tournament table' });
+    }
+
+    try {
+      await ctrl.handleReentry(socket);
+    } catch (err) {
+      socket.emit('tournament:reentry_rejected', { reason: err.message });
+    }
+  });
+
+  // tournament:request_addon
+  socket.on('tournament:request_addon', async () => {
+    const tableId = socket.data.tableId;
+    if (!tableId) return sendError(socket, 'Not in a table');
+
+    const { getController } = require('../../state/SharedState');
+    const ctrl = getController(tableId);
+    if (!ctrl || ctrl.getMode?.() !== 'tournament') {
+      return socket.emit('tournament:addon_rejected', { reason: 'Not a tournament table' });
+    }
+
+    try {
+      await ctrl.handleAddon(socket);
+    } catch (err) {
+      socket.emit('tournament:addon_rejected', { reason: err.message });
+    }
+  });
 };

@@ -172,6 +172,38 @@ router.get('/schools/:id/features', async (req, res) => {
   }
 });
 
+// ── GET /api/admin/schools/:id/group-policy ──────────────────────────────────
+router.get('/schools/:id/group-policy', async (req, res) => {
+  try {
+    const school = await SchoolRepository.findById(req.params.id);
+    if (!school) return res.status(404).json({ error: 'not_found' });
+
+    const policy = await SchoolRepository.getGroupPolicy(req.params.id);
+    res.json(policy);
+  } catch (err) {
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ── PUT /api/admin/schools/:id/group-policy ───────────────────────────────────
+router.put('/schools/:id/group-policy', async (req, res) => {
+  try {
+    const school = await SchoolRepository.findById(req.params.id);
+    if (!school) return res.status(404).json({ error: 'not_found' });
+
+    const { enabled, max_groups, max_players_per_group } = req.body || {};
+    await SchoolRepository.setGroupPolicy(
+      req.params.id,
+      { enabled, max_groups, max_players_per_group },
+      req.user?.stableId ?? req.user?.id ?? null,
+    );
+    const policy = await SchoolRepository.getGroupPolicy(req.params.id);
+    res.json(policy);
+  } catch (err) {
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
 // ── PUT /api/admin/schools/:id/features ──────────────────────────────────────
 router.put('/schools/:id/features', async (req, res) => {
   try {

@@ -2,7 +2,7 @@
 
 const supabase = require('../supabase');
 
-const SCHOOL_COLUMNS = 'id, name, logo_url, primary_color, theme, status, max_coaches, max_students, created_at, updated_at, created_by, updated_by';
+const SCHOOL_COLUMNS = 'id, name, description, logo_url, primary_color, theme, status, max_coaches, max_students, created_at, updated_at, created_by, updated_by';
 const PROFILE_COLUMNS = 'id, display_name, email, status, avatar_url, school_id, player_roles(roles(name))';
 
 // ─── School CRUD ──────────────────────────────────────────────────────────────
@@ -54,6 +54,7 @@ async function create({ name, logoUrl, primaryColor, theme, maxCoaches, maxStude
 async function update(id, fields, updatedBy) {
   const patch = { updated_at: new Date().toISOString(), updated_by: updatedBy ?? null };
   if (fields.name         !== undefined) patch.name          = fields.name;
+  if (fields.description  !== undefined) patch.description   = fields.description;
   if (fields.logoUrl      !== undefined) patch.logo_url      = fields.logoUrl;
   if (fields.primaryColor !== undefined) patch.primary_color = fields.primaryColor;
   if (fields.theme        !== undefined) patch.theme         = fields.theme;
@@ -150,7 +151,7 @@ async function canAddStudent(schoolId) {
 const VALID_FEATURES = new Set([
   'feature:replay', 'feature:analysis', 'feature:chip_bank',
   'feature:playlists', 'feature:tournaments', 'feature:crm',
-  'feature:leaderboard', 'feature:scenarios',
+  'feature:leaderboard', 'feature:scenarios', 'feature:groups',
 ]);
 
 async function getFeatures(schoolId) {
@@ -206,10 +207,107 @@ async function bulkSetFeatures(schoolId, featureMap, updatedBy) {
   if (error) throw new Error(error.message);
 }
 
+// ─── Group policy ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns the effective group policy for a school.
+ * School-level setting takes priority; falls back to org-level default.
+ * Shape: { enabled: bool, max_groups: int|null, max_players_per_group: int|null }
+ */
+async function getGroupPolicy(schoolId) {
+  // School-level override
+  const { data: schoolRow } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('scope', 'school')
+    .eq('scope_id', schoolId)
+    .eq('key', 'feature:groups')
+    .maybeSingle();
+
+  if (schoolRow?.value && 'enabled' in schoolRow.value) {
+    return {
+      enabled:               schoolRow.value.enabled !== false,
+      max_groups:            schoolRow.value.max_groups            ?? null,
+      max_players_per_group: schoolRow.value.max_players_per_group ?? null,
+    };
+  }
+
+  // Org-level default
+  const { data: orgRow } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('scope', 'org')
+    .is('scope_id', null)
+    .eq('key', 'policy:groups')
+    .maybeSingle();
+
+  return {
+    enabled:               orgRow?.value?.enabled !== false,
+    max_groups:            orgRow?.value?.max_groups            ?? null,
+    max_players_per_group: orgRow?.value?.max_players_per_group ?? null,
+  };
+}
+
+/** Upserts the school-level group policy. */
+async function setGroupPolicy(schoolId, { enabled, max_groups, max_players_per_group }, updatedBy) {
+  const { error } = await supabase
+    .from('settings')
+    .upsert({
+      scope:    'school',
+      scope_id: schoolId,
+      key:      'feature:groups',
+      value: {
+        enabled:               enabled !== false,
+        max_groups:            max_groups            != null ? Number(max_groups)            : null,
+        max_players_per_group: max_players_per_group != null ? Number(max_players_per_group) : null,
+        updated_by:            updatedBy ?? null,
+      },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'scope,scope_id,key' });
+  if (error) throw new Error(error.message);
+}
+
+/** Gets the org-level group policy defaults. */
+async function getOrgGroupPolicy() {
+  const { data } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('scope', 'org')
+    .is('scope_id', null)
+    .eq('key', 'policy:groups')
+    .maybeSingle();
+
+  return {
+    enabled:               data?.value?.enabled               !== false,
+    max_groups:            data?.value?.max_groups            ?? null,
+    max_players_per_group: data?.value?.max_players_per_group ?? null,
+  };
+}
+
+/** Sets the org-level group policy defaults. */
+async function setOrgGroupPolicy({ enabled, max_groups, max_players_per_group }, updatedBy) {
+  const { error } = await supabase
+    .from('settings')
+    .upsert({
+      scope:    'org',
+      scope_id: null,
+      key:      'policy:groups',
+      value: {
+        enabled:               enabled !== false,
+        max_groups:            max_groups            != null ? Number(max_groups)            : null,
+        max_players_per_group: max_players_per_group != null ? Number(max_players_per_group) : null,
+        updated_by:            updatedBy ?? null,
+      },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'scope,scope_id,key' });
+  if (error) throw new Error(error.message);
+}
+
 module.exports = {
   findAll, findById, create, update, archive,
   getMembers, getMemberCounts, assignPlayer, removePlayer,
   canAddCoach, canAddStudent,
   getFeatures, setFeature, bulkSetFeatures,
+  getGroupPolicy, setGroupPolicy, getOrgGroupPolicy, setOrgGroupPolicy,
   VALID_FEATURES,
 };

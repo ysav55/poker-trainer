@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hand Analyzer / Tagger — Full Audit</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --blue: #58a6ff;
+      --red: #f85149;
+      --green: #3fb950;
+      --gold: #d4af37;
+      --orange: #d29922;
+      --purple: #bc8cff;
+      --teal: #39d353;
+      --pink: #ff7b72;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .page-wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+
+    /* ── HEADER ───────────────────────────────────────── */
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 40px;
+    }
+    .header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .header p { color: var(--muted); font-size: 14px; }
+    .header .meta { display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge.blue { border-color: var(--blue); color: var(--blue); }
+    .badge.red  { border-color: var(--red);  color: var(--red);  }
+    .badge.green{ border-color: var(--green);color: var(--green);}
+    .badge.gold { border-color: var(--gold); color: var(--gold); }
+    .badge.purple{border-color: var(--purple);color: var(--purple);}
+
+    /* ── SECTION ──────────────────────────────────────── */
+    section { margin-bottom: 56px; }
+    section h2 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    section h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 24px 0 12px;
+    }
+
+    /* ── CARDS GRID ───────────────────────────────────── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .card-count {
+      background: var(--bg3);
+      border-radius: 12px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .card p {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .tag {
+      font-size: 11px;
+      font-weight: 600;
+      font-family: monospace;
+      padding: 3px 8px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+    }
+    .tag.auto    { background: rgba(88,166,255,.12); border-color: rgba(88,166,255,.3); color: var(--blue); }
+    .tag.mistake { background: rgba(248,81,73,.12);  border-color: rgba(248,81,73,.3);  color: var(--red); }
+    .tag.sizing  { background: rgba(63,185,80,.12);  border-color: rgba(63,185,80,.3);  color: var(--green); }
+    .tag.coach   { background: rgba(212,175,55,.12); border-color: rgba(212,175,55,.3); color: var(--gold); }
+    .tag.new     { background: rgba(188,140,255,.12);border-color: rgba(188,140,255,.3);color: var(--purple); }
+
+    /* ── DATA FLOW ────────────────────────────────────── */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .flow-line {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 32px;
+      flex-shrink: 0;
+    }
+    .flow-dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--bg3);
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .flow-dot.active { border-color: var(--blue); color: var(--blue); }
+    .flow-connector {
+      width: 2px;
+      flex: 1;
+      min-height: 24px;
+      background: var(--border);
+    }
+    .flow-body {
+      flex: 1;
+      padding: 4px 0 24px;
+    }
+    .flow-body strong {
+      color: var(--text);
+      font-size: 13px;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .flow-body span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    code {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--pink);
+    }
+
+    /* ── TABLE ────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 14px; text-align: left; }
+    th {
+      background: var(--bg3);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg2); }
+    td code { font-size: 11px; }
+
+    .scope-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--bg3);
+      color: var(--muted);
+    }
+    .scope-pill.hand   { color: var(--orange); }
+    .scope-pill.player { color: var(--blue); }
+    .scope-pill.action { color: var(--green); }
+
+    /* ── IDEA CARDS ───────────────────────────────────── */
+    .idea-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
+    }
+    .idea-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .idea-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px;
+      height: 100%;
+    }
+    .idea-card.easy::before   { background: var(--green); }
+    .idea-card.medium::before { background: var(--orange); }
+    .idea-card.hard::before   { background: var(--red); }
+
+    .idea-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .idea-name {
+      font-family: monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .effort-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .effort-badge.easy   { background: rgba(63,185,80,.15);  color: var(--green);  }
+    .effort-badge.medium { background: rgba(210,153,34,.15); color: var(--orange); }
+    .effort-badge.hard   { background: rgba(248,81,73,.15);  color: var(--red);    }
+
+    .idea-desc {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .idea-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .idea-why {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .idea-why strong { color: var(--text); }
+
+    /* ── STATS ROW ────────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .stat-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-box .num {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .stat-box .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── TOC ──────────────────────────────────────────── */
+    .toc {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 40px;
+    }
+    .toc h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
+    .toc ol { padding-left: 20px; }
+    .toc li { margin-bottom: 6px; }
+    .toc a { color: var(--blue); text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* ── ARCH BOX ─────────────────────────────────────── */
+    .arch-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.8;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .arch-box .hi { color: var(--blue); }
+    .arch-box .grn { color: var(--green); }
+    .arch-box .gold { color: var(--gold); }
+    .arch-box .red { color: var(--red); }
+    .arch-box .purple { color: var(--purple); }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- ── HEADER ──────────────────────────────────────── -->
+  <div class="header">
+    <h1>Hand Analyzer / Tagger — Full Audit</h1>
+    <p>End-to-end audit of the automatic tagging pipeline: logic, data flow, API surface, client consumption, and new capabilities to unlock.</p>
+    <div class="meta">
+      <span class="badge blue">10 Analyzers</span>
+      <span class="badge blue">47 Tags</span>
+      <span class="badge red">9 Mistake Tags</span>
+      <span class="badge green">6 Sizing Tags</span>
+      <span class="badge gold">Coach Tags (open)</span>
+      <span class="badge purple">3-Level Scoping</span>
+    </div>
+  </div>
+
+  <!-- ── TOC ─────────────────────────────────────────── -->
+  <div class="toc">
+    <h3>Contents</h3>
+    <ol>
+      <li><a href="#overview">System Overview & Stats</a></li>
+      <li><a href="#flow">Data Flow: Hand End → Tags in DB</a></li>
+      <li><a href="#analyzers">All 10 Analyzers & Their Tags</a></li>
+      <li><a href="#schema">DB Schema & Scoping Rules</a></li>
+      <li><a href="#api">API Routes & Client Consumption</a></li>
+      <li><a href="#catalog">Full Tag Catalog (47 tags)</a></li>
+      <li><a href="#new">New Capabilities to Unlock</a></li>
+    </ol>
+  </div>
+
+  <!-- ── SECTION 1: OVERVIEW ─────────────────────────── -->
+  <section id="overview">
+    <h2>1 · System Overview &amp; Stats</h2>
+    <div class="stats-row">
+      <div class="stat-box"><div class="num">10</div><div class="label">Analyzers</div></div>
+      <div class="stat-box"><div class="num">47</div><div class="label">Total Tags</div></div>
+      <div class="stat-box"><div class="num">3</div><div class="label">Scope Levels</div></div>
+      <div class="stat-box"><div class="num">4</div><div class="label">Tag Types</div></div>
+      <div class="stat-box"><div class="num">3</div><div class="label">Client Views</div></div>
+      <div class="stat-box"><div class="num">3</div><div class="label">API Routes</div></div>
+    </div>
+
+    <div class="arch-box"><span class="hi">AnalyzerService.js</span>  ← orchestrator
+├── <span class="grn">buildAnalyzerContext(handId)</span>      parallel DB fetch → enriched context
+└── <span class="grn">analyzeAndTagHand(handId)</span>         runs all analyzers → writes hand_tags
+
+<span class="gold">ANALYZER_REGISTRY</span> (tagAnalyzers/index.js)
+├── StreetAnalyzer       → 5 tags   (hand-level)
+├── PreflopAnalyzer      → 7 tags   (hand-level)
+├── PostflopAnalyzer     → 5 tags   (hand-level)
+├── PotTypeAnalyzer      → 5 tags   (hand-level)
+├── BoardAnalyzer        → 12 tags  (hand-level, flop texture)
+├── MistakeAnalyzer      → 8 tags   (hand + player + action)
+├── SizingAnalyzer       → 6 tags   (player + action, postflop only)
+├── PositionalAnalyzer   → 6 tags   (player-level)
+├── HandStrengthAnalyzer → 4 tags   (player + action, needs hole cards)
+└── EquityAnalyzer       → 4 tags   (player + action, needs hole cards)
+
+<span class="purple">TagRepository.js</span>
+├── replaceAutoTags()    ← atomically swaps auto/mistake/sizing tags
+└── updateCoachTags()    ← touches only coach tags
+
+<span class="red">hand_tags</span> (Supabase)
+  hand_id | tag | tag_type | player_id? | action_id?</div>
+
+    <h3>Tag Type Legend</h3>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:4px;">
+      <span class="tag auto">auto</span><span style="color:var(--muted);font-size:13px;">— Pattern characteristics of the hand (hand/player scope)</span>
+    </div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;">
+      <span class="tag mistake">mistake</span><span style="color:var(--muted);font-size:13px;">— Potentially suboptimal decisions (player/action scope)</span>
+    </div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;">
+      <span class="tag sizing">sizing</span><span style="color:var(--muted);font-size:13px;">— Bet size classification (action scope, postflop only)</span>
+    </div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;">
+      <span class="tag coach">coach</span><span style="color:var(--muted);font-size:13px;">— Manually applied by coaches (arbitrary string, never auto-replaced)</span>
+    </div>
+  </section>
+
+  <!-- ── SECTION 2: DATA FLOW ────────────────────────── -->
+  <section id="flow">
+    <h2>2 · Data Flow: Hand End → Tags in DB</h2>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-line"><div class="flow-dot active">1</div><div class="flow-connector"></div></div>
+        <div class="flow-body">
+          <strong>Hand ends in GameManager</strong>
+          <span><code>gameLifecycle.js</code> calls <code>HandLogger.endHand()</code> — writes board, final_pot, winners to DB</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-line"><div class="flow-dot active">2</div><div class="flow-connector"></div></div>
+        <div class="flow-body">
+          <strong>Analysis triggered automatically</strong>
+          <span><code>.then(() =&gt; AnalyzerService.analyzeAndTagHand(handId))</code> — non-blocking, errors logged but don't break game</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-line"><div class="flow-dot active">3</div><div class="flow-connector"></div></div>
+        <div class="flow-body">
+          <strong>buildAnalyzerContext(handId)</strong>
+          <span>3 parallel DB queries: <code>hands</code>, <code>hand_actions</code>, <code>hand_players</code> → enriched with sizingRatio, positions, byStreet map, memoized <code>evaluateAt(playerId, street)</code>, botPlayerIds Set</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-line"><div class="flow-dot active">4</div><div class="flow-connector"></div></div>
+        <div class="flow-body">
+          <strong>Promise.allSettled([…10 analyzers…])</strong>
+          <span>All 10 analyzers run in parallel. Each returns <code>TagResult[]</code>. One analyzer crashing doesn't block others.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-line"><div class="flow-dot active">5</div><div class="flow-connector"></div></div>
+        <div class="flow-body">
+          <strong>Post-processing</strong>
+          <span>Validate TagResult shape → deduplicate hand/player-level tags → filter bot-player tags</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-line"><div class="flow-dot active">6</div><div class="flow-connector"></div></div>
+        <div class="flow-body">
+          <strong>replaceAutoTags(handId, tagRows)</strong>
+          <span>Atomic: DELETE old auto/mistake/sizing tags → INSERT new batch. Coach tags are never touched.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-line"><div class="flow-dot">7</div><div class="flow-connector"></div></div>
+        <div class="flow-body">
+          <strong>Client reads tags via REST</strong>
+          <span><code>GET /api/hands/history</code> (filtered list) · <code>GET /api/hands/:id</code> (full detail) · <code>GET /api/hands/tags</code> (distinct tag list)</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-line"><div class="flow-dot"></div></div>
+        <div class="flow-body">
+          <strong>Displayed in HandHistoryPage / AnalysisPage</strong>
+          <span>Color-coded pills, bar charts, drill-down by tag</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 3: ANALYZERS ────────────────────────── -->
+  <section id="analyzers">
+    <h2>3 · All 10 Analyzers &amp; Their Tags</h2>
+    <div class="card-grid">
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">StreetAnalyzer</span>
+          <span class="card-count">5 tags</span>
+        </div>
+        <p>Tracks which streets were reached and whether the hand went to showdown.</p>
+        <div class="tag-list">
+          <span class="tag auto">WALK</span>
+          <span class="tag auto">SAW_FLOP</span>
+          <span class="tag auto">SAW_TURN</span>
+          <span class="tag auto">SAW_RIVER</span>
+          <span class="tag auto">WENT_TO_SHOWDOWN</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">PreflopAnalyzer</span>
+          <span class="card-count">7 tags</span>
+        </div>
+        <p>Classifies preflop action patterns: aggression level, position plays, and squeeze scenarios.</p>
+        <div class="tag-list">
+          <span class="tag auto">3BET_POT</span>
+          <span class="tag auto">FOUR_BET_POT</span>
+          <span class="tag auto">SQUEEZE_POT</span>
+          <span class="tag auto">ALL_IN_PREFLOP</span>
+          <span class="tag auto">LIMPED_POT</span>
+          <span class="tag auto">BTN_OPEN</span>
+          <span class="tag auto">BLIND_DEFENSE</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">PostflopAnalyzer</span>
+          <span class="card-count">5 tags</span>
+        </div>
+        <p>Detects postflop action patterns: c-bets, check-raises, donk bets, and river aggression.</p>
+        <div class="tag-list">
+          <span class="tag auto">C_BET</span>
+          <span class="tag auto">CHECK_RAISE</span>
+          <span class="tag auto">BLUFF_CATCH</span>
+          <span class="tag auto">DONK_BET</span>
+          <span class="tag auto">RIVER_RAISE</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">PotTypeAnalyzer</span>
+          <span class="card-count">5 tags</span>
+        </div>
+        <p>Characterizes the pot by size, number of players, and effective stack depth.</p>
+        <div class="tag-list">
+          <span class="tag auto">WHALE_POT</span>
+          <span class="tag auto">MULTIWAY</span>
+          <span class="tag auto">SHORT_STACK</span>
+          <span class="tag auto">DEEP_STACK</span>
+          <span class="tag auto">OVERBET</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">BoardAnalyzer</span>
+          <span class="card-count">12 tags</span>
+        </div>
+        <p>Full flop texture analysis across 4 dimensions: suits, pairing, connectivity, and height. Plus wet/dry composites.</p>
+        <div class="tag-list">
+          <span class="tag auto">RAINBOW_BOARD</span>
+          <span class="tag auto">TWO_TONE_BOARD</span>
+          <span class="tag auto">MONOTONE_BOARD</span>
+          <span class="tag auto">UNPAIRED_BOARD</span>
+          <span class="tag auto">PAIRED_BOARD</span>
+          <span class="tag auto">TRIPS_BOARD</span>
+          <span class="tag auto">CONNECTED_BOARD</span>
+          <span class="tag auto">ONE_GAP_BOARD</span>
+          <span class="tag auto">DISCONNECTED_BOARD</span>
+          <span class="tag auto">ACE_HIGH_BOARD</span>
+          <span class="tag auto">BROADWAY_BOARD</span>
+          <span class="tag auto">MID_BOARD</span>
+          <span class="tag auto">LOW_BOARD</span>
+          <span class="tag auto">WET_BOARD</span>
+          <span class="tag auto">DRY_BOARD</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">MistakeAnalyzer</span>
+          <span class="card-count">8 tags</span>
+        </div>
+        <p>Flags preflop leaks and postflop errors including open-limps, cold-calls, and folding to tiny bets.</p>
+        <div class="tag-list">
+          <span class="tag mistake">UNDO_USED</span>
+          <span class="tag mistake">OPEN_LIMP</span>
+          <span class="tag mistake">OVERLIMP</span>
+          <span class="tag mistake">LIMP_RERAISE</span>
+          <span class="tag mistake">COLD_CALL_3BET</span>
+          <span class="tag mistake">FOLD_TO_PROBE</span>
+          <span class="tag mistake">MIN_RAISE</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">SizingAnalyzer</span>
+          <span class="card-count">6 tags</span>
+        </div>
+        <p>Action-level bet size classification on all postflop streets. Buckets span probe → overbet jam.</p>
+        <div class="tag-list">
+          <span class="tag sizing">PROBE_BET &lt;25%</span>
+          <span class="tag sizing">THIRD_POT_BET 25–50%</span>
+          <span class="tag sizing">HALF_POT_BET 50–80%</span>
+          <span class="tag sizing">POT_BET 80–110%</span>
+          <span class="tag sizing">OVERBET 110–200%</span>
+          <span class="tag sizing">OVERBET_JAM &gt;200%</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">PositionalAnalyzer</span>
+          <span class="card-count">6 tags</span>
+        </div>
+        <p>Position-qualified action tags for coaching feedback — distinguishes IP vs OOP c-bets and position-specific 3-bets.</p>
+        <div class="tag-list">
+          <span class="tag auto">C_BET_IP</span>
+          <span class="tag auto">C_BET_OOP</span>
+          <span class="tag auto">DONK_BET_BB</span>
+          <span class="tag auto">3BET_BTN</span>
+          <span class="tag auto">3BET_SB</span>
+          <span class="tag auto">SQUEEZE_CO</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">HandStrengthAnalyzer</span>
+          <span class="card-count">4 tags</span>
+        </div>
+        <p>Outcome-aware tags requiring hole cards. Detects slowplays, hero calls, missed value, and thin value raises.</p>
+        <div class="tag-list">
+          <span class="tag auto">SLOWPLAY</span>
+          <span class="tag auto">HERO_CALL</span>
+          <span class="tag auto">VALUE_MISSED</span>
+          <span class="tag auto">THIN_VALUE_RAISE</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">EquityAnalyzer</span>
+          <span class="card-count">4 tags</span>
+        </div>
+        <p>Equity-based decision quality. Requires hole cards from at least 2 players. Uses memoized per-street equity.</p>
+        <div class="tag-list">
+          <span class="tag mistake">DREW_THIN</span>
+          <span class="tag auto">VALUE_BACKED</span>
+          <span class="tag auto">EQUITY_BLUFF</span>
+          <span class="tag mistake">EQUITY_FOLD</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── SECTION 4: SCHEMA ───────────────────────────── -->
+  <section id="schema">
+    <h2>4 · DB Schema &amp; Scoping Rules</h2>
+    <div class="arch-box"><span class="hi">hand_tags</span>
+  id         bigserial    PK
+  hand_id    uuid         FK → hands (CASCADE delete)
+  tag        text         e.g. "C_BET", "OPEN_LIMP"
+  tag_type   text         CHECK IN ('auto','mistake','coach','sizing')
+  player_id  uuid?        FK → player_profiles (SET NULL) — null = hand-level
+  action_id  bigint?      FK → hand_actions (SET NULL) — null = not per-action
+  created_at timestamptz  DEFAULT now()
+
+<span class="gold">Unique constraints (3 partial indexes from migration 006):</span>
+  UNIQUE (hand_id, tag, tag_type) WHERE player_id IS NULL                         → hand-level
+  UNIQUE (hand_id, tag, tag_type, player_id) WHERE player_id IS NOT NULL AND action_id IS NULL  → player-level
+  — no uniqueness constraint on action_id rows (multiple bets per hand can share a sizing tag)
+
+<span class="grn">Indexes:</span>
+  idx_hand_tags_hand, idx_hand_tags_tag, idx_hand_tags_type,
+  idx_hand_tags_hand_type, idx_hand_tags_player, idx_hand_tags_action</div>
+
+    <h3>Scope Decision Tree</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Scope</th><th>player_id</th><th>action_id</th><th>Example Tags</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="scope-pill hand">hand-level</span></td>
+            <td><code>NULL</code></td>
+            <td><code>NULL</code></td>
+            <td>WALK, 3BET_POT, MONOTONE_BOARD, MULTIWAY, UNDO_USED</td>
+          </tr>
+          <tr>
+            <td><span class="scope-pill player">player-level</span></td>
+            <td>UUID</td>
+            <td><code>NULL</code></td>
+            <td>OPEN_LIMP, C_BET_IP, SLOWPLAY, VALUE_MISSED, 3BET_BTN</td>
+          </tr>
+          <tr>
+            <td><span class="scope-pill action">action-level</span></td>
+            <td>UUID</td>
+            <td>bigint</td>
+            <td>PROBE_BET, HERO_CALL, DREW_THIN, EQUITY_FOLD, FOLD_TO_PROBE</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 5: API ──────────────────────────────── -->
+  <section id="api">
+    <h2>5 · API Routes &amp; Client Consumption</h2>
+
+    <h3>Server Routes</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Method + Path</th><th>Auth</th><th>Returns</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>GET /api/hands/tags</code></td>
+            <td>requireAuth</td>
+            <td>Distinct tags list: <code>{tags: [{tag, tag_type}]}</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /api/hands/history</code></td>
+            <td>requireAuth</td>
+            <td>Paginated list with <code>auto_tags[]</code>, <code>mistake_tags[]</code>, <code>coach_tags[]</code>. Params: <code>playerId, tableId, startDate, endDate, tags (OR), mistakesOnly, scenariosOnly, limit, offset</code></td>
+          </tr>
+          <tr>
+            <td><code>GET /api/hands/:handId</code></td>
+            <td>requireAuth</td>
+            <td>Full hand detail: actions, hole cards, <code>auto_tags[]</code>, <code>mistake_tags[]</code>, <code>coach_tags[]</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Client Views</h3>
+    <div class="card-grid" style="margin-top:12px;">
+      <div class="card">
+        <div class="card-header"><span class="card-title">HandHistoryPage</span></div>
+        <p>Hand browser with tag-based search. Shows color-coded tag pills per hand (first 6 + overflow). Tag filter dropdown populated from <code>/api/hands/tags</code>.</p>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">AnalysisPage</span></div>
+        <p>Aggregate view per student. Horizontal bar chart of top-12 tags by frequency. Clickable bars drill into hands matching that tag.</p>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">ReviewTablePage</span></div>
+        <p>Step-by-step action replay. Tags not currently surfaced here — potential improvement area.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SECTION 6: FULL TAG CATALOG ────────────────── -->
+  <section id="catalog">
+    <h2>6 · Full Tag Catalog (47 Tags)</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Tag</th><th>Type</th><th>Scope</th><th>Trigger Condition</th></tr>
+        </thead>
+        <tbody>
+          <!-- Street -->
+          <tr><td><span class="tag auto">WALK</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>BB wins uncontested preflop, no board dealt</td></tr>
+          <tr><td><span class="tag auto">SAW_FLOP</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Board length ≥ 3</td></tr>
+          <tr><td><span class="tag auto">SAW_TURN</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Board length ≥ 4</td></tr>
+          <tr><td><span class="tag auto">SAW_RIVER</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Board length ≥ 5</td></tr>
+          <tr><td><span class="tag auto">WENT_TO_SHOWDOWN</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td><code>phase_ended === 'showdown'</code></td></tr>
+          <!-- Preflop -->
+          <tr><td><span class="tag auto">3BET_POT</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>≥ 2 raises preflop</td></tr>
+          <tr><td><span class="tag auto">FOUR_BET_POT</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>≥ 3 raises preflop</td></tr>
+          <tr><td><span class="tag auto">SQUEEZE_POT</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Raise after (raise → call) sequence preflop</td></tr>
+          <tr><td><span class="tag auto">ALL_IN_PREFLOP</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Any all-in action preflop</td></tr>
+          <tr><td><span class="tag auto">LIMPED_POT</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Voluntary calls preflop, no raise ever</td></tr>
+          <tr><td><span class="tag auto">BTN_OPEN</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>First preflop raise from button position</td></tr>
+          <tr><td><span class="tag auto">BLIND_DEFENSE</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>BB responded to a raise with call or re-raise</td></tr>
+          <!-- Postflop -->
+          <tr><td><span class="tag auto">C_BET</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Last PF raiser is first to bet/raise on flop</td></tr>
+          <tr><td><span class="tag auto">CHECK_RAISE</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Player checks, then raises on same street</td></tr>
+          <tr><td><span class="tag auto">BLUFF_CATCH</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Caller of last river bet wins at showdown</td></tr>
+          <tr><td><span class="tag auto">DONK_BET</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Non-PF-raiser bets first on flop (into the raiser)</td></tr>
+          <tr><td><span class="tag auto">RIVER_RAISE</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Any raise action on the river</td></tr>
+          <!-- Pot type -->
+          <tr><td><span class="tag auto">WHALE_POT</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>final_pot &gt; 150× BB</td></tr>
+          <tr><td><span class="tag auto">MULTIWAY</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>3+ players saw flop (or preflop if no flop)</td></tr>
+          <tr><td><span class="tag auto">SHORT_STACK</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Any player's stack &lt; 20× BB</td></tr>
+          <tr><td><span class="tag auto">DEEP_STACK</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Any player's stack &gt; 100× BB</td></tr>
+          <tr><td><span class="tag auto">OVERBET</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Any bet/raise &gt; 2× pot (hand-level signal)</td></tr>
+          <!-- Board -->
+          <tr><td><span class="tag auto">RAINBOW_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: all 3 different suits</td></tr>
+          <tr><td><span class="tag auto">TWO_TONE_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: exactly 2 suits (flush draw possible)</td></tr>
+          <tr><td><span class="tag auto">MONOTONE_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: all 3 same suit</td></tr>
+          <tr><td><span class="tag auto">UNPAIRED_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: all 3 different ranks</td></tr>
+          <tr><td><span class="tag auto">PAIRED_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: exactly 2 ranks same</td></tr>
+          <tr><td><span class="tag auto">TRIPS_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: all 3 same rank</td></tr>
+          <tr><td><span class="tag auto">CONNECTED_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: span ≤ 2 (e.g., 7-8-9)</td></tr>
+          <tr><td><span class="tag auto">ONE_GAP_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: span 3–4 (e.g., 6-7-9)</td></tr>
+          <tr><td><span class="tag auto">DISCONNECTED_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: span &gt; 4 (e.g., Q-2-3)</td></tr>
+          <tr><td><span class="tag auto">ACE_HIGH_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop contains an Ace</td></tr>
+          <tr><td><span class="tag auto">BROADWAY_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: all T-K (no Ace)</td></tr>
+          <tr><td><span class="tag auto">MID_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: all ranks 6–9</td></tr>
+          <tr><td><span class="tag auto">LOW_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flop: all ranks ≤ 7</td></tr>
+          <tr><td><span class="tag auto">WET_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Flush draw + straight draw both present</td></tr>
+          <tr><td><span class="tag auto">DRY_BOARD</span></td><td>auto</td><td><span class="scope-pill hand">hand</span></td><td>Rainbow + disconnected (no draws)</td></tr>
+          <!-- Positional -->
+          <tr><td><span class="tag auto">C_BET_IP</span></td><td>auto</td><td><span class="scope-pill player">player</span></td><td>C-bet while holding positional advantage</td></tr>
+          <tr><td><span class="tag auto">C_BET_OOP</span></td><td>auto</td><td><span class="scope-pill player">player</span></td><td>C-bet without positional advantage</td></tr>
+          <tr><td><span class="tag auto">DONK_BET_BB</span></td><td>auto</td><td><span class="scope-pill player">player</span></td><td>Donk bet specifically from BB position</td></tr>
+          <tr><td><span class="tag auto">3BET_BTN</span></td><td>auto</td><td><span class="scope-pill player">player</span></td><td>3-bet from button position</td></tr>
+          <tr><td><span class="tag auto">3BET_SB</span></td><td>auto</td><td><span class="scope-pill player">player</span></td><td>3-bet from small blind position</td></tr>
+          <tr><td><span class="tag auto">SQUEEZE_CO</span></td><td>auto</td><td><span class="scope-pill player">player</span></td><td>Squeeze play from cutoff position</td></tr>
+          <!-- Mistakes -->
+          <tr><td><span class="tag mistake">UNDO_USED</span></td><td>mistake</td><td><span class="scope-pill hand">hand</span></td><td>Any action in the hand was reverted</td></tr>
+          <tr><td><span class="tag mistake">OPEN_LIMP</span></td><td>mistake</td><td><span class="scope-pill player">player</span></td><td>Non-BB calls before any raise</td></tr>
+          <tr><td><span class="tag mistake">OVERLIMP</span></td><td>mistake</td><td><span class="scope-pill player">player</span></td><td>Calls preflop when ≥1 limp already in</td></tr>
+          <tr><td><span class="tag mistake">LIMP_RERAISE</span></td><td>mistake</td><td><span class="scope-pill player">player</span></td><td>Limped preflop, then raised after a squeeze</td></tr>
+          <tr><td><span class="tag mistake">COLD_CALL_3BET</span></td><td>mistake</td><td><span class="scope-pill player">player</span></td><td>Called a 3-bet with no prior investment in pot</td></tr>
+          <tr><td><span class="tag mistake">FOLD_TO_PROBE</span></td><td>mistake</td><td><span class="scope-pill action">action</span></td><td>Folded to a bet &lt; 25% of pot</td></tr>
+          <tr><td><span class="tag mistake">MIN_RAISE</span></td><td>mistake</td><td><span class="scope-pill action">action</span></td><td>Raised to ≤ 2× the previous bet</td></tr>
+          <tr><td><span class="tag mistake">DREW_THIN</span></td><td>mistake</td><td><span class="scope-pill action">action</span></td><td>Called a street bet with equity &lt; 25%</td></tr>
+          <tr><td><span class="tag mistake">EQUITY_FOLD</span></td><td>mistake</td><td><span class="scope-pill action">action</span></td><td>Folded with equity &gt; 50%</td></tr>
+          <!-- Sizing -->
+          <tr><td><span class="tag sizing">PROBE_BET</span></td><td>sizing</td><td><span class="scope-pill action">action</span></td><td>Bet size &lt; 25% pot (postflop only)</td></tr>
+          <tr><td><span class="tag sizing">THIRD_POT_BET</span></td><td>sizing</td><td><span class="scope-pill action">action</span></td><td>25–50% pot</td></tr>
+          <tr><td><span class="tag sizing">HALF_POT_BET</span></td><td>sizing</td><td><span class="scope-pill action">action</span></td><td>50–80% pot</td></tr>
+          <tr><td><span class="tag sizing">POT_BET</span></td><td>sizing</td><td><span class="scope-pill action">action</span></td><td>80–110% pot</td></tr>
+          <tr><td><span class="tag sizing">OVERBET</span></td><td>sizing</td><td><span class="scope-pill action">action</span></td><td>110–200% pot</td></tr>
+          <tr><td><span class="tag sizing">OVERBET_JAM</span></td><td>sizing</td><td><span class="scope-pill action">action</span></td><td>&gt; 200% pot</td></tr>
+          <!-- Hand strength -->
+          <tr><td><span class="tag auto">SLOWPLAY</span></td><td>auto</td><td><span class="scope-pill player">player</span></td><td>Had monster (≥3-of-a-kind) on flop/turn, never bet/raised that street</td></tr>
+          <tr><td><span class="tag auto">HERO_CALL</span></td><td>auto</td><td><span class="scope-pill action">action</span></td><td>Called river bet with pair or worse, went to showdown</td></tr>
+          <tr><td><span class="tag auto">VALUE_MISSED</span></td><td>auto</td><td><span class="scope-pill player">player</span></td><td>Had ≥ two-pair every postflop street, never bet/raised</td></tr>
+          <tr><td><span class="tag auto">THIN_VALUE_RAISE</span></td><td>auto</td><td><span class="scope-pill action">action</span></td><td>Raised river with exactly one pair</td></tr>
+          <!-- Equity -->
+          <tr><td><span class="tag auto">VALUE_BACKED</span></td><td>auto</td><td><span class="scope-pill action">action</span></td><td>Bet/raised with equity &gt; 70%</td></tr>
+          <tr><td><span class="tag auto">EQUITY_BLUFF</span></td><td>auto</td><td><span class="scope-pill action">action</span></td><td>Bet/raised with equity &lt; 30%, got called</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── SECTION 7: NEW CAPABILITIES ────────────────── -->
+  <section id="new">
+    <h2>7 · New Capabilities to Unlock</h2>
+    <p style="color:var(--muted); margin-bottom:24px;">
+      Ideas are sorted by ease of integration within each tier. <strong>Easy</strong> = new tag in an existing analyzer or a new single-purpose analyzer (~1–3h).
+      <strong>Medium</strong> = requires new context fields or multi-hand aggregation (~half day to 1 day).
+      <strong>Hard</strong> = architecture change, external data, or new UI surface (&gt; 1 day).
+    </p>
+
+    <h3 style="color:var(--green);">Easy — Drop-in Tags (new analyzer file or extend existing)</h3>
+    <div class="idea-grid">
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">SPLIT_POT</span>
+          <span class="effort-badge easy">~30 min</span>
+        </div>
+        <p class="idea-desc">Fired when a hand ends in a chop (multiple winners, equal split). Useful for filtering boring hands from review queues.</p>
+        <div class="idea-meta">
+          <span class="tag auto">hand-level</span>
+          <span class="tag auto">StreetAnalyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Check <code>hand.winners</code> array length &gt; 1 in StreetAnalyzer. No new context needed.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">ALL_IN_POSTFLOP</span>
+          <span class="effort-badge easy">~30 min</span>
+        </div>
+        <p class="idea-desc">An all-in happened on flop, turn, or river — distinct from ALL_IN_PREFLOP. Identifies high-pressure postflop spots for review.</p>
+        <div class="idea-meta">
+          <span class="tag auto">hand-level</span>
+          <span class="tag auto">PostflopAnalyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Filter <code>actions</code> for <code>action === 'allin'</code> on postflop streets.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">FOLD_TO_CBET</span>
+          <span class="effort-badge easy">~45 min</span>
+        </div>
+        <p class="idea-desc">Player folded when facing a c-bet on the flop. Reveals over-folding tendencies to continuation bets — one of the most common exploitable leaks.</p>
+        <div class="idea-meta">
+          <span class="tag mistake">player-level</span>
+          <span class="tag mistake">MistakeAnalyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Re-use <code>findLastPFRaiser()</code> util. Check who folded on flop to their first bet. Tag that player.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">3BET_FOLD</span>
+          <span class="effort-badge easy">~45 min</span>
+        </div>
+        <p class="idea-desc">Player 3-bet preflop and then folded to a 4-bet. Directly measurable — coaches often look for this as a sign of bluffy 3-bet ranges.</p>
+        <div class="idea-meta">
+          <span class="tag mistake">player-level</span>
+          <span class="tag mistake">PreflopAnalyzer or MistakeAnalyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> If FOUR_BET_POT is tagged, find the 3-bettor in preflop actions and check if they subsequently folded.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">FLOAT_BET</span>
+          <span class="effort-badge easy">~1h</span>
+        </div>
+        <p class="idea-desc">Player called on the flop OOP, then led out when checked to on the turn. The "float" — calling with air then betting when opponent shows weakness.</p>
+        <div class="idea-meta">
+          <span class="tag auto">player-level</span>
+          <span class="tag auto">new PostflopAnalyzer extension</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Find player who called flop OOP, then check if they bet first on turn when opponent checked. Uses <code>positions</code> map + <code>byStreet</code>.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">DOUBLE_BARREL / TRIPLE_BARREL</span>
+          <span class="effort-badge easy">~1h</span>
+        </div>
+        <p class="idea-desc">The preflop raiser continued betting on 2 or 3 streets (flop + turn = double barrel; flop + turn + river = triple barrel). Essential for understanding aggression frequency.</p>
+        <div class="idea-meta">
+          <span class="tag auto">hand-level</span>
+          <span class="tag auto">PostflopAnalyzer extension</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> After C_BET detection, check if the same player also bet/raised on subsequent streets using <code>byStreet</code>.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">STAB_BET</span>
+          <span class="effort-badge easy">~1h</span>
+        </div>
+        <p class="idea-desc">Bet in position when the preflop raiser checked to you on any postflop street. A "stab" at the pot when the aggressor shows weakness — fundamentally different from a c-bet or donk.</p>
+        <div class="idea-meta">
+          <span class="tag auto">player-level</span>
+          <span class="tag auto">new analyzer or PostflopAnalyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Player was not the PF raiser, is last to act (IP), and bets after everyone checked to them postflop.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">POT_COMMITS</span>
+          <span class="effort-badge easy">~1h</span>
+        </div>
+        <p class="idea-desc">Player voluntarily put in &gt; 33% of their starting stack — mathematically pot-committed. Tags the decision point where folding becomes theoretically wrong.</p>
+        <div class="idea-meta">
+          <span class="tag auto">player + action-level</span>
+          <span class="tag auto">new PotCommitAnalyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Track cumulative chips_in per player vs starting stack. Tag action where &gt;33% threshold is crossed. Stack info already in context.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">BLIND_STEAL</span>
+          <span class="effort-badge easy">~1h</span>
+        </div>
+        <p class="idea-desc">BTN, CO, or SB raised preflop and everyone folded without seeing a flop. Identifies steal attempts — coaches track steal frequency as a key metric.</p>
+        <div class="idea-meta">
+          <span class="tag auto">player-level</span>
+          <span class="tag auto">PreflopAnalyzer extension</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> First raise is from BTN/CO/SB, outcome is WALK (no flop). Tag the raiser. Already have positions map and WALK detection.</p>
+      </div>
+
+      <div class="idea-card easy">
+        <div class="idea-header">
+          <span class="idea-name">SIZING_CONSISTENCY</span>
+          <span class="effort-badge easy">~1.5h</span>
+        </div>
+        <p class="idea-desc">Player used drastically different sizing on the same street across multiple bets (e.g., pot-bet bluff, probe-bet for value). Flags exploitable size-tells.</p>
+        <div class="idea-meta">
+          <span class="tag mistake">player-level</span>
+          <span class="tag mistake">SizingAnalyzer extension</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> After sizing tags computed per action, check if the same player has 2+ bet/raise actions on same street with sizing buckets that differ by &gt; 2 levels.</p>
+      </div>
+
+    </div>
+
+    <h3 style="color:var(--orange); margin-top:40px;">Medium — New Context Field or Aggregation Logic</h3>
+    <div class="idea-grid">
+
+      <div class="idea-card medium">
+        <div class="idea-header">
+          <span class="idea-name">RIVER_BLUFF</span>
+          <span class="effort-badge medium">~2h</span>
+        </div>
+        <p class="idea-desc">Player bet/raised on the river, held hole cards, and lost at showdown. The inverse of BLUFF_CATCH — identifies actual bluffs that got called off.</p>
+        <div class="idea-meta">
+          <span class="tag auto">player + action-level</span>
+          <span class="tag auto">HandStrengthAnalyzer extension</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Requires <code>hand.winners</code> lookup at showdown + hole cards. Already available via <code>evaluateAt()</code>. Tag the river aggressor who lost.</p>
+      </div>
+
+      <div class="idea-card medium">
+        <div class="idea-header">
+          <span class="idea-name">CBET_FREQUENCY (per-player stat)</span>
+          <span class="effort-badge medium">~3h</span>
+        </div>
+        <p class="idea-desc">% of times player c-bets when they were the PF raiser and saw a flop. The most widely tracked coaching stat. Revealed over multiple hands, not per-hand.</p>
+        <div class="idea-meta">
+          <span class="tag new">aggregate stat</span>
+          <span class="tag new">new API endpoint</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Query <code>hand_tags</code> — count C_BET_IP + C_BET_OOP per player / count SAW_FLOP where player was PF raiser. New DB query in PlayerRepository.</p>
+      </div>
+
+      <div class="idea-card medium">
+        <div class="idea-header">
+          <span class="idea-name">STREET_AGGRESSION_FACTOR</span>
+          <span class="effort-badge medium">~3h</span>
+        </div>
+        <p class="idea-desc">Per-street aggression factor: (bets + raises) / (calls + folds). The classic AF stat broken down by street — shows if a player is passive postflop.</p>
+        <div class="idea-meta">
+          <span class="tag new">aggregate stat</span>
+          <span class="tag new">AnalysisPage widget</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Count action types per street from <code>hand_actions</code>. Group by player. No new tags needed — pure query stat on existing data.</p>
+      </div>
+
+      <div class="idea-card medium">
+        <div class="idea-header">
+          <span class="idea-name">LEAK_SCORE</span>
+          <span class="effort-badge medium">~4h</span>
+        </div>
+        <p class="idea-desc">Weighted sum of mistake tags per player session — open-limp=1pt, cold-call-3bet=2pt, drew-thin=3pt, equity-fold=3pt, etc. Single number for session quality.</p>
+        <div class="idea-meta">
+          <span class="tag new">aggregate stat</span>
+          <span class="tag new">AnalysisPage / session view</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Define weight table in config. Query <code>hand_tags WHERE tag_type='mistake'</code> per session. Compute weighted sum. Surfaced as a session-level KPI.</p>
+      </div>
+
+      <div class="idea-card medium">
+        <div class="idea-header">
+          <span class="idea-name">TURN_BARREL_EQUITY</span>
+          <span class="effort-badge medium">~4h</span>
+        </div>
+        <p class="idea-desc">Tagged the turn barrel (double-barrel) with equity context: was the second-street bet backed by equity (&gt;50%) or was it a pure bluff (&lt;30%)?</p>
+        <div class="idea-meta">
+          <span class="tag new">player + action-level</span>
+          <span class="tag new">new EquityAnalyzer extension</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Combine double-barrel detection with existing <code>getEquityAt('turn')</code>. Two new tags: BARREL_EQUITY_BET / BARREL_BLUFF. Needs hole cards.</p>
+      </div>
+
+      <div class="idea-card medium">
+        <div class="idea-header">
+          <span class="idea-name">POSITION_LEAK (OOP loss rate)</span>
+          <span class="effort-badge medium">~5h</span>
+        </div>
+        <p class="idea-desc">How often a player loses when they are OOP (SB, BB, UTG) vs IP (BTN, CO, HJ). The single most important positional leak metric.</p>
+        <div class="idea-meta">
+          <span class="tag new">aggregate stat</span>
+          <span class="tag new">new PlayerRepository query</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Join <code>hand_players</code> with <code>hand_actions.position</code> (already stored). Compare win/loss by position group. Surfaces on player profile.</p>
+      </div>
+
+      <div class="idea-card medium">
+        <div class="idea-header">
+          <span class="idea-name">TAG_TREND (session-over-session delta)</span>
+          <span class="effort-badge medium">~6h</span>
+        </div>
+        <p class="idea-desc">Show whether mistake frequency is trending up or down across the last N sessions. Answers: "is this player improving?"</p>
+        <div class="idea-meta">
+          <span class="tag new">UI widget</span>
+          <span class="tag new">AnalysisPage</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Group mistake tag counts by session, compute rolling average per player. Render as a sparkline in AnalysisPage alongside bar chart.</p>
+      </div>
+
+    </div>
+
+    <h3 style="color:var(--red); margin-top:40px;">Hard — Architecture Change, External Data, or Major UI</h3>
+    <div class="idea-grid">
+
+      <div class="idea-card hard">
+        <div class="idea-header">
+          <span class="idea-name">RANGE_DEVIATION (GTO lite)</span>
+          <span class="effort-badge hard">2–3 days</span>
+        </div>
+        <p class="idea-desc">Compare actual preflop action to a bundled simplified GTO range chart. Tag hands where the player deviated significantly — wrong position open, calling too wide, 3-betting too tight.</p>
+        <div class="idea-meta">
+          <span class="tag new">player-level</span>
+          <span class="tag new">new RangeAnalyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Embed a lookup table of GTO ranges per position + action. Requires hole cards. Compare hand + position to expected range. Existing RangeParser infrastructure helps.</p>
+      </div>
+
+      <div class="idea-card hard">
+        <div class="idea-header">
+          <span class="idea-name">TILT_DETECTION</span>
+          <span class="effort-badge hard">2–3 days</span>
+        </div>
+        <p class="idea-desc">Detect session-level patterns that suggest tilt: increased OPEN_LIMP rate after a WHALE_POT loss, higher bet sizing variance, shorter decision sequences. A coaching red-flag system.</p>
+        <div class="idea-meta">
+          <span class="tag new">session-level tag</span>
+          <span class="tag new">new session analyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Requires session-scoped analysis pass (not per-hand). Build SessionAnalyzerService that reads last N hands per session and detects behavioral clusters.</p>
+      </div>
+
+      <div class="idea-card hard">
+        <div class="idea-header">
+          <span class="idea-name">HAND_SIMILARITY_SEARCH</span>
+          <span class="effort-badge hard">3–4 days</span>
+        </div>
+        <p class="idea-desc">Given any hand, find the top-5 most similar hands in history. Similarity = matching board texture tags + preflop action tags + pot type. Enables "show me more hands like this."</p>
+        <div class="idea-meta">
+          <span class="tag new">search feature</span>
+          <span class="tag new">HandHistoryPage</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Represent each hand as a tag-vector. Use PostgreSQL array overlap queries (GIN index on tag arrays) or cosine similarity. Tags already in DB — it's a query problem.</p>
+      </div>
+
+      <div class="idea-card hard">
+        <div class="idea-header">
+          <span class="idea-name">COACH INSIGHT FEED</span>
+          <span class="effort-badge hard">3–5 days</span>
+        </div>
+        <p class="idea-desc">A generated per-player narrative: "Alice open-limped 4 times this session (up from 1 last week), folded to 3 c-bets, and never barreled turns." Turns tag data into plain-English coaching notes.</p>
+        <div class="idea-meta">
+          <span class="tag new">new CoachInsightService</span>
+          <span class="tag new">CoachAlertsPage</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Define rule templates keyed on tag + threshold + trend. Render as text. Optionally pass to Claude API for prose generation. Surfaces in CoachAlertsPage.</p>
+      </div>
+
+      <div class="idea-card hard">
+        <div class="idea-header">
+          <span class="idea-name">SOLVER EV DELTA</span>
+          <span class="effort-badge hard">1–2 weeks</span>
+        </div>
+        <p class="idea-desc">Integrate a poker solver (e.g., PokerSolver.js, or a precomputed spot library) to estimate the EV of the actual action vs the solver's recommended action. The gold standard for coaching tools.</p>
+        <div class="idea-meta">
+          <span class="tag new">action-level tag</span>
+          <span class="tag new">new SolverAnalyzer</span>
+        </div>
+        <p class="idea-why"><strong>How:</strong> Requires an EV lookup table or embedded solver. Significant computation. Could be async/background. Would produce EV_LOSS / EV_NEUTRAL / EV_GAIN per action.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <div style="color:var(--muted); font-size:12px; border-top:1px solid var(--border); padding-top:24px; margin-top:40px;">
+    Audit generated 2026-04-03 · Poker Trainer feat/phase2 branch · 10 analyzers · 47 tags
+  </div>
+
+</div>
+</body>
+</html>

@@ -109,6 +109,13 @@ export default function TournamentStandings() {
           <p style={{ color: '#6e7681', fontSize: 14 }}>No standings recorded yet.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {/* Column header row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '0 16px', marginBottom: 2 }}>
+              <span style={{ minWidth: 40 }} />
+              <span style={{ flex: 1, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#6e7681', textTransform: 'uppercase' }}>Player</span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#6e7681', textTransform: 'uppercase', minWidth: 60, textAlign: 'right' }}>Prize</span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#6e7681', textTransform: 'uppercase' }}>Stack</span>
+            </div>
             {standings.map((s, i) => {
               const ps = positionStyle(s.finish_position);
               const name = s.player_profiles?.display_name ?? s.player_id ?? `Player ${i + 1}`;
@@ -144,17 +151,17 @@ export default function TournamentStandings() {
                     {name}
                   </span>
 
+                  {/* Prize */}
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#3fb950', fontFamily: 'monospace', minWidth: 60, textAlign: 'right' }}>
+                    {s.prize != null && Number(s.prize) > 0
+                      ? s.prize?.toLocaleString() ?? '—'
+                      : '—'}
+                  </span>
+
                   {/* Chips at elimination */}
                   {s.chips_at_elimination != null && (
                     <span style={{ fontSize: 12, color: '#6e7681', fontFamily: 'monospace' }}>
                       {s.chips_at_elimination.toLocaleString('en-US')} chips
-                    </span>
-                  )}
-
-                  {/* Prize (if set) */}
-                  {s.prize != null && Number(s.prize) > 0 && (
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#3fb950', fontFamily: 'monospace' }}>
-                      ${Number(s.prize).toLocaleString('en-US')}
                     </span>
                   )}
 

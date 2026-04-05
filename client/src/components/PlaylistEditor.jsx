@@ -1,5 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { apiFetch } from '../lib/api';
+import ScenarioPickerModal from './ScenarioPickerModal';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -14,37 +15,15 @@ const ADVANCE_OPTIONS = [
   { value: 'manual', label: 'Manual trigger' },
 ];
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Shared sub-components ──────────────────────────────────────────────────────
 
-function sectionLabel(text) {
+function SectionLabel({ text }) {
   return (
     <div style={{
       fontSize: 9, fontWeight: 700, letterSpacing: '0.15em',
-      color: '#6e7681', textTransform: 'uppercase', marginBottom: 8,
+      color: '#6e7681', textTransform: 'uppercase', marginBottom: 6,
     }}>
       {text}
-    </div>
-  );
-}
-
-function FieldInput({ label, value, onChange, placeholder = '' }) {
-  return (
-    <div className="mb-4">
-      {sectionLabel(label)}
-      <input
-        type="text"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: '100%', padding: '7px 10px', borderRadius: 4,
-          border: '1px solid #30363d', background: '#0d1117',
-          color: '#f0ece3', fontSize: 12, outline: 'none',
-          boxSizing: 'border-box',
-        }}
-        onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.5)'; }}
-        onBlur={e => { e.target.style.borderColor = '#30363d'; }}
-      />
     </div>
   );
 }
@@ -52,8 +31,8 @@ function FieldInput({ label, value, onChange, placeholder = '' }) {
 function SelectToggle({ label, options, value, onChange }) {
   return (
     <div className="mb-4">
-      {sectionLabel(label)}
-      <div className="flex gap-1">
+      <SectionLabel text={label} />
+      <div className="flex gap-1 flex-wrap">
         {options.map(opt => {
           const active = value === opt.value;
           return (
@@ -62,7 +41,7 @@ function SelectToggle({ label, options, value, onChange }) {
               onClick={() => onChange(opt.value)}
               style={{
                 padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 600,
-                cursor: 'pointer', transition: 'all 0.1s',
+                cursor: 'pointer',
                 background: active ? 'rgba(212,175,55,0.15)' : 'none',
                 border: active ? '1px solid rgba(212,175,55,0.5)' : '1px solid #30363d',
                 color: active ? '#d4af37' : '#6e7681',
@@ -77,7 +56,61 @@ function SelectToggle({ label, options, value, onChange }) {
   );
 }
 
-function ScenarioRow({ entry, index, total, onRemove, onMoveUp, onMoveDown }) {
+function TagEditor({ tags, onChange }) {
+  const [input, setInput] = useState('');
+
+  function commit() {
+    const val = input.trim().toLowerCase();
+    if (val && !tags.includes(val)) onChange([...tags, val]);
+    setInput('');
+  }
+
+  return (
+    <div className="mb-4">
+      <SectionLabel text="Tags" />
+      <div className="flex flex-wrap gap-1 mb-2">
+        {tags.map(t => (
+          <span
+            key={t}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 600,
+              background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.25)',
+              color: '#d4af37',
+            }}
+          >
+            {t}
+            <button
+              onClick={() => onChange(tags.filter(x => x !== t))}
+              style={{ background: 'none', border: 'none', color: '#d4af37', cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0 }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(); } }}
+          placeholder="Add tag…"
+          style={{
+            flex: 1, padding: '5px 8px', borderRadius: 4, fontSize: 11,
+            border: '1px solid #30363d', background: '#0d1117', color: '#f0ece3', outline: 'none',
+          }}
+          onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.5)'; }}
+          onBlur={e => { e.target.style.borderColor = '#30363d'; commit(); }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Item row ───────────────────────────────────────────────────────────────────
+
+function ItemRow({ item, index, total, onMoveUp, onMoveDown, onRemove }) {
+  const scenario = item.scenario ?? {};
   return (
     <div
       style={{
@@ -91,145 +124,184 @@ function ScenarioRow({ entry, index, total, onRemove, onMoveUp, onMoveDown }) {
         {index + 1}
       </span>
       <span style={{ flex: 1, fontSize: 12, color: '#f0ece3', fontWeight: 500 }}>
-        {entry.hand_id?.slice(0, 8)}…
+        {scenario.name ?? `Scenario ${item.scenario_id?.slice(0, 8)}…`}
       </span>
-      {entry.phase_ended && (
+      {scenario.player_count && (
         <span style={{
           fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
           padding: '2px 6px', borderRadius: 3,
-          background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.25)',
-          color: '#3fb950',
+          background: 'rgba(110,118,129,0.1)', border: '1px solid #30363d',
+          color: '#6e7681',
         }}>
-          {entry.phase_ended}
+          {scenario.player_count}p
         </span>
       )}
       <div className="flex gap-1">
         <button
           onClick={onMoveUp}
           disabled={index === 0}
+          title="Move up"
           style={{
             width: 22, height: 22, borderRadius: 3, border: '1px solid #30363d',
             background: 'none', color: '#6e7681', cursor: index === 0 ? 'not-allowed' : 'pointer',
             fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
             opacity: index === 0 ? 0.3 : 1,
           }}
-          title="Move up"
-        >
-          ▲
-        </button>
+        >▲</button>
         <button
           onClick={onMoveDown}
           disabled={index === total - 1}
+          title="Move down"
           style={{
             width: 22, height: 22, borderRadius: 3, border: '1px solid #30363d',
             background: 'none', color: '#6e7681', cursor: index === total - 1 ? 'not-allowed' : 'pointer',
             fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
             opacity: index === total - 1 ? 0.3 : 1,
           }}
-          title="Move down"
-        >
-          ▼
-        </button>
+        >▼</button>
         <button
           onClick={onRemove}
+          title="Remove"
           style={{
             width: 22, height: 22, borderRadius: 3, border: '1px solid rgba(248,81,73,0.3)',
             background: 'none', color: '#f85149', cursor: 'pointer',
             fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
-          title="Remove from playlist"
-        >
-          ×
-        </button>
+        >×</button>
       </div>
     </div>
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 
+/**
+ * PlaylistEditor — create or edit a playlist using the new scenario-builder schema.
+ *
+ * Props:
+ *   playlist  {object|null}  — existing playlist row, or null for new
+ *   onClose   {() => void}
+ *   onSaved   {() => void}
+ */
 export default function PlaylistEditor({ playlist, onClose, onSaved }) {
   const isNew = !playlist?.playlist_id;
+  const playlistId = playlist?.playlist_id ?? null;
 
-  const [name, setName]         = useState(playlist?.name ?? '');
-  const [ordering, setOrdering] = useState('sequential');
-  const [advance, setAdvance]   = useState('manual');
-  const [hands, setHands]       = useState([]);
-  const [handsLoading, setHandsLoading] = useState(!isNew);
+  // ── Form state ────────────────────────────────────────────────────────────
+  const [name, setName]           = useState(playlist?.name ?? '');
+  const [ordering, setOrdering]   = useState(playlist?.ordering ?? 'sequential');
+  const [advanceMode, setAdvance] = useState(playlist?.advance_mode ?? 'manual');
+  const [tags, setTags]           = useState(Array.isArray(playlist?.tags) ? playlist.tags : []);
+
+  // ── Items state ───────────────────────────────────────────────────────────
+  const [items, setItems]               = useState([]);
+  const [itemsLoading, setItemsLoading] = useState(!isNew);
+
+  // ── UI state ──────────────────────────────────────────────────────────────
+  const [showPicker, setShowPicker] = useState(false);
   const [saving, setSaving]     = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError]       = useState(null);
   const [success, setSuccess]   = useState(false);
 
-  // Load hands for existing playlist
+  // ── Load items for existing playlist ─────────────────────────────────────
   useEffect(() => {
-    if (isNew) return;
-    setHandsLoading(true);
-    apiFetch(`/api/playlists/${playlist.playlist_id}/hands`)
-      .then(data => setHands(Array.isArray(data?.hands) ? data.hands : []))
-      .catch(() => setHands([]))
-      .finally(() => setHandsLoading(false));
-  }, [playlist?.playlist_id, isNew]);
+    if (isNew || !playlistId) return;
+    setItemsLoading(true);
+    apiFetch(`/api/playlists/${playlistId}/items`)
+      .then(data => setItems(Array.isArray(data?.items) ? data.items : []))
+      .catch(() => setItems([]))
+      .finally(() => setItemsLoading(false));
+  }, [playlistId, isNew]);
 
-  const handleMoveUp = useCallback((idx) => {
-    setHands(prev => {
-      if (idx === 0) return prev;
-      const next = [...prev];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      return next;
-    });
+  // ── Reorder helper — saves positions to server after local move ───────────
+  const saveOrder = useCallback(async (reordered, id) => {
+    const orderPayload = reordered.map((item, idx) => ({ id: item.id, position: idx }));
+    try {
+      await apiFetch(`/api/playlists/${id}/items/reorder`, {
+        method: 'POST',
+        body: JSON.stringify({ items: orderPayload }),
+      });
+    } catch {
+      // non-fatal — local order already updated, server will re-sync on next load
+    }
   }, []);
 
+  const handleMoveUp = useCallback((idx) => {
+    if (idx === 0) return;
+    setItems(prev => {
+      const next = [...prev];
+      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+      if (playlistId) saveOrder(next, playlistId);
+      return next;
+    });
+  }, [playlistId, saveOrder]);
+
   const handleMoveDown = useCallback((idx) => {
-    setHands(prev => {
+    setItems(prev => {
       if (idx === prev.length - 1) return prev;
       const next = [...prev];
       [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+      if (playlistId) saveOrder(next, playlistId);
       return next;
     });
-  }, []);
+  }, [playlistId, saveOrder]);
 
-  const handleRemove = useCallback(async (handId) => {
+  const handleRemove = useCallback(async (item) => {
     if (isNew) {
-      setHands(prev => prev.filter(h => h.hand_id !== handId));
+      setItems(prev => prev.filter(i => i.id !== item.id));
       return;
     }
     try {
-      await apiFetch(`/api/playlists/${playlist.playlist_id}/hands/${handId}`, { method: 'DELETE' });
-      setHands(prev => prev.filter(h => h.hand_id !== handId));
+      await apiFetch(`/api/playlists/${playlistId}/items/${item.id}`, { method: 'DELETE' });
+      setItems(prev => prev.filter(i => i.id !== item.id));
     } catch (err) {
       setError(err.message ?? 'Remove failed');
     }
-  }, [isNew, playlist?.playlist_id]);
+  }, [isNew, playlistId]);
 
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (!name.trim()) { setError('Name is required'); return; }
     setSaving(true);
     setError(null);
     try {
       if (isNew) {
-        await apiFetch('/api/playlists', {
+        // Step 1: create with name
+        const created = await apiFetch('/api/playlists', {
           method: 'POST',
           body: JSON.stringify({ name: name.trim() }),
         });
+        const newId = created?.playlist_id ?? created?.id;
+        // Step 2: patch new columns if server returned an id
+        if (newId) {
+          await apiFetch(`/api/playlists/${newId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ ordering, advance_mode: advanceMode, tags }),
+          });
+        }
       } else {
-        // Playlist name update — no dedicated PATCH endpoint yet, just reflect locally
+        await apiFetch(`/api/playlists/${playlistId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: name.trim(), ordering, advance_mode: advanceMode, tags }),
+        });
       }
       setSuccess(true);
-      setTimeout(() => { onSaved?.(); }, 700);
+      setTimeout(() => onSaved?.(), 700);
     } catch (err) {
       setError(err.message ?? 'Save failed');
     } finally {
       setSaving(false);
     }
-  }, [isNew, name, onSaved]);
+  }, [isNew, name, ordering, advanceMode, tags, playlistId, onSaved]);
 
+  // ── Soft delete ───────────────────────────────────────────────────────────
   const handleDelete = useCallback(async () => {
-    if (isNew || !playlist?.playlist_id) return;
-    if (!window.confirm(`Delete playlist "${playlist.name}"? This cannot be undone.`)) return;
+    if (isNew || !playlistId) return;
+    if (!window.confirm(`Delete playlist "${playlist.name}"?`)) return;
     setDeleting(true);
     try {
-      await apiFetch(`/api/playlists/${playlist.playlist_id}`, { method: 'DELETE' });
+      await apiFetch(`/api/playlists/${playlistId}/soft`, { method: 'DELETE' });
       onClose?.();
       onSaved?.();
     } catch (err) {
@@ -237,10 +309,13 @@ export default function PlaylistEditor({ playlist, onClose, onSaved }) {
     } finally {
       setDeleting(false);
     }
-  }, [isNew, playlist, onClose, onSaved]);
+  }, [isNew, playlistId, playlist?.name, onClose, onSaved]);
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full" style={{ background: '#0d1117', overflow: 'hidden' }}>
+
       {/* Header */}
       <div
         className="flex items-center justify-between px-4 py-3 flex-shrink-0"
@@ -259,37 +334,67 @@ export default function PlaylistEditor({ playlist, onClose, onSaved }) {
             }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.color = '#d4af37'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#6e7681'; }}
-          >
-            ×
-          </button>
+          >×</button>
         )}
       </div>
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto" style={{ padding: '16px' }}>
 
-        <FieldInput label="Name" value={name} onChange={setName} placeholder="e.g. River Decisions Vol. 1" />
+        {/* Name */}
+        <div className="mb-4">
+          <SectionLabel text="Name" />
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="e.g. River Decisions Vol. 1"
+            style={{
+              width: '100%', padding: '7px 10px', borderRadius: 4, boxSizing: 'border-box',
+              border: '1px solid #30363d', background: '#0d1117', color: '#f0ece3',
+              fontSize: 12, outline: 'none',
+            }}
+            onFocus={e => { e.target.style.borderColor = 'rgba(212,175,55,0.5)'; }}
+            onBlur={e => { e.target.style.borderColor = '#30363d'; }}
+          />
+        </div>
 
-        <SelectToggle
-          label="Ordering"
-          options={ORDERING_OPTIONS}
-          value={ordering}
-          onChange={setOrdering}
-        />
+        <SelectToggle label="Ordering" options={ORDERING_OPTIONS} value={ordering} onChange={setOrdering} />
+        <SelectToggle label="Advance"  options={ADVANCE_OPTIONS}  value={advanceMode} onChange={setAdvance} />
 
-        <SelectToggle
-          label="Advance"
-          options={ADVANCE_OPTIONS}
-          value={advance}
-          onChange={setAdvance}
-        />
+        <TagEditor tags={tags} onChange={setTags} />
 
-        {/* Scenarios */}
+        {/* Stats row — only for existing playlists */}
+        {!isNew && (
+          <div className="mb-4 flex gap-4" style={{ fontSize: 11, color: '#6e7681' }}>
+            <span>{items.length} scenario{items.length !== 1 ? 's' : ''}</span>
+            {playlist?.play_count != null && (
+              <span>{playlist.play_count} drill run{playlist.play_count !== 1 ? 's' : ''}</span>
+            )}
+          </div>
+        )}
+
+        {/* Scenarios list */}
         <div className="mb-5">
-          {sectionLabel('Scenarios')}
-          {handsLoading ? (
+          <div className="flex items-center justify-between mb-2">
+            <SectionLabel text="Scenarios" />
+            <button
+              onClick={() => setShowPicker(true)}
+              style={{
+                padding: '3px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+                border: '1px solid #30363d', background: 'none', color: '#8b949e',
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.color = '#d4af37'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#8b949e'; }}
+            >
+              + Add
+            </button>
+          </div>
+
+          {itemsLoading ? (
             <div style={{ color: '#444', fontSize: 11, padding: '12px 0' }}>Loading…</div>
-          ) : hands.length === 0 ? (
+          ) : items.length === 0 ? (
             <div style={{
               padding: '20px', textAlign: 'center', borderRadius: 6,
               border: '1px dashed #21262d', color: '#444', fontSize: 11,
@@ -297,30 +402,18 @@ export default function PlaylistEditor({ playlist, onClose, onSaved }) {
               No scenarios in this playlist yet.
             </div>
           ) : (
-            hands.map((entry, idx) => (
-              <ScenarioRow
-                key={entry.hand_id}
-                entry={entry}
+            items.map((item, idx) => (
+              <ItemRow
+                key={item.id}
+                item={item}
                 index={idx}
-                total={hands.length}
+                total={items.length}
                 onMoveUp={() => handleMoveUp(idx)}
                 onMoveDown={() => handleMoveDown(idx)}
-                onRemove={() => handleRemove(entry.hand_id)}
+                onRemove={() => handleRemove(item)}
               />
             ))
           )}
-        </div>
-
-        {/* Assigned To — stub */}
-        <div className="mb-5">
-          {sectionLabel('Assigned To')}
-          <div style={{
-            padding: '12px 14px', borderRadius: 6,
-            background: 'rgba(110,118,129,0.05)', border: '1px dashed #30363d',
-            fontSize: 11, color: '#6e7681',
-          }}>
-            Student &amp; group assignment coming in a future update.
-          </div>
         </div>
 
         {/* Error / success */}
@@ -344,47 +437,61 @@ export default function PlaylistEditor({ playlist, onClose, onSaved }) {
         )}
       </div>
 
+      {/* Scenario picker modal */}
+      {showPicker && playlistId && (
+        <ScenarioPickerModal
+          playlistId={playlistId}
+          onClose={() => setShowPicker(false)}
+          onAdded={(newItems) => {
+            setItems(prev => [...prev, ...newItems]);
+            setShowPicker(false);
+          }}
+        />
+      )}
+
       {/* Footer */}
       <div
         className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-        style={{ borderTop: '1px solid #30363d', gap: 8 }}
+        style={{ borderTop: '1px solid #30363d' }}
       >
-        {!isNew && (
+        {!isNew ? (
           <button
             onClick={handleDelete}
             disabled={deleting}
             style={{
               padding: '6px 12px', borderRadius: 4,
               border: '1px solid rgba(248,81,73,0.3)', background: 'none',
-              color: '#f85149', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              color: '#f85149', fontSize: 11, fontWeight: 600,
+              cursor: deleting ? 'not-allowed' : 'pointer',
             }}
           >
             {deleting ? 'Deleting…' : 'Delete'}
           </button>
-        )}
-        <div className="flex-1" />
-        <button
-          onClick={onClose}
-          style={{
-            padding: '6px 14px', borderRadius: 4,
-            border: '1px solid #30363d', background: 'none',
-            color: '#6e7681', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            padding: '6px 16px', borderRadius: 4,
-            background: saving ? '#a07a20' : '#d4af37', color: '#000',
-            border: 'none', fontSize: 11, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
-            letterSpacing: '0.06em',
-          }}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
+        ) : <div />}
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            style={{
+              padding: '6px 14px', borderRadius: 4,
+              border: '1px solid #30363d', background: 'none',
+              color: '#6e7681', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              padding: '6px 16px', borderRadius: 4,
+              background: saving ? '#a07a20' : '#d4af37', color: '#000',
+              border: 'none', fontSize: 11, fontWeight: 700,
+              cursor: saving ? 'not-allowed' : 'pointer', letterSpacing: '0.06em',
+            }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
     </div>
   );

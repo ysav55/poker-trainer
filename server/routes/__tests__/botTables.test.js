@@ -104,11 +104,23 @@ describe('POST /api/bot-tables', () => {
     );
   });
 
-  test('returns 400 when name is missing', async () => {
+  test('auto-generates name when name is omitted', async () => {
+    mockCurrentUser = playerUser;
+    const { name: _n, ...noName } = validBody;
+    const res = await request(app).post('/api/bot-tables').send(noName);
+    expect(res.status).toBe(201);
+    expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
+      expect.objectContaining({ name: expect.stringMatching(/^Bot Game — /) })
+    );
+  });
+
+  test('auto-generates name when name is empty string', async () => {
     mockCurrentUser = playerUser;
     const res = await request(app).post('/api/bot-tables').send({ ...validBody, name: '' });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_name');
+    expect(res.status).toBe(201);
+    expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
+      expect.objectContaining({ name: expect.stringMatching(/^Bot Game — /) })
+    );
   });
 
   test('returns 400 when difficulty is invalid', async () => {
