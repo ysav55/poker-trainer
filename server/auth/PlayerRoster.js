@@ -8,9 +8,9 @@
  * (for the primary role) directly from Supabase.
  *
  * IMPORTANT: password_hash and status columns, and the player_roles table,
- * are only present after migration 009 is applied AND the roster-migration
- * script (scripts/migrate-roster-to-db.js) has been run to import existing
- * players.csv entries into the DB.
+ * are only present after migration 009 is applied. All players are managed
+ * exclusively through the DB (player_profiles + player_roles). players.csv
+ * has been removed — use the /admin/users API to create or modify players.
  *
  * Public interface (unchanged from the CSV version):
  *   const entry = await PlayerRoster.authenticate('Alice', 'mypass');

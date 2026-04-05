@@ -19,8 +19,7 @@ async function getPlayerPermissions(playerId, roleHint = null) {
     ) ?? []
   );
 
-  // Fallback: players created via players.csv have no player_roles rows.
-  // Derive permissions from the JWT role name instead.
+  // Fallback: players with no player_roles rows — derive permissions from JWT role name.
   if (keys.size === 0 && roleHint) {
     const { data: roleData } = await supabase
       .from('roles')
