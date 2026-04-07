@@ -91,6 +91,7 @@ module.exports = function registerBetting(socket, ctx) {
 
     // For uncoached tables, hand reset & auto-deal are driven by AutoController
     // (coached tables use the reset_hand socket event from the coach instead)
+    // bot_cash is excluded — BotTableController drives _completeHand itself via its internal listener
     if (freshState.phase === 'showdown') {
       const { getController } = require('../../state/SharedState');
       const ctrl = getController(tableId);
