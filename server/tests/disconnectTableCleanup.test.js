@@ -35,6 +35,11 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+afterEach(() => {
+  jest.clearAllTimers();
+  jest.useRealTimers();
+});
+
 function buildCtx() {
   const rooms = new Map();
   const io = {
@@ -104,13 +109,10 @@ test('TableRepository.closeTable is called when last socket leaves room after TT
   listeners['disconnect']();
 
   // Advance past the 60s TTL
-  jest.runAllTimers();
+  jest.advanceTimersByTime(60_000);
 
-  // Wait for async operations (closeTable returns a promise)
-  await Promise.resolve();
-  await Promise.resolve();
-
-  jest.useRealTimers();
+  // Wait for promise chains to complete by flushing both timers and microtasks
+  await jest.runAllTimersAsync();
 
   expect(TableRepository.closeTable).toHaveBeenCalledWith(tableId);
 });
@@ -149,11 +151,8 @@ test('TableRepository.closeTable is NOT called if other sockets still in room', 
   registerDisconnect(socket, ctx);
   listeners['disconnect']();
 
-  jest.runAllTimers();
-  await Promise.resolve();
-  await Promise.resolve();
-
-  jest.useRealTimers();
+  jest.advanceTimersByTime(60_000);
+  await jest.runAllTimersAsync();
 
   expect(TableRepository.closeTable).not.toHaveBeenCalled();
 });
