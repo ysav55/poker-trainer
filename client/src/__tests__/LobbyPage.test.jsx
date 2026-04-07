@@ -95,6 +95,11 @@ describe('LobbyPage — table creation redirect', () => {
     const createBtn = screen.getByText(/^Create$/i);
     fireEvent.click(createBtn);
 
+    // Assert POST was called
+    await waitFor(() => {
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/tables', expect.objectContaining({ method: 'POST' }));
+    });
+
     // Navigate must fire immediately with the id from the POST response
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/table/table-abc123');
@@ -119,8 +124,12 @@ describe('LobbyPage — table creation redirect', () => {
 
     fireEvent.click(screen.getByText(/^Create$/i));
 
-    // Wait a tick then assert navigate was NOT called with a table path
-    await new Promise(r => setTimeout(r, 50));
+    // Assert POST was called (ensures we wait for the async operation)
+    await waitFor(() => {
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/tables', expect.objectContaining({ method: 'POST' }));
+    });
+
+    // Assert navigate was NOT called with a table path
     expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringMatching(/^\/table\//));
   });
 });
