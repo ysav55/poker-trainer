@@ -3,14 +3,14 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
-export function useTableSocket(tableId, { managerMode = false } = {}) {
+export function useTableSocket(tableId, { managerMode = false, forceSpectator = false } = {}) {
   const { user } = useAuth();
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
 
   // Read spectate flag from URL (?spectate=true)
   const [searchParams] = useSearchParams();
-  const spectateMode = searchParams.get('spectate') === 'true';
+  const spectateMode = forceSpectator || searchParams.get('spectate') === 'true';
 
   // Read buy-in amount from router state (set by LobbyPage buy-in modal)
   const location = useLocation();
@@ -23,6 +23,7 @@ export function useTableSocket(tableId, { managerMode = false } = {}) {
 
     socket.on('connect', () => {
       setConnected(true);
+      if (!user) return;
       const COACH_ROLES = ['coach', 'admin', 'superadmin'];
       socket.emit('join_room', {
         name: user.name,

@@ -198,7 +198,7 @@ export default function TournamentLobby() {
   const [registered, setRegistered] = useState(false);
   const [countdown, setCountdown]   = useState(null);
   const [lateRegOpen, setLateRegOpen] = useState(false);
-  const { socketRef, connected } = useTableSocket(tableId, { managerMode: false });
+  const { socketRef, connected } = useTableSocket(tableId, { managerMode: false, forceSpectator: true });
 
   // Role flags
   const canManage   = hasPermission('tournament:manage');
