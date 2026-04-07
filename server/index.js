@@ -135,7 +135,7 @@ app.use('/api/admin', requireAuth, adminScenariosRouter);
 app.use('/api/admin', requireAuth, adminCRMRouter);
 app.use('/api/admin', requireAuth, adminGroupsRouter);
 app.use('/api/admin', requireAuth, adminOrgSettingsRouter);
-app.use('/api/settings', settingsRouter);
+app.use('/api/settings', requireAuth, settingsRouter);
 app.use('/api/admin', requireAuth, adminTournamentsRouter);
 app.use('/api/admin', requireAuth, adminSchoolsRouter);
 app.use('/api/staking', requireAuth, stakingRouter);

@@ -301,12 +301,50 @@ async function _computePeriodStats(studentId, start, end) {
       flopFacedBet++;
       if (flopActs.some(a => a.action === 'fold')) foldedToCbetCount++;
     }
-    const raises = pfActions.filter(a => a.action === 'raise' || a.action === 'bet').length;
-    if (raises >= 1) { threeBetOpps++; if (raises >= 2) threeBetCount++; }
   }
 
-  // Tags.
+  // 3bet%: Fetch ALL preflop actions (not just student's) to identify 3-bet opportunities
+  // A 3-bet opportunity exists when opponent raised preflop first
+  // A 3-bet is counted when student raised AFTER opponent's raise
   const handIds = Object.keys(byHand);
+  if (handIds.length > 0) {
+    // Fetch ALL preflop actions for these hands (no player_id filter)
+    const { data: allPreflopActions, error: pfErr } = await supabase
+      .from('hand_actions')
+      .select('id, hand_id, player_id, action, street')
+      .in('hand_id', handIds)
+      .eq('street', 'preflop')
+      .gte('created_at', startIso)
+      .lte('created_at', endIso);
+    if (pfErr) throw new Error(pfErr.message);
+
+    const preflopActionsAll = allPreflopActions || [];
+    const byHandAllActions = {};
+    for (const a of preflopActionsAll) {
+      (byHandAllActions[a.hand_id] = byHandAllActions[a.hand_id] || []).push(a);
+    }
+
+    for (const [handId, handActions] of Object.entries(byHandAllActions)) {
+      // Sort by action id to see sequence
+      const sorted = handActions.sort((a, b) => a.id - b.id);
+
+      // Find the first raiser (opponent)
+      const firstRaiserId = sorted.find(a => a.action === 'raise' || a.action === 'bet')?.player_id;
+      if (!firstRaiserId) continue; // No raise in this hand, no 3-bet opportunity
+
+      // Student saw a raise: 3-bet opportunity exists
+      threeBetOpps++;
+
+      // Check if student raised after the first raiser
+      const studentIdx = sorted.findIndex(a => a.player_id === studentId);
+      const firstRaiserIdx = sorted.findIndex(a => a.player_id === firstRaiserId);
+
+      if (studentIdx > firstRaiserIdx && sorted[studentIdx].action === 'raise') {
+        // Student raised after opponent's initial raise — this is a 3-bet
+        threeBetCount++;
+      }
+    }
+  }
   const tagCounts = {};
   if (handIds.length > 0) {
     const [{ data: pt }, { data: ht }] = await Promise.all([

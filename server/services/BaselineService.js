@@ -126,24 +126,54 @@ async function recompute(playerId) {
   const cbetTurn    = pfRaiserHands > 0 ? cbetTurnCount  / pfRaiserHands : null;
   const foldToCbet  = flopFacedBet  > 0 ? foldedToCbetCount / flopFacedBet : null;
 
-  // 3bet%: hands where player raised facing a preflop raise / hands where player had an action after a raise
+  // 3bet%: Fetch ALL preflop actions (not just focal player's) to identify 3-bet opportunities
+  // A 3-bet opportunity exists when opponent raised preflop first
+  // A 3-bet is counted when focal player raised AFTER opponent's raise
   let threeBetOpps = 0, threeBetCount = 0;
-  for (const acts of Object.values(byHand)) {
-    const pfActions  = acts.filter(a => a.street === 'preflop');
-    if (pfActions.length === 0) continue;
-    // Count preflop raises before this player's actions (simplified: any preflop raise in the hand)
-    const raisesBefore = pfActions.filter(a => a.action === 'raise' || a.action === 'bet').length;
-    if (raisesBefore >= 1) {
+
+  const handIds = Object.keys(byHand);
+  if (handIds.length > 0) {
+    // Fetch ALL preflop actions for these hands (no player_id filter)
+    const { data: allPreflopActions, error: pfErr } = await supabase
+      .from('hand_actions')
+      .select('id, hand_id, player_id, action, street')
+      .in('hand_id', handIds)
+      .eq('street', 'preflop')
+      .gte('created_at', cutoff.toISOString());
+    if (pfErr) throw new Error(pfErr.message);
+
+    const allActions = allPreflopActions || [];
+    const byHandAllActions = {};
+    for (const a of allActions) {
+      (byHandAllActions[a.hand_id] = byHandAllActions[a.hand_id] || []).push(a);
+    }
+
+    for (const [handId, handActions] of Object.entries(byHandAllActions)) {
+      // Sort by action id to see sequence
+      const sorted = handActions.sort((a, b) => a.id - b.id);
+
+      // Find the first raiser (opponent)
+      const firstRaiserId = sorted.find(a => a.action === 'raise' || a.action === 'bet')?.player_id;
+      if (!firstRaiserId) continue; // No raise in this hand, no 3-bet opportunity
+
+      // Focal player saw a raise: 3-bet opportunity exists
       threeBetOpps++;
-      // Player 3-bet if they also raised (and there was already a raise)
-      if (raisesBefore >= 2) threeBetCount++;
+
+      // Check if focal player raised after the first raiser
+      const focalPlayerIdx = sorted.findIndex(a => a.player_id === playerId);
+      const firstRaiserIdx = sorted.findIndex(a => a.player_id === firstRaiserId);
+
+      if (focalPlayerIdx > firstRaiserIdx && sorted[focalPlayerIdx].action === 'raise') {
+        // Focal player raised after opponent's initial raise — this is a 3-bet
+        threeBetCount++;
+      }
     }
   }
+
   const threeBetPct = threeBetOpps > 0 ? threeBetCount / threeBetOpps : null;
 
   // ── 3. Fetch hand_tags for tag profile and mistake frequencies ───────────────
 
-  const handIds = Object.keys(byHand);
   const tagCounts = {};
 
   if (handIds.length > 0) {

@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { io } from 'socket.io-client';
 import { apiFetch } from '../lib/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
-
-const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
+import { useTableSocket } from '../hooks/useTableSocket.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -200,7 +198,7 @@ export default function TournamentLobby() {
   const [registered, setRegistered] = useState(false);
   const [countdown, setCountdown]   = useState(null);
   const [lateRegOpen, setLateRegOpen] = useState(false);
-  const socketRef = useRef(null);
+  const { socketRef, connected } = useTableSocket(tableId, { managerMode: false });
 
   // Role flags
   const canManage   = hasPermission('tournament:manage');
@@ -232,14 +230,11 @@ export default function TournamentLobby() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Socket connection for live late-reg events
+  // Register tournament late-reg listeners on the shared socket
   useEffect(() => {
-    const token = sessionStorage.getItem('poker_trainer_jwt') || '';
-    const socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      auth: (cb) => cb({ token }),
-    });
-    socketRef.current = socket;
+    if (!connected) return;
+    const socket = socketRef.current;
+    if (!socket) return;
 
     socket.on('tournament:late_reg_open', () => setLateRegOpen(true));
     socket.on('tournament:late_reg_closed', () => setLateRegOpen(false));
@@ -247,16 +242,12 @@ export default function TournamentLobby() {
       setError(reason ?? 'Cannot join: tournament is already in progress');
     });
 
-    socket.on('connect', () => {
-      // Join the tournament room to receive table-scoped events
-      socket.emit('join_room', { name: '_lobby_observer', tableId, isSpectator: true });
-    });
-
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      socket.off('tournament:late_reg_open');
+      socket.off('tournament:late_reg_closed');
+      socket.off('tournament:late_reg_rejected');
     };
-  }, [tableId]);
+  }, [connected, socketRef]);
 
   // Countdown ticker
   const [, setTick] = useState(0);

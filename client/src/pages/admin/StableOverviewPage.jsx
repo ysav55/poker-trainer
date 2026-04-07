@@ -1,43 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../lib/api.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const GOLD = '#d4af37';
-
-// ─── Mock data (replace with apiFetch('/api/coach/reports/stable') when backend ships) ──
-
-const MOCK_STUDENTS = [
-  { id: 1,  name: 'Sam Patel',     grade: 84, delta: +12, hands: 312, net: +18200, vpip: 21, group: 'MTT Beginners'  },
-  { id: 2,  name: 'Taylor Wong',   grade: 79, delta:  +8, hands: 287, net: +11400, vpip: 23, group: 'Cash Advanced'  },
-  { id: 3,  name: 'Riley Chen',    grade: 75, delta:  +5, hands: 198, net:  +8100, vpip: 22, group: 'MTT Beginners'  },
-  { id: 4,  name: 'Marcus Torres', grade: 61, delta:  -6, hands: 203, net:  -3800, vpip: 27, group: 'River Defense'  },
-  { id: 5,  name: 'Alex Kim',      grade: 54, delta: -17, hands: 142, net:  -1600, vpip: 25, group: 'River Defense'  },
-  { id: 6,  name: 'Jordan Lee',    grade: null, delta: null, hands: 0, net: null, vpip: null, group: 'Unassigned' },
-  { id: 7,  name: 'Jamie Davis',   grade: 71, delta:  +1, hands: 241, net:  +3200, vpip: 24, group: 'Cash Advanced'  },
-  { id: 8,  name: 'Morgan Silva',  grade: 68, delta:  -2, hands: 178, net:  -900,  vpip: 26, group: 'MTT Beginners'  },
-  { id: 9,  name: 'Casey Brown',   grade: 73, delta:  +3, hands: 195, net:  +4700, vpip: 20, group: 'Cash Advanced'  },
-  { id: 10, name: 'Drew Martinez', grade: 66, delta:  -4, hands: 163, net:  -2100, vpip: 29, group: 'River Defense'  },
-  { id: 11, name: 'Quinn Johnson', grade: 77, delta:  +7, hands: 224, net:  +7300, vpip: 22, group: 'MTT Beginners'  },
-  { id: 12, name: 'Avery Williams',grade: 58, delta:  -9, hands: 117, net:  -4200, vpip: 31, group: 'Unassigned'     },
-];
-
-const MOCK_GROUPS = [
-  { name: 'MTT Beginners', students: 12, avgGrade: 68, trend: +3  },
-  { name: 'Cash Advanced', students:  8, avgGrade: 79, trend:  0  },
-  { name: 'River Defense', students:  6, avgGrade: 61, trend: -4  },
-  { name: 'Unassigned',    students:  6, avgGrade: 72, trend: +1  },
-];
-
-const MOCK_AVERAGES = {
-  weekLabel:         'Week of Mar 24–30',
-  avgGrade:           71,
-  prevAvgGrade:       73,
-  activeStudents:     28,
-  totalStudents:      32,
-  totalHands:        8247,
-  avgHandsPerStudent: 295,
-};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -334,12 +301,66 @@ function GroupBreakdownTable({ groups, onGroupClick }) {
 
 export default function StableOverviewPage() {
   const navigate = useNavigate();
-  const avg = MOCK_AVERAGES;
-  const gradeDelta = avg.avgGrade - avg.prevAvgGrade;
+  const [overview, setOverview] = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
 
-  function goToCRM() {
-    navigate('/admin/crm');
+  useEffect(() => {
+    apiFetch('/api/coach/reports/stable')
+      .then(data => setOverview(data))
+      .catch(err => setError(err.message ?? 'Failed to load overview'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function goToCRM() { navigate('/admin/crm'); }
+
+  if (loading) {
+    return <div style={{ color: '#6e7681', padding: 24 }}>Loading…</div>;
   }
+  if (error) {
+    return <div style={{ color: '#f85149', padding: 24 }}>{error}</div>;
+  }
+
+  // Map API shape → component-friendly shapes
+  const students = (overview?.students ?? []).map(s => ({
+    id:    s.player_id,
+    name:  s.display_name,
+    grade: s.overall_grade ?? null,
+    delta: null,
+    hands: null,
+    net:   null,
+    vpip:  null,
+    group: 'Unassigned',
+  }));
+
+  const topPerformers = (overview?.top_performers ?? []).map(s => ({
+    id:    s.player_id,
+    name:  s.display_name,
+    grade: s.overall_grade ?? null,
+  }));
+
+  const concerns = (overview?.concerns ?? []).map(s => ({
+    id:    s.player_id,
+    name:  s.display_name,
+    grade: s.overall_grade ?? null,
+  }));
+
+  const activeCount = students.filter(s => s.grade != null).length;
+  const avgGrade    = overview?.avg_grade ?? null;
+  const gradeDelta  = null; // prev-period grade not returned by this endpoint
+
+  // Calculate week label from period dates
+  const weekLabel = (() => {
+    const reports = overview?.students ?? [];
+    if (reports.length === 0) return 'Week of —';
+    const first = reports[0];
+    if (!first.period_start || !first.period_end) return 'Week of —';
+    const start = new Date(first.period_start);
+    const end = new Date(first.period_end);
+    const startMo = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const endMo = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `Week of ${startMo}–${endMo}`;
+  })();
 
   return (
     <div style={{ color: '#e5e7eb' }}>
@@ -348,21 +369,21 @@ export default function StableOverviewPage() {
         {/* Page title */}
         <div>
           <h1 className="text-lg font-bold" style={{ color: '#f0ece3' }}>Stable Overview</h1>
-          <p className="text-xs mt-0.5" style={{ color: '#6e7681' }}>{avg.weekLabel}</p>
+          <p className="text-xs mt-0.5" style={{ color: '#6e7681' }}>{weekLabel}</p>
         </div>
 
-        {/* Summary stats — 4 pills */}
+        {/* Summary stats — 3 pills */}
         <div
-          className="grid grid-cols-2 sm:grid-cols-4 gap-px rounded-xl overflow-hidden"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-px rounded-xl overflow-hidden"
           style={{ background: '#30363d', border: '1px solid #30363d' }}
           data-testid="stable-averages"
         >
           {[
             {
               label: 'Avg Grade',
-              value: avg.avgGrade,
-              sub: `prev: ${avg.prevAvgGrade}`,
-              valueColor: gradeColor(avg.avgGrade),
+              value: avgGrade ?? '—',
+              sub: 'no prior data',
+              valueColor: gradeColor(avgGrade),
             },
             {
               label: 'Grade Δ',
@@ -372,14 +393,8 @@ export default function StableOverviewPage() {
             },
             {
               label: 'Active Students',
-              value: `${avg.activeStudents}/${avg.totalStudents}`,
+              value: `${activeCount}/${students.length}`,
               sub: 'enrolled',
-              valueColor: '#f0ece3',
-            },
-            {
-              label: 'Total Hands',
-              value: avg.totalHands.toLocaleString(),
-              sub: `~${avg.avgHandsPerStudent} avg/student`,
               valueColor: '#f0ece3',
             },
           ].map(({ label, value, sub, valueColor }) => (
@@ -400,31 +415,30 @@ export default function StableOverviewPage() {
           ))}
         </div>
 
-        {/* Top Improvers + Needs Attention — side-by-side */}
+        {/* Top Performers + Needs Attention — side-by-side */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-          {/* Top Improvers */}
+          {/* Top Performers */}
           <div
             className="rounded-xl overflow-hidden"
             style={{ background: '#161b22', border: '1px solid #30363d' }}
             data-testid="top-improvers"
           >
-            <PanelHeader title="TOP IMPROVERS" titleColor="#3fb950" />
-            {MOCK_STUDENTS
-              .filter(s => s.delta != null && s.delta > 0)
-              .sort((a, b) => b.delta - a.delta)
-              .slice(0, 3)
-              .map((s, i) => (
-                <StudentMiniRow
-                  key={s.id}
-                  rank={i + 1}
-                  name={s.name}
-                  grade={s.grade}
-                  delta={s.delta}
-                  note={null}
-                  onClick={goToCRM}
-                />
-              ))}
+            <PanelHeader title="TOP PERFORMERS" titleColor="#3fb950" />
+            {topPerformers.slice(0, 3).map((s, i) => (
+              <StudentMiniRow
+                key={s.id}
+                rank={i + 1}
+                name={s.name}
+                grade={s.grade}
+                delta={null}
+                note={null}
+                onClick={goToCRM}
+              />
+            ))}
+            {topPerformers.length === 0 && (
+              <p className="text-xs px-4 py-3" style={{ color: '#6e7681' }}>No data yet.</p>
+            )}
           </div>
 
           {/* Needs Attention */}
@@ -434,33 +448,32 @@ export default function StableOverviewPage() {
             data-testid="needs-attention"
           >
             <PanelHeader title="NEEDS ATTENTION" titleColor="#f85149" />
-            {MOCK_STUDENTS
-              .filter(s => (s.delta != null && s.delta < 0) || s.hands === 0)
-              .sort((a, b) => (a.delta ?? 0) - (b.delta ?? 0))
-              .slice(0, 3)
-              .map((s, i) => (
-                <StudentMiniRow
-                  key={s.id}
-                  rank={i + 1}
-                  name={s.name}
-                  grade={s.grade}
-                  delta={s.delta}
-                  note={s.hands === 0 ? 'inactive' : null}
-                  onClick={goToCRM}
-                />
-              ))}
+            {concerns.slice(0, 3).map((s, i) => (
+              <StudentMiniRow
+                key={s.id}
+                rank={i + 1}
+                name={s.name}
+                grade={s.grade}
+                delta={null}
+                note={null}
+                onClick={goToCRM}
+              />
+            ))}
+            {concerns.length === 0 && (
+              <p className="text-xs px-4 py-3" style={{ color: '#6e7681' }}>No data yet.</p>
+            )}
           </div>
         </div>
 
         {/* All Students table */}
         <AllStudentsTable
-          students={MOCK_STUDENTS}
+          students={students}
           onStudentClick={goToCRM}
         />
 
         {/* Group Breakdown table */}
         <GroupBreakdownTable
-          groups={MOCK_GROUPS}
+          groups={[]}
           onGroupClick={goToCRM}
         />
 

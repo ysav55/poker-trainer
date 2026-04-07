@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 import UserForm from './UserForm';
 import UserDetail from './UserDetail';
 
@@ -373,17 +374,8 @@ export default function UserManagement() {
   // Password reset request queue
   const [pendingResets, setPendingResets] = useState([]);
 
-  // Detect current user role from stored JWT
-  const currentUserRole = (() => {
-    try {
-      const token = sessionStorage.getItem('poker_trainer_jwt');
-      if (!token) return null;
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      return payload.role ?? null;
-    } catch {
-      return null;
-    }
-  })();
+  const { user } = useAuth();
+  const currentUserRole = user?.role ?? null;
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
