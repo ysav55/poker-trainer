@@ -1,5 +1,7 @@
 'use strict';
 
+const PlaylistExecutionService = require('../../services/PlaylistExecutionService');
+
 module.exports = function registerPlaylists(socket, ctx) {
   const { tables, io, broadcastState, sendError,
           requireCoach, HandLogger,
@@ -108,6 +110,15 @@ module.exports = function registerPlaylists(socket, ctx) {
     const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     if (gm.state.phase !== 'waiting') return sendError(socket, 'Can only activate playlist between hands');
+
+    // Guard: block if a REST drill session is already active at this table
+    try {
+      const restDrillSession = await PlaylistExecutionService.getStatus(tableId);
+      if (restDrillSession?.active) {
+        return sendError(socket, 'A structured drill session is active at this table. End it first.');
+      }
+    } catch (_) { /* non-blocking — proceed if status check fails */ }
+
     try {
       const hands = await HandLogger.getPlaylistHands(playlistId);
       if (!hands.length) return sendError(socket, 'Playlist is empty');

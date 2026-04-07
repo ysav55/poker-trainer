@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api';
 
-const ROLES = ['superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
+const ROLES = ['superadmin', 'admin', 'coach', 'coached_student', 'solo_student'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

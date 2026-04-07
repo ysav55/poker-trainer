@@ -5,7 +5,9 @@ const supabase = require('../db/supabase.js');
 // Cache: Map<playerId, schoolId | null>
 // schoolId=null means no school assigned (all features enabled).
 // schoolId=false means player not found.
-const schoolIdCache = new Map();
+const schoolIdCache      = new Map();
+const schoolIdCacheTime  = new Map();
+const SCHOOL_ID_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Cache: Map<schoolId, Map<featureKey, boolean>>
 const featureCache = new Map();
@@ -13,7 +15,12 @@ const FEATURE_CACHE_TTL_MS = 60_000; // 1 minute
 const featureCacheTimes = new Map();
 
 async function getSchoolIdForPlayer(playerId) {
-  if (schoolIdCache.has(playerId)) return schoolIdCache.get(playerId);
+  if (schoolIdCache.has(playerId)) {
+    const age = Date.now() - (schoolIdCacheTime.get(playerId) ?? 0);
+    if (age < SCHOOL_ID_CACHE_TTL_MS) return schoolIdCache.get(playerId);
+    schoolIdCache.delete(playerId);
+    schoolIdCacheTime.delete(playerId);
+  }
 
   const { data } = await supabase
     .from('player_profiles')
@@ -23,6 +30,7 @@ async function getSchoolIdForPlayer(playerId) {
 
   const schoolId = data?.school_id ?? null;
   schoolIdCache.set(playerId, schoolId);
+  schoolIdCacheTime.set(playerId, Date.now());
   return schoolId;
 }
 
@@ -87,6 +95,7 @@ function requireFeature(shortKey) {
 /** Invalidate cached school-id for a player (call after school assignment changes). */
 function invalidatePlayerSchoolCache(playerId) {
   schoolIdCache.delete(playerId);
+  schoolIdCacheTime.delete(playerId);
 }
 
 /** Invalidate feature cache for a school (call after feature toggles change). */

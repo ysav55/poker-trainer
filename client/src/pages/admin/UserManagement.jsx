@@ -6,7 +6,7 @@ import UserDetail from './UserDetail';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 15;
-const ROLES     = ['', 'superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
+const ROLES     = ['', 'superadmin', 'admin', 'coach', 'coached_student', 'solo_student'];
 const STATUSES  = ['active', 'suspended', 'archived'];
 
 const STATUS_COLORS = {
@@ -140,7 +140,7 @@ function ActionsMenu({ user, currentUserRole, onViewProfile, onEdit, onResetPass
 
 // ─── Reset Password Modal ─────────────────────────────────────────────────────
 
-function ResetPasswordModal({ user, onClose }) {
+function ResetPasswordModal({ user, onClose, onSuccess }) {
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState(null);
@@ -162,6 +162,7 @@ function ResetPasswordModal({ user, onClose }) {
         body: JSON.stringify({ password: newPassword }),
       });
       setDone(true);
+      onSuccess?.();
     } catch (err) {
       setError(err.message || 'Failed to reset password');
     } finally {
@@ -369,10 +370,13 @@ export default function UserManagement() {
   const [resetUser, setResetUser]       = useState(null);
   const [deleteUser, setDeleteUser]     = useState(null);
 
+  // Password reset request queue
+  const [pendingResets, setPendingResets] = useState([]);
+
   // Detect current user role from stored JWT
   const currentUserRole = (() => {
     try {
-      const token = localStorage.getItem('poker_trainer_jwt');
+      const token = sessionStorage.getItem('poker_trainer_jwt');
       if (!token) return null;
       const payload = JSON.parse(atob(token.split('.')[1]));
       return payload.role ?? null;
@@ -400,6 +404,12 @@ export default function UserManagement() {
   }, [filterStatus, filterRole]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  useEffect(() => {
+    apiFetch('/api/admin/users/pending-resets')
+      .then(d => setPendingResets(d.requests ?? []))
+      .catch(() => {}); // non-fatal
+  }, []);
 
   const filtered = users.filter(u => {
     if (!search) return true;
@@ -471,6 +481,34 @@ export default function UserManagement() {
           </button>
         </div>
       </div>
+
+      {/* Pending password reset requests */}
+      {pendingResets.length > 0 && (
+        <div
+          className="rounded-lg px-4 py-3 mb-4"
+          style={{ background: 'rgba(227,179,65,0.08)', border: '1px solid rgba(227,179,65,0.35)' }}
+          data-testid="pending-resets-banner"
+        >
+          <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: '#e3b341' }}>
+            Password Reset Requests ({pendingResets.length})
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {pendingResets.map(r => (
+              <div key={r.id} className="flex items-center justify-between gap-3">
+                <span className="text-sm" style={{ color: '#f0ece3' }}>{r.displayName}</span>
+                <button
+                  onClick={() => setResetUser({ id: r.playerId, display_name: r.displayName })}
+                  className="text-xs px-3 py-1 rounded font-semibold"
+                  style={{ background: 'rgba(227,179,65,0.15)', border: '1px solid rgba(227,179,65,0.4)', color: '#e3b341', cursor: 'pointer' }}
+                  data-testid={`reset-btn-${r.playerId}`}
+                >
+                  Reset Password
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="rounded-lg px-4 py-3 mb-4 flex flex-wrap items-center gap-3"
@@ -611,7 +649,13 @@ export default function UserManagement() {
       {showCreate && <UserForm user={null} onClose={() => setShowCreate(false)} onSaved={loadUsers} />}
       {editUser && <UserForm user={editUser} onClose={() => setEditUser(null)} onSaved={loadUsers} />}
       {detailUserId && <UserDetail userId={detailUserId} onClose={() => setDetailUserId(null)} onUpdated={loadUsers} />}
-      {resetUser && <ResetPasswordModal user={resetUser} onClose={() => setResetUser(null)} />}
+      {resetUser && (
+        <ResetPasswordModal
+          user={resetUser}
+          onClose={() => setResetUser(null)}
+          onSuccess={() => setPendingResets(prev => prev.filter(r => r.playerId !== resetUser.id))}
+        />
+      )}
       {deleteUser && <DeleteConfirmModal user={deleteUser} onClose={() => setDeleteUser(null)} onConfirmed={loadUsers} />}
     </div>
   );

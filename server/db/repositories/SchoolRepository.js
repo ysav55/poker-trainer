@@ -109,7 +109,7 @@ async function getMemberCounts(schoolId) {
     ['coach', 'admin', 'superadmin'].includes(pr.roles?.name)
   )).length;
   const students = members.filter(p => p.player_roles?.some(pr =>
-    ['player', 'trial', 'coached_student', 'solo_student'].includes(pr.roles?.name)
+    ['trial', 'coached_student', 'solo_student'].includes(pr.roles?.name)
   )).length;
   return { coaches, students, total: members.length };
 }

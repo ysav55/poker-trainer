@@ -62,6 +62,7 @@ jest.mock('../HandLoggerSupabase', () => {
     getSessionStats:       jest.fn().mockResolvedValue([]),
     getSessionReport:      jest.fn().mockResolvedValue(null),
     getPlayerStats:        jest.fn().mockResolvedValue(null),
+    getPlayerStatsByMode:  jest.fn().mockResolvedValue(null),
     getAllPlayersWithStats: jest.fn().mockResolvedValue([]),
     getPlayerHands:        jest.fn().mockResolvedValue([]),
     getPlayerHoverStats:   jest.fn().mockResolvedValue({ allTime: null, session: null }),

@@ -27,10 +27,14 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
     }
   });
 
-  // GET /api/players
+  // GET /api/players?period=7d|30d|all&gameType=cash|tournament|all
   app.get('/api/players', requireAuth, async (req, res) => {
     try {
-      const players = await HandLogger.getAllPlayersWithStats();
+      const VALID_PERIODS    = ['7d', '30d', 'all'];
+      const VALID_GAME_TYPES = ['cash', 'tournament', 'all'];
+      const period   = VALID_PERIODS.includes(req.query.period)    ? req.query.period    : 'all';
+      const gameType = VALID_GAME_TYPES.includes(req.query.gameType) ? req.query.gameType : 'all';
+      const players = await HandLogger.getAllPlayersWithStats({ period, gameType });
       res.json({ players });
     } catch (err) {
       res.status(500).json({ error: 'internal_error' });

@@ -1,14 +1,124 @@
 'use strict';
 
+const bcrypt = require('bcrypt');
+
 /**
  * Tournament socket event handlers.
  *
  * Registered events:
- *   tournament:move_player  — move a player from their current table to a target table
+ *   tournament:claim_management   — claim manager seat on orphaned tournament
+ *   tournament:release_management — intentionally release manager seat
+ *   tournament:steal_management   — steal manager seat with password (rank check)
+ *   tournament:move_player        — move a player between tables (MTT)
+ *   tournament:request_reentry    — re-entry after elimination
+ *   tournament:request_addon      — take an add-on
  */
 
 module.exports = function registerTournamentHandlers(socket, ctx) {
   const { tables, io, requireCoach, sendError } = ctx;
+
+  // ── Helper to get tournament controller for socket's current table ───────────
+  function getTournamentCtrl() {
+    const tableId = socket.data.tableId;
+    if (!tableId) return null;
+    const { getController } = require('../../state/SharedState');
+    const ctrl = getController(tableId);
+    return (ctrl && ctrl.getMode?.() === 'tournament') ? ctrl : null;
+  }
+
+  // ── tournament:claim_management ──────────────────────────────────────────────
+  // Claim an orphaned tournament. Fails if already managed by someone else.
+  socket.on('tournament:claim_management', () => {
+    const ctrl = getTournamentCtrl();
+    if (!ctrl) return sendError(socket, 'Not a tournament table');
+    if (!socket.data.authenticated) return socket.emit('error', { message: 'Unauthorized' });
+
+    const sid  = socket.data.stableId;
+    const role = socket.data.role ?? null;
+    const name = socket.data.name ?? 'Unknown';
+
+    const granted = ctrl.claimManagement(sid, name, role);
+    if (granted) {
+      socket.data.isManager = true;
+      socket.emit('tournament:claim_result', { granted: true });
+    } else {
+      socket.emit('tournament:claim_result', {
+        granted:     false,
+        managedBy:   ctrl.managedBy,
+        managerName: ctrl.managerName,
+      });
+    }
+  });
+
+  // ── tournament:release_management ────────────────────────────────────────────
+  // Intentionally release management (e.g. manager clicks "Leave").
+  socket.on('tournament:release_management', () => {
+    const ctrl = getTournamentCtrl();
+    if (!ctrl) return;
+    const sid = socket.data.stableId;
+    ctrl.releaseManagement(sid);
+    socket.data.isManager = false;
+  });
+
+  // ── tournament:steal_management ──────────────────────────────────────────────
+  // Steal management from a lower-ranked manager.
+  // Payload: { password }
+  // Server verifies challenger's own password + rank > current manager rank.
+  socket.on('tournament:steal_management', async ({ password } = {}) => {
+    if (!password || typeof password !== 'string') {
+      return socket.emit('tournament:steal_result', { granted: false, reason: 'Password required' });
+    }
+
+    const ctrl = getTournamentCtrl();
+    if (!ctrl) return socket.emit('tournament:steal_result', { granted: false, reason: 'Not a tournament table' });
+    if (!socket.data.authenticated) return socket.emit('tournament:steal_result', { granted: false, reason: 'Unauthorized' });
+
+    const sid  = socket.data.stableId;
+    const role = socket.data.role ?? null;
+    const name = socket.data.name ?? 'Unknown';
+
+    // Rank check
+    if (!ctrl.canSteal(role)) {
+      return socket.emit('tournament:steal_result', {
+        granted: false,
+        reason:  `Your role (${role}) cannot override the current manager (${ctrl.managerRole})`,
+      });
+    }
+
+    // Password verification — load challenger's hash from DB
+    try {
+      const supabase = require('../../db/supabase');
+      const { data: player } = await supabase
+        .from('player_profiles')
+        .select('password_hash')
+        .eq('id', sid)
+        .maybeSingle();
+
+      if (!player?.password_hash) {
+        return socket.emit('tournament:steal_result', { granted: false, reason: 'Account not found' });
+      }
+
+      const valid = await bcrypt.compare(password, player.password_hash);
+      if (!valid) {
+        return socket.emit('tournament:steal_result', { granted: false, reason: 'Incorrect password' });
+      }
+    } catch (err) {
+      return socket.emit('tournament:steal_result', { granted: false, reason: 'Verification failed' });
+    }
+
+    // Notify the previous manager before transferring
+    if (ctrl.managedBy && ctrl.managedBy !== sid) {
+      io.to(socket.data.tableId).emit('notification', {
+        type:    'warning',
+        message: `Management was taken over by ${name}`,
+      });
+    }
+
+    // Force-claim
+    ctrl._setManager(sid, name, role);
+    socket.data.isManager = true;
+    socket.emit('tournament:steal_result', { granted: true });
+  });
 
   /**
    * tournament:move_player
@@ -88,6 +198,53 @@ module.exports = function registerTournamentHandlers(socket, ctx) {
       type:    'info',
       message: `${name} moved from ${fromTableId} to ${toTableId}`,
     });
+  });
+
+  // ── tournament:pause ─────────────────────────────────────────────────────────
+  socket.on('tournament:pause', () => {
+    if (!socket.data.isManager) return socket.emit('error', { message: 'Not the tournament manager' });
+    const ctrl = getTournamentCtrl();
+    if (!ctrl) return;
+    const ok = ctrl.pause();
+    socket.emit('tournament:pause_result', { ok });
+  });
+
+  // ── tournament:resume ────────────────────────────────────────────────────────
+  socket.on('tournament:resume', () => {
+    if (!socket.data.isManager) return socket.emit('error', { message: 'Not the tournament manager' });
+    const ctrl = getTournamentCtrl();
+    if (!ctrl) return;
+    const ok = ctrl.resume();
+    socket.emit('tournament:resume_result', { ok });
+  });
+
+  // ── tournament:eliminate_player ──────────────────────────────────────────────
+  // Payload: { stableId }
+  socket.on('tournament:eliminate_player', async ({ stableId } = {}) => {
+    if (!socket.data.isManager) return socket.emit('error', { message: 'Not the tournament manager' });
+    if (!stableId) return socket.emit('error', { message: 'stableId required' });
+    const ctrl = getTournamentCtrl();
+    if (!ctrl) return;
+    const result = await ctrl.eliminatePlayerManual(stableId);
+    socket.emit('tournament:eliminate_result', result);
+  });
+
+  // ── tournament:set_hand_visibility ───────────────────────────────────────────
+  // Payload: { type: 'manager'|'spectator', value: boolean }
+  socket.on('tournament:set_hand_visibility', ({ type, value } = {}) => {
+    if (!socket.data.isManager) return socket.emit('error', { message: 'Not the tournament manager' });
+    const ctrl = getTournamentCtrl();
+    if (!ctrl) return;
+    ctrl.setHandVisibility(type, value);
+  });
+
+  // ── tournament:set_icm_overlay ───────────────────────────────────────────────
+  // Payload: { enabled: boolean }
+  socket.on('tournament:set_icm_overlay', ({ enabled } = {}) => {
+    if (!socket.data.isManager) return socket.emit('error', { message: 'Not the tournament manager' });
+    const ctrl = getTournamentCtrl();
+    if (!ctrl) return;
+    ctrl.setIcmOverlay(enabled);
   });
 
   // tournament:request_reentry

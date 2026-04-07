@@ -6,8 +6,8 @@ import { useNotifications } from '../hooks/useNotifications.js';
 
 const TableContext = createContext(null);
 
-export function TableProvider({ tableId, children }) {
-  const socket = useTableSocket(tableId);
+export function TableProvider({ tableId, managerMode = false, children }) {
+  const socket = useTableSocket(tableId, { managerMode });
   const notifications = useNotifications(socket);
   const { addError, addNotification } = notifications;
 

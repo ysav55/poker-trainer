@@ -41,6 +41,7 @@ describe('socketAuthMiddleware', () => {
     await runMiddleware(socket);
     expect(socket.data.authenticated).toBe(true);
     expect(socket.data.stableId).toBe('uuid-123');
+    expect(socket.data.playerId).toBe('uuid-123');
     expect(socket.data.jwtName).toBe('Alice');
     expect(socket.data.role).toBe('player');
     expect(socket.data.isCoach).toBe(false);
@@ -52,6 +53,36 @@ describe('socketAuthMiddleware', () => {
     await runMiddleware(socket);
     expect(socket.data.isCoach).toBe(true);
     expect(socket.data.authenticated).toBe(true);
+  });
+
+  test('sets isCoach=true for admin role', async () => {
+    const adminToken = JwtService.sign({ stableId: 'uuid-admin', name: 'Admin Ann', role: 'admin' });
+    const socket = makeSocket(adminToken);
+    await runMiddleware(socket);
+    expect(socket.data.isCoach).toBe(true);
+    expect(socket.data.role).toBe('admin');
+  });
+
+  test('sets isCoach=true for superadmin role', async () => {
+    const saToken = JwtService.sign({ stableId: 'uuid-sa', name: 'Super', role: 'superadmin' });
+    const socket = makeSocket(saToken);
+    await runMiddleware(socket);
+    expect(socket.data.isCoach).toBe(true);
+    expect(socket.data.role).toBe('superadmin');
+  });
+
+  test('sets isCoach=false for coached_student', async () => {
+    const token = JwtService.sign({ stableId: 'uuid-cs', name: 'Student', role: 'coached_student' });
+    const socket = makeSocket(token);
+    await runMiddleware(socket);
+    expect(socket.data.isCoach).toBe(false);
+  });
+
+  test('sets isCoach=false for solo_student', async () => {
+    const token = JwtService.sign({ stableId: 'uuid-ss', name: 'Solo', role: 'solo_student' });
+    const socket = makeSocket(token);
+    await runMiddleware(socket);
+    expect(socket.data.isCoach).toBe(false);
   });
 
   test('marks authenticated=false for missing token (spectator path)', async () => {

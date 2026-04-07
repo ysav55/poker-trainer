@@ -29,7 +29,7 @@ const gateTournaments = requireFeature('tournaments');
 
 const router = express.Router();
 
-// POST /api/admin/tournaments — create tournament table + config
+// POST /api/admin/tournaments — create tournament table + config + registry row
 router.post(
   '/tournaments',
   requireAuth,
@@ -39,11 +39,26 @@ router.post(
     try {
       const {
         name,
-        blindSchedule  = [],
-        startingStack  = 10000,
-        rebuyAllowed   = false,
-        rebuyLevelCap  = 0,
-        scheduledFor   = null,
+        blindSchedule     = [],
+        startingStack     = 10000,
+        rebuyAllowed      = false,
+        rebuyLevelCap     = 0,
+        scheduledFor      = null,
+        // v2 wizard fields
+        payoutStructure   = null,
+        payoutMethod      = 'flat',
+        showIcmOverlay    = false,
+        dealThreshold     = 0,
+        addonAllowed      = false,
+        addonStack        = null,
+        addonDeadlineLevel = 0,
+        lateRegMinutes    = 0,
+        reentryAllowed    = false,
+        reentryLimit      = 0,
+        reentryStack      = null,
+        minPlayers        = 6,
+        scheduledStartAt  = null,
+        refPlayerId       = null,
       } = req.body || {};
 
       if (!name) return res.status(400).json({ error: 'name is required' });
@@ -52,25 +67,71 @@ router.post(
       }
 
       const tableId = `tournament-${Date.now()}`;
+      const createdBy = req.user?.stableId ?? req.user?.id;
 
       await TableRepository.createTable({
         id:           tableId,
         name,
         mode:         'tournament',
-        createdBy:    req.user.id,
+        createdBy,
         config:       { starting_stack: startingStack },
-        scheduledFor,
+        scheduledFor: scheduledFor ?? scheduledStartAt,
       });
 
-      const configId = await TournamentRepository.createConfig({
-        tableId,
-        blindSchedule,
-        startingStack,
-        rebuyAllowed,
-        rebuyLevelCap,
-      });
+      // Wrap subsequent inserts — if any fail, clean up the already-committed table row
+      let configId, tournamentId;
+      try {
+        configId = await TournamentRepository.createConfig({
+          tableId,
+          blindSchedule,
+          startingStack,
+          rebuyAllowed,
+          rebuyLevelCap,
+          payoutStructure,
+          payoutMethod,
+          showIcmOverlay,
+          dealThreshold,
+          addonAllowed,
+          addonStack,
+          addonDeadlineLevel,
+          lateRegMinutes,
+          reentryAllowed,
+          reentryLimit,
+          reentryStack,
+          minPlayers,
+          scheduledStartAt,
+        });
 
-      res.status(201).json({ tableId, configId });
+        // Create linked registry row in tournaments table
+        tournamentId = await TournamentRepository.createLinkedTournament({
+          tableId,
+          name,
+          blindStructure:  blindSchedule,
+          startingStack,
+          rebuyAllowed,
+          addonAllowed,
+          minPlayers,
+          scheduledStartAt,
+          createdBy,
+        });
+
+        // Appoint referee if provided
+        if (refPlayerId) {
+          const supabase = require('../../db/supabase');
+          await supabase.from('tournament_referees').insert({
+            table_id:     tableId,
+            player_id:    refPlayerId,
+            appointed_by: createdBy,
+            active:       true,
+          });
+        }
+      } catch (innerErr) {
+        // Compensating rollback — remove the tables row so no orphaned card appears in lobby
+        await TableRepository.deleteTable(tableId).catch(() => {});
+        throw innerErr;
+      }
+
+      res.status(201).json({ tableId, configId, tournamentId });
     } catch (err) {
       res.status(500).json({ error: 'internal_error', message: err.message });
     }
@@ -96,7 +157,12 @@ function registerTournamentRoutes(app) {
 
       if (!config) return res.status(404).json({ error: 'Tournament config not found' });
 
-      res.json({ config, standings });
+      // Include live management state from in-memory controller (if running)
+      const ctrl = getController(req.params.id);
+      const managedBy   = ctrl?.managedBy   ?? null;
+      const managerName = ctrl?.managerName ?? null;
+
+      res.json({ config, standings, managedBy, managerName });
     } catch (err) {
       res.status(500).json({ error: 'internal_error', message: err.message });
     }
@@ -165,6 +231,62 @@ function registerTournamentRoutes(app) {
         const winner = active.sort((a, b) => b.stack - a.stack)[0] ?? null;
         await ctrl._endTournament(winner?.id ?? null);
         res.json({ ended: true });
+      } catch (err) {
+        res.status(500).json({ error: 'internal_error', message: err.message });
+      }
+    }
+  );
+
+  // POST /api/tables/:id/tournament/pause — pause the level timer
+  app.post(
+    '/api/tables/:id/tournament/pause',
+    requireAuth,
+    gateTournaments,
+    requireTournamentAccess(),
+    (req, res) => {
+      const ctrl = getController(req.params.id);
+      if (!ctrl || ctrl.getMode() !== 'tournament') {
+        return res.status(400).json({ error: 'Table is not a tournament table' });
+      }
+      const ok = ctrl.pause();
+      res.json({ paused: ok });
+    }
+  );
+
+  // POST /api/tables/:id/tournament/resume — resume after a pause
+  app.post(
+    '/api/tables/:id/tournament/resume',
+    requireAuth,
+    gateTournaments,
+    requireTournamentAccess(),
+    (req, res) => {
+      const ctrl = getController(req.params.id);
+      if (!ctrl || ctrl.getMode() !== 'tournament') {
+        return res.status(400).json({ error: 'Table is not a tournament table' });
+      }
+      const ok = ctrl.resume();
+      res.json({ resumed: ok });
+    }
+  );
+
+  // POST /api/tables/:id/tournament/eliminate-player — manually eliminate a player
+  app.post(
+    '/api/tables/:id/tournament/eliminate-player',
+    requireAuth,
+    gateTournaments,
+    requireTournamentAccess(),
+    async (req, res) => {
+      try {
+        const { stableId } = req.body ?? {};
+        if (!stableId) return res.status(400).json({ error: 'stableId is required' });
+
+        const ctrl = getController(req.params.id);
+        if (!ctrl || ctrl.getMode() !== 'tournament') {
+          return res.status(400).json({ error: 'Table is not a tournament table' });
+        }
+        const result = await ctrl.eliminatePlayerManual(stableId);
+        if (!result.success) return res.status(400).json({ error: result.reason });
+        res.json({ eliminated: true });
       } catch (err) {
         res.status(500).json({ error: 'internal_error', message: err.message });
       }

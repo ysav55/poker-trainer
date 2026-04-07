@@ -118,13 +118,13 @@ describe('authenticate()', () => {
     expect(result.role).toBe('superadmin');
   });
 
-  test('falls back to "player" when getPrimaryRole returns null', async () => {
+  test('falls back to "coached_student" when getPrimaryRole returns null', async () => {
     findByDisplayName.mockResolvedValueOnce(validPlayer());
     bcrypt.compare.mockResolvedValueOnce(true);
     getPrimaryRole.mockResolvedValueOnce(null);
 
     const result = await PlayerRoster.authenticate('Alice', 'pass');
-    expect(result.role).toBe('player');
+    expect(result.role).toBe('coached_student');
   });
 
   test('calls findByDisplayName with trimmed name', async () => {

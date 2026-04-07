@@ -5,7 +5,7 @@ module.exports = function registerJoinRoom(socket, ctx) {
           broadcastState, sendError,
           HandLogger, log } = ctx;
 
-  socket.on('join_room', async ({ name, isSpectator: payloadSpectator = false, tableId = 'main-table', buyInAmount } = {}) => {
+  socket.on('join_room', async ({ name, isSpectator: payloadSpectator = false, tableId = 'main-table', buyInAmount, managerMode = false } = {}) => {
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
       return sendError(socket, 'Name is required');
     }
@@ -88,6 +88,16 @@ module.exports = function registerJoinRoom(socket, ctx) {
       isCoach = false;
     }
 
+    // Delegation: if this table has a designated controller and the joining user
+    // is that controller, grant them full coach-level socket powers regardless of their role.
+    // Only applies in coached_cash mode (non-coached modes already force isCoach=false above).
+    if (mode === 'coached_cash' && !isCoach && tableRow?.controller_id &&
+        tableRow.controller_id === resolvedStableId) {
+      isCoach                = true;
+      socket.data.isCoach    = true;
+      socket.data.isDelegate = true;
+    }
+
     // Instantiate controller and emit table_config
     const { getOrCreateController } = require('../../state/SharedState');
     const sm = tables.get(tableId);
@@ -144,23 +154,55 @@ module.exports = function registerJoinRoom(socket, ctx) {
       }
     }
 
-    // Tournament late-registration gate
-    if (mode === 'tournament' && !isReconnect) {
+    // Tournament late-registration gate + manager mode handling
+    if (mode === 'tournament') {
       const { getController } = require('../../state/SharedState');
       const ctrl = getController(tableId);
-      // If a tournament controller exists AND the game has started, check late reg
-      if (ctrl && ctrl.getMode?.() === 'tournament' && ctrl.startedAt) {
+
+      // managerMode: join as spectator and attempt to claim management
+      if (managerMode && socket.data.authenticated) {
+        const role = socket.data.role ?? null;
+        const sid  = resolvedStableId;
+
+        // Check if this is a reconnecting manager within the grace window
+        if (ctrl && ctrl.managedBy === sid) {
+          ctrl.onManagerReconnect(sid, trimmedName, role);
+        }
+
+        // Join as spectator first, then attempt claim
+        socket.data.tableId    = tableId;
+        socket.data.isCoach    = false;
+        socket.data.isSpectator = true;
+        socket.data.name       = trimmedName;
+        socket.data.stableId   = resolvedStableId;
+        socket.data.isManager  = false;
+        socket.join(tableId);
+
+        let isManager = false;
+        if (ctrl && ctrl.getMode?.() === 'tournament') {
+          isManager = ctrl.claimManagement(sid, trimmedName, role);
+          socket.data.isManager = isManager;
+        }
+
+        const publicState = gm.getPublicState ? gm.getPublicState(socket.id, false) : gm.state;
+        socket.emit('room_joined', { playerId: socket.id, isCoach: false, isSpectator: true, isManager, name: trimmedName, tableId });
+        socket.emit('game_state', publicState);
+        if (!isManager && ctrl?.managedBy) {
+          socket.emit('notification', { type: 'info', message: `Tournament is managed by ${ctrl.managerName}` });
+        }
+        log.info('game', 'manager_join', `${trimmedName} joined as ${isManager ? 'manager' : 'read-only spectator'}`, { tableId, role });
+        return;
+      }
+
+      // Normal (non-manager) join: late-reg gate applies when tournament has started
+      if (!isReconnect && ctrl && ctrl.getMode?.() === 'tournament' && ctrl.startedAt) {
         if (!ctrl.isLateRegOpen()) {
           socket.emit('tournament:late_reg_rejected', {
             reason: ctrl.lateRegMinutes > 0 ? 'Late registration has closed' : 'Tournament is already in progress',
           });
           return;
         }
-        // Late reg is open — mark them as a late registrant (no special flag needed, they just join normally)
-        socket.emit('notification', {
-          type: 'info',
-          message: 'You have joined during the late registration period',
-        });
+        socket.emit('notification', { type: 'info', message: 'You have joined during the late registration period' });
       }
     }
 
@@ -235,12 +277,23 @@ module.exports = function registerJoinRoom(socket, ctx) {
     socket.data.isSpectator = false;
     socket.data.name = trimmedName;
     socket.data.stableId = resolvedStableId;
+    socket.data.isManager = false;
     socket.join(tableId);
 
-    socket.emit('room_joined', { playerId: socket.id, isCoach, isSpectator: false, name: trimmedName, tableId });
+    socket.emit('room_joined', { playerId: socket.id, isCoach, isSpectator: false, isManager: false, name: trimmedName, tableId });
     broadcastState(tableId, { type: 'join', message: `${trimmedName} ${isCoach ? '(Coach)' : ''} joined the table` });
     log.info('game', 'player_join', `${trimmedName} joined`, { tableId, name: trimmedName, role: isCoach ? 'coach' : 'player', playerId: resolvedStableId });
     log.trackSocket('join_room', tableId, resolvedStableId, { name: trimmedName, isCoach });
     console.log(`[join] ${trimmedName} (coach=${isCoach}, mode=${mode}) → ${tableId}`);
+
+    // Notify the controller — AutoController uses this to auto-start the first hand
+    // when a second non-coach player sits down on an uncoached table.
+    if (!isCoach) {
+      const { getController } = require('../../state/SharedState');
+      const ctrl = getController(tableId);
+      if (ctrl?.onPlayerJoin) {
+        ctrl.onPlayerJoin(resolvedStableId).catch(() => {});
+      }
+    }
   });
 };

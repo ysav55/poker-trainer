@@ -5,6 +5,11 @@ const { BlindSchedule }        = require('./BlindSchedule');
 const { TournamentRepository } = require('../../db/repositories/TournamentRepository');
 const { TableRepository }      = require('../../db/repositories/TableRepository');
 
+// Role rank for steal validation — higher rank can steal from lower.
+// referee rank removed: referees are now per-resource delegates (tournament_referees table),
+// not a global role. Management steal is restricted to coach/admin/superadmin.
+const ROLE_RANK = { superadmin: 3, admin: 2, coach: 1 };
+
 class TournamentController extends AutoController {
   constructor(tableId, gm, io, config = null) {
     super(tableId, gm, io);
@@ -22,6 +27,210 @@ class TournamentController extends AutoController {
     this.lateRegOpen    = false;
     this.addonOpen         = false;
     this.addonDeadlineLevel = 0;
+
+    // ── Management state (in-memory) ──────────────────────────────────────────
+    this.managedBy            = null; // stableId of active manager
+    this.managerName          = null; // display name for broadcast
+    this.managerRole          = null; // role string for rank comparison
+    this.managerDisconnectTimer = null; // 10s grace timer handle
+
+    // ── Pause state ───────────────────────────────────────────────────────────
+    this.paused                 = false;
+    this.pausedLevelRemainingMs = null; // saved level-timer remainder during pause
+
+    // ── Visibility / overlay (in-memory display state) ────────────────────────
+    this.managerHandVisible    = true;  // manager sees all hole cards
+    this.spectatorHandVisible  = false; // spectators see all hole cards
+    this.icmOverlayEnabled     = false;
+  }
+
+  // ── Management API ───────────────────────────────────────────────────────────
+
+  /**
+   * Attempt to claim management of this tournament.
+   * Returns true if claim was granted, false if already managed.
+   */
+  claimManagement(stableId, name, role) {
+    if (this.managedBy && this.managedBy !== stableId) return false;
+    this._setManager(stableId, name, role);
+    return true;
+  }
+
+  /**
+   * Release management. Only the current manager can release.
+   * `force` bypasses the ownership check (used by disconnect timer).
+   */
+  releaseManagement(stableId, { force = false } = {}) {
+    if (!force && this.managedBy !== stableId) return false;
+    clearTimeout(this.managerDisconnectTimer);
+    this.managerDisconnectTimer = null;
+    this._setManager(null, null, null);
+    return true;
+  }
+
+  /**
+   * Returns true if `challengerRole` outranks the current manager role.
+   */
+  canSteal(challengerRole) {
+    if (!this.managedBy) return true; // orphaned — no steal needed, claim it
+    const challenger = ROLE_RANK[challengerRole] ?? 0;
+    const current    = ROLE_RANK[this.managerRole] ?? 0;
+    return challenger > current;
+  }
+
+  /** Force-set the manager and broadcast to the room. */
+  _setManager(stableId, name, role) {
+    this.managedBy   = stableId;
+    this.managerName = name;
+    this.managerRole = role;
+    this.io.to(this.tableId).emit('tournament:manager_changed', {
+      managedBy:   stableId,
+      managerName: name,
+    });
+  }
+
+  /**
+   * Handle manager socket disconnect: start 10s grace window.
+   * Eligible users in the room see a countdown; if the manager doesn't
+   * reconnect within 10s the claim is released.
+   */
+  onManagerDisconnect(stableId, name) {
+    if (this.managedBy !== stableId) return;
+    const expiresAt = Date.now() + 10_000;
+    this.io.to(this.tableId).emit('tournament:manager_disconnected', {
+      managedBy:   stableId,
+      managerName: name,
+      expiresAt,
+    });
+    clearTimeout(this.managerDisconnectTimer);
+    this.managerDisconnectTimer = setTimeout(() => {
+      // Only release if still the same manager (didn't reconnect)
+      if (this.managedBy === stableId) {
+        this._setManager(null, null, null);
+      }
+    }, 10_000);
+  }
+
+  /**
+   * Called when the manager's socket reconnects within the grace window.
+   * Cancels the release timer and re-grants management.
+   */
+  onManagerReconnect(stableId, name, role) {
+    if (this.managedBy !== stableId) return;
+    clearTimeout(this.managerDisconnectTimer);
+    this.managerDisconnectTimer = null;
+    // Re-broadcast so all clients know management is active again
+    this._setManager(stableId, name, role);
+  }
+
+  // ── Pause / Resume ───────────────────────────────────────────────────────────
+
+  /**
+   * Pause the tournament: freeze the level timer and block new hands.
+   * Returns false if already paused.
+   */
+  pause() {
+    if (this.paused) return false;
+    this.paused = true;
+
+    // Save remaining level time before cancelling the timer
+    this.pausedLevelRemainingMs = this.blindSchedule?.getTimeRemainingMs() ?? null;
+    clearTimeout(this.levelTimer);
+    this.levelTimer = null;
+
+    // Pause the game engine so it won't start a new hand
+    this.gm.state.paused = true;
+
+    this.io.to(this.tableId).emit('tournament:paused', {
+      pausedLevelRemainingMs: this.pausedLevelRemainingMs,
+    });
+    return true;
+  }
+
+  /**
+   * Resume the tournament: restart the level timer with the saved remainder.
+   * Returns false if not paused.
+   */
+  resume() {
+    if (!this.paused) return false;
+    this.paused = false;
+    this.gm.state.paused = false;
+
+    const remainingMs = this.pausedLevelRemainingMs;
+    this.pausedLevelRemainingMs = null;
+
+    if (remainingMs !== null && remainingMs > 0) {
+      const level = this.blindSchedule?.getCurrentLevel();
+      if (level) {
+        // Adjust levelStartTime so getTimeRemainingMs() stays accurate going forward
+        if (this.blindSchedule) {
+          this.blindSchedule.levelStartTime = Date.now() - (level.duration_minutes * 60_000 - remainingMs);
+        }
+        this.io.to(this.tableId).emit('tournament:time_remaining', {
+          level: level.level,
+          remainingMs,
+        });
+        this.levelTimer = setTimeout(() => {
+          this._advanceLevel().catch(() => {});
+        }, remainingMs);
+      }
+    }
+
+    this.io.to(this.tableId).emit('tournament:resumed', {});
+    return true;
+  }
+
+  // ── Manual controls ──────────────────────────────────────────────────────────
+
+  /**
+   * Manually eliminate a player by their stableId.
+   * Zeroes their stack and runs the standard elimination flow.
+   */
+  async eliminatePlayerManual(targetStableId) {
+    const state = this.gm.getState ? this.gm.getState() : {};
+    const player = (state.seated ?? state.players ?? [])
+      .find(p => p.stable_id === targetStableId || p.stableId === targetStableId);
+
+    if (!player) return { success: false, reason: 'Player not found' };
+    if ((player.stack ?? 0) <= 0) return { success: false, reason: 'Player already eliminated' };
+
+    const stackToRemove = player.stack ?? 0;
+    if (typeof this.gm.adjustStack === 'function') {
+      this.gm.adjustStack(player.id, -stackToRemove);
+    }
+
+    await this._eliminatePlayer(player.id, stackToRemove);
+    return { success: true };
+  }
+
+  // ── Hand visibility + ICM overlay (in-memory display state) ─────────────────
+
+  /**
+   * Toggle what hole cards are visible.
+   * type: 'manager' | 'spectator'
+   */
+  setHandVisibility(type, value) {
+    if (type === 'manager') {
+      this.managerHandVisible = !!value;
+    } else if (type === 'spectator') {
+      this.spectatorHandVisible = !!value;
+    } else {
+      return;
+    }
+    this.io.to(this.tableId).emit('tournament:hand_visibility_changed', {
+      managerHandVisible:   this.managerHandVisible,
+      spectatorHandVisible: this.spectatorHandVisible,
+    });
+  }
+
+  /**
+   * Toggle the live ICM equity overlay in the tournament info panel.
+   */
+  setIcmOverlay(value) {
+    this.icmOverlayEnabled = !!value;
+    this.io.to(this.tableId).emit('tournament:icm_overlay_changed', {
+      enabled: this.icmOverlayEnabled,
+    });
   }
 
   getMode() { return 'tournament'; }
@@ -476,6 +685,8 @@ class TournamentController extends AutoController {
     this.lateRegTimer = null;
     clearTimeout(this.levelTimer);
     this.levelTimer = null;
+    clearTimeout(this.managerDisconnectTimer);
+    this.managerDisconnectTimer = null;
     super.destroy();
   }
 }

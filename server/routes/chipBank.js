@@ -22,7 +22,7 @@ module.exports = function registerChipBankRoutes(app, { requireAuth, requireRole
 
     // Players can only read their own balance; coaches/admins can read anyone's
     const isOwnProfile = user.stableId === id || user.id === id;
-    const isElevated   = ['coach', 'admin', 'superadmin', 'moderator'].includes(user.role);
+    const isElevated   = ['coach', 'admin', 'superadmin'].includes(user.role);
     if (!isOwnProfile && !isElevated)
       return res.status(403).json({ error: 'forbidden', message: 'You can only view your own chip balance.' });
 
@@ -76,7 +76,7 @@ module.exports = function registerChipBankRoutes(app, { requireAuth, requireRole
     const user = req.user;
 
     const isOwnProfile = user.stableId === id || user.id === id;
-    const isElevated   = ['coach', 'admin', 'superadmin', 'moderator'].includes(user.role);
+    const isElevated   = ['coach', 'admin', 'superadmin'].includes(user.role);
     if (!isOwnProfile && !isElevated)
       return res.status(403).json({ error: 'forbidden', message: 'You can only view your own chip history.' });
 

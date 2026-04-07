@@ -90,7 +90,7 @@ export default function ProfileTab({ onSwitchTab }) {
   }
 
   const isCoach   = ['coach', 'admin', 'superadmin'].includes(user?.role);
-  const isStudent = ['coached_student', 'solo_student', 'player', 'trial'].includes(user?.role);
+  const isStudent = ['coached_student', 'solo_student', 'trial'].includes(user?.role);
 
   if (loading) return <Card><p className="text-sm" style={{ color: '#6e7681' }}>Loading…</p></Card>;
 

@@ -174,11 +174,11 @@ export default function BotLobbyPage() {
   const handleCreated = useCallback((table) => {
     setShowModal(false);
     const tableId = table.id ?? table.tableId;
-    if (tableId) navigate(`/game/${tableId}`);
+    if (tableId) navigate(`/table/${tableId}`);
   }, [navigate]);
 
   const handleJoin = useCallback((tableId) => {
-    navigate(`/game/${tableId}`);
+    navigate(`/table/${tableId}`);
   }, [navigate]);
 
   return (

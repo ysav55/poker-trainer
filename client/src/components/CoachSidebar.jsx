@@ -72,6 +72,19 @@ export default function CoachSidebar({
   // Active tab state
   const [activeTab, setActiveTab] = useState('GAME');
 
+  // Track the last hand loaded as a scenario (so we can offer "Save to Playlist")
+  const [lastLoadedHandId, setLastLoadedHandId] = useState(null);
+  const [saveToPlaylistId, setSaveToPlaylistId] = useState('');
+
+  // Intercept loadHandScenario to record the loaded hand
+  const augmentedEmit = {
+    ...emit,
+    loadHandScenario: (handId, stackMode) => {
+      setLastLoadedHandId(handId);
+      emit.loadHandScenario?.(handId, stackMode);
+    },
+  };
+
   // Destructure game state with safe defaults
   const {
     phase: _phase = 'waiting',
@@ -351,13 +364,13 @@ export default function CoachSidebar({
             <>
               <HandLibrarySection
                 hands={hands}
-                emit={emit}
+                emit={augmentedEmit}
                 playlists={playlists}
               />
 
               <HistorySection
                 phase={phase}
-                emit={emit}
+                emit={augmentedEmit}
                 hands={hands}
                 historyLoading={historyLoading}
                 handDetail={handDetail}
@@ -366,6 +379,59 @@ export default function CoachSidebar({
                 clearDetail={clearDetail}
                 onLoadReplay={loadReplay}
               />
+
+              {/* Save loaded scenario to playlist */}
+              {lastLoadedHandId && config_phase && playlists.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: '10px 10px 10px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(212,175,55,0.3)',
+                    background: 'rgba(212,175,55,0.05)',
+                  }}
+                >
+                  <p style={{ fontSize: 10, color: '#d4af37', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 6 }}>
+                    SAVE SCENARIO TO PLAYLIST
+                  </p>
+                  <div className="flex gap-1">
+                    <select
+                      value={saveToPlaylistId}
+                      onChange={e => setSaveToPlaylistId(e.target.value)}
+                      className="flex-1 min-w-0 rounded outline-none"
+                      style={{ background: '#161b22', border: '1px solid #30363d', padding: '3px 6px', fontSize: '10px', color: '#c9c3b8' }}
+                    >
+                      <option value="">— select playlist —</option>
+                      {playlists.map(pl => (
+                        <option key={pl.playlist_id} value={pl.playlist_id}>{pl.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => {
+                        if (saveToPlaylistId) {
+                          augmentedEmit.addToPlaylist?.(saveToPlaylistId, lastLoadedHandId);
+                          setSaveToPlaylistId('');
+                          setLastLoadedHandId(null);
+                        }
+                      }}
+                      disabled={!saveToPlaylistId}
+                      style={{
+                        padding: '3px 10px',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        borderRadius: 4,
+                        border: '1px solid rgba(212,175,55,0.4)',
+                        background: saveToPlaylistId ? 'rgba(212,175,55,0.15)' : 'transparent',
+                        color: saveToPlaylistId ? '#d4af37' : '#6e7681',
+                        cursor: saveToPlaylistId ? 'pointer' : 'not-allowed',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* + Build Scenario button */}
               <button

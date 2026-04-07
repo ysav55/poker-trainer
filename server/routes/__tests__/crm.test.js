@@ -139,7 +139,7 @@ describe('GET /api/admin/players', () => {
 // ─── POST /api/admin/students ─────────────────────────────────────────────────
 
 describe('POST /api/admin/students', () => {
-  const validBody = { name: 'Charlie', password: 'pass123', role: 'player' };
+  const validBody = { name: 'Charlie', password: 'pass123', role: 'coached_student' };
 
   beforeEach(() => {
     mockCurrentUser = adminUser;
@@ -193,7 +193,7 @@ describe('POST /api/admin/students', () => {
     const res = await request(app).post('/api/admin/students').send(validBody);
     expect(res.status).toBe(201);
     // Response should include the assigned role from the request body, not a DB column
-    expect(res.body.role).toBe('player');
+    expect(res.body.role).toBe('coached_student');
     expect(res.body.id).toBe('new-uuid-1');
   });
 });

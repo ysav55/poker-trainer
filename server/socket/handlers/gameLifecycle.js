@@ -8,12 +8,10 @@ module.exports = function registerGameLifecycle(socket, ctx) {
           requireCoach, HandLogger, AnalyzerService, log, uuidv4, advancePlaylist } = ctx;
 
   socket.on('start_game', async ({ mode = 'rng' } = {}) => {
-    {
-      const { getController } = require('../../state/SharedState');
-      const ctrl = getController(socket.data.tableId);
-      if (ctrl?.getMode() === 'uncoached_cash') {
-        return socket.emit('error', { message: 'Auto-deal tables start automatically' });
-      }
+    const { getController } = require('../../state/SharedState');
+    const ctrl = getController(socket.data.tableId);
+    if (ctrl?.getMode() === 'uncoached_cash') {
+      return socket.emit('error', { message: 'Auto-deal tables start automatically' });
     }
     if (requireCoach(socket, 'start the game')) return;
     const gm = tables.get(socket.data.tableId);
@@ -29,6 +27,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
 
     if (!gm.state.replay_mode.branched) {
       const handId = uuidv4();
+      const tableMode = ctrl?.getMode?.() ?? null;
       const allSeatedPlayers = gm.state.players
         .filter(p => !p.is_shadow && !p.is_observer)
         .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
@@ -47,6 +46,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
         bigBlind: gm.state.big_blind,
         isScenario: false,
         sessionType: 'live',
+        tableMode,
       }).then(() => {
         activeHands.set(tableId, { handId, sessionId: gm.sessionId });
         socket.emit('hand_started', { handId });
@@ -129,6 +129,8 @@ module.exports = function registerGameLifecycle(socket, ctx) {
     const dealSnapshot = gm.state.players
       .filter(p => p.hole_cards?.length > 0)
       .map(p => ({ id: stableIdMap.get(p.id) || p.id, hole_cards: [...p.hole_cards] }));
+    const { getController: getCtrl2 } = require('../../state/SharedState');
+    const tableMode2 = getCtrl2(tableId)?.getMode?.() ?? null;
     await HandLogger.startHand({
       handId,
       sessionId: gm.sessionId,
@@ -140,6 +142,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
       bigBlind: gm.state.big_blind,
       isScenario: true,
       sessionType: 'drill',
+      tableMode: tableMode2,
     }).catch(err => log.error('db', 'start_hand_configured_failed', '[HandLogger] startHand (configured)', { err, tableId }));
     activeHands.set(tableId, { handId, sessionId: gm.sessionId, isManualScenario: true });
     socket.emit('hand_started', { handId });

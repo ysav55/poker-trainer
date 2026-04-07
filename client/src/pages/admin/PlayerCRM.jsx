@@ -10,7 +10,7 @@ import ReportsTab from './ReportsTab';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ROLES = ['', 'superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
+const ROLES = ['', 'superadmin', 'admin', 'coach', 'coached_student', 'solo_student'];
 const SUB_TABS = ['INFO', 'SESSIONS', 'STATS', 'NOTES', 'STAKING', 'SCENARIOS', 'REPORTS', 'PREP BRIEF'];
 const NOTE_TYPES = ['general', 'session_review', 'goal', 'weakness'];
 
@@ -2237,7 +2237,7 @@ function AddStudentModal({ allGroups, schools, onClose, onCreated }) {
   const [name, setName]         = useState('');
   const [password, setPassword] = useState('');
   const [email, setEmail]       = useState('');
-  const [role, setRole]         = useState('player');
+  const [role, setRole]         = useState('coached_student');
   const [schoolId, setSchoolId] = useState('');
   const [groupIds, setGroupIds] = useState([]);
   const [saving, setSaving]     = useState(false);
@@ -2345,9 +2345,8 @@ function AddStudentModal({ allGroups, schools, onClose, onCreated }) {
                 onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
                 onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
               >
-                <option value="player" style={{ background: '#161b22' }}>Player</option>
-                <option value="trial" style={{ background: '#161b22' }}>Trial</option>
-                <option value="moderator" style={{ background: '#161b22' }}>Moderator</option>
+                <option value="coached_student" style={{ background: '#161b22' }}>Coached Student</option>
+                <option value="solo_student" style={{ background: '#161b22' }}>Solo Student</option>
               </select>
             </div>
             <div className="flex flex-col gap-1">

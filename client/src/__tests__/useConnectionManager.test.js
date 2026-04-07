@@ -31,7 +31,7 @@ function createMockSocket() {
 describe('useConnectionManager', () => {
   beforeEach(() => {
     mockSocket = createMockSocket()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
   afterEach(() => {
@@ -136,36 +136,36 @@ describe('useConnectionManager', () => {
 
   // ── Auth error handling ───────────────────────────────────────────────────
 
-  it('clears localStorage on connect_error with "unauthorized" message', () => {
-    localStorage.setItem('poker_trainer_jwt', 'token')
-    localStorage.setItem('poker_trainer_player_id', 'pid')
+  it('clears sessionStorage on connect_error with "unauthorized" message', () => {
+    sessionStorage.setItem('poker_trainer_jwt', 'token')
+    sessionStorage.setItem('poker_trainer_player_id', 'pid')
     renderHook(() => useConnectionManager())
     act(() => { mockSocket._trigger('connect_error', { message: 'unauthorized' }) })
-    expect(localStorage.getItem('poker_trainer_jwt')).toBeNull()
-    expect(localStorage.getItem('poker_trainer_player_id')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_player_id')).toBeNull()
   })
 
-  it('clears localStorage on connect_error with "auth" in message', () => {
-    localStorage.setItem('poker_trainer_jwt', 'token')
+  it('clears sessionStorage on connect_error with "auth" in message', () => {
+    sessionStorage.setItem('poker_trainer_jwt', 'token')
     renderHook(() => useConnectionManager())
     act(() => { mockSocket._trigger('connect_error', { message: 'auth failure' }) })
-    expect(localStorage.getItem('poker_trainer_jwt')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBeNull()
   })
 
-  it('clears localStorage on connect_error with "token" in message', () => {
-    localStorage.setItem('poker_trainer_jwt', 'token')
+  it('clears sessionStorage on connect_error with "token" in message', () => {
+    sessionStorage.setItem('poker_trainer_jwt', 'token')
     renderHook(() => useConnectionManager())
     act(() => { mockSocket._trigger('connect_error', { message: 'invalid token' }) })
-    expect(localStorage.getItem('poker_trainer_jwt')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBeNull()
   })
 
-  it('does NOT clear localStorage on non-auth connect_error', () => {
-    localStorage.setItem('poker_trainer_jwt', 'token')
-    localStorage.setItem('poker_trainer_player_id', 'pid')
+  it('does NOT clear sessionStorage on non-auth connect_error', () => {
+    sessionStorage.setItem('poker_trainer_jwt', 'token')
+    sessionStorage.setItem('poker_trainer_player_id', 'pid')
     renderHook(() => useConnectionManager())
     act(() => { mockSocket._trigger('connect_error', { message: 'timeout' }) })
-    expect(localStorage.getItem('poker_trainer_jwt')).toBe('token')
-    expect(localStorage.getItem('poker_trainer_player_id')).toBe('pid')
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBe('token')
+    expect(sessionStorage.getItem('poker_trainer_player_id')).toBe('pid')
   })
 
   it('clears joinParams on auth-related connect_error to prevent auto-rejoin', () => {

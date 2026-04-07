@@ -64,8 +64,8 @@ module.exports = function registerCoachControls(socket, ctx) {
   });
 
   socket.on('toggle_pause', () => {
-    if (!socket.data.isCoach && socket.data.role !== 'moderator') {
-      return sendSyncError(socket, 'Only coaches or moderators can pause');
+    if (!socket.data.isCoach) {
+      return sendSyncError(socket, 'Only the coach can pause');
     }
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');

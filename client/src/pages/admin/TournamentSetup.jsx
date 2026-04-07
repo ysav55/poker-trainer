@@ -133,13 +133,15 @@ function LevelRow({ index, level, isFirst, isLast, onChange, onMove, onRemove })
 
 const STEPS = ['Basic Info', 'Blind Structure', 'Payout Structure', 'Rules', 'Review'];
 
-function WizardModal({ onClose, onCreated }) {
+export function WizardModal({ onClose, onCreated }) {
   const [step, setStep] = useState(0);
 
-  // Step 1 — Basic Info
-  const [name, setName]             = useState('');
-  const [startingStack, setStack]   = useState(10000);
-  const [buyIn, setBuyIn]           = useState(0);
+  // Step 0 — Basic Info
+  const [name, setName]                   = useState('');
+  const [startingStack, setStack]         = useState(10000);
+  const [buyIn, setBuyIn]                 = useState(0);
+  const [minPlayers, setMinPlayers]       = useState(6);
+  const [scheduledStartAt, setScheduledStartAt] = useState('');
 
   // Step 2 — Blind Structure
   const [levels, setLevels] = useState([
@@ -237,7 +239,8 @@ function WizardModal({ onClose, onCreated }) {
     setSaving(true);
     setError(null);
     try {
-      const blindStructure = levels.map((l, i) => ({
+      // System A field name: blindSchedule (not blindStructure)
+      const blindSchedule = levels.map((l, i) => ({
         level: i + 1,
         sb: l.sb,
         bb: l.bb,
@@ -245,36 +248,35 @@ function WizardModal({ onClose, onCreated }) {
         duration_minutes: l.durationMin,
       }));
       const payoutStructure = payouts.map(p => ({ position: p.place, percentage: p.percent }));
-      const data = await apiFetch('/api/tournaments', {
+
+      const data = await apiFetch('/api/admin/tournaments', {
         method: 'POST',
         body: JSON.stringify({
           name,
-          blindStructure,
+          blindSchedule,
           startingStack,
           rebuyAllowed,
           addonAllowed,
           payoutStructure,
-          payoutPresetId: payoutPresetId !== 'custom' ? payoutPresetId : null,
           payoutMethod,
           showIcmOverlay,
           dealThreshold,
+          minPlayers,
+          scheduledStartAt: scheduledStartAt || null,
+          refPlayerId: refPlayerId.trim() || null,
         }),
       });
+
       // Fire-and-forget: save blind structure as a named preset if requested
       if (saveAsPreset && newPresetName.trim() && levels.length > 0) {
         apiFetch('/api/blind-presets', {
           method: 'POST',
-          body: JSON.stringify({ name: newPresetName.trim(), levels: blindStructure }),
+          body: JSON.stringify({ name: newPresetName.trim(), levels: blindSchedule }),
         }).catch(() => {}); // non-fatal
       }
-      // Appoint referee if provided
-      if (refPlayerId.trim()) {
-        apiFetch(`/api/tournaments/${data.id}/referee`, {
-          method: 'POST',
-          body: JSON.stringify({ refPlayerId: refPlayerId.trim() }),
-        }).catch(() => {}); // non-fatal — tournament is created regardless
-      }
-      onCreated(data.id);
+
+      // data = { tableId, configId, tournamentId }
+      onCreated(data);
       onClose();
     } catch (err) {
       setError(err.message ?? 'Create failed');
@@ -353,6 +355,21 @@ function WizardModal({ onClose, onCreated }) {
               {fieldInput('Tournament Name', name, setName)}
               {fieldInput('Starting Stack', startingStack, setStack, 'number')}
               {fieldInput('Buy-In Amount', buyIn, setBuyIn, 'number')}
+              {fieldInput('Minimum Players to Start', minPlayers, setMinPlayers, 'number')}
+              <div className="flex flex-col gap-1.5 mb-4">
+                <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>
+                  Scheduled Start Time (optional)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={scheduledStartAt}
+                  onChange={e => setScheduledStartAt(e.target.value)}
+                  className="rounded text-sm outline-none px-3 py-2"
+                  style={{ background: '#0d1117', border: '1px solid #30363d', color: '#f0ece3' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#30363d'; }}
+                />
+              </div>
             </div>
           )}
 
@@ -742,8 +759,9 @@ export default function TournamentSetup() {
 
   const filtered = tournaments.filter(t => STATUS_MAP[activeTab]?.includes(t.status));
 
-  function handleCreated(id) {
+  function handleCreated({ tableId }) {
     fetchTournaments();
+    if (tableId) navigate(`/tournament/${tableId}/lobby`);
   }
 
   return (
@@ -815,7 +833,11 @@ export default function TournamentSetup() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
           {filtered.map(t => (
-            <TournamentCard key={t.id} t={t} onOpen={() => navigate(`/tournament/${t.id}/lobby`)} />
+            <TournamentCard
+              key={t.id}
+              t={t}
+              onOpen={() => navigate(`/tournament/${t.table_id ?? t.id}/lobby`)}
+            />
           ))}
         </div>
       )}

@@ -302,7 +302,11 @@ function FlaggedHandsList({ hands, loading, tagFilter }) {
               key={h.hand_id}
               className="px-4 py-3 flex items-center justify-between group cursor-pointer"
               style={{ background: 'transparent', transition: 'background 0.1s' }}
-              onClick={() => navigate(`/review?handId=${h.hand_id}`)}
+              onClick={() => {
+                const handIds = displayed.slice(0, 30).map(d => d.hand_id);
+                const currentIndex = handIds.indexOf(h.hand_id);
+                navigate(`/review?handId=${h.hand_id}`, { state: { handIds, currentIndex } });
+              }}
               data-testid={`flagged-hand-${h.hand_id}`}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}

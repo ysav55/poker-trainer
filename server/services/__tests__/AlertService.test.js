@@ -63,7 +63,7 @@ beforeEach(() => {
   mockTableData = {};
 
   for (const table of [
-    'player_profiles', 'alert_config', 'student_baselines',
+    'player_profiles', 'player_roles', 'alert_config', 'student_baselines',
     'session_player_stats', 'leaderboard', 'alert_instances',
   ]) {
     setTable(table, null);
@@ -318,6 +318,11 @@ describe('AlertService.generateAlerts', () => {
 
   function setupStudents(students) {
     setTable('player_profiles', students);
+    // _fetchStudents first queries player_roles to find student IDs, then player_profiles
+    setTable('player_roles', students.map(s => ({
+      player_id: s.id,
+      roles: { name: 'coached_student' },
+    })));
   }
   function setupAlertConfig(rows) {
     setTable('alert_config', rows ?? []);
@@ -336,7 +341,7 @@ describe('AlertService.generateAlerts', () => {
   }
 
   beforeEach(() => {
-    setupStudents([{ id: STUDENT_ID, display_name: 'Alex', is_coach: false }]);
+    setupStudents([{ id: STUDENT_ID, display_name: 'Alex' }]);
     setupAlertConfig([]);
     setupBaseline(null);
     setupSessions([]);

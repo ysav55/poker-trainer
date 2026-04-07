@@ -60,6 +60,11 @@ const TableRepository = {
     if (error) throw error;
   },
 
+  async deleteTable(id) {
+    const { error } = await supabase.from('tables').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   // Open any scheduled tables whose scheduled_for <= now
   async activateScheduledTables() {
     const { data, error } = await supabase

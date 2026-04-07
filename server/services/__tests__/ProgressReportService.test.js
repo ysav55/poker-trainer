@@ -364,6 +364,7 @@ describe('getById()', () => {
 describe('stableOverview()', () => {
   test('returns empty state when no students', async () => {
     setTable('player_profiles', []);
+    setTable('player_roles', []);
     mockFrom.mockImplementation((table) => makeChain(mockResponses[table] ?? { data: null, error: null }));
     const result = await ProgressReportService.stableOverview(COACH_ID);
     expect(result).toMatchObject({ students: [], avg_grade: null });
@@ -374,6 +375,10 @@ describe('stableOverview()', () => {
       { id: 's1', display_name: 'Alice' },
       { id: 's2', display_name: 'Bob' },
     ]);
+    setTable('player_roles', [
+      { player_id: 's1', roles: { name: 'coached_student' } },
+      { player_id: 's2', roles: { name: 'coached_student' } },
+    ]);
 
     const reportRows = {
       s1: { data: { player_id: 's1', overall_grade: 80, display_name: 'Alice', period_start: '2026-03-24', period_end: '2026-03-30', created_at: '2026-04-01T00:00:00Z' }, error: null },
@@ -382,6 +387,7 @@ describe('stableOverview()', () => {
 
     let callCount = 0;
     mockFrom.mockImplementation((table) => {
+      if (table === 'player_roles')    return makeChain(mockResponses['player_roles']);
       if (table === 'player_profiles') return makeChain(mockResponses['player_profiles']);
       if (table === 'progress_reports') {
         const studentKey = callCount++ % 2 === 0 ? 's1' : 's2';

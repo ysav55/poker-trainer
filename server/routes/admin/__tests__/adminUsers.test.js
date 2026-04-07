@@ -39,11 +39,16 @@ jest.mock('../../../db/supabase.js', () => {
     single:       jest.fn(),
     maybeSingle:  jest.fn(),
     delete:       jest.fn(),
+    update:       jest.fn(),
   };
   chain.from.mockReturnValue(chain);
   chain.select.mockReturnValue(chain);
   chain.eq.mockReturnValue(chain);
   chain.delete.mockReturnValue(chain);
+  // update returns chain so chained .eq() calls work; resolves with no error
+  chain.update.mockReturnValue(chain);
+  // Make chain thenable so `await supabase.from(...).update(...).eq(...).eq(...)` resolves
+  chain.then = jest.fn((resolve) => Promise.resolve(resolve({ data: null, error: null })));
   // Default: no role found
   chain.single.mockResolvedValue({ data: null, error: null });
   chain.maybeSingle.mockResolvedValue({ data: null, error: null });

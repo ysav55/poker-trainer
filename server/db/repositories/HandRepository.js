@@ -7,7 +7,7 @@ const { ensureSession } = require('./SessionRepository');
 
 // ─── Hand Lifecycle ───────────────────────────────────────────────────────────
 
-async function startHand({ handId, sessionId, tableId, players, allPlayers, dealerSeat = 0, isScenario = false, smallBlind = 0, bigBlind = 0, sessionType = null }) {
+async function startHand({ handId, sessionId, tableId, players, allPlayers, dealerSeat = 0, isScenario = false, smallBlind = 0, bigBlind = 0, sessionType = null, tableMode = null }) {
   await ensureSession(sessionId, tableId);
 
   await q(supabase.from('hands').upsert({
@@ -21,6 +21,7 @@ async function startHand({ handId, sessionId, tableId, players, allPlayers, deal
     small_blind:        smallBlind,
     big_blind:          bigBlind,
     session_type:       sessionType,
+    table_mode:         tableMode,
   }, { onConflict: 'hand_id', ignoreDuplicates: true }));
 
   // Ensure each player has a player_profiles row before inserting hand_players FK

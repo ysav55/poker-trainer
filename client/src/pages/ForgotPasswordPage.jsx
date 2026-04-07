@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { apiFetch } from '../lib/api.js';
 
 const INPUT_STYLE = {
   background: 'rgba(255,255,255,0.04)',
@@ -31,18 +32,27 @@ function AuthInput({ type = 'text', value, onChange, placeholder, maxLength, dis
 }
 
 export default function ForgotPasswordPage() {
-  const [name, setName]       = useState('');
+  const [name, setName]           = useState('');
   const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name.trim()) return;
-
+    setError('');
     setLoading(true);
-    // No backend endpoint yet — contact-coach flow
-    setLoading(false);
-    setSubmitted(true);
+    try {
+      await apiFetch('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setError(err.message || 'Request failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -125,6 +135,12 @@ export default function ForgotPasswordPage() {
                   disabled={loading}
                 />
               </div>
+
+              {error && (
+                <p data-testid="forgot-error" className="text-xs text-red-400 leading-snug -mt-1">
+                  {error}
+                </p>
+              )}
 
               <button
                 type="submit"

@@ -79,7 +79,16 @@
       "Bash(grep -n \"ALTER TABLE tables\\\\|ADD.*NOT NULL\" /c/Users/user/poker-trainer/supabase/migrations/*.sql)",
       "Bash(node --input-type=module)",
       "Bash(node -e ':*)",
-      "Bash(git -C /c/Users/user/poker-trainer diff --stat HEAD)"
+      "Bash(git -C /c/Users/user/poker-trainer diff --stat HEAD)",
+      "Bash(grep -n \"INSERT INTO roles\" *.sql)",
+      "Bash(grep -n \"INSERT INTO role_permissions\" *.sql)",
+      "Bash(grep -E \"\\\\.\\(js\\)$\")",
+      "Bash(grep -E \"\\\\.\\(js|jsx\\)$\")",
+      "Bash(grep -n \"buyInAmount\" /c/Users/user/poker-trainer/server/socket/handlers/*.js)",
+      "Bash(grep -E \"\\\\.\\(jsx|tsx\\)$\")",
+      "Bash(xargs grep:*)",
+      "Bash(find /c/Users/user/poker-trainer/server -type f -name \"*.js\" -exec grep -l \"prevent.*delete\\\\|cannot.*delete\\\\|minimum.*table\\\\|only.*table\" {} \\\\;)",
+      "Bash(find /c/Users/user/poker-trainer/server -type f -name \"*.js\" -exec grep -l \"seed\\\\|fixture\\\\|bootstrap\\\\|init.*table\" {} \\\\;)"
     ],
     "additionalDirectories": [
       "C:\\Users\\user\\.claude\\skills\\design-an-interface",

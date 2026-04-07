@@ -31,7 +31,7 @@ function createMockSocket() {
 describe('useSocket — return shape', () => {
   beforeEach(() => {
     mockSocket = createMockSocket()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('exposes all connection fields', () => {
@@ -97,7 +97,7 @@ describe('useSocket — return shape', () => {
 describe('useSocket — connection state', () => {
   beforeEach(() => {
     mockSocket = createMockSocket()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('connected starts as false', () => {
@@ -122,21 +122,21 @@ describe('useSocket — connection state', () => {
 describe('useSocket — leaveRoom', () => {
   beforeEach(() => {
     mockSocket = createMockSocket()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
-  it('clears poker_trainer_jwt from localStorage', () => {
-    localStorage.setItem('poker_trainer_jwt', 'my-token')
+  it('clears poker_trainer_jwt from sessionStorage', () => {
+    sessionStorage.setItem('poker_trainer_jwt', 'my-token')
     const { result } = renderHook(() => useSocket())
     act(() => { result.current.leaveRoom() })
-    expect(localStorage.getItem('poker_trainer_jwt')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBeNull()
   })
 
-  it('clears poker_trainer_player_id from localStorage', () => {
-    localStorage.setItem('poker_trainer_player_id', 'uuid-123')
+  it('clears poker_trainer_player_id from sessionStorage', () => {
+    sessionStorage.setItem('poker_trainer_player_id', 'uuid-123')
     const { result } = renderHook(() => useSocket())
     act(() => { result.current.leaveRoom() })
-    expect(localStorage.getItem('poker_trainer_player_id')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_player_id')).toBeNull()
   })
 
   it('calls socket.disconnect()', () => {

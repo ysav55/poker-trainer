@@ -114,6 +114,44 @@ describe('getPlayerPermissions', () => {
     // Both calls return the same Set reference
     expect(second).toBe(first);
   });
+
+  test('re-queries Supabase after 5-minute TTL expires', async () => {
+    const id = 'player-ttl-test';
+    resolvePermissions(['perm_before_ttl']);
+
+    // Populate cache with a frozen timestamp
+    const frozenNow = 1_000_000;
+    jest.spyOn(Date, 'now').mockReturnValue(frozenNow);
+    await getPlayerPermissions(id);
+    expect(mockEq).toHaveBeenCalledTimes(1);
+
+    // Advance clock past TTL (5 min + 1 ms)
+    Date.now.mockReturnValue(frozenNow + 5 * 60 * 1000 + 1);
+    resolvePermissions(['perm_after_ttl']);
+
+    const perms = await getPlayerPermissions(id);
+    expect(mockEq).toHaveBeenCalledTimes(2);
+    expect(perms.has('perm_after_ttl')).toBe(true);
+    expect(perms.has('perm_before_ttl')).toBe(false);
+
+    jest.restoreAllMocks();
+  });
+
+  test('does not re-query before TTL expires', async () => {
+    const id = 'player-ttl-still-fresh';
+    resolvePermissions(['fresh_perm']);
+
+    const frozenNow = 2_000_000;
+    jest.spyOn(Date, 'now').mockReturnValue(frozenNow);
+    await getPlayerPermissions(id);
+
+    // Advance by less than TTL
+    Date.now.mockReturnValue(frozenNow + 4 * 60 * 1000);
+    await getPlayerPermissions(id);
+    expect(mockEq).toHaveBeenCalledTimes(1); // still cached
+
+    jest.restoreAllMocks();
+  });
 });
 
 // ─── invalidatePermissionCache ────────────────────────────────────────────────
@@ -142,6 +180,26 @@ describe('invalidatePermissionCache', () => {
 
   test('does not throw when invalidating a player not in cache', () => {
     expect(() => invalidatePermissionCache('no-such-player')).not.toThrow();
+  });
+
+  test('invalidate clears cache so next call re-queries even before TTL', async () => {
+    const id = 'player-invalidate-ttl';
+    const frozenNow = 3_000_000;
+    jest.spyOn(Date, 'now').mockReturnValue(frozenNow);
+
+    resolvePermissions(['perm_initial']);
+    await getPlayerPermissions(id);
+    expect(mockEq).toHaveBeenCalledTimes(1);
+
+    // Invalidate well within TTL window
+    invalidatePermissionCache(id);
+
+    resolvePermissions(['perm_refreshed']);
+    const perms = await getPlayerPermissions(id);
+    expect(mockEq).toHaveBeenCalledTimes(2);
+    expect(perms.has('perm_refreshed')).toBe(true);
+
+    jest.restoreAllMocks();
   });
 });
 

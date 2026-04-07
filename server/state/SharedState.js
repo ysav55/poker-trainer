@@ -27,7 +27,7 @@ function destroyController(tableId) {
 
 function _createController(mode, tableId, gm, io, tableConfig = {}) {
   switch (mode) {
-    case 'uncoached_cash': return new AutoController(tableId, gm, io);
+    case 'uncoached_cash': return new AutoController(tableId, gm, io, tableConfig);
     case 'tournament':     return new TournamentController(tableId, gm, io);
     case 'bot_cash':       return new BotTableController(tableId, gm, io, tableConfig);
     default:               return new CoachedController(tableId, gm, io);

@@ -137,6 +137,20 @@ describe('startHand', () => {
     const { dealerSeat: _omit, ...paramsWithoutDealer } = baseParams;
     await expect(startHand(paramsWithoutDealer)).resolves.not.toThrow();
   });
+
+  test('accepts tableMode and resolves without throwing', async () => {
+    await expect(startHand({ ...baseParams, tableMode: 'coached_cash' })).resolves.not.toThrow();
+  });
+
+  test('accepts tableMode=null (historical hands) without throwing', async () => {
+    await expect(startHand({ ...baseParams, tableMode: null })).resolves.not.toThrow();
+  });
+
+  test('defaults tableMode to null when omitted', async () => {
+    // q is mocked — just ensure no error thrown and ensureSession is called
+    await expect(startHand(baseParams)).resolves.not.toThrow();
+    expect(ensureSession).toHaveBeenCalledWith('session-001', 'table-001');
+  });
 });
 
 // ── recordAction ─────────────────────────────────────────────────────────────

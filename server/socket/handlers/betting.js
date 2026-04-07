@@ -88,5 +88,15 @@ module.exports = function registerBetting(socket, ctx) {
       io.to(tableId).emit('showdown_result', freshState.showdown_result);
     }
     startActionTimer(tableId);
+
+    // For uncoached tables, hand reset & auto-deal are driven by AutoController
+    // (coached tables use the reset_hand socket event from the coach instead)
+    if (freshState.phase === 'showdown') {
+      const { getController } = require('../../state/SharedState');
+      const ctrl = getController(tableId);
+      if (ctrl?.getMode?.() === 'uncoached_cash') {
+        ctrl._completeHand().catch(() => {});
+      }
+    }
   });
 };

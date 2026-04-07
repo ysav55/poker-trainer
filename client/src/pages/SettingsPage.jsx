@@ -15,8 +15,8 @@ const ALL_TABS = [
   { id: 'alerts',         label: 'Alerts',         roles: ['coach'],                                                                                              component: AlertsTab        },
   { id: 'org',            label: 'Org',            roles: ['admin','superadmin'],                                                                                  component: OrgTab           },
   { id: 'platform',       label: 'Platform',       roles: ['superadmin'],                                                                                          component: PlatformTab      },
-  { id: 'profile',        label: 'Profile',        roles: ['coach','admin','superadmin','player','trial','moderator','coached_student','solo_student','referee'],  component: ProfileTab       },
-  { id: 'danger-zone',    label: 'Danger Zone',    roles: ['coach','admin','superadmin','player','trial','moderator','coached_student','solo_student','referee'],  component: DangerZoneTab    },
+  { id: 'profile',        label: 'Profile',        roles: ['coach','admin','superadmin','trial','coached_student','solo_student'],  component: ProfileTab       },
+  { id: 'danger-zone',    label: 'Danger Zone',    roles: ['coach','admin','superadmin','trial','coached_student','solo_student'],  component: DangerZoneTab    },
 ];
 
 export default function SettingsPage() {

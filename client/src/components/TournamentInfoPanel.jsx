@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTable } from '../contexts/TableContext.jsx';
-import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiFetch } from '../lib/api.js';
 
 // ── Inline keyframe injection (single instance) ──────────────────────────────
@@ -46,64 +45,6 @@ function ordinal(n) {
 
 // ── Confirm modal ─────────────────────────────────────────────────────────────
 
-function ConfirmModal({ title, body, confirmLabel, danger, onConfirm, onClose }) {
-  useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(2px)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div
-        className="w-full max-w-sm rounded-xl shadow-2xl flex flex-col"
-        style={{ background: '#161b22', border: '1px solid #30363d', boxShadow: '0 8px 48px rgba(0,0,0,0.8)' }}
-      >
-        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #30363d' }}>
-          <span className="text-sm font-bold tracking-[0.15em]" style={{ color: danger ? '#f85149' : '#d4af37' }}>
-            {title}
-          </span>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6e7681' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#f0ece3'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; }}
-            aria-label="Close"
-          >✕</button>
-        </div>
-        <div className="px-5 py-4 flex flex-col gap-4">
-          <p className="text-sm" style={{ color: '#8b949e' }}>{body}</p>
-          <div className="flex items-center justify-end gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded text-sm font-medium"
-              style={{ background: 'none', border: '1px solid #30363d', color: '#8b949e', cursor: 'pointer' }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => { onConfirm(); onClose(); }}
-              className="px-4 py-2 rounded text-sm font-bold tracking-wider"
-              style={{
-                background: danger ? 'rgba(248,81,73,0.15)' : 'rgba(212,175,55,0.15)',
-                border: `1px solid ${danger ? 'rgba(248,81,73,0.4)' : 'rgba(212,175,55,0.4)'}`,
-                color: danger ? '#f85149' : '#d4af37',
-                cursor: 'pointer',
-              }}
-            >
-              {confirmLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 /**
@@ -113,7 +54,6 @@ function ConfirmModal({ title, body, confirmLabel, danger, onConfirm, onClose })
 export default function TournamentInfoPanel() {
   const { tableId, gameState, socket: tableSocket } = useTable();
   const socketRef = tableSocket?.socketRef;
-  const { hasPermission } = useAuth();
   const navigate = useNavigate();
 
   // ── Tournament state ───────────────────────────────────────────────────────
@@ -138,6 +78,9 @@ export default function TournamentInfoPanel() {
   const [addonStack, setAddonStack] = useState(0);
   const [addonTaken, setAddonTaken] = useState(false); // track if this user already took it
 
+  // ── Paused state ─────────────────────────────────────────────────────────────
+  const [isPaused, setIsPaused]           = useState(false);
+
   // ── ICM overlay state ──────────────────────────────────────────────────────
   const [icmOverlay, setIcmOverlay]       = useState(null);   // array of { playerId, icmPct, icmChips }
 
@@ -145,6 +88,7 @@ export default function TournamentInfoPanel() {
   const [dealProposal, setDealProposal]   = useState(null);
   const [dealLoading, setDealLoading]     = useState(false);
   const [showDealModal, setShowDealModal] = useState(false);
+  const [actionError, setActionError]     = useState(null);
 
   // ── Countdown ─────────────────────────────────────────────────────────────
   const [remainingMs, setRemainingMs]     = useState(null);
@@ -204,7 +148,7 @@ export default function TournamentInfoPanel() {
     const onLateRegOpen = ({ endsAt }) => { setLateRegOpen(true); setLateRegEndsAt(endsAt); };
     const onLateRegClosed = () => { setLateRegOpen(false); setLateRegEndsAt(null); };
 
-    const currentUserId = localStorage.getItem('poker_trainer_player_id');
+    const currentUserId = sessionStorage.getItem('poker_trainer_player_id');
 
     const onReentryAvailable = ({ playerId, reentryStack: stack, endsAt }) => {
       if (playerId === currentUserId) {
@@ -246,6 +190,11 @@ export default function TournamentInfoPanel() {
       setActionError(`Add-on failed: ${reason}`);
     };
 
+    const onPaused   = () => setIsPaused(true);
+    const onResumed  = () => setIsPaused(false);
+
+    socket.on('tournament:paused',   onPaused);
+    socket.on('tournament:resumed',  onResumed);
     socket.on('tournament:time_remaining', onTimeRemaining);
     socket.on('tournament:blind_up',       onBlindUp);
     socket.on('tournament:final_level',    onFinalLevel);
@@ -278,6 +227,8 @@ export default function TournamentInfoPanel() {
       socket.off('tournament:addon_closed',   onAddonClosed);
       socket.off('tournament:addon_confirmed', onAddonConfirmed);
       socket.off('tournament:addon_rejected', onAddonRejected);
+    socket.off('tournament:paused',         onPaused);
+    socket.off('tournament:resumed',        onResumed);
     };
   }, [socketRef, startCountdown, tableId, navigate]);
 
@@ -319,35 +270,6 @@ export default function TournamentInfoPanel() {
     }
   }, [tableId]);
 
-  // ── Coach overrides ────────────────────────────────────────────────────────
-  const [confirmModal, setConfirmModal] = useState(null);
-  const [actionError, setActionError]   = useState(null);
-
-  const handleAdvanceLevel = useCallback(async () => {
-    setActionError(null);
-    try {
-      await apiFetch(`/api/tables/${tableId}/tournament/advance-level`, { method: 'POST' });
-    } catch (err) {
-      // Fallback: emit socket event if REST not available
-      socketRef?.current?.emit('tournament:advance_level', { tableId });
-      setActionError(err.message);
-    }
-  }, [tableId, socketRef]);
-
-  const handleEndTournament = useCallback(async () => {
-    setActionError(null);
-    try {
-      await apiFetch(`/api/tables/${tableId}/tournament/end`, { method: 'POST' });
-    } catch (err) {
-      socketRef?.current?.emit('tournament:end', { tableId });
-      setActionError(err.message);
-    }
-  }, [tableId, socketRef]);
-
-  // Coaches/admins have table:manage; referees have tournament:manage.
-  // Either qualifies for tournament controls (coach/admin always >= referee).
-  const canManage = hasPermission('table:manage') || hasPermission('tournament:manage');
-
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
@@ -363,6 +285,25 @@ export default function TournamentInfoPanel() {
           gap: '14px',
         }}
       >
+        {/* ── Paused banner ──────────────────────────────────────────────── */}
+        {isPaused && (
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.14em',
+              color: '#e3b341',
+              background: 'rgba(227,179,65,0.08)',
+              border: '1px solid rgba(227,179,65,0.3)',
+              borderRadius: 6,
+              padding: '6px 10px',
+              textAlign: 'center',
+            }}
+          >
+            ⏸ TOURNAMENT PAUSED
+          </div>
+        )}
+
         {/* ── Late registration banner ─────────────────────────────────── */}
         {lateRegOpen && (
           <div className="bg-yellow-500 text-black text-sm px-3 py-2 rounded mb-2">
@@ -635,122 +576,22 @@ export default function TournamentInfoPanel() {
           )}
         </div>
 
-        {/* ── Coach overrides ──────────────────────────────────────────────── */}
-        {canManage && !winner && (
+        {/* Error display (add-on/reentry errors) */}
+        {actionError && (
           <div
             style={{
-              borderTop: '1px solid rgba(255,255,255,0.06)',
-              paddingTop: '12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
+              fontSize: '11px',
+              color: '#f85149',
+              background: 'rgba(248,81,73,0.08)',
+              border: '1px solid rgba(248,81,73,0.25)',
+              borderRadius: '4px',
+              padding: '4px 8px',
             }}
           >
-            <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.15em', color: '#6e7681', marginBottom: '2px' }}>
-              COACH CONTROLS
-            </div>
-
-            {actionError && (
-              <div
-                style={{
-                  fontSize: '11px',
-                  color: '#f85149',
-                  background: 'rgba(248,81,73,0.08)',
-                  border: '1px solid rgba(248,81,73,0.25)',
-                  borderRadius: '4px',
-                  padding: '4px 8px',
-                }}
-              >
-                {actionError}
-              </div>
-            )}
-
-            {/* Advance Level */}
-            <button
-              onClick={() =>
-                setConfirmModal({
-                  title: 'ADVANCE LEVEL',
-                  body: 'Force-advance to the next blind level now?',
-                  confirmLabel: 'ADVANCE',
-                  danger: false,
-                  onConfirm: handleAdvanceLevel,
-                })
-              }
-              style={{
-                background: 'none',
-                border: '1px solid rgba(212,175,55,0.25)',
-                borderRadius: '6px',
-                color: '#d4af37',
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.1em',
-                padding: '6px 12px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'border-color 0.15s, background 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(212,175,55,0.6)';
-                e.currentTarget.style.background  = 'rgba(212,175,55,0.06)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(212,175,55,0.25)';
-                e.currentTarget.style.background  = 'none';
-              }}
-            >
-              Advance Level
-            </button>
-
-            {/* End Tournament */}
-            <button
-              onClick={() =>
-                setConfirmModal({
-                  title: 'END TOURNAMENT',
-                  body: 'Are you sure you want to end the tournament immediately? This cannot be undone.',
-                  confirmLabel: 'END TOURNAMENT',
-                  danger: true,
-                  onConfirm: handleEndTournament,
-                })
-              }
-              style={{
-                background: 'none',
-                border: '1px solid rgba(248,81,73,0.3)',
-                borderRadius: '6px',
-                color: '#f85149',
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.1em',
-                padding: '6px 12px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'border-color 0.15s, background 0.15s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(248,81,73,0.65)';
-                e.currentTarget.style.background  = 'rgba(248,81,73,0.06)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(248,81,73,0.3)';
-                e.currentTarget.style.background  = 'none';
-              }}
-            >
-              End Tournament
-            </button>
+            {actionError}
           </div>
         )}
       </div>
-
-      {/* ── Confirm modal (portal-free, rendered outside panel box) ─────────── */}
-      {confirmModal && (
-        <ConfirmModal
-          title={confirmModal.title}
-          body={confirmModal.body}
-          confirmLabel={confirmModal.confirmLabel}
-          danger={confirmModal.danger}
-          onConfirm={confirmModal.onConfirm}
-          onClose={() => setConfirmModal(null)}
-        />
-      )}
 
       {/* ── Re-entry modal ───────────────────────────────────────────────────── */}
       {showReentryModal && (

@@ -252,7 +252,7 @@ router.post('/snapshots/compute', canManage, async (req, res) => {
 // Admin creates a student account directly (no email verification needed).
 // Body: { name, password, email?, role?, schoolId?, groupIds? }
 router.post('/students', canEdit, async (req, res) => {
-  const { name, password, email, role = 'player', schoolId, groupIds = [] } = req.body || {};
+  const { name, password, email, role = 'coached_student', schoolId, groupIds = [] } = req.body || {};
 
   if (!name || typeof name !== 'string' || name.trim().length < 2)
     return res.status(400).json({ error: 'invalid_name', message: 'Name must be at least 2 characters.' });
@@ -261,7 +261,7 @@ router.post('/students', canEdit, async (req, res) => {
   if (email && (typeof email !== 'string' || !email.includes('@')))
     return res.status(400).json({ error: 'invalid_email', message: 'Email is not valid.' });
 
-  const allowedRoles = ['player', 'trial', 'moderator'];
+  const allowedRoles = ['coached_student', 'solo_student'];
   if (!allowedRoles.includes(role))
     return res.status(400).json({ error: 'invalid_role', message: `Role must be one of: ${allowedRoles.join(', ')}.` });
 

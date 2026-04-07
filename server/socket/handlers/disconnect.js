@@ -16,6 +16,14 @@ module.exports = function registerDisconnect(socket, ctx) {
     const isSpectator = socket.data.isSpectator;
 
     if (isSpectator) {
+      // If the spectator was the tournament manager, start the 10s grace window
+      if (socket.data.isManager) {
+        const { getController } = require('../../state/SharedState');
+        const ctrl = getController(tableId);
+        if (ctrl && ctrl.getMode?.() === 'tournament') {
+          ctrl.onManagerDisconnect(socket.data.stableId, name);
+        }
+      }
       console.log(`[disconnect] spectator ${name} left ${tableId}`);
       return;
     }

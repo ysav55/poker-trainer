@@ -7,6 +7,7 @@ import StatPill from '../components/StatPill.jsx';
 import FilterTabs from '../components/FilterTabs.jsx';
 import TableCard from '../components/TableCard.jsx';
 import NewTableCard from '../components/NewTableCard.jsx';
+import { WizardModal } from './admin/TournamentSetup.jsx';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -38,10 +39,14 @@ const TRIAL_TABLE_TABS = [
 const MODE_OPTIONS = [
   { value: 'coached_cash',   label: 'Coached Cash' },
   { value: 'uncoached_cash', label: 'Auto Cash' },
-  { value: 'tournament',     label: 'Tournament' },
 ];
 
+// Tournament mode is handled separately via the WizardModal — not in the simple create flow.
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Roles that can manage (claim/steal management) a tournament table
+const MANAGER_ROLES = new Set(['superadmin', 'admin', 'coach']);
 
 function mapTableToCard(table, role, userId) {
   const isTournament = table.mode === 'tournament';
@@ -49,10 +54,19 @@ function mapTableToCard(table, role, userId) {
   const status = ['waiting', 'paused'].includes(phase) ? phase : 'active';
   const tableType = isTournament ? 'Tournament' : 'Cash';
   const isSeated = table.players?.some?.((p) => p.stableId === userId || p.id === userId);
+  const canManage = MANAGER_ROLES.has(role);
+  const isCoachOrAdmin = role === 'coach' || role === 'admin' || role === 'superadmin';
 
   let actionLabel = 'JOIN';
-  if (role === 'coach' || role === 'admin' || role === 'superadmin') {
+  let secondaryActionLabel = null;
+
+  if (isTournament && canManage) {
+    // Tournament + eligible role: split Play / Manage
+    actionLabel = 'PLAY';
+    secondaryActionLabel = 'MANAGE';
+  } else if (!isTournament && isCoachOrAdmin) {
     actionLabel = 'MANAGE';
+    secondaryActionLabel = 'SPECTATE';
   } else if (isSeated) {
     actionLabel = 'PLAYING';
   } else if (isTournament) {
@@ -66,13 +80,15 @@ function mapTableToCard(table, role, userId) {
     privacy: table.privacy ?? 'open',
     gameType: 'NLHE',
     tableType,
+    mode: table.mode,
     maxPlayers: table.maxPlayers ?? 9,
     playerCount: table.playerCount ?? table.player_count ?? 0,
-    smallBlind: table.smallBlind ?? null,
-    bigBlind: table.bigBlind ?? null,
+    smallBlind: table.smallBlind ?? table.config?.sb ?? null,
+    bigBlind: table.bigBlind ?? table.config?.bb ?? null,
     pot: table.pot ?? null,
     controller: table.controller ?? null,
     actionLabel,
+    secondaryActionLabel,
   };
 }
 
@@ -101,27 +117,66 @@ function fmtStat(v, pct = false) {
 
 // ─── Create Table Modal ───────────────────────────────────────────────────────
 
+const PRIVACY_OPTIONS = [
+  { value: 'open',    label: 'Open',    desc: 'Anyone can join' },
+  { value: 'school',  label: 'School',  desc: 'Same school only' },
+  { value: 'private', label: 'Private', desc: 'Invitation only' },
+];
+
 function CreateTableModal({ onClose, onCreated }) {
-  const [name, setName]   = useState('');
-  const [mode, setMode]   = useState('coached_cash');
-  const [busy, setBusy]   = useState(false);
-  const [error, setError] = useState('');
+  const [name, setName]             = useState('');
+  const [mode, setMode]             = useState('coached_cash');
+  const [sb, setSb]                 = useState(25);
+  const [bb, setBb]                 = useState(50);
+  const [startingStack, setStack]   = useState(5000);
+  const [privacy, setPrivacy]       = useState('open');
+  const [presets, setPresets]       = useState([]);
+  const [saveAsPreset, setSavePreset] = useState(false);
+  const [presetName, setPresetName] = useState('');
+  const [busy, setBusy]             = useState(false);
+  const [error, setError]           = useState('');
+
+  // Load presets on mount
+  useEffect(() => {
+    apiFetch('/api/table-presets').then((d) => setPresets(d?.presets ?? [])).catch(() => {});
+  }, []);
+
+  const applyPreset = (preset) => {
+    const cfg = preset.config ?? {};
+    if (cfg.sb)            setSb(cfg.sb);
+    if (cfg.bb)            setBb(cfg.bb);
+    if (cfg.startingStack) setStack(cfg.startingStack);
+  };
 
   const handleCreate = async () => {
     if (!name.trim()) { setError('Table name is required.'); return; }
+    if (sb <= 0 || bb <= sb) { setError('Big blind must be greater than small blind.'); return; }
     setBusy(true);
     setError('');
     try {
       const table = await apiFetch('/api/tables', {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim(), mode }),
+        body: JSON.stringify({
+          name: name.trim(),
+          mode,
+          privacy,
+          config: { sb, bb, startingStack },
+        }),
       });
+      if (saveAsPreset && presetName.trim()) {
+        apiFetch('/api/table-presets', {
+          method: 'POST',
+          body: JSON.stringify({ name: presetName.trim(), config: { sb, bb, startingStack } }),
+        }).catch(() => {});
+      }
       onCreated(table);
     } catch (err) {
       setError(err.message);
       setBusy(false);
     }
   };
+
+  const inputStyle = { background: '#0d1117', border: '1px solid #30363d', color: '#e6edf3' };
 
   return (
     <div
@@ -137,13 +192,33 @@ function CreateTableModal({ onClose, onCreated }) {
           New Table
         </h2>
 
+        {/* Preset loader */}
+        {presets.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>Load Preset</label>
+            <select
+              className="rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+              defaultValue=""
+              onChange={(e) => {
+                const p = presets.find((x) => String(x.id) === e.target.value);
+                if (p) applyPreset(p);
+              }}
+            >
+              <option value="" disabled>Select a preset…</option>
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Table name */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>
-            Table Name
-          </label>
+          <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>Table Name</label>
           <input
             className="rounded-lg px-3 py-2 text-sm outline-none"
-            style={{ background: '#0d1117', border: '1px solid #30363d', color: '#e6edf3' }}
+            style={inputStyle}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Main Table"
@@ -152,6 +227,7 @@ function CreateTableModal({ onClose, onCreated }) {
           />
         </div>
 
+        {/* Mode */}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>Mode</label>
           <div className="flex gap-2 flex-wrap">
@@ -172,6 +248,88 @@ function CreateTableModal({ onClose, onCreated }) {
           </div>
         </div>
 
+        {/* Blinds */}
+        <div className="flex gap-3">
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>Small Blind</label>
+            <input
+              type="number" min="1"
+              className="rounded-lg px-3 py-2 text-sm outline-none w-full"
+              style={inputStyle}
+              value={sb}
+              onChange={(e) => setSb(Number(e.target.value))}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>Big Blind</label>
+            <input
+              type="number" min="1"
+              className="rounded-lg px-3 py-2 text-sm outline-none w-full"
+              style={inputStyle}
+              value={bb}
+              onChange={(e) => setBb(Number(e.target.value))}
+            />
+          </div>
+        </div>
+
+        {/* Starting Stack */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>
+            Starting Stack <span style={{ color: '#8b949e' }}>({(startingStack / bb).toFixed(0)} BB)</span>
+          </label>
+          <input
+            type="number" min="1"
+            className="rounded-lg px-3 py-2 text-sm outline-none"
+            style={inputStyle}
+            value={startingStack}
+            onChange={(e) => setStack(Number(e.target.value))}
+          />
+        </div>
+
+        {/* Privacy */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>Privacy</label>
+          <div className="flex gap-2 flex-wrap">
+            {PRIVACY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setPrivacy(opt.value)}
+                className="text-xs px-3 py-1.5 rounded-full font-semibold transition-colors"
+                title={opt.desc}
+                style={
+                  privacy === opt.value
+                    ? { background: 'rgba(212,175,55,0.2)', border: `1px solid rgba(212,175,55,0.5)`, color: GOLD }
+                    : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: '#6b7280' }
+                }
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Save as preset */}
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={saveAsPreset}
+              onChange={(e) => setSavePreset(e.target.checked)}
+              style={{ accentColor: GOLD }}
+            />
+            <span className="text-xs" style={{ color: '#8b949e' }}>Save config as preset</span>
+          </label>
+          {saveAsPreset && (
+            <input
+              className="rounded-lg px-3 py-2 text-sm outline-none"
+              style={inputStyle}
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder="Preset name…"
+            />
+          )}
+        </div>
+
         {error && <p className="text-xs" style={{ color: '#f87171' }}>{error}</p>}
 
         <div className="flex gap-3 justify-end">
@@ -189,6 +347,86 @@ function CreateTableModal({ onClose, onCreated }) {
             style={{ background: 'rgba(212,175,55,0.2)', border: `1px solid rgba(212,175,55,0.5)`, color: GOLD }}
           >
             {busy ? 'Creating…' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Buy-In Modal ────────────────────────────────────────────────────────────
+
+function BuyInModal({ table, userId, onConfirm, onClose }) {
+  const bb = table.bigBlind ?? table.config?.bb ?? 50;
+  const [multiplier, setMultiplier] = useState(100);
+  const [chipBalance, setChipBalance] = useState(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    apiFetch(`/api/players/${userId}/stats`).then((d) => {
+      setChipBalance(d?.chip_bank ?? d?.chipBank ?? null);
+    }).catch(() => {});
+  }, [userId]);
+
+  const buyInAmount = Math.round(multiplier * bb);
+  const canAfford = chipBalance == null || chipBalance >= buyInAmount;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div
+        className="flex flex-col gap-5 rounded-xl w-full max-w-xs"
+        style={{ background: '#161b22', border: '1px solid #30363d', padding: 24 }}
+      >
+        <h2 className="text-sm font-bold tracking-widest uppercase" style={{ color: GOLD }}>
+          Buy In — {table.name}
+        </h2>
+
+        {chipBalance != null && (
+          <p className="text-xs" style={{ color: '#8b949e' }}>
+            Your chip bank: <span style={{ color: '#e6edf3' }}>{Number(chipBalance).toLocaleString()}</span>
+          </p>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>
+            Amount: <span style={{ color: '#e6edf3' }}>{buyInAmount.toLocaleString()} chips ({multiplier} BB)</span>
+          </label>
+          <input
+            type="range" min="50" max="200" step="10"
+            value={multiplier}
+            onChange={(e) => setMultiplier(Number(e.target.value))}
+            style={{ accentColor: GOLD, width: '100%' }}
+          />
+          <div className="flex justify-between text-xs" style={{ color: '#6e7681' }}>
+            <span>50 BB</span><span>200 BB</span>
+          </div>
+        </div>
+
+        {!canAfford && (
+          <p className="text-xs" style={{ color: '#f87171' }}>
+            Insufficient chips — you need {buyInAmount.toLocaleString()} but have {Number(chipBalance).toLocaleString()}.
+          </p>
+        )}
+
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            className="text-xs px-4 py-2 rounded-lg font-semibold uppercase tracking-wider"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(buyInAmount)}
+            disabled={!canAfford}
+            className="text-xs px-4 py-2 rounded-lg font-semibold uppercase tracking-wider disabled:opacity-50"
+            style={{ background: 'rgba(212,175,55,0.2)', border: `1px solid rgba(212,175,55,0.5)`, color: GOLD }}
+          >
+            Join Table
           </button>
         </div>
       </div>
@@ -376,7 +614,7 @@ function SessionWidget({ sessions }) {
 
 // ─── Tables Section ───────────────────────────────────────────────────────────
 
-function TablesSection({ tables, role, userId, canCreate, onAction, onNewTable }) {
+function TablesSection({ tables, role, userId, canCreate, onAction, onManageAction, onNewTable, onNewTournament }) {
   const [tab, setTab] = useState('all');
 
   const tabDefs = (role === 'coach' || role === 'admin' || role === 'superadmin')
@@ -415,16 +653,23 @@ function TablesSection({ tables, role, userId, canCreate, onAction, onNewTable }
               className="grid"
               style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}
             >
-              {visible.map((t) => (
-                <TableCard
-                  key={t.id ?? t.tableId}
-                  table={mapTableToCard(t, role, userId)}
-                  onAction={onAction}
-                  showController={showController}
-                />
-              ))}
+              {visible.map((t) => {
+                const cardData = mapTableToCard(t, role, userId);
+                return (
+                  <TableCard
+                    key={t.id ?? t.tableId}
+                    table={cardData}
+                    onAction={onAction}
+                    onSecondaryAction={cardData.secondaryActionLabel ? onManageAction : undefined}
+                    showController={showController}
+                  />
+                );
+              })}
               {canCreate && (
-                <NewTableCard onClick={onNewTable} />
+                <NewTableCard
+                  onClick={tab === 'tournament' ? onNewTournament : onNewTable}
+                  label={tab === 'tournament' ? '+ New Tournament' : '+ New Table'}
+                />
               )}
             </div>
           )}
@@ -457,6 +702,8 @@ export default function LobbyPage() {
   const [sessions, setSessions]         = useState([]);
   const [announcement, setAnnouncement] = useState(null);
   const [showModal, setShowModal]       = useState(false);
+  const [showTournamentWizard, setShowTournamentWizard] = useState(false);
+  const [buyInTable, setBuyInTable]     = useState(null); // table object for buy-in modal
 
   // ── Data loading ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -496,16 +743,43 @@ export default function LobbyPage() {
     const table = activeTables.find((t) => (t.id ?? t.tableId) === tableId);
     if (table?.mode === 'tournament') {
       navigate(`/tournament/${tableId}/lobby`);
+    } else if (table?.mode === 'uncoached_cash' && !isCoachOrAdmin) {
+      // Non-coach player joining an uncoached table must buy in first
+      setBuyInTable(table);
     } else {
       navigate(`/table/${tableId}`);
     }
+  }, [activeTables, navigate, isCoachOrAdmin]);
+
+  // "Manage" action on a tournament card — joins as manager-spectator
+  // "Spectate" action on a cash table — joins as spectator
+  const handleManageAction = useCallback((tableId) => {
+    const table = activeTables.find((t) => (t.id ?? t.tableId) === tableId);
+    if (table?.mode === 'tournament') {
+      navigate(`/table/${tableId}?manager=true`);
+    } else {
+      navigate(`/table/${tableId}?spectate=true`);
+    }
   }, [activeTables, navigate]);
+
+  const handleBuyInConfirm = useCallback((buyInAmount) => {
+    if (!buyInTable) return;
+    const tableId = buyInTable.id ?? buyInTable.tableId;
+    setBuyInTable(null);
+    navigate(`/table/${tableId}`, { state: { buyInAmount } });
+  }, [buyInTable, navigate]);
 
   const handleCreated = useCallback((table) => {
     setShowModal(false);
     refreshTables();
     const tableId = table.id ?? table.tableId;
     if (tableId) navigate(`/table/${tableId}`);
+  }, [navigate, refreshTables]);
+
+  const handleTournamentCreated = useCallback(({ tableId }) => {
+    setShowTournamentWizard(false);
+    refreshTables();
+    if (tableId) navigate(`/tournament/${tableId}/lobby`);
   }, [navigate, refreshTables]);
 
   // ── Build stats rows ───────────────────────────────────────────────────────
@@ -597,7 +871,9 @@ export default function LobbyPage() {
         userId={userId}
         canCreate={canCreate}
         onAction={handleTableAction}
+        onManageAction={handleManageAction}
         onNewTable={() => setShowModal(true)}
+        onNewTournament={() => setShowTournamentWizard(true)}
       />
 
       {/* ── Recent Activity (coach / admin) ────────────────────────────────── */}
@@ -608,6 +884,24 @@ export default function LobbyPage() {
         <CreateTableModal
           onClose={() => setShowModal(false)}
           onCreated={handleCreated}
+        />
+      )}
+
+      {/* ── Buy-In Modal (uncoached tables, non-coach players) ─────────────── */}
+      {buyInTable && (
+        <BuyInModal
+          table={buyInTable}
+          userId={userId}
+          onConfirm={handleBuyInConfirm}
+          onClose={() => setBuyInTable(null)}
+        />
+      )}
+
+      {/* ── Tournament Wizard (inline) ─────────────────────────────────────── */}
+      {showTournamentWizard && (
+        <WizardModal
+          onClose={() => setShowTournamentWizard(false)}
+          onCreated={handleTournamentCreated}
         />
       )}
     </div>

@@ -168,10 +168,16 @@ async function getById(coachId, studentId, reportId) {
  * Returns avg_grade, top_performers, concerns.
  */
 async function stableOverview(coachId) {
-  const { data: students, error: sErr } = await supabase
-    .from('player_profiles')
-    .select('id, display_name')
-    .eq('is_coach', false);
+  // Find players with a student role. Replaces the deprecated is_coach=false filter
+  // (player_profiles.is_coach was removed in migration 043).
+  const { data: roleRows } = await supabase
+    .from('player_roles')
+    .select('player_id, roles!inner(name)')
+    .in('roles.name', ['coached_student', 'solo_student', 'trial', 'player']);
+  const studentIds = [...new Set((roleRows ?? []).map(r => r.player_id))];
+  const { data: students, error: sErr } = studentIds.length
+    ? await supabase.from('player_profiles').select('id, display_name').in('id', studentIds)
+    : { data: [], error: null };
   if (sErr) throw new Error(sErr.message);
   if (!students || students.length === 0) return { students: [], avg_grade: null, top_performers: [], concerns: [] };
 

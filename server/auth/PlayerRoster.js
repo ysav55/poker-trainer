@@ -46,7 +46,7 @@ async function authenticate(name, password) {
   if (!valid) return null;
 
   const role = await getPrimaryRole(player.id);
-  return { id: player.id, name: player.display_name, role: role ?? 'player' };
+  return { id: player.id, name: player.display_name, role: role ?? 'coached_student' };
 }
 
 /**

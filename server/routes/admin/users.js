@@ -28,7 +28,7 @@ router.use(canManageUsers);
  * Extract primary role name from nested player_roles structure returned by Supabase.
  * player_roles: [{ roles: { name: 'coach' } }, ...]
  */
-const ROLE_PRIORITY = ['superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
+const ROLE_PRIORITY = ['superadmin', 'admin', 'coach', 'coached_student', 'solo_student', 'trial'];
 
 function normalizeRole(playerRoles) {
   if (!Array.isArray(playerRoles) || playerRoles.length === 0) return null;
@@ -105,6 +105,33 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// ─── GET /api/admin/users/pending-resets ─────────────────────────────────────
+// Returns all pending password reset requests with player display names.
+// Must appear before :id route to avoid being caught by it.
+
+router.get('/users/pending-resets', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('password_reset_requests')
+      .select('id, player_id, requested_at, player_profiles(display_name)')
+      .eq('status', 'pending')
+      .order('requested_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: 'internal_error' });
+
+    const requests = (data || []).map(r => ({
+      id:          r.id,
+      playerId:    r.player_id,
+      displayName: r.player_profiles?.display_name ?? r.player_id,
+      requestedAt: r.requested_at,
+    }));
+
+    res.json({ requests });
+  } catch (err) {
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
 // ─── GET /api/admin/users/export-csv ─────────────────────────────────────────
 // Must appear before :id route to avoid being caught by it
 
@@ -170,7 +197,7 @@ router.post('/users', async (req, res) => {
     const body = req.body || {};
     // Accept both camelCase and snake_case from the frontend
     const displayName = body.displayName || body.display_name;
-    const { email, password, role: roleName = 'player' } = body;
+    const { email, password, role: roleName = 'coached_student' } = body;
 
     if (!displayName) return res.status(400).json({ error: 'displayName is required' });
     if (!password)    return res.status(400).json({ error: 'password is required' });
@@ -286,6 +313,13 @@ router.post('/users/:id/reset-password', async (req, res) => {
     if (!password) return res.status(400).json({ error: 'password is required' });
     const passwordHash = await bcrypt.hash(password, 12);
     await setPassword(req.params.id, passwordHash);
+
+    // Resolve any pending reset request for this user
+    await supabase.from('password_reset_requests')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: req.user?.id || null })
+      .eq('player_id', req.params.id)
+      .eq('status', 'pending');
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'internal_error' });

@@ -7,6 +7,18 @@ const TRIAL_DAYS    = 7;
 const TRIAL_HANDS   = 20;
 const BCRYPT_ROUNDS = 12;
 
+/**
+ * Returns 'active' if the player currently has an active trial, null otherwise.
+ * Accepts a player_profiles row (with trial_expires_at and trial_hands_remaining).
+ */
+function computeTrialStatus(player) {
+  if (!player?.trial_expires_at) return null;
+  const expired = new Date(player.trial_expires_at) <= new Date();
+  if (expired) return null;
+  if (player.trial_hands_remaining != null && player.trial_hands_remaining <= 0) return null;
+  return 'active';
+}
+
 module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, JwtService, authLimiter, log }) {
 
   // ── POST /api/auth/register ──────────────────────────────────────────────────
@@ -67,9 +79,10 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
       }
 
       const role  = await getPrimaryRole(newId);
-      const token = JwtService.sign({ stableId: newId, name: name.trim(), role: role ?? roleName });
+      // New registrations always start with an active trial
+      const token = JwtService.sign({ stableId: newId, name: name.trim(), role: role ?? roleName, trialStatus: 'active' });
       log.info('auth', 'register_ok', `New student registered: ${name.trim()}`, { playerId: newId, role: roleName, coachId });
-      return res.status(201).json({ stableId: newId, name: name.trim(), role: role ?? roleName, token });
+      return res.status(201).json({ stableId: newId, name: name.trim(), role: role ?? roleName, trialStatus: 'active', token });
     } catch (err) {
       log.error('auth', 'register_error', `Registration error: ${err.message}`, { err });
       return res.status(500).json({ error: 'internal_error', message: 'Registration failed.' });
@@ -98,9 +111,17 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
       return res.status(500).json({ error: 'db_error', message: 'Could not resolve player identity.' });
     }
 
-    const token = JwtService.sign({ stableId, name: entry.name, role: entry.role });
+    // Check trial status so frontend can gate trial-only UI without a DB call
+    const { findById } = require('../db/repositories/PlayerRepository');
+    const playerProfile = await findById(stableId).catch(() => null);
+    const trialStatus   = computeTrialStatus(playerProfile);
+
+    const jwtPayload = { stableId, name: entry.name, role: entry.role };
+    if (trialStatus) jwtPayload.trialStatus = trialStatus;
+
+    const token = JwtService.sign(jwtPayload);
     log.info('auth', 'login_ok', `${entry.name} logged in`, { name: entry.name, role: entry.role, playerId: stableId });
-    res.json({ stableId, name: entry.name, role: entry.role, token });
+    res.json({ stableId, name: entry.name, role: entry.role, ...(trialStatus && { trialStatus }), token });
   });
 
   // ── POST /api/auth/reset-password ────────────────────────────────────────────
@@ -178,6 +199,35 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
     } catch (err) {
       log.error('auth', 'register_coach_error', `Coach registration error: ${err.message}`, { err });
       return res.status(500).json({ error: 'internal_error', message: 'Coach registration failed.' });
+    }
+  });
+
+  // ── POST /api/auth/forgot-password ──────────────────────────────────────────
+  // Unauthenticated. Stores a pending reset request so an admin/coach can act on it.
+  // No email is sent — the admin resolves it manually via POST /api/admin/users/:id/reset-password.
+  app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
+    const { name } = req.body || {};
+    if (!name || typeof name !== 'string' || name.trim().length < 2)
+      return res.status(400).json({ error: 'invalid_name', message: 'Account name is required.' });
+
+    const { findByDisplayName } = require('../db/repositories/PlayerRepository');
+    const supabase = require('../db/supabase.js');
+
+    try {
+      const player = await findByDisplayName(name.trim());
+      // Always return 200 to avoid username enumeration
+      if (!player) return res.status(200).json({ status: 'submitted' });
+
+      // Upsert: replace any existing pending request for this player
+      await supabase.from('password_reset_requests')
+        .upsert({ player_id: player.id, status: 'pending', requested_at: new Date().toISOString() },
+                 { onConflict: 'player_id,status' });
+
+      log.info('auth', 'forgot_password', `Password reset request from ${name.trim()}`, { playerId: player.id });
+      return res.status(200).json({ status: 'submitted' });
+    } catch (err) {
+      log.error('auth', 'forgot_password_error', `Forgot password error: ${err.message}`, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Request failed.' });
     }
   });
 

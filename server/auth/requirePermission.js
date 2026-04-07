@@ -3,10 +3,17 @@
 const supabase = require('../db/supabase.js');
 
 // In-memory cache: Map<playerId, Set<permKey>>
-const permissionCache = new Map();
+const permissionCache     = new Map();
+const permissionCacheTime = new Map();
+const PERMISSION_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 async function getPlayerPermissions(playerId, roleHint = null) {
-  if (permissionCache.has(playerId)) return permissionCache.get(playerId);
+  if (permissionCache.has(playerId)) {
+    const age = Date.now() - (permissionCacheTime.get(playerId) ?? 0);
+    if (age < PERMISSION_CACHE_TTL_MS) return permissionCache.get(playerId);
+    permissionCache.delete(playerId);
+    permissionCacheTime.delete(playerId);
+  }
 
   const { data } = await supabase
     .from('player_roles')
@@ -32,11 +39,13 @@ async function getPlayerPermissions(playerId, roleHint = null) {
   }
 
   permissionCache.set(playerId, keys);
+  permissionCacheTime.set(playerId, Date.now());
   return keys;
 }
 
 function invalidatePermissionCache(playerId) {
   permissionCache.delete(playerId);
+  permissionCacheTime.delete(playerId);
 }
 
 function requirePermission(...keys) {

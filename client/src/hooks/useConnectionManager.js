@@ -16,7 +16,7 @@ export function useConnectionManager() {
   // Keep a ref to the latest token so the socket auth callback always sends fresh
   // credentials without needing to recreate the socket when the user changes.
   const tokenRef = useRef(null)
-  tokenRef.current = user?.token || localStorage.getItem('poker_trainer_jwt') || ''
+  tokenRef.current = user?.token || sessionStorage.getItem('poker_trainer_jwt') || ''
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
@@ -52,8 +52,8 @@ export function useConnectionManager() {
       // If the server rejects the socket due to an expired or invalid JWT, clear
       // stale credentials so the user is prompted to log in again.
       if (err.message?.toLowerCase().includes('auth') || err.message?.toLowerCase().includes('token') || err.message?.toLowerCase().includes('unauthorized')) {
-        localStorage.removeItem('poker_trainer_jwt')
-        localStorage.removeItem('poker_trainer_player_id')
+        sessionStorage.removeItem('poker_trainer_jwt')
+        sessionStorage.removeItem('poker_trainer_player_id')
         joinParamsRef.current = null
       }
       console.error('[socket] connect_error', err.message)

@@ -63,7 +63,7 @@ export default function DangerZoneTab() {
       setDone('Your account has been deactivated. You will be logged out shortly.');
       // Give the user a moment to read the message, then clear local state
       setTimeout(() => {
-        localStorage.removeItem('poker_trainer_jwt');
+        sessionStorage.removeItem('poker_trainer_jwt');
         window.location.href = '/login';
       }, 3000);
     } catch {

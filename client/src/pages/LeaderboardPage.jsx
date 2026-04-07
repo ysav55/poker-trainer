@@ -117,19 +117,18 @@ export default function LeaderboardPage() {
 
   useEffect(() => {
     setLoading(true);
-    apiFetch('/api/players')
+    const params = new URLSearchParams();
+    if (period   !== 'all') params.set('period',   period);
+    if (gameType !== 'all') params.set('gameType', gameType);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    apiFetch(`/api/players${qs}`)
       .then((data) => setPlayers(data?.players ?? data ?? []))
       .catch((err)  => setError(err.message))
       .finally(()   => setLoading(false));
-  }, []);
+  }, [period, gameType]);
 
   const filtered = useMemo(() => {
     let list = players;
-
-    // Game type filter — stub (API doesn't segment by game type yet)
-    // When server supports ?gameType=, pass it in the fetch instead.
-
-    // Period filter — stub (API returns all-time; future: server param)
 
     // Search
     if (search.trim()) {
@@ -143,7 +142,7 @@ export default function LeaderboardPage() {
       const bv = Number(b.total_net_chips ?? b.net_chips ?? 0);
       return bv - av;
     });
-  }, [players, period, gameType, search]);
+  }, [players, search]);
 
   function handleRowClick(player) {
     if (!isCoach) return;

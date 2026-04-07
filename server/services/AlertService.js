@@ -75,10 +75,20 @@ async function generateAlerts(coachId) {
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
 async function _fetchStudents() {
+  // Find players with a student role. Replaces the deprecated is_coach=false filter
+  // (player_profiles.is_coach was removed in migration 043).
+  const { data: roleRows } = await supabase
+    .from('player_roles')
+    .select('player_id, roles!inner(name)')
+    .in('roles.name', ['coached_student', 'solo_student', 'trial', 'player']);
+
+  if (!roleRows || roleRows.length === 0) return [];
+  const studentIds = [...new Set(roleRows.map(r => r.player_id))];
+
   const { data, error } = await supabase
     .from('player_profiles')
     .select('id, display_name, last_seen')
-    .eq('is_coach', false)
+    .in('id', studentIds)
     .eq('is_bot', false); // Exclude bot players — alerts are for human students only
 
   if (error || !data) return [];

@@ -19,8 +19,9 @@ function socketAuthMiddleware(socket, next) {
   if (payload) {
     socket.data.authenticated = true;
     socket.data.stableId      = payload.stableId;
+    socket.data.playerId      = payload.stableId;
     socket.data.role          = payload.role;
-    socket.data.isCoach       = payload.role === 'coach';
+    socket.data.isCoach       = new Set(['coach', 'admin', 'superadmin']).has(payload.role);
     socket.data.isBot         = payload.role === 'bot';
     socket.data.jwtName       = payload.name;
   } else {

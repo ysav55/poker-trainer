@@ -26,6 +26,8 @@ jest.mock('../supabase', () => {
   chain.limit       = jest.fn(() => chain);
   chain.range       = jest.fn(() => chain);
   chain.ilike       = jest.fn(() => chain);
+  chain.gte         = jest.fn(() => chain);
+  chain.not         = jest.fn(() => chain);
   chain.maybeSingle = jest.fn(() => chain);
   chain.single      = jest.fn(() => chain);
   // Default: resolves with null data and no error (used by q() via .then())
@@ -174,6 +176,71 @@ describe('getAllPlayersWithStats', () => {
   });
 });
 
+// ─── getAllPlayersWithStats — filtered path ───────────────────────────────────
+
+describe('getAllPlayersWithStats — filtered path', () => {
+  const HAND_PLAYERS = [
+    { player_id: 'p1', vpip: true,  pfr: true,  is_winner: true,  stack_start: 1000, stack_end: 1200, hands: { started_at: new Date().toISOString(), table_mode: 'coached_cash' } },
+    { player_id: 'p1', vpip: false, pfr: false, is_winner: false, stack_start: 1200, stack_end: 1150, hands: { started_at: new Date().toISOString(), table_mode: 'coached_cash' } },
+    { player_id: 'p2', vpip: true,  pfr: false, is_winner: false, stack_start: 800,  stack_end: 750,  hands: { started_at: new Date().toISOString(), table_mode: 'tournament' } },
+  ];
+  const NAME_ROWS = [
+    { player_id: 'p1', display_name: 'Alice' },
+    { player_id: 'p2', display_name: 'Bob' },
+  ];
+
+  function setupFilteredMocks(hpRows = HAND_PLAYERS, nameRows = NAME_ROWS) {
+    // First supabase.then call = hand_players query result
+    supabase.then
+      .mockImplementationOnce((resolve) => resolve({ data: hpRows, error: null }))
+      // Second call = leaderboard display names
+      .mockImplementationOnce((resolve) => resolve({ data: nameRows, error: null }));
+  }
+
+  test('period=7d triggers filtered path and aggregates correctly', async () => {
+    setupFilteredMocks();
+    const result = await getAllPlayersWithStats({ period: '7d', gameType: 'all' });
+
+    expect(result).toHaveLength(2);
+    const alice = result.find(p => p.stableId === 'p1');
+    expect(alice.total_hands).toBe(2);
+    expect(alice.total_wins).toBe(1);
+    expect(alice.total_net_chips).toBe(150); // (1200-1000) + (1150-1200)
+    expect(alice.vpip_percent).toBe(50); // 1/2
+    expect(alice.pfr_percent).toBe(50);  // 1/2
+    expect(alice.name).toBe('Alice');
+  });
+
+  test('gameType=cash triggers filtered path', async () => {
+    setupFilteredMocks();
+    const result = await getAllPlayersWithStats({ period: 'all', gameType: 'cash' });
+    expect(result).toHaveLength(2);
+    expect(supabase.in).toHaveBeenCalledWith('hands.table_mode', ['coached_cash', 'uncoached_cash', 'bot_cash']);
+  });
+
+  test('gameType=tournament filters by tournament mode', async () => {
+    setupFilteredMocks([HAND_PLAYERS[2]], [NAME_ROWS[1]]);
+    const result = await getAllPlayersWithStats({ period: 'all', gameType: 'tournament' });
+    expect(result).toHaveLength(1);
+    expect(supabase.eq).toHaveBeenCalledWith('hands.table_mode', 'tournament');
+  });
+
+  test('returns empty array when no hand_players match', async () => {
+    supabase.then
+      .mockImplementationOnce((resolve) => resolve({ data: [], error: null }));
+    const result = await getAllPlayersWithStats({ period: '7d' });
+    expect(result).toEqual([]);
+  });
+
+  test('all + all uses fast leaderboard path (calls q, not supabase.then)', async () => {
+    q.mockResolvedValueOnce([]);
+    const result = await getAllPlayersWithStats({ period: 'all', gameType: 'all' });
+    // Fast path uses q(); supabase.then should NOT have been called for hand_players
+    expect(q).toHaveBeenCalled();
+    expect(result).toEqual([]);
+  });
+});
+
 // ─── getPlayerHoverStats ─────────────────────────────────────────────────────
 
 describe('getPlayerHoverStats', () => {
@@ -211,40 +278,38 @@ describe('getPlayerHoverStats', () => {
 });
 
 // ─── getPlayerHands ───────────────────────────────────────────────────────────
+// getPlayerHands uses direct supabase chain calls (not q()), so tests use
+// supabase.then.mockImplementationOnce to control each sequential DB call.
 
 describe('getPlayerHands', () => {
-  test('returns empty array when q resolves with null', async () => {
-    q.mockResolvedValueOnce(null);
+  test('returns empty array when hand_players is empty', async () => {
+    // Step 1 returns no rows → early return
+    supabase.then.mockImplementationOnce((resolve) => resolve({ data: [], error: null }));
     const result = await getPlayerHands('uuid-001');
     expect(result).toEqual([]);
   });
 
   test('returns mapped hand objects from hand_players join', async () => {
-    q.mockResolvedValueOnce([
-      {
-        hole_cards:  ['Ac', 'Kh'],
-        stack_start: 1000,
-        stack_end:   1150,
-        is_winner:   true,
-        vpip:        true,
-        pfr:         true,
-        wtsd:        true,
-        wsd:         true,
-        seat:        0,
-        hands: {
-          hand_id:     'hand-abc',
-          started_at:  '2026-01-01T00:00:00Z',
-          ended_at:    '2026-01-01T00:05:00Z',
-          final_pot:   300,
-          winner_id:   'uuid-001',
-          winner_name: 'Alice',
-          phase_ended: 'showdown',
-          board:       ['Ah', 'Kd', '2c'],
-          table_id:    'table-1',
-          hand_tags:   [{ tag: 'C_BET', tag_type: 'auto' }],
-        },
+    const hpRow = {
+      hand_id: 'hand-abc', vpip: true, pfr: true, wtsd: true, wsd: true,
+      is_winner: true, stack_start: 1000, stack_end: 1150, seat: 0,
+      hole_cards: ['Ac', 'Kh'], hands: { table_id: 'table-1' },
+    };
+    const fullRow = {
+      hole_cards: ['Ac', 'Kh'], stack_start: 1000, stack_end: 1150,
+      is_winner: true, vpip: true, pfr: true, wtsd: true, wsd: true, seat: 0,
+      hands: {
+        hand_id: 'hand-abc', started_at: '2026-01-01T00:00:00Z',
+        ended_at: '2026-01-01T00:05:00Z', final_pot: 300,
+        winner_id: 'uuid-001', winner_name: 'Alice', phase_ended: 'showdown',
+        board: ['Ah', 'Kd', '2c'], table_id: 'table-1',
+        hand_tags: [{ tag: 'C_BET', tag_type: 'auto' }],
       },
-    ]);
+    };
+    // Step 1: hand_players summary fetch
+    supabase.then.mockImplementationOnce((resolve) => resolve({ data: [hpRow], error: null }));
+    // Step 3: full hand_players + hands join
+    supabase.then.mockImplementationOnce((resolve) => resolve({ data: [fullRow], error: null }));
 
     const result = await getPlayerHands('uuid-001');
     expect(result).toHaveLength(1);
@@ -255,25 +320,22 @@ describe('getPlayerHands', () => {
   });
 
   test('defaults board and hole_cards to [] when null', async () => {
-    q.mockResolvedValueOnce([
-      {
-        hole_cards:  null,
-        stack_start: 500,
-        stack_end:   null,
-        is_winner:   false,
-        vpip:        false,
-        pfr:         false,
-        wtsd:        false,
-        wsd:         false,
-        seat:        1,
-        hands: {
-          hand_id: 'hand-xyz', started_at: null, ended_at: null,
-          final_pot: 0, winner_id: null, winner_name: null,
-          phase_ended: null, board: null, table_id: 'table-1',
-          hand_tags: [],
-        },
+    const hpRow = {
+      hand_id: 'hand-xyz', vpip: false, pfr: false, wtsd: false, wsd: false,
+      is_winner: false, stack_start: 500, stack_end: null, seat: 1,
+      hole_cards: null, hands: { table_id: 'table-1' },
+    };
+    const fullRow = {
+      hole_cards: null, stack_start: 500, stack_end: null,
+      is_winner: false, vpip: false, pfr: false, wtsd: false, wsd: false, seat: 1,
+      hands: {
+        hand_id: 'hand-xyz', started_at: null, ended_at: null,
+        final_pot: 0, winner_id: null, winner_name: null,
+        phase_ended: null, board: null, table_id: 'table-1', hand_tags: [],
       },
-    ]);
+    };
+    supabase.then.mockImplementationOnce((resolve) => resolve({ data: [hpRow], error: null }));
+    supabase.then.mockImplementationOnce((resolve) => resolve({ data: [fullRow], error: null }));
 
     const result = await getPlayerHands('uuid-001');
     expect(result[0].hole_cards).toEqual([]);
@@ -326,13 +388,8 @@ describe('isRegisteredPlayer', () => {
     expect(await isRegisteredPlayer('uuid-001')).toBe(false);
   });
 
-  test('returns false when player exists but is_roster is false', async () => {
-    q.mockResolvedValueOnce({ id: 'uuid-001', is_roster: false });
-    expect(await isRegisteredPlayer('uuid-001')).toBe(false);
-  });
-
-  test('returns true when player exists and is_roster is true', async () => {
-    q.mockResolvedValueOnce({ id: 'uuid-001', is_roster: true });
+  test('returns true when player exists (existence is sufficient)', async () => {
+    q.mockResolvedValueOnce({ id: 'uuid-001' });
     expect(await isRegisteredPlayer('uuid-001')).toBe(true);
   });
 });

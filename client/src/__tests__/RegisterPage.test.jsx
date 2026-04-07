@@ -3,9 +3,9 @@
  *
  * Tests for the self-registration form:
  *  - Renders student/coach tabs
- *  - Validates required fields
+ *  - Validates required fields (including email for coach)
  *  - Validates password confirmation match
- *  - Calls register() on valid submission
+ *  - Calls register() for students, registerCoach() for coaches
  *  - Shows success message on success
  *  - Shows friendly error when registration is disabled (410)
  *  - Switches to coach tab and shows approval notice
@@ -19,9 +19,10 @@ import { MemoryRouter } from 'react-router-dom';
 // ── Mock AuthContext ───────────────────────────────────────────────────────────
 
 const mockRegister = vi.fn();
+const mockRegisterCoach = vi.fn();
 
 vi.mock('../contexts/AuthContext.jsx', () => ({
-  useAuth: () => ({ register: mockRegister }),
+  useAuth: () => ({ register: mockRegister, registerCoach: mockRegisterCoach }),
 }));
 
 // ── Mock useNavigate ───────────────────────────────────────────────────────────
@@ -78,6 +79,12 @@ describe('RegisterPage rendering', () => {
     fireEvent.click(screen.getByText('Coach'));
     expect(screen.getByRole('button', { name: /request coach access/i })).toBeTruthy();
   });
+
+  it('shows email field when Coach tab is selected', () => {
+    renderPage();
+    fireEvent.click(screen.getByText('Coach'));
+    expect(screen.getByPlaceholderText('your@email.com')).toBeTruthy();
+  });
 });
 
 // ── Validation ────────────────────────────────────────────────────────────────
@@ -112,6 +119,27 @@ describe('RegisterPage validation', () => {
     fireEvent.click(screen.getByRole('button', { name: /create account/i }));
     expect(screen.getByTestId('register-error').textContent).toMatch(/do not match/i);
   });
+
+  it('shows error when coach email is missing', async () => {
+    renderPage();
+    fireEvent.click(screen.getByText('Coach'));
+    fireEvent.change(screen.getByPlaceholderText('Your display name'), { target: { value: 'Bob' } });
+    fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('Re-enter password'), { target: { value: 'password123' } });
+    fireEvent.click(screen.getByRole('button', { name: /request coach access/i }));
+    expect(screen.getByTestId('register-error').textContent).toMatch(/email.*required/i);
+  });
+
+  it('shows error when coach email is invalid', async () => {
+    renderPage();
+    fireEvent.click(screen.getByText('Coach'));
+    fireEvent.change(screen.getByPlaceholderText('Your display name'), { target: { value: 'Bob' } });
+    fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('Re-enter password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('your@email.com'), { target: { value: 'notanemail' } });
+    fireEvent.click(screen.getByRole('button', { name: /request coach access/i }));
+    expect(screen.getByTestId('register-error').textContent).toMatch(/valid email/i);
+  });
 });
 
 // ── Successful submission ─────────────────────────────────────────────────────
@@ -129,7 +157,8 @@ describe('RegisterPage successful submission', () => {
       fireEvent.click(screen.getByRole('button', { name: /create account/i }));
     });
 
-    expect(mockRegister).toHaveBeenCalledWith({ name: 'Alice', password: 'password123', role: 'student' });
+    expect(mockRegister).toHaveBeenCalledWith({ name: 'Alice', password: 'password123' });
+    expect(mockRegisterCoach).not.toHaveBeenCalled();
   });
 
   it('shows success message after student registration', async () => {
@@ -149,27 +178,48 @@ describe('RegisterPage successful submission', () => {
     });
   });
 
-  it('calls register() with role=coach for coach tab', async () => {
-    mockRegister.mockResolvedValueOnce({});
+  it('calls registerCoach() with name, password, email for coach tab', async () => {
+    mockRegisterCoach.mockResolvedValueOnce({ status: 'pending' });
     renderPage();
 
     fireEvent.click(screen.getByText('Coach'));
     fireEvent.change(screen.getByPlaceholderText('Your display name'), { target: { value: 'Bob' } });
     fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
     fireEvent.change(screen.getByPlaceholderText('Re-enter password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('your@email.com'), { target: { value: 'Bob@example.com' } });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /request coach access/i }));
     });
 
-    expect(mockRegister).toHaveBeenCalledWith({ name: 'Bob', password: 'password123', role: 'coach' });
+    expect(mockRegisterCoach).toHaveBeenCalledWith('Bob', 'password123', 'bob@example.com');
+    expect(mockRegister).not.toHaveBeenCalled();
+  });
+
+  it('shows pending success message after coach registration', async () => {
+    mockRegisterCoach.mockResolvedValueOnce({ status: 'pending' });
+    renderPage();
+
+    fireEvent.click(screen.getByText('Coach'));
+    fireEvent.change(screen.getByPlaceholderText('Your display name'), { target: { value: 'Bob' } });
+    fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('Re-enter password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('your@email.com'), { target: { value: 'bob@example.com' } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /request coach access/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('register-success').textContent).toMatch(/admin will review/i);
+    });
   });
 });
 
 // ── Registration disabled (410) ───────────────────────────────────────────────
 
 describe('RegisterPage — registration disabled', () => {
-  it('shows friendly closed-registration message on 410', async () => {
+  it('shows friendly closed-registration message on 410 (student)', async () => {
     const err = new Error('Self-registration is disabled. Contact the coach to be added to the roster.');
     err.status = 410;
     mockRegister.mockRejectedValueOnce(err);
@@ -192,7 +242,7 @@ describe('RegisterPage — registration disabled', () => {
   it('shows coach-specific message on 410 for coach tab', async () => {
     const err = new Error('Self-registration is disabled.');
     err.status = 410;
-    mockRegister.mockRejectedValueOnce(err);
+    mockRegisterCoach.mockRejectedValueOnce(err);
 
     renderPage();
     fireEvent.click(screen.getByText('Coach'));
@@ -200,6 +250,7 @@ describe('RegisterPage — registration disabled', () => {
     fireEvent.change(screen.getByPlaceholderText('Your display name'), { target: { value: 'Bob' } });
     fireEvent.change(screen.getByPlaceholderText('At least 8 characters'), { target: { value: 'password123' } });
     fireEvent.change(screen.getByPlaceholderText('Re-enter password'), { target: { value: 'password123' } });
+    fireEvent.change(screen.getByPlaceholderText('your@email.com'), { target: { value: 'bob@example.com' } });
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /request coach access/i }));

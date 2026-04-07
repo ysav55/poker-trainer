@@ -171,7 +171,7 @@ describe('getMembers', () => {
   };
   const studentMember = {
     id: 'p2', display_name: 'Student', school_id: 'school-1',
-    player_roles: [{ roles: { name: 'player' } }],
+    player_roles: [{ roles: { name: 'coached_student' } }],
   };
 
   test('returns all members without role filter', async () => {
@@ -199,8 +199,8 @@ describe('getMemberCounts', () => {
   test('counts coaches and students correctly', async () => {
     const members = [
       { player_roles: [{ roles: { name: 'coach' } }] },
-      { player_roles: [{ roles: { name: 'player' } }] },
-      { player_roles: [{ roles: { name: 'player' } }] },
+      { player_roles: [{ roles: { name: 'coached_student' } }] },
+      { player_roles: [{ roles: { name: 'solo_student' } }] },
     ];
     mockChain.order.mockResolvedValueOnce({ data: members, error: null });
 
@@ -290,7 +290,7 @@ describe('canAddStudent', () => {
   test('returns false when at student limit', async () => {
     const school = makeSchool({ max_students: 10 });
     mockChain.maybeSingle.mockResolvedValueOnce({ data: school, error: null });
-    const students = Array(10).fill({ player_roles: [{ roles: { name: 'player' } }] });
+    const students = Array(10).fill({ player_roles: [{ roles: { name: 'coached_student' } }] });
     mockChain.order.mockResolvedValueOnce({ data: students, error: null });
 
     expect(await repo.canAddStudent('school-1')).toBe(false);

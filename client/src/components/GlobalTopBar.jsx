@@ -19,13 +19,16 @@ const PAGE_TITLE_MAP = {
 };
 
 const ROLE_PILL = {
-  coach:      { label: 'Coach',      bg: 'rgba(212,175,55,0.15)', color: '#d4af37', border: 'rgba(212,175,55,0.4)' },
-  admin:      { label: 'Admin',      bg: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: 'rgba(59,130,246,0.4)' },
-  superadmin: { label: 'Admin',      bg: 'rgba(59,130,246,0.2)',  color: '#93c5fd', border: 'rgba(59,130,246,0.5)' },
-  player:     { label: 'Student',    bg: 'rgba(34,197,94,0.12)',  color: '#4ade80', border: 'rgba(34,197,94,0.35)' },
-  trial:      { label: 'Trial',      bg: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: 'rgba(100,116,139,0.4)' },
-  moderator:  { label: 'Moderator',  bg: 'rgba(139,92,246,0.12)', color: '#a78bfa', border: 'rgba(139,92,246,0.35)' },
-  referee:    { label: 'Referee',    bg: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: 'rgba(100,116,139,0.4)' },
+  coach:           { label: 'Coach',   bg: 'rgba(212,175,55,0.15)', color: '#d4af37', border: 'rgba(212,175,55,0.4)' },
+  admin:           { label: 'Admin',   bg: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: 'rgba(59,130,246,0.4)' },
+  superadmin:      { label: 'Admin',   bg: 'rgba(59,130,246,0.2)',  color: '#93c5fd', border: 'rgba(59,130,246,0.5)' },
+  coached_student: { label: 'Student', bg: 'rgba(34,197,94,0.12)',  color: '#4ade80', border: 'rgba(34,197,94,0.35)' },
+  solo_student:    { label: 'Student', bg: 'rgba(34,197,94,0.12)',  color: '#4ade80', border: 'rgba(34,197,94,0.35)' },
+  trial:           { label: 'Trial',   bg: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: 'rgba(100,116,139,0.4)' },
+  // Legacy roles kept during migration window (moderator/referee/player may still exist in old JWTs)
+  player:          { label: 'Student', bg: 'rgba(34,197,94,0.12)',  color: '#4ade80', border: 'rgba(34,197,94,0.35)' },
+  moderator:       { label: 'Staff',   bg: 'rgba(139,92,246,0.12)', color: '#a78bfa', border: 'rgba(139,92,246,0.35)' },
+  referee:         { label: 'Staff',   bg: 'rgba(100,116,139,0.15)', color: '#94a3b8', border: 'rgba(100,116,139,0.4)' },
 };
 
 /**

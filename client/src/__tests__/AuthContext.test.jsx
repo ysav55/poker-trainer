@@ -2,8 +2,8 @@
  * AuthContext.test.jsx
  *
  * Tests for AuthProvider / useAuth:
- *   - login() sets user state, fetches permissions, stores in localStorage
- *   - logout() clears user, permissions, and localStorage keys
+ *   - login() sets user state, fetches permissions, stores in sessionStorage
+ *   - logout() clears user, permissions, and sessionStorage keys
  *   - hasPermission() returns true/false based on the current permissions Set
  *
  * RequireAuth lives in App.jsx (not exported), so we test it by mounting an
@@ -76,11 +76,11 @@ function RequireAuth() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  localStorage.clear()
+  sessionStorage.clear()
 })
 
 afterEach(() => {
-  localStorage.clear()
+  sessionStorage.clear()
 })
 
 // ── login() ───────────────────────────────────────────────────────────────────
@@ -116,7 +116,7 @@ describe('login()', () => {
     expect(screen.getByTestId('user-role').textContent).toBe('coach')
   })
 
-  it('stores JWT and stableId in localStorage', async () => {
+  it('stores JWT and stableId in sessionStorage', async () => {
     apiFetch
       .mockResolvedValueOnce({
         stableId: 'uuid-002',
@@ -139,8 +139,8 @@ describe('login()', () => {
       await waitFor(() => loginDone)
     })
 
-    expect(localStorage.getItem('poker_trainer_jwt')).toBe('tok.xxx.yyy')
-    expect(localStorage.getItem('poker_trainer_player_id')).toBe('uuid-002')
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBe('tok.xxx.yyy')
+    expect(sessionStorage.getItem('poker_trainer_player_id')).toBe('uuid-002')
   })
 
   it('fetches permissions after login and updates hasPermission', async () => {
@@ -270,7 +270,7 @@ describe('logout()', () => {
     expect(screen.getByTestId('perm-admin').textContent).toBe('false')
   })
 
-  it('removes JWT and stableId from localStorage', async () => {
+  it('removes JWT and stableId from sessionStorage', async () => {
     apiFetch
       .mockResolvedValueOnce({
         stableId: 'uuid-012',
@@ -294,14 +294,14 @@ describe('logout()', () => {
       await waitFor(() => loginDone)
     })
 
-    expect(localStorage.getItem('poker_trainer_jwt')).toBe('tok.grace')
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBe('tok.grace')
 
     act(() => {
       screen.getByTestId('logout-btn').click()
     })
 
-    expect(localStorage.getItem('poker_trainer_jwt')).toBeNull()
-    expect(localStorage.getItem('poker_trainer_player_id')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_player_id')).toBeNull()
   })
 })
 
@@ -353,11 +353,11 @@ describe('hasPermission()', () => {
 
 describe('RequireAuth', () => {
   it('renders protected children when user is authenticated', async () => {
-    // Pre-populate localStorage so AuthProvider initialises with a user
+    // Pre-populate sessionStorage so AuthProvider initialises with a user
     // We craft a valid-looking JWT payload (base64 encoded JSON in part 2)
     const payload = btoa(JSON.stringify({ stableId: 'uuid-100', name: 'Ivan', role: 'player' }))
     const fakeToken = `header.${payload}.sig`
-    localStorage.setItem('poker_trainer_jwt', fakeToken)
+    sessionStorage.setItem('poker_trainer_jwt', fakeToken)
 
     // AuthProvider now fetches permissions on mount when a token exists
     apiFetch.mockResolvedValueOnce({ permissions: [] })
@@ -380,7 +380,7 @@ describe('RequireAuth', () => {
   })
 
   it('redirects to /login when user is null', () => {
-    // No token in localStorage — user starts as null
+    // No token in sessionStorage — user starts as null
     render(
       <AuthProvider>
         <MemoryRouter initialEntries={['/protected']}>
@@ -525,8 +525,8 @@ describe('logout() — full state clear', () => {
 })
 
 describe('hasPermission() — unauthenticated', () => {
-  it('returns false when no token exists in localStorage', () => {
-    // localStorage is cleared in beforeEach — no token present
+  it('returns false when no token exists in sessionStorage', () => {
+    // sessionStorage is cleared in beforeEach — no token present
     render(
       <AuthProvider>
         <AuthConsumer />

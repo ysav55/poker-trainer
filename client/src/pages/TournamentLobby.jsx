@@ -234,7 +234,7 @@ export default function TournamentLobby() {
 
   // Socket connection for live late-reg events
   useEffect(() => {
-    const token = localStorage.getItem('poker_trainer_jwt') || '';
+    const token = sessionStorage.getItem('poker_trainer_jwt') || '';
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       auth: (cb) => cb({ token }),
@@ -371,7 +371,18 @@ export default function TournamentLobby() {
       )}
 
       {!t ? (
-        <div style={{ color: '#6e7681', fontSize: 14 }}>No tournament config found.</div>
+        <div style={{ textAlign: 'center', padding: '64px 0' }}>
+          <div style={{ color: '#f85149', fontSize: 14, marginBottom: 8 }}>Tournament configuration not found.</div>
+          <div style={{ color: '#6e7681', fontSize: 12, marginBottom: 20 }}>This table may not have been set up correctly.</div>
+          <button
+            onClick={() => navigate('/lobby')}
+            style={{ background: 'none', border: '1px solid #30363d', borderRadius: 6, color: '#8b949e', cursor: 'pointer', padding: '7px 16px', fontSize: 12 }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#d4af37'; e.currentTarget.style.color = '#d4af37'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; e.currentTarget.style.color = '#8b949e'; }}
+          >
+            ← Back to Lobby
+          </button>
+        </div>
       ) : (
         <>
           {/* Countdown progress bar */}

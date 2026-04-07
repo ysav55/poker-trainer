@@ -5,6 +5,7 @@ const { requirePermission } = require('../auth/requirePermission');
 const HandLogger = require('../db/HandLoggerSupabase');
 const repo = require('../db/repositories/ScenarioBuilderRepository');
 const PlaylistExecutionService = require('../services/PlaylistExecutionService');
+const SharedState = require('../state/SharedState');
 
 const router = express.Router();
 
@@ -302,6 +303,16 @@ router.post('/playlists/:id/items/reorder', canTag, async (req, res) => {
 router.post('/tables/:tableId/drill', canManage, async (req, res) => {
   const { playlist_id, opted_in_players = [], opted_out_players = [] } = req.body || {};
   if (!playlist_id) return res.status(400).json({ error: 'playlist_id is required' });
+
+  // Guard: block if socket playlist drill is already active at this table
+  const gm = SharedState.tables.get(req.params.tableId);
+  if (gm?.state.playlist_mode?.active) {
+    return res.status(409).json({
+      error: 'conflict',
+      message: 'A socket playlist drill is active at this table. Deactivate it first.',
+    });
+  }
+
   try {
     const session = await PlaylistExecutionService.start({
       tableId:          req.params.tableId,

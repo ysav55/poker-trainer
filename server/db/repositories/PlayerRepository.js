@@ -33,23 +33,90 @@ async function getPlayerStats(stableId) {
   };
 }
 
-async function getAllPlayersWithStats() {
-  const data = await q(
-    supabase.from('leaderboard').select('*').order('net_chips', { ascending: false })
-  );
-  return (data || []).map(r => {
-    const total = r.total_hands ?? 0;
-    return {
-      stableId:        r.player_id,
-      name:            r.display_name,
-      total_hands:     total,
-      total_wins:      r.total_wins   ?? 0,
-      total_net_chips: r.net_chips    ?? 0,
-      vpip_percent:    total > 0 ? Math.round((r.vpip_count ?? 0) / total * 100) : 0,
-      pfr_percent:     total > 0 ? Math.round((r.pfr_count  ?? 0) / total * 100) : 0,
-      last_hand_at:    r.last_hand_at,
-    };
-  });
+const CASH_MODES = ['coached_cash', 'uncoached_cash', 'bot_cash'];
+
+async function getAllPlayersWithStats({ period = 'all', gameType = 'all' } = {}) {
+  // Fast path: use pre-aggregated leaderboard table when no filters applied
+  if (period === 'all' && gameType === 'all') {
+    const data = await q(
+      supabase.from('leaderboard').select('*').order('net_chips', { ascending: false })
+    );
+    return (data || []).map(r => {
+      const total = r.total_hands ?? 0;
+      return {
+        stableId:        r.player_id,
+        name:            r.display_name,
+        total_hands:     total,
+        total_wins:      r.total_wins   ?? 0,
+        total_net_chips: r.net_chips    ?? 0,
+        vpip_percent:    total > 0 ? Math.round((r.vpip_count ?? 0) / total * 100) : 0,
+        pfr_percent:     total > 0 ? Math.round((r.pfr_count  ?? 0) / total * 100) : 0,
+        last_hand_at:    r.last_hand_at,
+      };
+    });
+  }
+
+  // Filtered path: aggregate from hand_players + hands with date/mode constraints
+  // Step 1: build filtered hand_players query
+  let query = supabase
+    .from('hand_players')
+    .select('player_id, vpip, pfr, is_winner, stack_start, stack_end, hands!inner(started_at, table_mode)');
+
+  if (period !== 'all') {
+    const days = period === '7d' ? 7 : 30;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    query = query.gte('hands.started_at', cutoff);
+  }
+
+  if (gameType === 'cash') {
+    query = query.in('hands.table_mode', CASH_MODES);
+  } else if (gameType === 'tournament') {
+    query = query.eq('hands.table_mode', 'tournament');
+  }
+
+  const { data: hpRows, error: hpErr } = await query;
+  if (hpErr) throw hpErr;
+
+  // Step 2: aggregate by player_id in JS
+  const playerMap = new Map();
+  for (const hp of hpRows || []) {
+    let p = playerMap.get(hp.player_id);
+    if (!p) {
+      p = { player_id: hp.player_id, total_hands: 0, total_wins: 0, net_chips: 0, vpip_count: 0, pfr_count: 0 };
+      playerMap.set(hp.player_id, p);
+    }
+    p.total_hands += 1;
+    if (hp.is_winner)  p.total_wins += 1;
+    p.net_chips  += (hp.stack_end ?? 0) - (hp.stack_start ?? 0);
+    if (hp.vpip)       p.vpip_count += 1;
+    if (hp.pfr)        p.pfr_count  += 1;
+  }
+
+  if (playerMap.size === 0) return [];
+
+  // Step 3: resolve display names from leaderboard (already caches names)
+  const playerIds = [...playerMap.keys()];
+  const { data: nameRows } = await supabase
+    .from('leaderboard')
+    .select('player_id, display_name')
+    .in('player_id', playerIds);
+  const nameMap = new Map((nameRows || []).map(r => [r.player_id, r.display_name]));
+
+  return [...playerMap.values()]
+    .sort((a, b) => b.net_chips - a.net_chips)
+    .map(p => {
+      const total = p.total_hands;
+      return {
+        stableId:        p.player_id,
+        name:            nameMap.get(p.player_id) ?? p.player_id,
+        total_hands:     total,
+        total_wins:      p.total_wins,
+        total_net_chips: p.net_chips,
+        vpip_percent:    total > 0 ? Math.round(p.vpip_count / total * 100) : 0,
+        pfr_percent:     total > 0 ? Math.round(p.pfr_count  / total * 100) : 0,
+        last_hand_at:    null,
+      };
+    });
 }
 
 /**
@@ -215,7 +282,7 @@ async function getPlayerStatsByMode(stableId, mode = 'overall') {
 async function findById(id) {
   const { data } = await supabase
     .from('player_profiles')
-    .select('id, display_name, email, status, password_hash, is_roster, last_seen, trial_expires_at, trial_hands_remaining')
+    .select('id, display_name, email, status, password_hash, last_seen, trial_expires_at, trial_hands_remaining')
     .eq('id', id)
     .maybeSingle();
   return data ?? null;
@@ -242,7 +309,7 @@ async function decrementTrialHands(id) {
 async function findByDisplayName(name) {
   const { data } = await supabase
     .from('player_profiles')
-    .select('id, display_name, email, status, password_hash, is_roster, last_seen')
+    .select('id, display_name, email, status, password_hash, last_seen')
     .eq('display_name', name.trim())
     .limit(1)
     .maybeSingle();
@@ -255,7 +322,7 @@ async function findByDisplayName(name) {
  * Requires the player_roles + roles tables (migration 009).
  */
 async function getPrimaryRole(playerId) {
-  const ROLE_PRIORITY = ['superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
+  const ROLE_PRIORITY = ['superadmin', 'admin', 'coach', 'coached_student', 'solo_student', 'trial'];
   const { data } = await supabase
     .from('player_roles')
     .select('roles(name)')
@@ -326,7 +393,7 @@ async function removeRole(playerId, roleId) {
  * @param {{ status?: string, role?: string, limit?: number, offset?: number }} opts
  */
 async function listPlayers({ status, role, limit = 50, offset = 0 } = {}) {
-  const ROLE_PRIORITY = ['superadmin', 'admin', 'coach', 'moderator', 'referee', 'player', 'trial'];
+  const ROLE_PRIORITY = ['superadmin', 'admin', 'coach', 'coached_student', 'solo_student', 'trial'];
 
   let query = supabase
     .from('player_profiles')
@@ -381,7 +448,6 @@ async function loginRosterPlayer(name) {
 
   if (existing) {
     await q(supabase.from('player_profiles').update({
-      is_roster: true,
       last_seen: new Date().toISOString(),
     }).eq('id', existing.id));
     return { stableId: existing.id, name: existing.display_name };
@@ -391,7 +457,6 @@ async function loginRosterPlayer(name) {
   await q(supabase.from('player_profiles').insert({
     id:           stableId,
     display_name: trimmed,
-    is_roster:    true,
     last_seen:    new Date().toISOString(),
   }));
   return { stableId, name: trimmed };
@@ -401,11 +466,11 @@ async function isRegisteredPlayer(stableId) {
   if (!stableId) return false;
   const data = await q(
     supabase.from('player_profiles')
-      .select('id, is_roster')
+      .select('id')
       .eq('id', stableId)
       .maybeSingle()
   );
-  return !!(data && data.is_roster);
+  return !!data;
 }
 
 module.exports = {

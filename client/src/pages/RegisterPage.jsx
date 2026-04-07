@@ -49,7 +49,7 @@ function TabButton({ active, onClick, children }) {
 }
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, registerCoach } = useAuth();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState('student'); // 'student' | 'coach'
@@ -60,7 +60,7 @@ export default function RegisterPage() {
   const [confirm, setConfirm]   = useState('');
 
   // Coach-only field
-  const [schoolName, setSchoolName] = useState('');
+  const [email, setEmail] = useState('');
 
   // State
   const [error, setError]     = useState('');
@@ -68,7 +68,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
 
   const reset = () => {
-    setName(''); setPassword(''); setConfirm(''); setSchoolName('');
+    setName(''); setPassword(''); setConfirm(''); setEmail('');
     setError(''); setSuccess('');
   };
 
@@ -83,16 +83,19 @@ export default function RegisterPage() {
     if (!password)      { setError('Password is required.'); return; }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
     if (password !== confirm) { setError('Passwords do not match.'); return; }
+    if (tab === 'coach') {
+      if (!email.trim()) { setError('Email address is required for coach registration.'); return; }
+      if (!email.includes('@')) { setError('Please enter a valid email address.'); return; }
+    }
 
     setLoading(true);
     try {
-      await register({ name: name.trim(), password, role: tab });
-      setSuccess(
-        tab === 'coach'
-          ? 'Request submitted! An admin will review your coach application.'
-          : 'Account created! Redirecting to login…'
-      );
-      if (tab === 'student') {
+      if (tab === 'coach') {
+        await registerCoach(name.trim(), password, email.trim().toLowerCase());
+        setSuccess('Request submitted! An admin will review your coach application.');
+      } else {
+        await register({ name: name.trim(), password });
+        setSuccess('Account created! Redirecting to login…');
         setTimeout(() => navigate('/login'), 1800);
       }
     } catch (err) {
@@ -203,15 +206,15 @@ export default function RegisterPage() {
             />
           </div>
 
-          {/* Coach-only: School Name */}
+          {/* Coach-only: Email */}
           {tab === 'coach' && (
             <div className="flex flex-col gap-1.5">
-              <label className="label-sm">School Name</label>
+              <label className="label-sm">Email Address</label>
               <AuthInput
-                value={schoolName}
-                onChange={(e) => { setSchoolName(e.target.value); setError(''); }}
-                placeholder="e.g. Rivera Poker Academy"
-                maxLength={64}
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                placeholder="your@email.com"
                 disabled={loading}
               />
             </div>

@@ -2,31 +2,24 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 /**
- * Role matrix from spec §2.3
- * Columns: coach | student (coached) | solo | trial | admin | superadmin
- *
- * In the codebase:
- *   coach       → 'coach'
- *   student     → 'player'    (coached_student maps to 'player' role in JWT)
- *   solo        → 'player'    (no coach — same role, differentiated by data)
- *   trial       → 'trial'
- *   admin       → 'admin'
- *   superadmin  → 'superadmin'
- *   moderator   → same as admin for nav purposes
+ * Role matrix — 5 canonical roles:
+ *   coach, coached_student, solo_student, admin, superadmin
+ *   trial = status flag on coached_student/solo_student (handled via isTrial in context)
  */
+const STUDENT_ROLES = ['coached_student', 'solo_student', 'trial']; // trial kept during migration window
 const NAV_ITEMS = [
   {
     icon: '🏠',
     label: 'Lobby',
     path: '/lobby',
-    roles: ['coach', 'player', 'trial', 'admin', 'superadmin', 'moderator', 'referee'],
+    roles: ['coach', ...STUDENT_ROLES, 'admin', 'superadmin'],
   },
   {
     icon: '🃏',
     label: 'Tables',
     path: '/lobby',
     hash: '#tables',
-    roles: ['coach', 'player', 'trial', 'admin', 'superadmin', 'moderator', 'referee'],
+    roles: ['coach', ...STUDENT_ROLES, 'admin', 'superadmin'],
     badgeKey: 'tables',
   },
   {
@@ -46,13 +39,13 @@ const NAV_ITEMS = [
     icon: '📖',
     label: 'History',
     path: '/history',
-    roles: ['coach', 'player', 'admin', 'superadmin'],
+    roles: ['coach', ...STUDENT_ROLES, 'admin', 'superadmin'],
   },
   {
     icon: '🤖',
     label: 'Bot Games',
     path: '/bot-lobby',
-    roles: ['player', 'coach', 'admin', 'superadmin'],
+    roles: [...STUDENT_ROLES, 'coach', 'admin', 'superadmin'],
   },
   {
     icon: '📊',
@@ -70,7 +63,7 @@ const NAV_ITEMS = [
     icon: '🏆',
     label: 'Leaderboard',
     path: '/leaderboard',
-    roles: ['coach', 'player', 'trial', 'admin', 'superadmin', 'moderator', 'referee'],
+    roles: ['coach', ...STUDENT_ROLES, 'admin', 'superadmin'],
   },
   {
     icon: '💰',
@@ -82,7 +75,7 @@ const NAV_ITEMS = [
     icon: '💰',
     label: 'Staking',
     path: '/staking',
-    roles: ['player'],
+    roles: ['coached_student', 'solo_student', 'trial'],
   },
   {
     icon: '📢',

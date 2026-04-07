@@ -20,6 +20,25 @@ jest.mock('../../../db/repositories/TableRepository', () => ({
   },
 }));
 
+// ─── AutoController lazy-require mocks ────────────────────────────────────────
+
+jest.mock('../../../state/SharedState', () => ({
+  tables:      new Map(),
+  activeHands: new Map(),
+  stableIdMap: new Map(),
+}));
+
+jest.mock('../../../db/HandLoggerSupabase', () => ({
+  startHand: jest.fn().mockResolvedValue(undefined),
+  endHand:   jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../../../game/AnalyzerService', () => ({
+  analyzeAndTagHand: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
+
 const { TournamentRepository } = require('../../../db/repositories/TournamentRepository');
 const { TableRepository }      = require('../../../db/repositories/TableRepository');
 
@@ -35,16 +54,22 @@ function makeIo() {
   return { to: jest.fn().mockReturnValue(room), _room: room };
 }
 
-function makePlayer(i) {
-  return { id: `player-${i}`, name: `P${i}`, stack: 1000, in_hand: true };
+function makePlayer(i, overrides = {}) {
+  return { id: `player-${i}`, name: `P${i}`, stack: 1000, in_hand: true, seat: i - 1, is_coach: false, ...overrides };
 }
 
-function makeGm(seatedCount = 2) {
-  const players = Array.from({ length: seatedCount }, (_, i) => makePlayer(i + 1));
+function makeGm(seatedCount = 2, playerOverrides = []) {
+  const players = Array.from({ length: seatedCount }, (_, i) => makePlayer(i + 1, playerOverrides[i] ?? {}));
+  const state = { players, seated: players };
   return {
-    getState: jest.fn().mockReturnValue({ seated: players }),
-    startGame: jest.fn().mockResolvedValue(undefined),
+    state,
+    getState: jest.fn().mockReturnValue(state),
+    startGame: jest.fn().mockReturnValue({}),
     setPlayerInHand: jest.fn(),
+    resetForNextHand: jest.fn(),
+    adjustStack: jest.fn(),
+    setBlinds: jest.fn().mockReturnValue({ success: true }),
+    getPublicState: jest.fn().mockReturnValue({}),
   };
 }
 
@@ -86,9 +111,18 @@ describe('AutoController', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    // Reset SharedState maps between tests
+    const ss = require('../../../state/SharedState');
+    ss.tables.clear();
+    ss.activeHands.clear();
+    ss.stableIdMap.clear();
+
     io = makeIo();
     gm = makeGm(2);
     ctrl = new AutoController('table-2', gm, io);
+    // Spy on _startHand by default — full _startHand requires IO infrastructure
+    // not available in unit tests. Individual tests override this spy as needed.
+    jest.spyOn(ctrl, '_startHand').mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -106,35 +140,84 @@ describe('AutoController', () => {
     expect(io._room.emit).toHaveBeenCalledWith('hand_complete', result);
   });
 
-  test('onHandComplete calls gm.startGame after 2s when seated >= 2', async () => {
+  test('onHandComplete schedules _startHand after 2s when 2+ active players remain', async () => {
     await ctrl.onHandComplete({ handId: 'h4' });
-    expect(gm.startGame).not.toHaveBeenCalled();
+    expect(ctrl._startHand).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(2000);
-    // Allow microtasks from async callback to flush
     await Promise.resolve();
 
-    expect(gm.startGame).toHaveBeenCalledTimes(1);
+    expect(ctrl._startHand).toHaveBeenCalledTimes(1);
   });
 
-  test('onHandComplete does NOT call gm.startGame if active is false when timer fires', async () => {
+  test('onHandComplete does NOT call _startHand if active=false when timer fires', async () => {
     await ctrl.onHandComplete({ handId: 'h5' });
     ctrl.active = false;
 
     jest.advanceTimersByTime(2000);
     await Promise.resolve();
 
-    expect(gm.startGame).not.toHaveBeenCalled();
+    expect(ctrl._startHand).not.toHaveBeenCalled();
   });
 
-  test('onHandComplete does NOT call gm.startGame if seated.length < 2', async () => {
-    gm.getState.mockReturnValue({ seated: ['p1'] });
+  test('onHandComplete does NOT call _startHand if fewer than 2 eligible players', async () => {
+    gm.state.players = [makePlayer(1)];
+
     await ctrl.onHandComplete({ handId: 'h6' });
 
     jest.advanceTimersByTime(2000);
     await Promise.resolve();
 
-    expect(gm.startGame).not.toHaveBeenCalled();
+    expect(ctrl._startHand).not.toHaveBeenCalled();
+  });
+
+  test('bust detection: sits out players with stack <= 0 and emits player_busted', async () => {
+    const bustedSocket = { emit: jest.fn() };
+    io.to = jest.fn((id) => id === 'player-1' ? bustedSocket : { emit: jest.fn() });
+
+    gm.state.players = [
+      makePlayer(1, { stack: 0 }),   // busted
+      makePlayer(2, { stack: 500 }), // healthy
+    ];
+
+    await ctrl.onHandComplete({ handId: 'h-bust' });
+
+    expect(gm.setPlayerInHand).toHaveBeenCalledWith('player-1', false);
+    expect(bustedSocket.emit).toHaveBeenCalledWith('player_busted', expect.objectContaining({
+      message: expect.any(String),
+    }));
+    // Healthy player should NOT be sat out
+    expect(gm.setPlayerInHand).not.toHaveBeenCalledWith('player-2', false);
+  });
+
+  test('bust detection: coaches are never sat out even if stack is 0', async () => {
+    gm.state.players = [
+      makePlayer(1, { stack: 0, is_coach: true }),
+      makePlayer(2, { stack: 500 }),
+    ];
+
+    await ctrl.onHandComplete({ handId: 'h-coach-bust' });
+
+    expect(gm.setPlayerInHand).not.toHaveBeenCalled();
+  });
+
+  test('onPlayerJoin triggers _startHand when 2 eligible players seated', async () => {
+    ctrl._handActive = false;
+    await ctrl.onPlayerJoin('player-1');
+    expect(ctrl._startHand).toHaveBeenCalledTimes(1);
+  });
+
+  test('onPlayerJoin does NOT trigger _startHand when hand is already active', async () => {
+    ctrl._handActive = true;
+    await ctrl.onPlayerJoin('player-1');
+    expect(ctrl._startHand).not.toHaveBeenCalled();
+  });
+
+  test('onPlayerJoin does NOT trigger _startHand when fewer than 2 eligible players', async () => {
+    gm.state.players = [makePlayer(1)];
+    ctrl._handActive = false;
+    await ctrl.onPlayerJoin('player-1');
+    expect(ctrl._startHand).not.toHaveBeenCalled();
   });
 
   test('canPause returns false', () => {
@@ -177,19 +260,21 @@ describe('TournamentController', () => {
 
   test('inherits AutoController behavior: emits hand_complete', async () => {
     const result = { handId: 'h7' };
+    ctrl._startHand = jest.fn().mockResolvedValue(undefined);
     await ctrl.onHandComplete(result);
     expect(io.to).toHaveBeenCalledWith('table-3');
     expect(io._room.emit).toHaveBeenCalledWith('hand_complete', result);
   });
 
-  test('inherits AutoController behavior: calls gm.startGame after 2s', async () => {
+  test('inherits AutoController behavior: schedules _startHand after 2s', async () => {
+    ctrl._startHand = jest.fn().mockResolvedValue(undefined);
     await ctrl.onHandComplete({ handId: 'h8' });
-    expect(gm.startGame).not.toHaveBeenCalled();
+    expect(ctrl._startHand).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(2000);
     await Promise.resolve();
 
-    expect(gm.startGame).toHaveBeenCalledTimes(1);
+    expect(ctrl._startHand).toHaveBeenCalledTimes(1);
   });
 
   test('stores config passed to constructor', () => {

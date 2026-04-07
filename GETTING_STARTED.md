@@ -2,7 +2,7 @@
 
 A real-time poker training tool. The **coach** controls the game (deal hands, pause, undo, configure specific cards, review history). **Players** join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history and player stats survive restarts and are accessible from any device.
 
-**Last updated:** 2026-04-05 — **Bug fixes:** Bot game creation now works without a name (auto-generates "Bot Game — \<timestamp\>"); bot lobby form field names corrected to match server contract. CRM player list (`/stable/crm`) no longer returns HTTP 500 — role resolution rewritten as a two-step query; player roles now display correctly in the roster. Scenario builder stays on the saved scenario after saving instead of resetting to the empty splash. Creating a new student from the CRM no longer returns 500 (invalid `role` column removed from post-creation SELECT). Previously (2026-04-05): **Tournament v2 (all 9 phases):** Full tournament system overhaul. Blind structure presets (system + school), payout presets + ICM calculator (Malmuth-Harville), deal proposals, late registration windows, re-entry & add-on support, tournament referee appointments (per-table or per-group), multi-table MTT groups (auto-provision tables, shared blind timer, cross-table eliminations), and drag-and-drop table balancer. Migrations 029–039 applied. New pages: TournamentBalancer (`/admin/tournaments/group/:id/balancer`). New socket events: `tournament:late_reg_open/closed/rejected`, `tournament:reentry_available/confirmed/rejected`, `tournament:addon_open/closed/confirmed`, `tournament:icm_update`, `tournament:blind_up`, `tournament_group:started/blind_up/final_table/ended/balance_needed`. Previously (2026-04-04): **Groups & Add Student:** Full group management system — coaches create/rename/recolor/delete groups in Settings → School; admins set platform-wide group limits (groups on/off, max groups per school, max players per group) and can override per school in Settings → Org. Add Student modal in Player CRM (name, password, role, school, initial group assignment). Group-aware roster view in CRM (filter by group, BY GROUP sectioned view). Server enforcement of all limits. Migration 024 required (`supabase/migrations/024_groups.sql`). Previously (2026-04-02): Complete page-by-page UI overhaul (POK-60). 18 routes, 45 components, 26 page files. UI bug fixes: settings role strings, page titles, bot lobby access, permissions fallback for CSV players, school settings scroll, hand_annotations migration.
+**Last updated:** 2026-04-06 — **Tournament Table Management (Phases 2–5):** Live management ownership system for tournament tables. Lobby now shows split **PLAY** / **MANAGE** buttons for eligible roles on tournament cards. Manage joins as an authenticated spectator and auto-claims the manager seat if orphaned. Role-ranked steal (`canSteal`) with bcrypt password confirmation — admin can take over from referee, not vice versa. 10-second disconnect grace window with client countdown. New in-game controls for managers: pause/resume (real timer freeze), manual player elimination, hand-visibility toggles, ICM overlay toggle, and a Start button before the tournament begins. New UI: `TournamentTopBar` strip (level/timer/field/avg stack, all users), `TournamentSidebar` (manager controls panel), `ManagedByBadge` (floating Claim/Take Over badge for non-managers). New socket events: `tournament:manager_changed`, `tournament:manager_disconnected`, `tournament:claim_result`, `tournament:steal_result`, `tournament:paused`, `tournament:resumed`, `tournament:hand_visibility_changed`, `tournament:icm_overlay_changed`. New REST: `POST /tournament/pause`, `/resume`, `/eliminate-player`. Previously (2026-04-05): **Bug fixes** (bot game creation, CRM 500s, scenario builder reset). **Tournament v2 (all 9 phases):** Blind presets, payout presets, ICM calculator, deal proposals, late registration, re-entry & add-on, referee appointments, MTT groups, table balancer. Migrations 029–039. Previously (2026-04-04): **Groups & Add Student.** Previously (2026-04-02): Complete page-by-page UI overhaul (POK-60).
 
 ---
 
@@ -686,32 +686,112 @@ Tabbed page with role-dependent tab visibility:
 
 ### Tournament Lifecycle
 
-1. **Create** — admin/coach navigates to `/admin/tournaments` and fills in the creation wizard (name, blind schedule, starting stack, rebuy settings). Clicking "Create Tournament" creates the table and config, then redirects to the Tournament Lobby.
+1. **Create** — admin/coach/referee navigates to `/admin/tournaments` or clicks **+ New Tournament** in the Lobby (Tournament tab). Both paths open the same 5-step creation wizard. The wizard calls `POST /api/admin/tournaments` which atomically creates the game table, tournament config, and registry row (migrations 029–040 required). After creation, you land on the Tournament Lobby.
 
-2. **Lobby** (`/tournament/:tableId/lobby`) — pre-start view showing:
-   - Tournament config (starting stack, levels, rebuy rules, scheduled start time)
+2. **Lobby** (`/tournament/:tableId/lobby`) — pre-start view:
+   - Config summary (starting stack, levels, rebuy/add-on rules, min players, scheduled start time)
    - Full blind structure sheet
-   - Countdown timer if a scheduled start time was set
-   - "Start Tournament" button (coaches only) — starts the blind timer and deals the first hand
-   - "Join Table" button (players) — goes directly to the table seat
+   - Countdown timer if a scheduled start time is set
+   - **Start Tournament** button (eligible users with management) — starts the blind timer and deals the first hand
+   - **Join Table** button (players) — goes directly to a seated player spot
 
-3. **In-progress** — **TournamentInfoPanel** (right side overlay) shows:
-   - Current blind level and SB/BB/ante
-   - Countdown timer (color shifts amber → red as the level expires)
-   - Player count remaining
-   - Recent eliminations feed (last 5)
-   - **Advance Level** and **End Tournament** coach controls (confirmation modal)
-   - Blind levels advance automatically on a timer
-   - Eliminations: when a player's stack reaches 0, they are recorded in standings and marked out of future hands
+3. **In-progress** — two views depending on role:
 
-4. **Standings** (`/tournament/:tableId/standings`) — automatically navigated to 3 seconds after `tournament:ended` fires. Shows:
-   - Winner banner (gold)
-   - Full final standings table with finish position, player name, chip count at elimination, prize (if set)
-   - Tournament summary footer
+   **Manager (admin/coach/referee who claimed management):**
+   - **TournamentTopBar** — secondary header strip showing Level, Blinds, Countdown, Field size, Avg Stack
+   - **TournamentSidebar** — right panel with full controls:
+     - ▶ Start (before start) / ⏸ Pause-Resume (live timer freeze)
+     - ⏭ Advance Level (force skip to next blind level, confirmation modal)
+     - ⏹ End Tournament (confirmation modal)
+     - ✕ Eliminate Player (modal: select active player, confirms manual elimination)
+     - **Visibility toggles**: "Show all cards to manager" / "Show all cards to spectators"
+     - **Live ICM overlay** toggle
 
-### Player Table Balancing (Referee / Coach)
+   **Players / Spectators (non-managers):**
+   - **TournamentTopBar** — same status strip as above
+   - **TournamentInfoPanel** — right panel showing blind level, countdown, player count, ICM equity (if enabled), recent eliminations, add-on button, re-entry modal
+   - **ManagedByBadge** — floating bottom-right badge:
+     - "Managed by [name]" when table has a manager
+     - "Claim Control" when orphaned (eligible roles only)
+     - "Take Over" when managed by someone else (eligible roles only) — opens password confirmation modal
+     - Shows 10-second countdown when manager disconnects with "Claim Now" button
 
-The server supports a `tournament:move_player` socket event for moving players between tables:
+4. **Standings** (`/tournament/:tableId/standings`) — navigated automatically 3 seconds after `tournament:ended` fires.
+
+### Joining a Tournament Table
+
+**From the Lobby:**
+
+Tournament table cards show two buttons for eligible roles (admin/coach/superadmin/referee):
+- **PLAY** → `/tournament/:tableId/lobby` — join as a seated player through the lobby flow
+- **MANAGE** → `/table/:tableId?manager=true` — join as authenticated spectator and auto-claim management if the table is orphaned
+
+Players (non-eligible roles) see a single **REGISTER** or **JOIN** button.
+
+**Directly via URL with `?manager=true`:**
+
+Appending `?manager=true` to any `/table/:tableId` URL causes the socket `join_room` event to include `managerMode: true`. The server joins the user as a spectator and attempts `claimManagement()`.
+
+### Tournament Management System
+
+Tournament tables have an in-memory "manager" tracked on `TournamentController`. Management is not persisted to the database — if the server restarts, anyone can re-claim.
+
+**How management works:**
+
+| Scenario | Result |
+|---|---|
+| Orphaned table (no manager) | Any eligible user who joins with `managerMode: true` is granted management immediately |
+| Already managed | The joining user receives `tournament:claim_result { granted: false }` and sees the ManagedByBadge in read-only mode |
+| Manager disconnects | 10-second grace window starts; `tournament:manager_disconnected { managedBy, managerName, expiresAt }` broadcasts to all; any eligible user can claim during grace window |
+| Manager reconnects within grace | Timer cancelled; management re-granted; `tournament:manager_changed` re-broadcast |
+| Grace window expires | Management released; table becomes orphaned |
+| Take Over (steal) | User emits `tournament:steal_management { password }` — server bcrypt-verifies the challenger's own password, checks `ROLE_RANK[challengerRole] > ROLE_RANK[currentManagerRole]`, then force-sets the new manager |
+
+**Role rank for steal purposes:**
+
+```
+superadmin(4) > admin(3) > coach(2) > referee(1)
+```
+
+A referee cannot steal from a coach. A coach can steal from a referee. Same-rank users cannot steal from each other.
+
+### Manager Socket Events
+
+| Event | Direction | Payload |
+|---|---|---|
+| `tournament:claim_management` | Client → Server | *(none)* |
+| `tournament:release_management` | Client → Server | *(none)* |
+| `tournament:steal_management` | Client → Server | `{ password }` |
+| `tournament:pause` | Client → Server | *(none)* — isManager required |
+| `tournament:resume` | Client → Server | *(none)* — isManager required |
+| `tournament:eliminate_player` | Client → Server | `{ stableId }` — isManager required |
+| `tournament:set_hand_visibility` | Client → Server | `{ type: 'manager'\|'spectator', value: boolean }` — isManager required |
+| `tournament:set_icm_overlay` | Client → Server | `{ enabled: boolean }` — isManager required |
+| `tournament:manager_changed` | Server → Room | `{ managedBy, managerName }` |
+| `tournament:manager_disconnected` | Server → Room | `{ managedBy, managerName, expiresAt }` |
+| `tournament:claim_result` | Server → Caller | `{ granted: boolean, managedBy?, managerName? }` |
+| `tournament:steal_result` | Server → Caller | `{ granted: boolean, reason? }` |
+| `tournament:paused` | Server → Room | `{ pausedLevelRemainingMs }` |
+| `tournament:resumed` | Server → Room | *(none)* |
+| `tournament:hand_visibility_changed` | Server → Room | `{ managerHandVisible, spectatorHandVisible }` |
+| `tournament:icm_overlay_changed` | Server → Room | `{ enabled }` |
+
+### Manager REST Endpoints
+
+All require auth + `requireTournamentAccess()` (tournament:manage permission or active referee appointment).
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/tables/:id/tournament/start` | Start the tournament (deals first hand, starts blind timer) |
+| `POST` | `/api/tables/:id/tournament/pause` | Freeze level timer; blocks new hands |
+| `POST` | `/api/tables/:id/tournament/resume` | Resume; restarts timer with accurate remaining time |
+| `POST` | `/api/tables/:id/tournament/advance-level` | Force-advance to next blind level |
+| `POST` | `/api/tables/:id/tournament/end` | End tournament immediately |
+| `POST` | `/api/tables/:id/tournament/eliminate-player` | Manual elimination — body: `{ stableId }` |
+| `GET` | `/api/tables/:id/tournament/deal-proposal` | Compute ICM deal amounts |
+| `POST` | `/api/tables/:id/tournament/deal-proposal/accept` | Accept deal and end tournament |
+
+### Player Table Balancing
 
 ```js
 socket.emit('tournament:move_player', {
@@ -721,7 +801,7 @@ socket.emit('tournament:move_player', {
 });
 ```
 
-The Referee Dashboard provides a UI for this via the "Move Player" button on each table card.
+Requires coach role (`requireCoach` socket guard).
 
 ---
 
@@ -732,7 +812,7 @@ Server tests (Jest):
 cd server
 npx jest --no-coverage
 ```
-Expected: **~2012 tests passing** across 77 suites.
+Expected: **2368 tests passing** across 100 suites (6 pre-existing failures in `PlayerRepository.test.js` and `REST.api.test.js` — unrelated to active feature work).
 
 Client tests (Vitest + React Testing Library):
 ```bash
@@ -793,7 +873,229 @@ No persistent disk is needed — all data lives in Supabase. A `Dockerfile` and 
 
 ---
 
-## Troubleshooting
+## 23. Architecture Patterns (Developer Reference)
+
+The tournament management system introduced several reusable patterns. Each is self-contained and can be applied to other areas of the codebase. The working implementations are the reference — read them before building anything similar.
+
+---
+
+### Pattern 1 — Role-Ranked Control Ownership
+
+**What it is:** A resource (a table, a session, a panel) is "owned" by one user at a time. Any user with a higher role rank can take over. Same-rank users cannot displace each other.
+
+**Reference implementation:** `server/game/controllers/TournamentController.js` — `ROLE_RANK`, `claimManagement()`, `canSteal()`, `releaseManagement()`, `_setManager()`
+
+```js
+// The rank table — extend if new roles need ordering
+const ROLE_RANK = { superadmin: 4, admin: 3, coach: 2, referee: 1 };
+
+// Claim: returns false if already owned by someone else
+claimManagement(stableId, name, role) {
+  if (this.managedBy && this.managedBy !== stableId) return false;
+  this._setManager(stableId, name, role);
+  return true;
+}
+
+// Steal check: challenger rank must strictly exceed current owner rank
+canSteal(challengerRole) {
+  if (!this.managedBy) return true;
+  return (ROLE_RANK[challengerRole] ?? 0) > (ROLE_RANK[this.managerRole] ?? 0);
+}
+```
+
+**Where else this applies in the codebase:**
+
+- `coached_cash` tables: currently the first coach to join owns the table with no displacement mechanism. If two coaches join, the second silently becomes a player. The pattern above could replace that fallback with a proper claim/steal cycle.
+- `MultiTablePage` broadcast controls: whichever coach opened the multi-table view effectively "owns" the broadcast bar. Two coaches opening `/multi` simultaneously can double-fire commands. An ownership claim here would prevent that.
+- Future: any "live session lead" concept (e.g. one coach leads a group review session while others observe).
+
+**How to apply:** Copy `ROLE_RANK` and the three methods into whatever controller owns the resource. Emit a `<resource>:owner_changed` socket event from `_setOwner()`. Listen for it on the client to show/hide controls.
+
+---
+
+### Pattern 2 — Disconnect Grace Window
+
+**What it is:** When an "owner" socket disconnects, start a short timer instead of immediately releasing the resource. Broadcast the expiry time so eligible clients can show a countdown. Cancel the timer if the owner reconnects before it fires.
+
+**Reference implementation:** `TournamentController.onManagerDisconnect()`, `onManagerReconnect()`, and `server/socket/handlers/disconnect.js` (spectator branch).
+
+```js
+onManagerDisconnect(stableId, name) {
+  if (this.managedBy !== stableId) return;
+  const expiresAt = Date.now() + 10_000;
+  this.io.to(this.tableId).emit('tournament:manager_disconnected', { managedBy: stableId, managerName: name, expiresAt });
+  this.managerDisconnectTimer = setTimeout(() => {
+    if (this.managedBy === stableId) this._setManager(null, null, null);
+  }, 10_000);
+}
+
+onManagerReconnect(stableId, name, role) {
+  if (this.managedBy !== stableId) return;
+  clearTimeout(this.managerDisconnectTimer);
+  this.managerDisconnectTimer = null;
+  this._setManager(stableId, name, role); // re-broadcast
+}
+```
+
+On reconnect, the joinRoom handler checks `ctrl.managedBy === resolvedStableId` before calling `onManagerReconnect()` — the identity check must happen before joining the room.
+
+**Where else this applies:**
+
+- **Coach disconnect in `coached_cash`** (`server/socket/handlers/disconnect.js`, `isCoach` branch): currently pauses the game immediately but does not offer a grace-window handoff. If two coaches are present (or a second coach is watching), the game could hand control to them after 5–10 seconds rather than staying paused indefinitely.
+- **Bot table controller** (`BotTableController`): if the bot process crashes or disconnects, the table is left in a broken state. A grace window with a re-initialization attempt would make recovery smoother.
+- **Chip-bank cash-out timing**: the 60-second player TTL (`reconnectTimers` in `disconnect.js`) already follows this pattern at a lower level — it's the same idea but for a player seat rather than a control role.
+
+**Client-side countdown:** The `ManagedByBadge` component (`client/src/components/ManagedByBadge.jsx`) shows the pattern for running a `setInterval` countdown from `expiresAt` and clearing it when `tournament:manager_changed` arrives.
+
+---
+
+### Pattern 3 — Authenticated Spectator with Elevated Controls
+
+**What it is:** A user joins a game table as a spectator (no seat, cannot act) but retains their authentication context, allowing them to control the game from outside it. Distinct from the anonymous spectator path.
+
+**Reference implementation:** `server/socket/handlers/joinRoom.js`, the `managerMode && socket.data.authenticated` branch (around line 153).
+
+Key decisions in that branch:
+- `isCoach: false`, `isSpectator: true` — no seat, no coach privilege
+- `socket.data.stableId` is still set from the JWT — so `requireTournamentAccess()` can validate them
+- `socket.data.isManager` flag is set so the disconnect handler knows to start the grace window
+- `room_joined` includes `isManager: true/false` so the client immediately knows whether to render the sidebar
+
+**Where else this applies:**
+
+- **Referee Dashboard** (`/admin/referee`): currently a standalone page that does not connect to the live socket game. If the referee were to join as an authenticated spectator (Pattern 3), they could use the same socket-level controls without needing separate REST polling. The `requireTournamentAccess()` middleware already accepts referees.
+- **Multi-table overview** (`/multi`): coaches join as players at each table to observe. An authenticated spectator join would be cleaner — they see live state without occupying a seat or appearing in player lists.
+- **Any "admin observer" feature** in future sessions: session notes, live grading, coach-assistant roles.
+
+**How to apply:** In `join_room`, detect the relevant flag in the payload (e.g. `observerMode: true`), set `isSpectator: true`, keep `stableId` from the JWT, and set a role-specific flag on `socket.data` for the disconnect handler and permission checks.
+
+---
+
+### Pattern 4 — URL-Driven Socket Join Intent
+
+**What it is:** The navigation URL carries the join intent as a query parameter. The page component reads it and passes it into the socket connection hook, which forwards it in the `join_room` event payload.
+
+**Reference implementation:**
+- `client/src/pages/TablePage.jsx` — `useSearchParams()` reads `?manager=true`
+- `client/src/contexts/TableContext.jsx` — `managerMode` prop forwarded to `useTableSocket`
+- `client/src/hooks/useTableSocket.js` — `managerMode` included in `join_room` emit
+
+```js
+// TablePage.jsx
+const [searchParams] = useSearchParams();
+const managerMode = searchParams.get('manager') === 'true';
+return <TableProvider tableId={tableId} managerMode={managerMode}>...</TableProvider>;
+
+// useTableSocket.js
+export function useTableSocket(tableId, { managerMode = false } = {}) {
+  socket.emit('join_room', { name, isCoach, isSpectator: false, tableId, managerMode });
+}
+```
+
+**Where else this applies:**
+
+- **`?spectate=true`**: a player who wants to watch without sitting. Currently they must send `isSpectator: true` in `join_room`. A URL param could make this a shareable link.
+- **`?replay=<handId>`**: auto-load a specific hand in the review table on mount. The URL intent drives a socket or REST call immediately.
+- **`?drill=<playlistId>`**: join a coached_cash table and immediately enter drill mode for a specific playlist. The coach already activates playlists via socket; this could automate it on join.
+- **Deep-linking into admin pages**: `?student=<uuid>` on `/admin/crm` to auto-focus a student without navigation. (REST-only, no socket needed — same idea, different delivery.)
+
+**How to apply:** Add `useSearchParams()` to the page component, extract the flag, pass it into the relevant hook or context, and include it in the first meaningful emit. Keep the URL param boolean or an opaque ID — never put sensitive data in URLs.
+
+---
+
+### Pattern 5 — Freeze/Thaw Timer
+
+**What it is:** An in-flight countdown timer is paused by saving the exact remaining milliseconds, clearing the `setTimeout`, and restarting it from the saved value on resume — rather than restarting from the full duration.
+
+**Reference implementation:** `TournamentController.pause()` / `resume()` + `BlindSchedule.getTimeRemainingMs()`.
+
+```js
+pause() {
+  this.paused = true;
+  this.pausedLevelRemainingMs = this.blindSchedule?.getTimeRemainingMs() ?? null;
+  clearTimeout(this.levelTimer);
+  this.levelTimer = null;
+  this.gm.state.paused = true;  // prevents new hands starting
+}
+
+resume() {
+  this.paused = false;
+  this.gm.state.paused = false;
+  const remainingMs = this.pausedLevelRemainingMs;
+  this.pausedLevelRemainingMs = null;
+  if (remainingMs > 0) {
+    // Fix levelStartTime so getTimeRemainingMs() stays accurate
+    this.blindSchedule.levelStartTime = Date.now() - (level.duration_minutes * 60_000 - remainingMs);
+    this.levelTimer = setTimeout(() => this._advanceLevel(), remainingMs);
+  }
+}
+```
+
+`BlindSchedule.getTimeRemainingMs()` returns `max(0, durationMs - elapsed)` where `elapsed = Date.now() - levelStartTime`. This is the correct value to save — not the initial duration.
+
+**Where else this applies:**
+
+- **Action timer** (`server/state/SharedState.js`, `pausedTimerRemainders` Map): the per-player action timer already has partial pause support. The pattern above is more rigorous — verify `pausedTimerRemainders` uses the same "save remaining, clear, restart from saved" approach rather than restarting from the original duration.
+- **Announcement countdown** or any timed challenge: if a timed drill or challenge mode is added, freeze/thaw follows the same pattern.
+- **Late registration window** (`TournamentController.lateRegTimer`): currently not paused when the tournament is paused. If a pause happens during late registration, the window keeps counting down. Applying the freeze/thaw pattern here would make late reg respect pause state.
+
+---
+
+### Pattern 6 — Split Action Card (Two-Intent Table Card)
+
+**What it is:** A lobby table card that exposes two distinct navigation intents — one for the player path and one for the management path — as side-by-side buttons rather than a single contextual action.
+
+**Reference implementation:**
+- `client/src/components/TableCard.jsx` — `secondaryActionLabel` + `onSecondaryAction` props
+- `client/src/pages/LobbyPage.jsx` — `mapTableToCard()` sets both fields for tournament cards, `TablesSection` passes `onManageAction`
+
+```js
+// mapTableToCard — only tournament tables for eligible roles get the split
+if (isTournament && canManage) {
+  actionLabel = 'PLAY';
+  secondaryActionLabel = 'MANAGE';
+}
+
+// TableCard — renders two buttons when secondaryActionLabel is present
+{secondaryActionLabel && onSecondaryAction ? (
+  <div style={{ display: 'flex', gap: 6 }}>
+    <button onClick={() => onAction?.(id)}>PLAY</button>
+    <button onClick={() => onSecondaryAction?.(id)}>MANAGE</button>
+  </div>
+) : (
+  <button onClick={() => onAction?.(id)}>{actionLabel}</button>
+)}
+```
+
+**Where else this applies:**
+
+- **Bot tables for coaches**: a coach might want to **OBSERVE** (join as spectator) vs **CONFIGURE** (open the bot table settings). The same split button pattern applies.
+- **Private tables**: an owner might want **PLAY** vs **SHARE LINK** (copy an invite URL). The second action doesn't even navigate — it's a clipboard copy.
+- **Scenario playlists in the lobby** (if surfaces): **DRILL** (enter drill mode) vs **REVIEW** (open history). Two distinct paths from the same card.
+
+**How to apply:** Add `secondaryActionLabel` and `secondaryActionStyle` to the card data object in `mapTableToCard()`, and pass `onSecondaryAction` from the section component. The `TableCard` component already supports this — just populate both fields.
+
+---
+
+### Pattern 7 — Secondary Status Strip
+
+**What it is:** A thin, always-visible header strip (below the main `TableTopBar`) that shows live state from socket events for all users on a particular table mode. It does not have interactive controls — it is purely informational.
+
+**Reference implementation:** `client/src/components/TournamentTopBar.jsx`
+
+The component:
+1. Subscribes to `tournament:time_remaining`, `tournament:blind_up`, `tournament:final_level` via `socketRef` from `useTable()`
+2. Derives `activePlayers` and `avgStack` from `gameState` (no extra fetch needed)
+3. Renders as a `flexShrink: 0` row in the outer column flex of `TablePage`
+4. Accepts `isPaused` prop from the parent so it knows to freeze the displayed countdown
+
+**Where else this applies:**
+
+- **`uncoached_cash` tables**: players have no coach sidebar, no context about who's in the hand. A status strip showing "Pot: 450 · Street: Flop · Players: 4" would reduce cognitive load without adding a full panel.
+- **Bot tables** (`bot_cash`): the table is autonomous — no coach sidebar. A strip showing the bot's decision pace, current level if progressive blinds are added, or "Next hand in 2s" countdown would be useful.
+- **Multi-table overview** (`/multi`): each table tile is small. A one-line summary strip per tile (phase, pot, active player count) would work well with this component pattern.
+
+**How to apply:** Create a new `<ModeTopBar>` component, subscribe to the relevant socket events in a `useEffect`, derive display values from `gameState`, and insert it in `TablePage` immediately after `<TableTopBar>` conditional on `tableMode`.
 
 | Problem | Fix |
 |---------|-----|

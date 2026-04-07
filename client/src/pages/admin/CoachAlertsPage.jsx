@@ -15,55 +15,6 @@ const ALERT_TYPE_LABELS = {
   positive_milestone: 'Milestone',
 };
 
-// ─── Mock fallback data ───────────────────────────────────────────────────────
-
-const MOCK_ALERTS = [
-  {
-    id: 'mock-1',
-    studentName: 'Alex Kim',
-    type: 'mistake_spike',
-    detail: 'EQUITY_FOLD: 8.4/100 (baseline: 3.2) · 2.6×\n3 flagged hands',
-    severity: 0.87,
-    dismissed: false,
-    generatedAt: 'Mar 29, 06:00',
-    hasHands: true,
-    hasSessions: false,
-  },
-  {
-    id: 'mock-2',
-    studentName: 'Jordan Lee',
-    type: 'inactivity',
-    detail: 'Last played: Mar 22 (7 days ago)\nThreshold: 5 days',
-    severity: 0.71,
-    dismissed: false,
-    generatedAt: 'Mar 29, 06:00',
-    hasHands: false,
-    hasSessions: false,
-  },
-  {
-    id: 'mock-3',
-    studentName: 'Marcus Torres',
-    type: 'losing_streak',
-    detail: '4 consecutive sessions · -12,400 chips',
-    severity: 0.54,
-    dismissed: false,
-    generatedAt: 'Mar 28, 22:15',
-    hasHands: false,
-    hasSessions: true,
-  },
-  {
-    id: 'mock-4',
-    studentName: 'Sam Patel',
-    type: 'positive_milestone',
-    detail: 'First profitable week: +4,200 chips · 312 hands 🎉',
-    severity: 0.0,
-    dismissed: false,
-    generatedAt: 'Mar 30, 06:00',
-    hasHands: false,
-    hasSessions: false,
-  },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function humanDetail(alertType, data) {
@@ -329,9 +280,8 @@ export default function CoachAlertsPage() {
         }));
 
         setAllAlerts(normalized);
-      } catch (_) {
-        // Fall back to mock data so the page is always usable
-        if (!cancelled) setAllAlerts(MOCK_ALERTS);
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Failed to load alerts');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -438,6 +388,10 @@ export default function CoachAlertsPage() {
 
         {loading ? (
           <div className="text-center py-16 text-sm" style={{ color: '#6e7681' }}>Loading alerts…</div>
+        ) : error ? (
+          <div className="text-center py-16 text-sm" style={{ color: '#f85149' }} data-testid="alerts-error">
+            {error}
+          </div>
         ) : (
           <>
             {/* Alert cards */}

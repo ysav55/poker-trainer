@@ -22,9 +22,18 @@ import PrivacyBadge from './PrivacyBadge';
  *     actionLabel {string}     — 'JOIN'|'SPECTATE'|'MANAGE'|'PLAYING'|'REGISTER'
  *
  *   onAction {fn(tableId)}
+ *   onSecondaryAction {fn(tableId)?}  — optional second action (e.g. "MANAGE" alongside "PLAY")
+ *   secondaryActionLabel {string?}
  *   showController {bool}     — whether to show the "Controller:" line (false for students)
  */
-export default function TableCard({ table, onAction, showController = false }) {
+const MODE_BADGE = {
+  coached_cash:   { label: 'Coached',    bg: 'rgba(212,175,55,0.15)',  color: '#d4af37',  border: 'rgba(212,175,55,0.4)' },
+  uncoached_cash: { label: 'Auto Deal',  bg: 'rgba(74,222,128,0.12)',  color: '#4ade80',  border: 'rgba(74,222,128,0.35)' },
+  tournament:     { label: 'Tournament', bg: 'rgba(96,165,250,0.12)',  color: '#60a5fa',  border: 'rgba(96,165,250,0.35)' },
+  bot_cash:       { label: 'Bot Table',  bg: 'rgba(167,139,250,0.12)', color: '#a78bfa',  border: 'rgba(167,139,250,0.35)' },
+};
+
+export default function TableCard({ table, onAction, onSecondaryAction, showController = false }) {
   const {
     id,
     name,
@@ -32,6 +41,7 @@ export default function TableCard({ table, onAction, showController = false }) {
     privacy = 'open',
     gameType = 'NLHE',
     tableType = 'Cash',
+    mode,
     maxPlayers = 9,
     playerCount = 0,
     smallBlind,
@@ -39,7 +49,10 @@ export default function TableCard({ table, onAction, showController = false }) {
     pot,
     controller,
     actionLabel = 'JOIN',
+    secondaryActionLabel = null,
   } = table;
+
+  const modeBadge = mode ? MODE_BADGE[mode] : null;
 
   const actionColors = {
     JOIN:      { bg: 'rgba(212,175,55,0.15)', color: '#d4af37', border: 'rgba(212,175,55,0.4)' },
@@ -78,6 +91,16 @@ export default function TableCard({ table, onAction, showController = false }) {
         <div className="text-[11px] mt-0.5" style={{ color: '#8b949e' }}>
           {gameType} · {tableType}
         </div>
+        {modeBadge && (
+          <div className="mt-1">
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+              style={{ background: modeBadge.bg, color: modeBadge.color, border: `1px solid ${modeBadge.border}` }}
+            >
+              {modeBadge.label}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Info chips */}
@@ -101,19 +124,48 @@ export default function TableCard({ table, onAction, showController = false }) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Action button */}
+      {/* Action button(s) */}
       <div className="px-3 pb-3 pt-2">
-        <button
-          onClick={() => onAction?.(id)}
-          className="w-full py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-all duration-150 active:scale-95"
-          style={{
-            background: actionStyle.bg,
-            color: actionStyle.color,
-            border: `1px solid ${actionStyle.border}`,
-          }}
-        >
-          {actionLabel}
-        </button>
+        {secondaryActionLabel && onSecondaryAction ? (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => onAction?.(id)}
+              className="py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-all duration-150 active:scale-95"
+              style={{
+                flex: 1,
+                background: actionStyle.bg,
+                color: actionStyle.color,
+                border: `1px solid ${actionStyle.border}`,
+              }}
+            >
+              {actionLabel}
+            </button>
+            <button
+              onClick={() => onSecondaryAction?.(id)}
+              className="py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-all duration-150 active:scale-95"
+              style={{
+                flex: 1,
+                background: (actionColors[secondaryActionLabel] ?? actionColors.SPECTATE).bg,
+                color: (actionColors[secondaryActionLabel] ?? actionColors.SPECTATE).color,
+                border: `1px solid ${(actionColors[secondaryActionLabel] ?? actionColors.SPECTATE).border}`,
+              }}
+            >
+              {secondaryActionLabel}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => onAction?.(id)}
+            className="w-full py-1.5 rounded text-xs font-bold uppercase tracking-widest transition-all duration-150 active:scale-95"
+            style={{
+              background: actionStyle.bg,
+              color: actionStyle.color,
+              border: `1px solid ${actionStyle.border}`,
+            }}
+          >
+            {actionLabel}
+          </button>
+        )}
       </div>
     </div>
   );

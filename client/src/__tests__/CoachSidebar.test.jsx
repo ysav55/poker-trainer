@@ -10,11 +10,26 @@
  *  - Replay controls are NOT in the sidebar (they live in PokerTable.jsx).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import React from 'react'
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
+
+// @holdem-poker-tools/hand-matrix uses browser globals (self) not available in jsdom.
+// Mock the package and the RangePicker component that wraps it.
+vi.mock('@holdem-poker-tools/hand-matrix', () => ({
+  HandMatrix: ({ onComboClick } = {}) => <div data-testid="hand-matrix" />,
+}))
+
+vi.mock('../components/RangePicker', () => ({
+  default: ({ onApply, onCancel }) => (
+    <div data-testid="range-picker">
+      <button onClick={() => onApply('')}>Apply</button>
+      <button onClick={onCancel}>Cancel</button>
+    </div>
+  ),
+}))
 
 vi.mock('socket.io-client', () => ({
   io: vi.fn(() => ({
@@ -30,6 +45,29 @@ vi.mock('socket.io-client', () => ({
 global.fetch = vi.fn(() =>
   Promise.resolve({ ok: true, json: () => Promise.resolve({ hands: [] }) })
 )
+
+// Fake hand fixture for save-to-playlist tests
+const FAKE_HAND = {
+  hand_id: 'hand-abc-123',
+  winner_name: 'Alice',
+  final_pot: 200,
+  started_at: new Date().toISOString(),
+  auto_tags: [],
+  coach_tags: [],
+}
+
+// Allow individual tests to inject hands via this ref
+let _mockHands = []
+vi.mock('../hooks/useHistory', () => ({
+  useHistory: () => ({
+    hands: _mockHands,
+    loading: false,
+    handDetail: null,
+    fetchHands: vi.fn(),
+    fetchHandDetail: vi.fn(),
+    clearDetail: vi.fn(),
+  }),
+}))
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -443,7 +481,111 @@ describe('CoachSidebar — default tab', () => {
   })
 })
 
-// ── Test 12: Phase strip pot amount ──────────────────────────────────────
+// ── Test 12: Save to Playlist widget ─────────────────────────────────────
+
+describe('CoachSidebar — Save to Playlist widget', () => {
+  const fakePlaylists = [
+    { playlist_id: 'pl-1', name: 'My Playlist' },
+    { playlist_id: 'pl-2', name: 'Drills' },
+  ]
+
+  beforeEach(() => {
+    _mockHands = [FAKE_HAND]
+  })
+
+  afterEach(() => {
+    _mockHands = []
+  })
+
+  it('widget is hidden when config_phase is false', async () => {
+    const { default: CoachSidebar } = await import('../components/CoachSidebar.jsx')
+    await act(async () => {
+      render(
+        <CoachSidebar
+          gameState={makeGameState({ config_phase: false })}
+          emit={makeEmit()}
+          isOpen={true}
+          onToggle={vi.fn()}
+          playlists={fakePlaylists}
+        />
+      )
+    })
+    fireEvent.click(screen.getByText('HANDS'))
+    expect(screen.queryByText('SAVE SCENARIO TO PLAYLIST')).toBeNull()
+  })
+
+  it('widget appears after loading a hand when config_phase is true', async () => {
+    const { default: CoachSidebar } = await import('../components/CoachSidebar.jsx')
+    await act(async () => {
+      render(
+        <CoachSidebar
+          gameState={makeGameState({ config_phase: true })}
+          emit={makeEmit()}
+          isOpen={true}
+          onToggle={vi.fn()}
+          playlists={fakePlaylists}
+        />
+      )
+    })
+    fireEvent.click(screen.getByText('HANDS'))
+
+    // Expand HAND LIBRARY section to reveal the Load button
+    const sectionHeaders = screen.getAllByText('HAND LIBRARY')
+    if (sectionHeaders.length > 0) fireEvent.click(sectionHeaders[0])
+
+    // Click the Load button on the fake hand
+    const loadBtns = screen.getAllByText('Load')
+    if (loadBtns.length > 0) {
+      await act(async () => { fireEvent.click(loadBtns[0]) })
+    }
+
+    const doc = document.body.textContent
+    expect(doc).toMatch(/SAVE SCENARIO TO PLAYLIST/i)
+  })
+
+  it('+ Add button calls emit.addToPlaylist with selected playlist and hand id', async () => {
+    const addToPlaylist = vi.fn()
+    const { default: CoachSidebar } = await import('../components/CoachSidebar.jsx')
+    await act(async () => {
+      render(
+        <CoachSidebar
+          gameState={makeGameState({ config_phase: true })}
+          emit={makeEmit({ addToPlaylist })}
+          isOpen={true}
+          onToggle={vi.fn()}
+          playlists={fakePlaylists}
+        />
+      )
+    })
+    fireEvent.click(screen.getByText('HANDS'))
+
+    // Expand HAND LIBRARY section
+    const sectionHeaders = screen.getAllByText('HAND LIBRARY')
+    if (sectionHeaders.length > 0) fireEvent.click(sectionHeaders[0])
+
+    // Load the hand
+    const loadBtns = screen.getAllByText('Load')
+    if (loadBtns.length > 0) {
+      await act(async () => { fireEvent.click(loadBtns[0]) })
+    }
+
+    // Select a playlist from the save-to-playlist dropdown
+    // (HandLibrarySection also has a "— select playlist —" dropdown; pick the last one)
+    const selects = screen.getAllByDisplayValue('— select playlist —')
+    const saveSelect = selects[selects.length - 1]
+    await act(async () => {
+      fireEvent.change(saveSelect, { target: { value: 'pl-1' } })
+    })
+
+    // Click + Add
+    const addBtn = screen.getByText('+ Add')
+    await act(async () => { fireEvent.click(addBtn) })
+
+    expect(addToPlaylist).toHaveBeenCalledWith('pl-1', FAKE_HAND.hand_id)
+  })
+})
+
+// ── Test 13: Phase strip pot amount ──────────────────────────────────────
 
 describe('CoachSidebar — phase strip', () => {
   it('shows formatted pot amount when pot > 0', async () => {

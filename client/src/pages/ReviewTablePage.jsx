@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiFetch } from '../lib/api.js';
 import PokerTable from '../components/PokerTable.jsx';
@@ -272,6 +273,62 @@ function AnnotationSection({ handId, cursor, isCoach, annotations, onAnnotationA
   );
 }
 
+// ── Socket replay controls (used when in live socket-driven review mode) ─────
+
+function SocketReplayControls({ onStepBack, onStepForward, onBranch, onUnbranch }) {
+  const btnBase = {
+    padding: '6px 14px',
+    fontSize: 12,
+    fontWeight: 700,
+    borderRadius: 6,
+    cursor: 'pointer',
+    transition: 'background 0.15s, border-color 0.15s',
+  };
+  return (
+    <div
+      className="flex items-center justify-center gap-2 px-4 py-2 shrink-0"
+      style={{ borderTop: '1px solid #21262d', background: 'rgba(6,10,15,0.97)' }}
+    >
+      <button
+        onClick={onStepBack}
+        style={{ ...btnBase, color: '#8b949e', border: '1px solid #30363d', background: '#21262d' }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = GOLD; e.currentTarget.style.borderColor = GOLD; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = '#8b949e'; e.currentTarget.style.borderColor = '#30363d'; }}
+        title="Step back"
+      >
+        ◁ Back
+      </button>
+      <button
+        onClick={onStepForward}
+        style={{ ...btnBase, color: '#8b949e', border: '1px solid #30363d', background: '#21262d' }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = GOLD; e.currentTarget.style.borderColor = GOLD; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = '#8b949e'; e.currentTarget.style.borderColor = '#30363d'; }}
+        title="Step forward"
+      >
+        Forward ▷
+      </button>
+      <button
+        onClick={onBranch}
+        style={{ ...btnBase, color: '#3fb950', border: '1px solid rgba(63,185,80,0.4)', background: 'transparent' }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(63,185,80,0.1)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        title="Branch from here into live play"
+      >
+        Branch ↗
+      </button>
+      <button
+        onClick={onUnbranch}
+        style={{ ...btnBase, color: '#8b949e', border: '1px solid #30363d', background: 'transparent' }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = '#e6edf3'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = '#8b949e'; }}
+        title="Return to replay from branch"
+      >
+        ↩ Unbranch
+      </button>
+    </div>
+  );
+}
+
 // ── Step controls bar ─────────────────────────────────────────────────────────
 
 function StepControls({ cursor, actionCount, onFirst, onPrev, onNext, onLast, onScrub }) {
@@ -398,10 +455,33 @@ function StepControls({ cursor, actionCount, onFirst, onPrev, onNext, onLast, on
 export default function ReviewTablePage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
 
   const handId   = searchParams.get('handId');
   const isCoach  = user?.role === 'coach' || user?.role === 'admin' || user?.role === 'superadmin';
+
+  // Hand list navigation (passed via location.state from AnalysisPage / HandHistoryPage)
+  const navHandIds     = location.state?.handIds ?? null;
+  const navCurrentIdx  = navHandIds ? navHandIds.indexOf(handId) : -1;
+  const hasPrevHand    = navHandIds && navCurrentIdx > 0;
+  const hasNextHand    = navHandIds && navCurrentIdx < navHandIds.length - 1;
+
+  const goToPrevHand = useCallback(() => {
+    if (!hasPrevHand) return;
+    const prevId = navHandIds[navCurrentIdx - 1];
+    navigate(`/review?handId=${prevId}`, {
+      state: { handIds: navHandIds, currentIndex: navCurrentIdx - 1 },
+    });
+  }, [hasPrevHand, navHandIds, navCurrentIdx, navigate]);
+
+  const goToNextHand = useCallback(() => {
+    if (!hasNextHand) return;
+    const nextId = navHandIds[navCurrentIdx + 1];
+    navigate(`/review?handId=${nextId}`, {
+      state: { handIds: navHandIds, currentIndex: navCurrentIdx + 1 },
+    });
+  }, [hasNextHand, navHandIds, navCurrentIdx, navigate]);
 
   const [hand, setHand]           = useState(null);
   const [annotations, setAnnotations] = useState([]);
@@ -435,8 +515,59 @@ export default function ReviewTablePage() {
   const goLast  = useCallback(() => setCursor(actionCount - 1), [actionCount]);
   const goTo    = useCallback((idx) => setCursor(Math.max(-1, Math.min(actionCount - 1, idx))), [actionCount]);
 
-  // Simulate gameState at cursor
-  const gameState = useMemo(() => buildGameState(hand, cursor), [hand, cursor]);
+  // ── Socket-driven review mode ─────────────────────────────────────────────
+  // When location.state.tableId is set (via "Go to Review" from a live table),
+  // connect to the live table's socket room and use the server-side ReplayEngine.
+  const reviewTableId    = location.state?.tableId ?? null;
+  const isSocketMode     = Boolean(reviewTableId && location.state?.isReviewSession);
+  const socketRef        = useRef(null);
+  const [socketGameState, setSocketGameState] = useState(null);
+
+  useEffect(() => {
+    if (!isSocketMode || !reviewTableId) return;
+
+    const sock = io(import.meta.env.VITE_SERVER_URL ?? '', {
+      auth: (cb) => cb({ token: user?.token ?? '' }),
+    });
+
+    sock.on('connect', () => {
+      sock.emit('join_room', {
+        name: user?.name ?? 'Reviewer',
+        isSpectator: true,
+        tableId: reviewTableId,
+      });
+    });
+
+    // Accept both initial state and incremental updates
+    sock.on('game_state',        (state) => setSocketGameState(state));
+    sock.on('game_state_update', (state) => setSocketGameState(state));
+
+    // When coach ends review, navigate back to live table
+    sock.on('transition_back_to_play', () => {
+      navigate(`/table/${reviewTableId}`);
+    });
+
+    socketRef.current = sock;
+    return () => {
+      sock.disconnect();
+      socketRef.current = null;
+    };
+  }, [isSocketMode, reviewTableId, user?.token, user?.name, navigate]);
+
+  // Emit helpers for socket-mode replay controls (coach only)
+  const emitReplay = useCallback((event, payload) => {
+    socketRef.current?.emit(event, payload);
+  }, []);
+
+  const handleBackToPlay = useCallback(() => {
+    socketRef.current?.emit('transition_back_to_play');
+  }, []);
+
+  // Simulate gameState at cursor (static mode only)
+  const staticGameState = useMemo(() => buildGameState(hand, cursor), [hand, cursor]);
+
+  // In socket mode, use server gameState; otherwise use locally simulated state
+  const gameState = isSocketMode ? socketGameState : staticGameState;
 
   // Annotation handlers
   const handleAnnotationAdded = useCallback((annotation) => {
@@ -528,8 +659,20 @@ export default function ReviewTablePage() {
               border: '1px solid rgba(59,130,246,0.3)',
             }}
           >
-            Review
+            {isSocketMode ? 'Live Review' : 'Review'}
           </span>
+          {/* "Back to Play" — only for coach in socket review mode */}
+          {isSocketMode && isCoach && (
+            <button
+              onClick={handleBackToPlay}
+              className="text-xs px-3 py-1 rounded transition-colors"
+              style={{ color: '#3fb950', border: '1px solid rgba(63,185,80,0.4)', background: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(63,185,80,0.1)'; e.currentTarget.style.borderColor = '#3fb950'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'rgba(63,185,80,0.4)'; }}
+            >
+              ▶ Back to Play
+            </button>
+          )}
         </div>
       </header>
 
@@ -546,15 +689,34 @@ export default function ReviewTablePage() {
               emit={{}}
             />
           </div>
-          <StepControls
-            cursor={cursor}
-            actionCount={actionCount}
-            onFirst={goFirst}
-            onPrev={goPrev}
-            onNext={goNext}
-            onLast={goLast}
-            onScrub={goTo}
-          />
+          {isSocketMode ? (
+            /* Socket mode: wire controls to server-side ReplayEngine events (coach only) */
+            isCoach ? (
+              <SocketReplayControls
+                onStepBack={() => emitReplay('replay_step_back')}
+                onStepForward={() => emitReplay('replay_step_forward')}
+                onBranch={() => emitReplay('replay_branch')}
+                onUnbranch={() => emitReplay('replay_unbranch')}
+              />
+            ) : (
+              <div
+                className="px-4 py-2 text-xs text-center shrink-0"
+                style={{ borderTop: '1px solid #21262d', color: '#4b5563' }}
+              >
+                Spectating — coach controls the replay
+              </div>
+            )
+          ) : (
+            <StepControls
+              cursor={cursor}
+              actionCount={actionCount}
+              onFirst={goFirst}
+              onPrev={goPrev}
+              onNext={goNext}
+              onLast={goLast}
+              onScrub={goTo}
+            />
+          )}
         </div>
 
         {/* Right: review panel */}
@@ -589,7 +751,10 @@ export default function ReviewTablePage() {
             <Timeline
               actions={actions}
               cursor={cursor}
-              onJumpTo={goTo}
+              onJumpTo={isSocketMode && isCoach
+                ? (idx) => emitReplay('replay_jump_to', { cursor: idx })
+                : goTo
+              }
             />
           </div>
 
@@ -608,30 +773,44 @@ export default function ReviewTablePage() {
             />
           </div>
 
-          {/* Prev/Next hand nav */}
-          <div
-            className="flex gap-2 px-3 py-2 shrink-0"
-            style={{ borderTop: '1px solid #21262d' }}
-          >
-            <button
-              onClick={() => navigate(-1)}
-              className="flex-1 text-xs py-1.5 rounded transition-colors"
-              style={{ color: '#6e7681', border: '1px solid #21262d', background: 'transparent' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#e6edf3'; e.currentTarget.style.borderColor = '#6e7681'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; e.currentTarget.style.borderColor = '#21262d'; }}
+          {/* Prev/Next hand nav — only shown when a hand list is available from the originating page */}
+          {navHandIds && (
+            <div
+              className="flex gap-2 px-3 py-2 shrink-0"
+              style={{ borderTop: '1px solid #21262d' }}
             >
-              ← Prev Hand
-            </button>
-            <button
-              onClick={() => navigate(-1)}
-              className="flex-1 text-xs py-1.5 rounded transition-colors"
-              style={{ color: '#6e7681', border: '1px solid #21262d', background: 'transparent' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#e6edf3'; e.currentTarget.style.borderColor = '#6e7681'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#6e7681'; e.currentTarget.style.borderColor = '#21262d'; }}
-            >
-              Next Hand →
-            </button>
-          </div>
+              <button
+                onClick={goToPrevHand}
+                disabled={!hasPrevHand}
+                className="flex-1 text-xs py-1.5 rounded transition-colors"
+                style={{
+                  color: hasPrevHand ? '#6e7681' : '#2d333b',
+                  border: `1px solid ${hasPrevHand ? '#21262d' : '#161b22'}`,
+                  background: 'transparent',
+                  cursor: hasPrevHand ? 'pointer' : 'default',
+                }}
+                onMouseEnter={(e) => { if (hasPrevHand) { e.currentTarget.style.color = '#e6edf3'; e.currentTarget.style.borderColor = '#6e7681'; } }}
+                onMouseLeave={(e) => { if (hasPrevHand) { e.currentTarget.style.color = '#6e7681'; e.currentTarget.style.borderColor = '#21262d'; } }}
+              >
+                ← Prev Hand
+              </button>
+              <button
+                onClick={goToNextHand}
+                disabled={!hasNextHand}
+                className="flex-1 text-xs py-1.5 rounded transition-colors"
+                style={{
+                  color: hasNextHand ? '#6e7681' : '#2d333b',
+                  border: `1px solid ${hasNextHand ? '#21262d' : '#161b22'}`,
+                  background: 'transparent',
+                  cursor: hasNextHand ? 'pointer' : 'default',
+                }}
+                onMouseEnter={(e) => { if (hasNextHand) { e.currentTarget.style.color = '#e6edf3'; e.currentTarget.style.borderColor = '#6e7681'; } }}
+                onMouseLeave={(e) => { if (hasNextHand) { e.currentTarget.style.color = '#6e7681'; e.currentTarget.style.borderColor = '#21262d'; } }}
+              >
+                Next Hand →
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -7,15 +7,47 @@ const TournamentRepository = {
    * Create a tournament config row.
    * Returns the new config id (UUID string).
    */
-  async createConfig({ tableId, blindSchedule, startingStack, rebuyAllowed = false, rebuyLevelCap = 0 }) {
+  async createConfig({
+    tableId,
+    blindSchedule,
+    startingStack,
+    rebuyAllowed      = false,
+    rebuyLevelCap     = 0,
+    payoutStructure   = null,
+    payoutMethod      = 'flat',
+    showIcmOverlay    = false,
+    dealThreshold     = 0,
+    addonAllowed      = false,
+    addonStack        = null,
+    addonDeadlineLevel = 0,
+    lateRegMinutes    = 0,
+    reentryAllowed    = false,
+    reentryLimit      = 0,
+    reentryStack      = null,
+    minPlayers        = 6,
+    scheduledStartAt  = null,
+  }) {
     const { data, error } = await supabase
       .from('tournament_configs')
       .insert({
-        table_id:        tableId,
-        blind_schedule:  blindSchedule,
-        starting_stack:  startingStack,
-        rebuy_allowed:   rebuyAllowed,
-        rebuy_level_cap: rebuyLevelCap,
+        table_id:            tableId,
+        blind_schedule:      blindSchedule,
+        starting_stack:      startingStack,
+        rebuy_allowed:       rebuyAllowed,
+        rebuy_level_cap:     rebuyLevelCap,
+        payout_structure:    payoutStructure,
+        payout_method:       payoutMethod,
+        show_icm_overlay:    showIcmOverlay,
+        deal_threshold:      dealThreshold,
+        addon_allowed:       addonAllowed,
+        addon_stack:         addonStack,
+        addon_deadline_level: addonDeadlineLevel,
+        late_reg_minutes:    lateRegMinutes,
+        reentry_allowed:     reentryAllowed,
+        reentry_limit:       reentryLimit,
+        reentry_stack:       reentryStack,
+        min_players:         minPlayers,
+        scheduled_start_at:  scheduledStartAt,
       })
       .select('id')
       .single();
@@ -69,6 +101,42 @@ const TournamentRepository = {
   },
 
   // ── Standalone tournament management (POK-95) ─────────────────────────────
+
+  /**
+   * Create a tournaments registry row linked to an existing System A table.
+   * Called after createTable + createConfig so all three rows exist atomically
+   * from the caller's perspective (admin/tournaments POST).
+   * Returns the new tournament UUID.
+   */
+  async createLinkedTournament({
+    tableId,
+    name,
+    blindStructure = [],
+    startingStack  = 10000,
+    rebuyAllowed   = false,
+    addonAllowed   = false,
+    minPlayers     = 6,
+    scheduledStartAt = null,
+    createdBy      = null,
+  }) {
+    const { data, error } = await supabase
+      .from('tournaments')
+      .insert({
+        table_id:           tableId,
+        name,
+        blind_structure:    blindStructure,
+        starting_stack:     startingStack,
+        rebuy_allowed:      rebuyAllowed,
+        addon_allowed:      addonAllowed,
+        min_players:        minPlayers,
+        scheduled_start_at: scheduledStartAt,
+        created_by:         createdBy,
+      })
+      .select('id')
+      .single();
+    if (error) throw error;
+    return data.id;
+  },
 
   /**
    * Create a standalone tournament (not tied to a table).
