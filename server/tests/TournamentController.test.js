@@ -10,6 +10,22 @@
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+jest.mock('../db/supabase', () => ({}));
+
+// Mock HandLoggerSupabase so _startHand() doesn't hit the real DB
+jest.mock('../db/HandLoggerSupabase', () => ({
+  startHand:    jest.fn().mockResolvedValue(undefined),
+  endHand:      jest.fn().mockResolvedValue(undefined),
+  logAction:    jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock SharedState so _startHand() doesn't require live Maps
+jest.mock('../state/SharedState', () => ({
+  tables:       new Map(),
+  activeHands:  new Map(),
+  stableIdMap:  new Map(),
+}));
+
 jest.mock('../db/repositories/TournamentRepository', () => ({
   TournamentRepository: {
     recordElimination: jest.fn().mockResolvedValue(undefined),
@@ -40,14 +56,22 @@ const { TableRepository }       = require('../db/repositories/TableRepository');
 
 function makeIo() {
   const room = { emit: jest.fn() };
-  return { to: jest.fn().mockReturnValue(room), _room: room };
+  return {
+    to: jest.fn().mockReturnValue(room),
+    _room: room,
+    // _broadcastState() reads io.sockets.adapter.rooms.get(tableId) — empty Map
+    // so the early-return guard fires and no actual broadcast happens.
+    sockets: { adapter: { rooms: new Map() }, sockets: new Map() },
+  };
 }
 
 function makeGm(players = []) {
+  const state = { players, seated: players, dealer_seat: 0, small_blind: 25, big_blind: 50 };
   return {
-    getState:       jest.fn().mockReturnValue({ seated: players }),
-    startGame:      jest.fn().mockResolvedValue(undefined),
-    setBlindLevels: jest.fn(),
+    state,
+    getState:        jest.fn().mockReturnValue(state),
+    startGame:       jest.fn().mockResolvedValue(undefined),
+    setBlindLevels:  jest.fn(),
     setPlayerInHand: jest.fn(),
   };
 }

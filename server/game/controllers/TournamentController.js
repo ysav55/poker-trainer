@@ -277,7 +277,7 @@ class TournamentController extends AutoController {
     }
 
     this._startLevelTimer();
-    await this.gm.startGame();
+    await this._startHand();
   }
 
   /**

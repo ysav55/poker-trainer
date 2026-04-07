@@ -35,9 +35,28 @@ jest.mock('../db/supabase', () => ({}));
 jest.mock('../db/repositories/TournamentRepository', () => ({ TournamentRepository: {} }));
 jest.mock('../db/repositories/TableRepository', () => ({ TableRepository: {} }));
 
+// Mock HandLoggerSupabase so _startHand() doesn't hit the real DB
+jest.mock('../db/HandLoggerSupabase', () => ({
+  startHand:    jest.fn().mockResolvedValue(undefined),
+  endHand:      jest.fn().mockResolvedValue(undefined),
+  logAction:    jest.fn().mockResolvedValue(undefined),
+}));
+
+// Mock SharedState so _startHand() doesn't require live Maps
+jest.mock('../state/SharedState', () => ({
+  tables:       new Map(),
+  activeHands:  new Map(),
+  stableIdMap:  new Map(),
+}));
+
 const mockIoEmit = jest.fn();
 const mockIoTo   = jest.fn(() => ({ emit: mockIoEmit }));
-const mockIo     = { to: mockIoTo };
+const mockIo     = {
+  to: mockIoTo,
+  // _broadcastState() reads io.sockets.adapter.rooms.get(tableId) — return an
+  // empty Map so the early-return guard fires and no actual broadcast happens.
+  sockets: { adapter: { rooms: new Map() }, sockets: new Map() },
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -254,6 +273,40 @@ describe('TournamentController — setHandVisibility', () => {
     const ctrl = makeCtrl('t7');
     ctrl.setHandVisibility('invalid', true);
     expect(mockIoEmit).not.toHaveBeenCalled();
+  });
+});
+
+// ─── start() ─────────────────────────────────────────────────────────────────
+
+describe('TournamentController — start()', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.clearAllTimers();
+  });
+
+  test('calls _startHand() so activeHands is populated', async () => {
+    const mockGm = {
+      state: { players: [], pot: 0, phase: 'waiting', dealer_seat: 0, replay_mode: { branched: false } },
+      startGame: jest.fn().mockResolvedValue(undefined),
+      setBlindLevel: jest.fn(),
+      addPlayer: jest.fn(),
+      setBlindLevels: jest.fn(),
+    };
+    const ctrl = new TournamentController('t1', mockGm, mockIo);
+
+    // Spy on _startHand — it should be called instead of gm.startGame directly
+    const startHandSpy = jest.spyOn(ctrl, '_startHand').mockResolvedValue(undefined);
+
+    await ctrl.start({
+      blind_schedule: [{ level: 1, small_blind: 50, big_blind: 100, duration_minutes: 15 }],
+      starting_stack: 10000,
+      late_reg_minutes: 0,
+      addon_allowed: false,
+      addon_deadline_level: 0,
+    });
+
+    expect(startHandSpy).toHaveBeenCalled();
+    expect(mockGm.startGame).not.toHaveBeenCalled();
   });
 });
 
