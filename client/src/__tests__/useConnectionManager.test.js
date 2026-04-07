@@ -70,17 +70,10 @@ describe('useConnectionManager', () => {
 
   // ── C-8: Reactive socket state ────────────────────────────────────────────
 
-  it('socket state is null before mount effect runs (initially null)', () => {
-    // The socket starts as null (useState(null)) and is set asynchronously
-    // in the useEffect. After renderHook, the effect has already run synchronously
-    // in the test environment, so socket should equal the mockSocket.
+  it('socket state equals the io() instance after mount effect runs', () => {
+    // useState(null) initialises to null; the effect immediately sets it to the socket.
+    // In the test environment effects run synchronously, so socket === mockSocket after renderHook.
     const { result } = renderHook(() => useConnectionManager())
-    expect(result.current.socket).toBe(mockSocket)
-  })
-
-  it('socket state is set to the io() instance after effect runs', () => {
-    const { result } = renderHook(() => useConnectionManager())
-    // The mock socket created by io() should be the reactive socket state value
     expect(result.current.socket).toBe(mockSocket)
   })
 

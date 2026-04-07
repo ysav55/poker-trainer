@@ -463,12 +463,12 @@ describe('useGameState — C-8 reactive socket state', () => {
   it('does NOT register listeners when socket state is null at mount', () => {
     const addError = vi.fn()
     const addNotification = vi.fn()
+    const mockSocket = { on: vi.fn(), off: vi.fn() }
     const socketRef = { current: null }
     // socket state is null — simulates the window before useConnectionManager's effect runs
     renderHook(() => useGameState({ socketRef, socket: null, addError, addNotification }))
-    // No socket.on calls should happen — there's no socket object to call .on on
-    // (we verify by confirming no throw and no phantom registrations)
-    expect(addError).not.toHaveBeenCalled()
+    // No socket.on calls should happen — null guard returns early before any registration
+    expect(mockSocket.on).not.toHaveBeenCalled()
   })
 
   it('registers listeners when socket state changes from null to a socket instance', () => {

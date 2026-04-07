@@ -17,13 +17,13 @@ import { useState, useEffect, useCallback } from 'react'
  *   replayExit()             — exit replay mode entirely
  */
 export function useReplay(socket) {
-  const { socketRef } = socket ?? {}
+  const { socketRef, socket: socketState } = socket ?? {}
 
   // Meta about the currently-loaded replay (set by replay_loaded event)
   const [replayMeta, setReplayMeta] = useState(null) // { handId, actionCount } | null
 
   useEffect(() => {
-    const s = socketRef?.current
+    const s = socketState
     if (!s) return
 
     const onReplayLoaded = ({ handId, actionCount }) => {
@@ -35,7 +35,7 @@ export function useReplay(socket) {
     return () => {
       s.off('replay_loaded', onReplayLoaded)
     }
-  }, [socketRef])
+  }, [socketState])
 
   const reset = useCallback(() => {
     setReplayMeta(null)
