@@ -95,7 +95,7 @@ module.exports = function registerJoinRoom(socket, ctx) {
 
     // Delegation: if this table has a designated controller and the joining user
     // is that controller, grant them full coach-level socket powers regardless of their role.
-    // Only applies in coached_cash mode (non-coached modes already force isCoach=false above).
+    // Only applies in coached_cash mode (non-coached modes strip isCoach except for admin/superadmin, see above).
     if (mode === 'coached_cash' && !isCoach && tableRow?.controller_id &&
         tableRow.controller_id === resolvedStableId) {
       isCoach                = true;

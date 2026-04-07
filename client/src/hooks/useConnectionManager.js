@@ -6,6 +6,9 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 // In development, connect to the Vite dev server's proxy target (localhost:3001).
 const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3001' : ''
 
+// Roles that carry coach-level privileges at the table.
+const COACH_ROLES = ['coach', 'admin', 'superadmin']
+
 export function useConnectionManager() {
   const { user } = useAuth() ?? {}
   const socketRef = useRef(null)
@@ -68,7 +71,6 @@ export function useConnectionManager() {
       // Auto-rejoin if we were already seated (socket reconnected after a drop)
       if (joinParamsRef.current) {
         const { name, role, stableId } = joinParamsRef.current
-        const COACH_ROLES = ['coach', 'admin', 'superadmin']
         socket.emit('join_room', {
           name,
           isCoach: COACH_ROLES.includes(role),
@@ -90,7 +92,6 @@ export function useConnectionManager() {
   }, [])
 
   const joinRoom = useCallback((name, role = 'player') => {
-    const COACH_ROLES = ['coach', 'admin', 'superadmin']
     const stableId = role === 'spectator' ? `spectator_${Date.now()}` : null
     joinParamsRef.current = { name, role, stableId }
     socketRef.current?.emit('join_room', {
