@@ -78,11 +78,13 @@ describe('POST /api/bot-tables', () => {
     expect(res.status).toBe(401);
   });
 
-  test('returns 201 with table on success (player)', async () => {
+  test('returns 201 with flat table object on success (player)', async () => {
     mockCurrentUser = playerUser;
     const res = await request(app).post('/api/bot-tables').send(validBody);
     expect(res.status).toBe(201);
-    expect(res.body.table).toMatchObject({ id: 'tid-abc', mode: 'bot_cash' });
+    // Response is the table directly, NOT wrapped in { table }
+    expect(res.body).toMatchObject({ id: 'tid-abc', mode: 'bot_cash' });
+    expect(res.body.table).toBeUndefined();
     expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'My Bot Table',
@@ -95,10 +97,12 @@ describe('POST /api/bot-tables', () => {
     );
   });
 
-  test('returns 201 with table on success (coach)', async () => {
+  test('returns 201 with flat table object on success (coach)', async () => {
     mockCurrentUser = coachUser;
     const res = await request(app).post('/api/bot-tables').send(validBody);
     expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ id: 'tid-abc', mode: 'bot_cash' });
+    expect(res.body.table).toBeUndefined();
     expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
       expect.objectContaining({ creatorRole: 'coach' })
     );

@@ -45,7 +45,7 @@ module.exports = function registerBotTableRoutes(app, { requireAuth }) {
         blinds,
         schoolId:    user.schoolId ?? null,
       });
-      return res.status(201).json({ table });
+      return res.status(201).json(table);
     } catch (err) {
       return res.status(500).json({ error: 'internal_error', message: 'Failed to create bot table.' });
     }
