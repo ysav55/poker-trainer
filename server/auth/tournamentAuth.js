@@ -18,14 +18,14 @@ async function canManageTournament(userId, { tableId = null, groupId = null } = 
   if (perms.has('tournament:manage')) return true;
 
   // Check active referee row
-  const query = supabase
+  let query = supabase
     .from('tournament_referees')
     .select('id')
     .eq('player_id', userId)
     .eq('active', true);
 
-  if (tableId)  query.eq('table_id', tableId);
-  else if (groupId) query.eq('group_id', groupId);
+  if (tableId)  query = query.eq('table_id', tableId);
+  else if (groupId) query = query.eq('group_id', groupId);
   else return false;
 
   const { data } = await query.maybeSingle();
