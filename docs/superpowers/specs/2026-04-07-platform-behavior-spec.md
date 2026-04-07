@@ -71,9 +71,10 @@ A browser-based poker coaching platform used by coaches and students during live
 ### 2.1 Coach creates a coached table
 - From lobby: clicks "New Table" → modal appears.
 - Sets: table name, small blind / big blind, max seats (2–9), buy-in range (min/max).
+- Sets privacy (see Flow 13 — Table Privacy).
 - Mode is `coached_cash`.
 - Table is created → coach is immediately redirected to the table view (director mode).
-- Table appears in lobby for all users in the coach's school.
+- Table appears in lobby according to privacy setting.
 
 ### 2.2 Students join the table
 - Student sees table in lobby with status chip (waiting / active).
@@ -127,6 +128,7 @@ A browser-based poker coaching platform used by coaches and students during live
 ### 3.1 Creating an uncoached table
 - Any user (student or coach) can create an uncoached table from lobby.
 - Sets: name, blinds, max seats, buy-in range.
+- Sets privacy (see Flow 13 — Table Privacy).
 - Mode is `uncoached_cash`.
 - Creator is redirected to the table and automatically seated.
 
@@ -379,6 +381,43 @@ A browser-based poker coaching platform used by coaches and students during live
 ### 12.5 Student access
 - Students cannot create or edit scenarios or playlists.
 - Students cannot see the scenario configuration before a hand is dealt.
+
+---
+
+## Flow 13 — Table Privacy & Visibility
+
+### 13.1 Privacy options
+Every table (coached and uncoached) has a privacy setting chosen at creation time:
+
+| Option | Who sees the table in lobby |
+|--------|-----------------------------|
+| **Public** | All users in the school |
+| **Group** | All members of a selected group (coach's groups, including Stable) |
+| **Private** | Explicit whitelist only |
+
+### 13.2 Admin table creation extras
+- Admin can assign a table to a specific school (determines which school's lobby it appears in).
+- Admin can set any privacy level.
+
+### 13.3 Coach table creation extras
+- Coach can assign a table to one of their groups (restricts visibility to group members).
+- Coach can set any privacy level.
+
+### 13.4 Private whitelist flow
+- Creator selects privacy → **Private**.
+- Two dropdowns appear:
+  - **Group dropdown** — optionally pick a group to pre-populate the whitelist with all group members.
+  - **Name dropdown** — search and add individual users to the whitelist one at a time.
+- Whitelist is cumulative: group members + individually added names.
+- Creator can remove individuals from the whitelist before saving.
+- Whitelist can be edited after table creation from the table settings (coach/admin only).
+- Table is invisible in lobby to anyone not on the whitelist.
+- Direct URL access (`/table/:id`) is also blocked for non-whitelisted users — they are redirected to lobby.
+
+### 13.5 Visibility rules
+- A user on the whitelist sees the table in their lobby with a lock icon (private badge).
+- A user NOT on the whitelist does not see the table at all — not even as a locked entry.
+- Coach and admin always see all tables they created regardless of privacy setting.
 
 ---
 
