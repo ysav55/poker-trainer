@@ -60,7 +60,7 @@ function StudentMiniRow({ rank, name, grade, delta, note, onClick }) {
       className="flex items-center gap-3 px-4 py-3"
       style={{ borderBottom: '1px solid #21262d', cursor: 'pointer' }}
       onClick={onClick}
-      data-testid={`mini-row-${name.replace(/\s+/g, '-').toLowerCase()}`}
+      data-testid={`mini-row-${(name ?? 'unknown').replace(/\s+/g, '-').toLowerCase()}`}
     >
       <span
         className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
@@ -69,7 +69,7 @@ function StudentMiniRow({ rank, name, grade, delta, note, onClick }) {
         {rank}
       </span>
       <span className="flex-1 text-sm font-semibold truncate" style={{ color: '#f0ece3' }}>
-        {name}
+        {name ?? '—'}
       </span>
       {note && (
         <span
@@ -267,6 +267,10 @@ function GroupBreakdownTable({ groups, onGroupClick }) {
         <span className="text-right">Avg Grade</span>
         <span className="text-right">Trend</span>
       </div>
+
+      {groups.length === 0 && (
+        <p className="text-xs px-4 py-3" style={{ color: '#6e7681' }}>No groups configured.</p>
+      )}
 
       {groups.map((g, i) => (
         <div
