@@ -235,7 +235,7 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
   app.get('/api/auth/permissions', requireAuth, async (req, res) => {
     try {
       const { getPlayerPermissions } = require('../auth/requirePermission.js');
-      const perms = await getPlayerPermissions(req.user.id, req.user.role);
+      const perms = await getPlayerPermissions(req.user.stableId ?? req.user.id, req.user.role);
       res.json({ permissions: [...perms] });
     } catch (err) {
       res.status(500).json({ error: 'Failed to load permissions' });

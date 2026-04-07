@@ -235,7 +235,7 @@ router.put('/users/:id', async (req, res) => {
     await updatePlayer(req.params.id, patch);
 
     if (roleName !== undefined) {
-      await setPlayerRole(req.params.id, roleName, req.user?.id || null);
+      await setPlayerRole(req.params.id, roleName, req.user?.stableId ?? req.user?.id ?? null);
     }
 
     res.json({ success: true });
@@ -276,7 +276,7 @@ router.patch('/users/:id/role', async (req, res) => {
   try {
     const { role: roleName } = req.body || {};
     if (!roleName) return res.status(400).json({ error: 'role is required' });
-    await setPlayerRole(req.params.id, roleName, req.user?.id || null);
+    await setPlayerRole(req.params.id, roleName, req.user?.stableId ?? req.user?.id ?? null);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'internal_error' });
@@ -316,7 +316,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
 
     // Resolve any pending reset request for this user
     await supabase.from('password_reset_requests')
-      .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: req.user?.id || null })
+      .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: req.user?.stableId ?? req.user?.id ?? null })
       .eq('player_id', req.params.id)
       .eq('status', 'pending');
 
@@ -341,7 +341,7 @@ router.post('/users/:id/roles', async (req, res) => {
     if (!roleId) return res.status(404).json({ error: 'role_not_found' });
 
     if (action === 'assign') {
-      await assignRole(req.params.id, roleId, req.user?.id || null);
+      await assignRole(req.params.id, roleId, req.user?.stableId ?? req.user?.id ?? null);
     } else {
       await removeRole(req.params.id, roleId);
     }

@@ -92,7 +92,8 @@ describe('GET /api/auth/permissions', () => {
   });
 
   test('returns 200 with a permissions array for an authenticated user', async () => {
-    mockCurrentUser = { id: 'player-uuid-001', role: 'coach' };
+    // JWT payload uses stableId (not id) — mirrors real token structure
+    mockCurrentUser = { stableId: 'player-uuid-001', role: 'coach' };
     getPlayerPermissions.mockResolvedValueOnce(new Set(['view_hands', 'manage_playlists']));
 
     const res = await request(app)
@@ -105,7 +106,7 @@ describe('GET /api/auth/permissions', () => {
   });
 
   test('permissions array matches what getPlayerPermissions returns', async () => {
-    mockCurrentUser = { id: 'player-uuid-002', role: 'admin' };
+    mockCurrentUser = { stableId: 'player-uuid-002', role: 'admin' };
     const fakePerms = new Set(['view_hands', 'manage_playlists', 'admin:access']);
     getPlayerPermissions.mockResolvedValueOnce(fakePerms);
 
@@ -118,20 +119,39 @@ describe('GET /api/auth/permissions', () => {
     expect(res.body.permissions.sort()).toEqual([...fakePerms].sort());
   });
 
-  test('calls getPlayerPermissions with the authenticated req.user.id', async () => {
-    const userId = 'player-uuid-xyz';
-    mockCurrentUser = { id: userId, role: 'player' };
+  test('calls getPlayerPermissions with req.user.stableId (real JWT field)', async () => {
+    // The JWT payload sets stableId, NOT id. The route must use stableId.
+    const stableId = 'player-uuid-xyz';
+    mockCurrentUser = { stableId, role: 'coach' };
     getPlayerPermissions.mockResolvedValueOnce(new Set(['some_perm']));
 
     await request(app)
       .get('/api/auth/permissions')
       .set('Authorization', 'Bearer valid-token');
 
-    expect(getPlayerPermissions).toHaveBeenCalledWith(userId, 'player');
+    expect(getPlayerPermissions).toHaveBeenCalledWith(stableId, 'coach');
+  });
+
+  test('returns non-empty permissions when stableId is present (regression: req.user.id was undefined)', async () => {
+    // Before the fix, req.user.id was undefined so getPlayerPermissions always got
+    // undefined as the first argument and returned [].  This test guards that regression.
+    const stableId = 'coach-stable-999';
+    mockCurrentUser = { stableId, role: 'coach' };
+    // id is intentionally absent — mirrors a real JWT payload
+    getPlayerPermissions.mockResolvedValueOnce(new Set(['hand:tag', 'crm:view']));
+
+    const res = await request(app)
+      .get('/api/auth/permissions')
+      .set('Authorization', 'Bearer valid-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.permissions).toContain('hand:tag');
+    // Verify the mock was called with the UUID, not undefined
+    expect(getPlayerPermissions).toHaveBeenCalledWith(stableId, 'coach');
   });
 
   test('returns empty permissions array when user has no permissions', async () => {
-    mockCurrentUser = { id: 'player-uuid-003', role: 'player' };
+    mockCurrentUser = { stableId: 'player-uuid-003', role: 'coached_student' };
     getPlayerPermissions.mockResolvedValueOnce(new Set());
 
     const res = await request(app)
@@ -143,7 +163,7 @@ describe('GET /api/auth/permissions', () => {
   });
 
   test('returns 500 when getPlayerPermissions throws', async () => {
-    mockCurrentUser = { id: 'player-uuid-004', role: 'player' };
+    mockCurrentUser = { stableId: 'player-uuid-004', role: 'coached_student' };
     getPlayerPermissions.mockRejectedValueOnce(new Error('DB failure'));
 
     const res = await request(app)
