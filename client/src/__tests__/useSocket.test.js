@@ -125,18 +125,18 @@ describe('useSocket — leaveRoom', () => {
     sessionStorage.clear()
   })
 
-  it('clears poker_trainer_jwt from sessionStorage', () => {
+  it('does NOT clear poker_trainer_jwt from sessionStorage (session clearing belongs in logout)', () => {
     sessionStorage.setItem('poker_trainer_jwt', 'my-token')
     const { result } = renderHook(() => useSocket())
     act(() => { result.current.leaveRoom() })
-    expect(sessionStorage.getItem('poker_trainer_jwt')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBe('my-token')
   })
 
-  it('clears poker_trainer_player_id from sessionStorage', () => {
+  it('does NOT clear poker_trainer_player_id from sessionStorage (session clearing belongs in logout)', () => {
     sessionStorage.setItem('poker_trainer_player_id', 'uuid-123')
     const { result } = renderHook(() => useSocket())
     act(() => { result.current.leaveRoom() })
-    expect(sessionStorage.getItem('poker_trainer_player_id')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_player_id')).toBe('uuid-123')
   })
 
   it('calls socket.disconnect()', () => {
