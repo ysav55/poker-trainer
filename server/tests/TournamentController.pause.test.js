@@ -284,12 +284,10 @@ describe('TournamentController — start()', () => {
     jest.clearAllTimers();
   });
 
-  test('calls _startHand() so activeHands is populated', async () => {
+  test('routes through _startHand() instead of calling gm.startGame() directly', async () => {
     const mockGm = {
       state: { players: [], pot: 0, phase: 'waiting', dealer_seat: 0, replay_mode: { branched: false } },
-      startGame: jest.fn().mockResolvedValue(undefined),
-      setBlindLevel: jest.fn(),
-      addPlayer: jest.fn(),
+      startGame: jest.fn(),
       setBlindLevels: jest.fn(),
     };
     const ctrl = new TournamentController('t1', mockGm, mockIo);
