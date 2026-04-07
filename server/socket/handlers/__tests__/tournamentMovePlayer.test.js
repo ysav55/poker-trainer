@@ -179,6 +179,9 @@ describe('tournament:move_player', () => {
     const toCalls = io.to.mock.calls.map(c => c[0]);
     expect(toCalls).toContain(FROM_TABLE);
     expect(toCalls).toContain(TO_TABLE);
+    // Verify the emitted event is 'game_state', not some other event
+    expect(io._roomEmit).toHaveBeenCalledWith('game_state', expect.objectContaining({ tableId: FROM_TABLE }));
+    expect(io._roomEmit).toHaveBeenCalledWith('game_state', expect.objectContaining({ tableId: TO_TABLE }));
   });
 
   it('sends an error when fromTableId is missing', async () => {

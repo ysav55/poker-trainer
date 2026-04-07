@@ -182,7 +182,7 @@ module.exports = function registerTournamentHandlers(socket, ctx) {
     if (typeof toGm.addPlayer === 'function') {
       toGm.addPlayer(playerId, name, false, playerId, stack);
     } else if (typeof toGm.seatPlayer === 'function') {
-      toGm.seatPlayer({ id: playerId, name, seat: targetSeat, stack });
+      toGm.seatPlayer(playerId, name, false, playerId, stack);
     }
 
     // Broadcast updated state to both tables
