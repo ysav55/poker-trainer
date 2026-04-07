@@ -332,14 +332,16 @@ async function _computePeriodStats(studentId, start, end) {
       const firstRaiserId = sorted.find(a => a.action === 'raise' || a.action === 'bet')?.player_id;
       if (!firstRaiserId) continue; // No raise in this hand, no 3-bet opportunity
 
+      // If student IS the opener, there is no prior raise to re-raise against
+      if (firstRaiserId === studentId) continue;
+
       // Student saw a raise: 3-bet opportunity exists
       threeBetOpps++;
 
-      // Check if student raised after the first raiser
-      const studentIdx = sorted.findIndex(a => a.player_id === studentId);
-      const firstRaiserIdx = sorted.findIndex(a => a.player_id === firstRaiserId);
-
-      if (studentIdx > firstRaiserIdx && sorted[studentIdx].action === 'raise') {
+      // Check if student raised after the first raiser's raise action
+      const firstRaiserActionIdx = sorted.findIndex(a => (a.action === 'raise' || a.action === 'bet') && a.player_id === firstRaiserId);
+      const actionsAfterRaise = sorted.slice(firstRaiserActionIdx + 1);
+      if (actionsAfterRaise.some(a => a.player_id === studentId && a.action === 'raise')) {
         // Student raised after opponent's initial raise — this is a 3-bet
         threeBetCount++;
       }

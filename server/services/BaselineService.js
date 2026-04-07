@@ -156,14 +156,16 @@ async function recompute(playerId) {
       const firstRaiserId = sorted.find(a => a.action === 'raise' || a.action === 'bet')?.player_id;
       if (!firstRaiserId) continue; // No raise in this hand, no 3-bet opportunity
 
+      // If focal player IS the opener, there is no prior raise to re-raise against
+      if (firstRaiserId === playerId) continue;
+
       // Focal player saw a raise: 3-bet opportunity exists
       threeBetOpps++;
 
-      // Check if focal player raised after the first raiser
-      const focalPlayerIdx = sorted.findIndex(a => a.player_id === playerId);
-      const firstRaiserIdx = sorted.findIndex(a => a.player_id === firstRaiserId);
-
-      if (focalPlayerIdx > firstRaiserIdx && sorted[focalPlayerIdx].action === 'raise') {
+      // Check if focal player raised after the first raiser's raise action
+      const firstRaiserActionIdx = sorted.findIndex(a => (a.action === 'raise' || a.action === 'bet') && a.player_id === firstRaiserId);
+      const actionsAfterRaise = sorted.slice(firstRaiserActionIdx + 1);
+      if (actionsAfterRaise.some(a => a.player_id === playerId && a.action === 'raise')) {
         // Focal player raised after opponent's initial raise — this is a 3-bet
         threeBetCount++;
       }
