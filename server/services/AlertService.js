@@ -40,7 +40,7 @@ const SEVERITY_FLOOR = 0.2;
  */
 async function generateAlerts(coachId) {
   const [students, config] = await Promise.all([
-    _fetchStudents(),
+    _fetchStudents(coachId),
     _fetchConfig(coachId),
   ]);
 
@@ -74,7 +74,7 @@ async function generateAlerts(coachId) {
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
-async function _fetchStudents() {
+async function _fetchStudents(coachId) {
   // Find players with a student role. Replaces the deprecated is_coach=false filter
   // (player_profiles.is_coach was removed in migration 043).
   const { data: roleRows } = await supabase
@@ -89,6 +89,7 @@ async function _fetchStudents() {
     .from('player_profiles')
     .select('id, display_name, last_seen')
     .in('id', studentIds)
+    .eq('coach_id', coachId)  // Scope to only this coach's students
     .eq('is_bot', false); // Exclude bot players — alerts are for human students only
 
   if (error || !data) return [];
