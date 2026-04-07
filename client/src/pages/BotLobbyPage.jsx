@@ -23,6 +23,7 @@ function CreateBotTableModal({ onClose, onCreated }) {
   const [bigBlind,    setBigBlind]    = useState(50);
   const [busy,        setBusy]        = useState(false);
   const [error,       setError]       = useState('');
+  const [tableName,   setTableName]   = useState('');
 
   const handleCreate = async () => {
     setBusy(true);
@@ -31,6 +32,7 @@ function CreateBotTableModal({ onClose, onCreated }) {
       const table = await apiFetch('/api/bot-tables', {
         method: 'POST',
         body: JSON.stringify({
+          name: tableName.trim() || undefined,
           difficulty,
           humanSeats,
           blinds: { small: smallBlind, big: bigBlind },
@@ -57,6 +59,23 @@ function CreateBotTableModal({ onClose, onCreated }) {
         <h2 className="text-sm font-bold tracking-widest uppercase" style={{ color: GOLD }}>
           New Bot Game
         </h2>
+
+        {/* Table name (optional) */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs text-gray-500 tracking-widest uppercase">
+            Table Name <span className="text-gray-600">(optional)</span>
+          </label>
+          <input
+            type="text"
+            data-testid="table-name-input"
+            className="rounded-lg px-3 py-2 text-sm text-gray-100 outline-none"
+            style={{ background: '#0d1117', border: '1px solid #30363d' }}
+            value={tableName}
+            onChange={(e) => setTableName(e.target.value)}
+            placeholder="e.g. Practice Session"
+            maxLength={60}
+          />
+        </div>
 
         {/* Difficulty */}
         <div className="flex flex-col gap-1.5">

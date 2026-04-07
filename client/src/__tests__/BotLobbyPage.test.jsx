@@ -147,7 +147,7 @@ describe('BotLobbyPage creation modal', () => {
     await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
     fireEvent.click(screen.getByTestId('new-game-button'));
     fireEvent.click(screen.getByTestId('modal-submit'));
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/game/bt-new'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/table/bt-new'));
   });
 
   it('shows error when POST fails', async () => {
@@ -170,5 +170,31 @@ describe('BotLobbyPage creation modal', () => {
     fireEvent.click(screen.getByTestId('difficulty-hard'));
     // Modal stays open after selecting difficulty
     expect(screen.getByTestId('create-bot-modal')).toBeTruthy();
+  });
+
+  it('shows a table name input in the modal', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    expect(screen.getByTestId('table-name-input')).toBeTruthy();
+  });
+
+  it('Start Game sends name in POST body when entered', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ tables: BOT_TABLES })
+      .mockResolvedValueOnce({ id: 'bt-new' });
+
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    fireEvent.change(screen.getByTestId('table-name-input'), { target: { value: 'My Table' } });
+    fireEvent.click(screen.getByTestId('modal-submit'));
+
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledWith(
+      '/api/bot-tables',
+      expect.objectContaining({
+        body: expect.stringContaining('"name":"My Table"'),
+      })
+    ));
   });
 });
