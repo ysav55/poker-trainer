@@ -131,9 +131,8 @@ A browser-based poker coaching platform used by coaches and students during live
 - Creator is redirected to the table and automatically seated.
 
 ### 3.2 Auto-start / auto-pause rules
-- Table auto-deals when ≥ 3 players are active and seated.
-- If active players drop to 2: table pauses after current hand ends. No new hands dealt.
-- If active players drop to 1: table enters waiting state.
+- Table auto-deals when ≥ 2 players are active and seated (heads-up is valid).
+- If active players drop to 1: table pauses after current hand ends. Waiting for another player.
 - If active players drop to 0 (all leave): table closes automatically and is removed from lobby.
 
 ### 3.3 Coach joins as player
@@ -163,14 +162,16 @@ A browser-based poker coaching platform used by coaches and students during live
 - Shows available bot tables with difficulty and current status.
 
 ### 4.2 Creating a bot table
-- Student clicks "New Game" → modal with: table name, difficulty (easy/medium/hard).
+- Student clicks "New Game" → modal with: table name, difficulty (easy/medium/hard), num of bots.
 - Table is created → student is immediately redirected to the table and seated.
-- Bots fill remaining seats automatically.
+- Bots fill assigned seats automatically.
 
 ### 4.3 Gameplay
 - Table auto-deals continuously. No minimum human player count.
 - Bots act automatically within a time limit.
 - Student plays normally.
+- Player can click "Add Bot" in-table to add a bot to an empty seat at any time.
+- No auto-fill to max seats — player controls how many bots are at the table.
 
 ### 4.4 Recording
 - All hands recorded and auto-tagged identically to other modes.
@@ -223,9 +224,9 @@ A browser-based poker coaching platform used by coaches and students during live
 - Coach can dismiss/resolve alerts.
 
 ### 6.4 Pre-session brief
-- Coach clicks "Prep Brief" before a session with a student.
-- System generates: recent performance summary, key leaks, suggested focus areas.
-- Cached for 1 hour.
+- Coach can generate a brief for a single student, multiple students, or an entire group.
+- System generates: recent performance summary, key leaks, suggested focus areas per selected student(s).
+- Cached for 1 hour per student.
 
 ### 6.5 Progress reports
 - Coach generates a report for a student: weekly / monthly / custom range.
@@ -233,24 +234,36 @@ A browser-based poker coaching platform used by coaches and students during live
 
 ### 6.6 Create student from CRM
 - Coach clicks "Add Student" from CRM.
-- Form: name, password. Coach is auto-assigned. Optional group assignment.
+- Form: name, email (optional), password. Coach is auto-assigned. Optional group assignment.
 
 ---
 
 ## Flow 7 — Groups & Stable
 
 ### 7.1 Groups
-- Coach creates named, color-coded groups.
+- Coach creates named, color-coded groups (e.g. "Beginners", "MTT Players", "High Stakes").
 - Students can belong to multiple groups simultaneously.
-- Groups are visible in CRM filtering and student profiles.
+- Groups are used for CRM filtering, session management, and pre-session briefs.
 
-### 7.2 Stable (special group)
-- "Stable" is a group with a financial ledger attached.
-- Each staked student has a chip bank: buy-in history, cash-out history, current balance.
-- Coach adjusts balances manually after sessions.
-- Only coach and admin can see financial data. Students cannot see other students' financials.
+### 7.2 Stable (staking management)
+- Dedicated CRM sub-page for managing real-money staking deals between coach and their horses.
+- This is NOT the in-app chip bank — it tracks real-money financial relationships.
+- Features per staked student (horse):
+  - **Contract**: stake percentage, makeup policy (carries / resets monthly / resets on settle), game formats, platforms
+  - **Sessions**: log of real-money sessions with results (add/edit/delete/dispute per session)
+  - **Makeup tracking**: current makeup balance, profit above makeup, running P&L
+  - **Settlements**: propose/approve/reject settlement events
+  - **Adjustments**: forgive makeup, adjust makeup, corrections, bonuses, penalties
+  - **Monthly breakdown**: bar chart of net results per month
+- Only the coach and admin can see staking data. The staked student can see their own contract and results via their player staking page.
+- Students cannot see other students' staking data.
 
-### 7.3 Group stats
+### 7.3 In-App Chip Bank (separate from stable)
+- Tracks in-app game chips only — not real money.
+- Coach adjusts a student's chip balance (buy-in/cash-out) after in-app sessions.
+- Used to maintain chip continuity across sessions on the platform.
+
+### 7.4 Group stats
 - Coach can view aggregate stats per group: avg VPIP, avg win rate, total hands, etc.
 
 ---
@@ -268,7 +281,8 @@ A browser-based poker coaching platform used by coaches and students during live
 ### 8.3 Gameplay
 - Hands auto-deal. Blind levels advance on schedule.
 - Eliminations tracked automatically. Bust player's chips go to winner.
-- Tables auto-balance as players bust (fill seats from other tables).
+- Auto-balance is on by default: tables rebalance automatically as players bust.
+- Auto-balance can be toggled off — in which case the tournament controller moves players manually.
 
 ### 8.4 Coach controls
 - Can pause tournament, manually adjust blind level, manually bust/reinstate a player.
@@ -283,7 +297,7 @@ A browser-based poker coaching platform used by coaches and students during live
 ## Flow 9 — Organized Tournament (Large Format)
 
 ### 9.1 Admin creates tournament
-- Admin creates: name, structure, date, max players, assigns referees.
+- Admin creates: name, structure, date, max players, rebuys & add-ons and assigns referees.
 - Registration opens — students register via lobby.
 
 ### 9.2 Referee management
@@ -355,11 +369,12 @@ A browser-based poker coaching platform used by coaches and students during live
 ### 12.3 Using playlists in session
 - Coach loads playlist from sidebar during a coached session.
 - Playlist advances automatically after each hand, or coach skips manually.
-- Coach can exit playlist at any time — reverts to free-form.
+- Coach can exit and resume playlist at any time — reverts to free-form.
 
-### 12.4 Sharing
-- Coach can share a playlist with another coach (read-only copy).
-- Shared playlists appear in the recipient's playlist library marked as "shared".
+### 12.4 Sharing via export/import
+- Coach can export a playlist to a file (JSON).
+- Coach can import a playlist from a file — creates a local copy in their library.
+- No platform-level sharing between coaches. Export/import is the exchange mechanism.
 
 ### 12.5 Student access
 - Students cannot create or edit scenarios or playlists.
@@ -375,3 +390,25 @@ A browser-based poker coaching platform used by coaches and students during live
 - **Recording:** Every hand played on any table type (coached, uncoached, bot, tournament) is saved to DB and auto-tagged.
 - **Stability:** A failing auto-tagger must not break hand save. Use `Promise.allSettled` in the analyzer pipeline.
 - **Old tables:** Tables must not persist after all players leave or after coach closes them. Idle timer closes orphaned tables after 20 minutes of inactivity.
+
+---
+
+## Architectural Decision — Tournament System Unification
+
+**Current state:** Two separate systems exist:
+- **System A** (table-based): `TournamentController` + socket events + `/table/:tableId` route. Powers the live game engine.
+- **System B** (standalone): `tournaments` + `tournament_players` REST tables. Powers registration, standings, and the tournament lobby. Migration 040 added a bridge FK.
+
+**Decision:** Merge into one unified system. System B becomes the single source of truth for all tournament metadata (registration, standings, blind schedule, player list). System A's `TournamentController` remains the live game engine but always operates under a System B tournament record.
+
+**Target flow:**
+1. Tournament created → always creates a `tournaments` record (System B)
+2. Players register → `tournament_players` records (System B)
+3. Coach/admin starts tournament → `TournamentController` spins up, linked via `tables.tournament_id` FK (already exists from migration 040)
+4. Hands play → socket-driven via System A as today
+5. Bust-outs, standings, blind levels → written to System B records in real time
+6. TournamentLobby → single fetch path, always reads from System B
+
+**Why:** The dual-path fetch in `TournamentLobby`, the duplicated state, and the "which system am I in?" confusion are the root cause of most tournament bugs. Unification removes the ambiguity.
+
+**Scope note:** This is a significant migration. Requires new migration(s), changes to `TournamentController`, `TournamentLobby`, and the tournament routes. Plan separately before executing.

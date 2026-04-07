@@ -112,7 +112,7 @@
 
 | Story | Status | Gap Description |
 |-------|--------|-----------------|
-| 9.1–9.4 All | PARTIAL | Infrastructure exists (System B). Live end-to-end behavior — unverified. Lower priority. |
+| 9.1–9.4 All | PARTIAL | Infrastructure exists (System B). Live end-to-end behavior — unverified. **HIGH PRIORITY.** Blocked on tournament system unification (see Architectural Decision in spec). |
 
 ---
 
@@ -155,18 +155,20 @@ Based on what's broken and what's blocking everything else:
 
 ### P0 — Unblocks all table testing
 1. **Table redirect on creation** (Flows 2.1, 3.1) — lobby table creation must navigate to `/table/:tableId` reliably
-2. **Bot table creation modal** (Flow 4.2) — name field missing, redirect missing
+2. **Bot table creation modal** (Flow 4.2) — name field missing, redirect missing; add "Add Bot" in-table button
 3. **Old tables persist** (Flow 2.9) — orphaned tables clog lobby
 
-### P1 — Core session quality
-4. **Create student 500 error** (Flow 1.3) — `UserForm` default role bug + missing coach assignment field
-5. **Leaderboard filters non-functional** (Flow 10.1) — data doesn't re-fetch on period/game-type change
-6. **Unified student profile** (Flow 6.2) — currently 6 separate pages
+### P1 — Core data quality
+4. **Create student 500 error** (Flow 1.3) — `UserForm` default role bug + missing coach assignment field + add email field
+5. **Tournament system unification** (Flows 8 & 9) — merge System A and System B into one coherent flow; required for Flow 9 (now high priority)
+6. **Leaderboard filters non-functional** (Flow 10.1) — data doesn't re-fetch on period/game-type change
 
 ### P2 — Verification pass (test in running app once P0 fixed)
 - All UNVERIFIED items above — go through each flow in the live app and update status
 
 ### P3 — Missing features
-- Playlist sharing between coaches (12.4)
-- Self-service account deletion (1.7)
+- Unified student profile page (Flow 6.2) — currently 6 separate pages
+- Playlist export/import (Flow 12.4)
+- Self-service account deletion (Flow 1.7)
 - Student notification when coach annotates a hand
+- Multi-student pre-session brief (Flow 6.4)
