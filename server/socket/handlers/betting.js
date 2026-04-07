@@ -94,7 +94,7 @@ module.exports = function registerBetting(socket, ctx) {
     if (freshState.phase === 'showdown') {
       const { getController } = require('../../state/SharedState');
       const ctrl = getController(tableId);
-      if (ctrl?.getMode?.() === 'uncoached_cash') {
+      if (['uncoached_cash', 'tournament'].includes(ctrl?.getMode?.())) {
         ctrl._completeHand().catch(() => {});
       }
     }
