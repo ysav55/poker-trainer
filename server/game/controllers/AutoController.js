@@ -72,7 +72,7 @@ class AutoController extends TableController {
       bigBlind:   this.gm.state.big_blind,
       isScenario: false,
       sessionType: 'live',
-      tableMode:  'uncoached_cash',
+      tableMode:  this.getMode(),
     }).catch(() => {});
 
     ss.activeHands.set(this.tableId, { handId, sessionId });
