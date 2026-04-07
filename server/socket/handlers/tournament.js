@@ -180,7 +180,7 @@ module.exports = function registerTournamentHandlers(socket, ctx) {
 
     // Seat at target table
     if (typeof toGm.addPlayer === 'function') {
-      toGm.addPlayer({ id: playerId, name, seat: targetSeat, stack });
+      toGm.addPlayer(playerId, name, false, playerId, stack);
     } else if (typeof toGm.seatPlayer === 'function') {
       toGm.seatPlayer({ id: playerId, name, seat: targetSeat, stack });
     }
