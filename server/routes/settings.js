@@ -15,7 +15,6 @@
  */
 
 const express          = require('express');
-const requireAuth      = require('../auth/requireAuth.js');
 const SettingsService  = require('../services/SettingsService.js');
 const supabase         = require('../db/supabase.js');
 
@@ -46,7 +45,7 @@ async function _writeScopeFor(req) {
 
 // ── GET /api/settings/table-defaults ─────────────────────────────────────────
 // Returns resolved defaults + source_scope per key.
-router.get('/table-defaults', requireAuth, async (req, res) => {
+router.get('/table-defaults', async (req, res) => {
   try {
     const schoolId = ADMIN_ROLES.has(req.user.role)
       ? null
@@ -61,7 +60,7 @@ router.get('/table-defaults', requireAuth, async (req, res) => {
 
 // ── PUT /api/settings/table-defaults ─────────────────────────────────────────
 // Body: { settings: { 'table.key': value, … } }
-router.put('/table-defaults', requireAuth, async (req, res) => {
+router.put('/table-defaults', async (req, res) => {
   const { settings: patch } = req.body || {};
   if (!patch || typeof patch !== 'object' || Array.isArray(patch))
     return res.status(400).json({ error: 'invalid_body', message: 'settings object required.' });
@@ -77,7 +76,7 @@ router.put('/table-defaults', requireAuth, async (req, res) => {
 
 // ── DELETE /api/settings/table-defaults ───────────────────────────────────────
 // Remove all overrides at caller's scope → reverts to inherited values.
-router.delete('/table-defaults', requireAuth, async (req, res) => {
+router.delete('/table-defaults', async (req, res) => {
   try {
     const { scope, scopeId } = await _writeScopeFor(req);
     await SettingsService.resetTableDefaults(scope, scopeId);
@@ -89,7 +88,7 @@ router.delete('/table-defaults', requireAuth, async (req, res) => {
 
 // ── GET /api/settings/presets ─────────────────────────────────────────────────
 // List quick-pick presets for the authenticated user.
-router.get('/presets', requireAuth, async (req, res) => {
+router.get('/presets', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('table_presets')
@@ -105,7 +104,7 @@ router.get('/presets', requireAuth, async (req, res) => {
 
 // ── POST /api/settings/presets ────────────────────────────────────────────────
 // Body: { name, config }
-router.post('/presets', requireAuth, async (req, res) => {
+router.post('/presets', async (req, res) => {
   const { name, config } = req.body || {};
   if (!name || typeof name !== 'string' || name.trim().length === 0)
     return res.status(400).json({ error: 'invalid_name', message: 'name is required.' });
@@ -127,7 +126,7 @@ router.post('/presets', requireAuth, async (req, res) => {
 
 // ── PATCH /api/settings/presets/:id ──────────────────────────────────────────
 // Body: { name?, config? }
-router.patch('/presets/:id', requireAuth, async (req, res) => {
+router.patch('/presets/:id', async (req, res) => {
   const { id } = req.params;
   const { name, config } = req.body || {};
 
@@ -155,7 +154,7 @@ router.patch('/presets/:id', requireAuth, async (req, res) => {
 });
 
 // ── DELETE /api/settings/presets/:id ─────────────────────────────────────────
-router.delete('/presets/:id', requireAuth, async (req, res) => {
+router.delete('/presets/:id', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('table_presets')
@@ -188,7 +187,7 @@ async function _callerSchool(stableId) {
 
 // ── GET /api/settings/school ──────────────────────────────────────────────────
 // Returns: { identity, staking_defaults, platforms, leaderboard }
-router.get('/school', requireAuth, async (req, res) => {
+router.get('/school', async (req, res) => {
   if (!SCHOOL_ROLES.has(req.user.role))
     return res.status(403).json({ error: 'forbidden' });
 
@@ -226,7 +225,7 @@ router.get('/school', requireAuth, async (req, res) => {
 
 // ── PUT /api/settings/school/identity ────────────────────────────────────────
 // Body: { name?, description? }
-router.put('/school/identity', requireAuth, async (req, res) => {
+router.put('/school/identity', async (req, res) => {
   if (!SCHOOL_ROLES.has(req.user.role))
     return res.status(403).json({ error: 'forbidden' });
 
@@ -254,7 +253,7 @@ router.put('/school/identity', requireAuth, async (req, res) => {
 
 // ── PUT /api/settings/school/staking-defaults ─────────────────────────────────
 // Body: { coach_split_pct?, makeup_policy?, bankroll_cap?, contract_duration_months? }
-router.put('/school/staking-defaults', requireAuth, async (req, res) => {
+router.put('/school/staking-defaults', async (req, res) => {
   if (!SCHOOL_ROLES.has(req.user.role))
     return res.status(403).json({ error: 'forbidden' });
 
@@ -279,7 +278,7 @@ router.put('/school/staking-defaults', requireAuth, async (req, res) => {
 });
 
 // ── GET /api/settings/school/platforms ───────────────────────────────────────
-router.get('/school/platforms', requireAuth, async (req, res) => {
+router.get('/school/platforms', async (req, res) => {
   if (!SCHOOL_ROLES.has(req.user.role))
     return res.status(403).json({ error: 'forbidden' });
 
@@ -296,7 +295,7 @@ router.get('/school/platforms', requireAuth, async (req, res) => {
 
 // ── PUT /api/settings/school/platforms ───────────────────────────────────────
 // Body: { platforms: string[] }
-router.put('/school/platforms', requireAuth, async (req, res) => {
+router.put('/school/platforms', async (req, res) => {
   if (!SCHOOL_ROLES.has(req.user.role))
     return res.status(403).json({ error: 'forbidden' });
 
@@ -318,7 +317,7 @@ router.put('/school/platforms', requireAuth, async (req, res) => {
 
 // ── PUT /api/settings/school/leaderboard ─────────────────────────────────────
 // Body: { primary_metric?, secondary_metric?, update_frequency? }
-router.put('/school/leaderboard', requireAuth, async (req, res) => {
+router.put('/school/leaderboard', async (req, res) => {
   if (!SCHOOL_ROLES.has(req.user.role))
     return res.status(403).json({ error: 'forbidden' });
 

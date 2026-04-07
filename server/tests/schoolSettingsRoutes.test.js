@@ -66,8 +66,9 @@ const request = require('supertest');
 function buildApp() {
   const app = express();
   app.use(express.json());
+  const requireAuth = require('../auth/requireAuth.js');
   const router = require('../routes/settings.js');
-  app.use('/api/settings', router);
+  app.use('/api/settings', requireAuth, router);
   return app;
 }
 
