@@ -87,6 +87,11 @@ module.exports = function registerDisconnect(socket, ctx) {
       if (!socketsInRoom || socketsInRoom.size === 0) {
         tables.delete(tableId);
         console.log(`[prune] table ${tableId} removed — no sockets remain`);
+        // Close in DB so lobby stops showing this table
+        const { TableRepository } = require('../../db/repositories/TableRepository.js');
+        TableRepository.closeTable(tableId).catch((err) =>
+          console.error(`[prune] failed to close table ${tableId} in DB:`, err.message)
+        );
       }
     }, 60_000);
 
