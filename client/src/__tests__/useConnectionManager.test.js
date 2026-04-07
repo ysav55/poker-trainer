@@ -109,6 +109,38 @@ describe('useConnectionManager', () => {
     }))
   })
 
+  it('joinRoom emits join_room with isCoach=true for admin role', () => {
+    const { result } = renderHook(() => useConnectionManager())
+    act(() => { result.current.joinRoom('Admin', 'admin') })
+    expect(mockSocket.emit).toHaveBeenCalledWith('join_room', expect.objectContaining({
+      name: 'Admin',
+      isCoach: true,
+      isSpectator: false,
+    }))
+  })
+
+  it('joinRoom emits join_room with isCoach=true for superadmin role', () => {
+    const { result } = renderHook(() => useConnectionManager())
+    act(() => { result.current.joinRoom('SuperAdmin', 'superadmin') })
+    expect(mockSocket.emit).toHaveBeenCalledWith('join_room', expect.objectContaining({
+      name: 'SuperAdmin',
+      isCoach: true,
+      isSpectator: false,
+    }))
+  })
+
+  it('auto-rejoin sends isCoach=true when stored role is admin', () => {
+    const { result } = renderHook(() => useConnectionManager())
+    // Join first as admin
+    act(() => { result.current.joinRoom('Admin', 'admin') })
+    mockSocket.emit.mockClear()
+    // Simulate reconnect
+    act(() => { mockSocket._trigger('connect') })
+    const call = mockSocket.emit.mock.calls.find(c => c[0] === 'join_room')
+    expect(call).toBeDefined()
+    expect(call[1].isCoach).toBe(true)
+  })
+
   it('joinRoom generates a stableId prefixed with "spectator_" for spectator role', () => {
     const { result } = renderHook(() => useConnectionManager())
     act(() => { result.current.joinRoom('Watcher', 'spectator') })

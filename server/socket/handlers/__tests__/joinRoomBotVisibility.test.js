@@ -54,9 +54,10 @@ jest.mock('../../../game/SessionManager', () =>
   }))
 );
 
-// SharedState — getOrCreateController stub
+// SharedState — getOrCreateController + getController stubs
 jest.mock('../../../state/SharedState', () => ({
   getOrCreateController: jest.fn(),
+  getController:         jest.fn().mockReturnValue(null),
 }));
 
 // ChipBankRepository — stub (chip buy-in path)
@@ -84,13 +85,13 @@ const registerJoinRoom = require('../joinRoom');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeSocket({ stableId = 'user-uuid-1', isCoach = false, authenticated = true } = {}) {
+function makeSocket({ stableId = 'user-uuid-1', isCoach = false, authenticated = true, role = null } = {}) {
   const errors = [];
   const emitted = [];
   const handlers = {};
   const socket = {
     id: 'socket-id-1',
-    data: { isCoach, stableId, authenticated, role: isCoach ? 'coach' : 'player' },
+    data: { isCoach, stableId, authenticated, role: role ?? (isCoach ? 'coach' : 'player') },
     emit: (event, payload) => emitted.push({ event, payload }),
     on:   (event, handler) => { handlers[event] = handler; },
     join: jest.fn(),
@@ -263,4 +264,61 @@ test('coached_cash table join is not affected by bot visibility check', async ()
   // Should never hit a bot visibility error
   const err = socket._emitted.find(e => e.event === 'error');
   expect(err).toBeUndefined();
+});
+
+// ─── Admin/superadmin coach privileges in non-coached modes (C-9) ─────────────
+
+test('admin retains isCoach=true when joining an uncoached_cash table', async () => {
+  mockTableRepo.getTable.mockResolvedValue({
+    id: 'open-table', mode: 'uncoached_cash', privacy: 'open', created_by: 'someone',
+  });
+  // socket.data.isCoach is set by socketAuthMiddleware from the JWT; role='admin'
+  const socket = makeSocket({ stableId: 'admin-uuid', isCoach: true, role: 'admin' });
+  const ctx = makeCtx();
+  await doJoin(socket, ctx, { tableId: 'open-table' });
+  const err = socket._emitted.find(e => e.event === 'error');
+  expect(err).toBeUndefined();
+  const joined = socket._emitted.find(e => e.event === 'room_joined');
+  expect(joined).toBeDefined();
+  expect(joined.payload.isCoach).toBe(true);
+});
+
+test('superadmin retains isCoach=true when joining an uncoached_cash table', async () => {
+  mockTableRepo.getTable.mockResolvedValue({
+    id: 'open-table', mode: 'uncoached_cash', privacy: 'open', created_by: 'someone',
+  });
+  const socket = makeSocket({ stableId: 'sadmin-uuid', isCoach: true, role: 'superadmin' });
+  const ctx = makeCtx();
+  await doJoin(socket, ctx, { tableId: 'open-table' });
+  const err = socket._emitted.find(e => e.event === 'error');
+  expect(err).toBeUndefined();
+  const joined = socket._emitted.find(e => e.event === 'room_joined');
+  expect(joined).toBeDefined();
+  expect(joined.payload.isCoach).toBe(true);
+});
+
+test('regular coach loses isCoach in uncoached_cash mode (existing behaviour preserved)', async () => {
+  mockTableRepo.getTable.mockResolvedValue({
+    id: 'open-table', mode: 'uncoached_cash', privacy: 'open', created_by: 'someone',
+  });
+  const socket = makeSocket({ stableId: 'coach-uuid', isCoach: true, role: 'coach' });
+  const ctx = makeCtx();
+  await doJoin(socket, ctx, { tableId: 'open-table' });
+  const joined = socket._emitted.find(e => e.event === 'room_joined');
+  expect(joined).toBeDefined();
+  expect(joined.payload.isCoach).toBe(false);
+});
+
+test('admin retains isCoach=true when joining a tournament mode table', async () => {
+  mockTableRepo.getTable.mockResolvedValue({
+    id: 'tourney-table', mode: 'tournament', privacy: 'open', created_by: 'someone',
+  });
+  const socket = makeSocket({ stableId: 'admin-uuid-2', isCoach: true, role: 'admin' });
+  const ctx = makeCtx();
+  await doJoin(socket, ctx, { tableId: 'tourney-table' });
+  const err = socket._emitted.find(e => e.event === 'error');
+  expect(err).toBeUndefined();
+  const joined = socket._emitted.find(e => e.event === 'room_joined');
+  expect(joined).toBeDefined();
+  expect(joined.payload.isCoach).toBe(true);
 });

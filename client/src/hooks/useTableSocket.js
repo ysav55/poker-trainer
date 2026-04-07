@@ -23,9 +23,10 @@ export function useTableSocket(tableId, { managerMode = false } = {}) {
 
     socket.on('connect', () => {
       setConnected(true);
+      const COACH_ROLES = ['coach', 'admin', 'superadmin'];
       socket.emit('join_room', {
         name: user.name,
-        isCoach: user.role === 'coach' && !spectateMode,
+        isCoach: COACH_ROLES.includes(user.role) && !spectateMode,
         isSpectator: spectateMode,
         tableId,
         managerMode,
