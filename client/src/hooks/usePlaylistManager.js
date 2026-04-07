@@ -1,19 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
 
 export function usePlaylistManager(socket) {
-  const { socketRef } = socket ?? {}
+  const { socketRef, socket: socketState } = socket ?? {}
   const [playlists, setPlaylists] = useState([])
 
   useEffect(() => {
-    const socket = socketRef.current
-    if (!socket) return
+    // Use the reactive socket state value so this effect re-runs when
+    // the socket instance changes (C-8 fix — stale ref capture).
+    const s = socketState
+    if (!s) return
 
-    socket.on('playlist_state', (payload) => setPlaylists(payload?.playlists ?? []))
+    s.on('playlist_state', (payload) => setPlaylists(payload?.playlists ?? []))
 
     return () => {
-      socket.off('playlist_state')
+      s.off('playlist_state')
     }
-  }, [socketRef])
+  }, [socketState])
 
   const reset = useCallback(() => setPlaylists([]), [])
 

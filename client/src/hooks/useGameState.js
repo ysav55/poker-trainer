@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
 export function useGameState(socket) {
-  const { socketRef, addError, addNotification } = socket ?? {}
+  const { socketRef, socket: socketState, addError, addNotification } = socket ?? {}
   const [gameState, setGameState] = useState(null)
   const [myId, setMyId] = useState(null)
   const [isCoach, setIsCoach] = useState(false)
@@ -19,7 +19,9 @@ export function useGameState(socket) {
   const [sharedRange, setSharedRange]     = useState(null)   // { handGroups, label, sharedBy } | null
 
   useEffect(() => {
-    const socket = socketRef.current
+    // Use the reactive socket state value (not socketRef.current) so this effect
+    // re-runs whenever the socket instance changes (C-8 fix).
+    const socket = socketState
     if (!socket) return
 
     socket.on('room_joined', ({ playerId, isCoach: coach, isSpectator: spectator }) => {
@@ -97,7 +99,7 @@ export function useGameState(socket) {
       socket.off('equity_settings')
       socket.off('range_shared')
     }
-  }, [socketRef, addError, addNotification])
+  }, [socketState, addError, addNotification])
 
   const reset = useCallback(() => {
     setMyId(null)

@@ -22,8 +22,9 @@ function renderGameState(socket, overrides = {}) {
   const addError = vi.fn()
   const addNotification = vi.fn()
   const socketRef = { current: socket }
+  // Pass both socketRef (imperative) and socket state value (reactive, C-8 fix)
   const { result, unmount } = renderHook(() =>
-    useGameState({ socketRef, addError, addNotification, ...overrides })
+    useGameState({ socketRef, socket, addError, addNotification, ...overrides })
   )
   return { result, addError, addNotification, unmount }
 }
@@ -453,5 +454,101 @@ describe('useGameState — emit helpers', () => {
     const { result } = setup()
     act(() => { result.current.setBlindLevels(5, 10) })
     expect(socket.emit).toHaveBeenCalledWith('set_blind_levels', { sb: 5, bb: 10 })
+  })
+})
+
+// ── C-8: Stale ref fix — listeners register when socket arrives after mount ──
+
+describe('useGameState — C-8 reactive socket state', () => {
+  it('does NOT register listeners when socket state is null at mount', () => {
+    const addError = vi.fn()
+    const addNotification = vi.fn()
+    const socketRef = { current: null }
+    // socket state is null — simulates the window before useConnectionManager's effect runs
+    renderHook(() => useGameState({ socketRef, socket: null, addError, addNotification }))
+    // No socket.on calls should happen — there's no socket object to call .on on
+    // (we verify by confirming no throw and no phantom registrations)
+    expect(addError).not.toHaveBeenCalled()
+  })
+
+  it('registers listeners when socket state changes from null to a socket instance', () => {
+    const addError = vi.fn()
+    const addNotification = vi.fn()
+    const mockSocket = createMockSocket()
+    const socketRef = { current: null }
+
+    // Start with null socket (simulates mount before socket is created)
+    const { rerender } = renderHook(
+      ({ socketInstance }) =>
+        useGameState({ socketRef, socket: socketInstance, addError, addNotification }),
+      { initialProps: { socketInstance: null } }
+    )
+
+    // No listeners registered yet
+    expect(mockSocket.on).not.toHaveBeenCalled()
+
+    // Socket arrives — simulates useConnectionManager calling setSocket(socketInstance)
+    act(() => {
+      socketRef.current = mockSocket
+    })
+    rerender({ socketInstance: mockSocket })
+
+    // Now listeners should be registered
+    expect(mockSocket.on).toHaveBeenCalledWith('room_joined', expect.any(Function))
+    expect(mockSocket.on).toHaveBeenCalledWith('game_state', expect.any(Function))
+    expect(mockSocket.on).toHaveBeenCalledWith('error', expect.any(Function))
+  })
+
+  it('re-registers listeners on a new socket instance (socket recreation cycle)', () => {
+    const addError = vi.fn()
+    const addNotification = vi.fn()
+    const socket1 = createMockSocket()
+    const socket2 = createMockSocket()
+    const socketRef = { current: socket1 }
+
+    const { rerender } = renderHook(
+      ({ socketInstance }) =>
+        useGameState({ socketRef, socket: socketInstance, addError, addNotification }),
+      { initialProps: { socketInstance: socket1 } }
+    )
+
+    expect(socket1.on).toHaveBeenCalledWith('room_joined', expect.any(Function))
+
+    // Socket recreated — previous socket cleaned up, new one registered
+    act(() => {
+      socketRef.current = socket2
+    })
+    rerender({ socketInstance: socket2 })
+
+    // Old socket should have been cleaned up
+    expect(socket1.off).toHaveBeenCalledWith('room_joined')
+    // New socket should have listeners registered
+    expect(socket2.on).toHaveBeenCalledWith('room_joined', expect.any(Function))
+    expect(socket2.on).toHaveBeenCalledWith('game_state', expect.any(Function))
+  })
+
+  it('events fire correctly after socket-state-driven registration', () => {
+    const addError = vi.fn()
+    const addNotification = vi.fn()
+    const mockSocket = createMockSocket()
+    const socketRef = { current: null }
+
+    const { result, rerender } = renderHook(
+      ({ socketInstance }) =>
+        useGameState({ socketRef, socket: socketInstance, addError, addNotification }),
+      { initialProps: { socketInstance: null } }
+    )
+
+    // Socket arrives
+    act(() => {
+      socketRef.current = mockSocket
+    })
+    rerender({ socketInstance: mockSocket })
+
+    // Event should fire and update state
+    act(() => {
+      mockSocket._trigger('room_joined', { playerId: 'p1', isCoach: false, isSpectator: false })
+    })
+    expect(result.current.myId).toBe('p1')
   })
 })

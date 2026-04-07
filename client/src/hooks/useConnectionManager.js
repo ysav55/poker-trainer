@@ -12,6 +12,9 @@ export function useConnectionManager() {
   // Stores last join params so the socket can auto-rejoin after a disconnect/reconnect
   const joinParamsRef = useRef(null)
   const [connected, setConnected] = useState(false)
+  // Reactive socket state — downstream hooks declare this as a dep so their
+  // effects re-run when the socket instance changes (fixes C-8 stale ref capture).
+  const [socket, setSocket] = useState(null)
 
   // Keep a ref to the latest token so the socket auth callback always sends fresh
   // credentials without needing to recreate the socket when the user changes.
@@ -26,6 +29,7 @@ export function useConnectionManager() {
       auth: (cb) => cb({ token: tokenRef.current }),
     })
     socketRef.current = socket
+    setSocket(socket)
 
     // ── Global error capture for alpha testing ─────────────────────────────
     // Ship uncaught JS errors + unhandled promise rejections back to the server
@@ -80,6 +84,7 @@ export function useConnectionManager() {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection)
       socket.disconnect()
       socketRef.current = null
+      setSocket(null)
     }
   }, [])
 
@@ -99,5 +104,5 @@ export function useConnectionManager() {
     joinParamsRef.current = null
   }, [])
 
-  return { socketRef, connected, joinRoom, clearJoinParams }
+  return { socketRef, socket, connected, joinRoom, clearJoinParams }
 }

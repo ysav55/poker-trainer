@@ -20,8 +20,9 @@ function createMockSocket() {
 
 function renderPlaylistManager(socket) {
   const socketRef = { current: socket }
+  // Pass both socketRef (imperative) and socket state value (reactive, C-8 fix)
   const { result, unmount } = renderHook(() =>
-    usePlaylistManager({ socketRef })
+    usePlaylistManager({ socketRef, socket })
   )
   return { result, unmount }
 }
@@ -177,7 +178,7 @@ describe('usePlaylistManager — emit helpers', () => {
 
   it('emit helpers are no-ops when socketRef.current is null', () => {
     const nullSocketRef = { current: null }
-    const { result } = renderHook(() => usePlaylistManager({ socketRef: nullSocketRef }))
+    const { result } = renderHook(() => usePlaylistManager({ socketRef: nullSocketRef, socket: null }))
     // None of these should throw
     expect(() => {
       act(() => {
@@ -190,5 +191,78 @@ describe('usePlaylistManager — emit helpers', () => {
         result.current.deactivatePlaylist()
       })
     }).not.toThrow()
+  })
+})
+
+// ── C-8: Stale ref fix — listeners register when socket arrives after mount ──
+
+describe('usePlaylistManager — C-8 reactive socket state', () => {
+  it('does NOT register listeners when socket state is null at mount', () => {
+    const mockSocket = createMockSocket()
+    const socketRef = { current: null }
+    renderHook(() => usePlaylistManager({ socketRef, socket: null }))
+    expect(mockSocket.on).not.toHaveBeenCalled()
+  })
+
+  it('registers listeners when socket state changes from null to a socket instance', () => {
+    const mockSocket = createMockSocket()
+    const socketRef = { current: null }
+
+    const { rerender } = renderHook(
+      ({ socketInstance }) => usePlaylistManager({ socketRef, socket: socketInstance }),
+      { initialProps: { socketInstance: null } }
+    )
+
+    expect(mockSocket.on).not.toHaveBeenCalled()
+
+    // Socket arrives after mount
+    act(() => {
+      socketRef.current = mockSocket
+    })
+    rerender({ socketInstance: mockSocket })
+
+    expect(mockSocket.on).toHaveBeenCalledWith('playlist_state', expect.any(Function))
+  })
+
+  it('re-registers listeners on socket recreation and cleans up old socket', () => {
+    const socket1 = createMockSocket()
+    const socket2 = createMockSocket()
+    const socketRef = { current: socket1 }
+
+    const { rerender } = renderHook(
+      ({ socketInstance }) => usePlaylistManager({ socketRef, socket: socketInstance }),
+      { initialProps: { socketInstance: socket1 } }
+    )
+
+    expect(socket1.on).toHaveBeenCalledWith('playlist_state', expect.any(Function))
+
+    act(() => { socketRef.current = socket2 })
+    rerender({ socketInstance: socket2 })
+
+    // Old socket cleaned up
+    expect(socket1.off).toHaveBeenCalledWith('playlist_state')
+    // New socket registered
+    expect(socket2.on).toHaveBeenCalledWith('playlist_state', expect.any(Function))
+  })
+
+  it('playlist_state events fire after socket-state-driven registration', () => {
+    const mockSocket = createMockSocket()
+    const socketRef = { current: null }
+
+    const { result, rerender } = renderHook(
+      ({ socketInstance }) => usePlaylistManager({ socketRef, socket: socketInstance }),
+      { initialProps: { socketInstance: null } }
+    )
+
+    expect(result.current.playlists).toEqual([])
+
+    act(() => { socketRef.current = mockSocket })
+    rerender({ socketInstance: mockSocket })
+
+    act(() => {
+      mockSocket._trigger('playlist_state', { playlists: [{ id: 'pl1', name: 'Test' }] })
+    })
+    expect(result.current.playlists).toHaveLength(1)
+    expect(result.current.playlists[0].id).toBe('pl1')
   })
 })
