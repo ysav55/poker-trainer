@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import CollapsibleSection from '../CollapsibleSection';
-import RangePicker from '../RangePicker';
+import { RangeMatrix } from '../RangeMatrix';
 import { comboToHandGroup } from '../../utils/comboUtils';
 
 function formatPot(n) {
@@ -12,7 +12,7 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
   const [scenarioSearch, setScenarioSearch] = useState('');
   const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState('');
   const [scenarioStackMode, setScenarioStackMode] = useState('keep');
-  const [rangePickerOpen, setRangePickerOpen] = useState(false);
+  const [rangeOpen, setRangeOpen] = useState(false);
   const [rangeFilter, setRangeFilter] = useState(new Set());
 
   const filteredHands = useMemo(() => {
@@ -76,7 +76,7 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
         {/* Range filter toggle */}
         <div className="flex gap-1">
           <button
-            onClick={() => setRangePickerOpen(true)}
+            onClick={() => setRangeOpen(o => !o)}
             style={{
               flex: 1, padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
               background: rangeFilter.size ? 'rgba(212,175,55,0.12)' : 'transparent',
@@ -86,38 +86,31 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
               textAlign: 'left',
             }}
           >
-            ⬡ Filter by Range {rangeFilter.size > 0 ? `(${rangeFilter.size} groups)` : ''}
+            ⬡ Filter by Range {rangeFilter.size > 0 ? `(${rangeFilter.size})` : ''}
           </button>
           {rangeFilter.size > 0 && (
             <button
-              onClick={() => setRangeFilter(new Set())}
+              onClick={() => { setRangeFilter(new Set()); setRangeOpen(false); }}
               style={{
                 padding: '3px 6px', borderRadius: 4, cursor: 'pointer',
                 background: 'transparent', border: '1px solid #30363d',
                 color: '#6e7681', fontSize: '9px',
               }}
-              title="Clear filter"
             >
-              ✕
+              Clear filter
             </button>
           )}
         </div>
-        {rangePickerOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ background: 'rgba(0,0,0,0.72)' }}
-            onClick={(e) => { if (e.target === e.currentTarget) setRangePickerOpen(false); }}
-          >
-            <RangePicker
-              seatLabel="Filter by Range"
-              initialRange={[...rangeFilter].join(',')}
-              onApply={(rangeStr) => {
-                setRangeFilter(new Set(rangeStr ? rangeStr.split(',').map(s => s.trim()).filter(Boolean) : []));
-                setRangePickerOpen(false);
-              }}
-              onCancel={() => setRangePickerOpen(false)}
-            />
-          </div>
+        {rangeOpen && (
+          <RangeMatrix
+            selected={rangeFilter}
+            onToggle={(group) => setRangeFilter(prev => {
+              const next = new Set(prev);
+              if (next.has(group)) next.delete(group); else next.add(group);
+              return next;
+            })}
+            colorMode="filter"
+          />
         )}
 
         {/* Hand list */}

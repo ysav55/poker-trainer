@@ -30,6 +30,11 @@
 
 jest.useFakeTimers();
 
+// Mock supabase and repositories so this file runs in CI without DB credentials
+jest.mock('../db/supabase', () => ({}));
+jest.mock('../db/repositories/TournamentRepository', () => ({ TournamentRepository: {} }));
+jest.mock('../db/repositories/TableRepository', () => ({ TableRepository: {} }));
+
 const mockIoEmit = jest.fn();
 const mockIoTo   = jest.fn(() => ({ emit: mockIoEmit }));
 const mockIo     = { to: mockIoTo };

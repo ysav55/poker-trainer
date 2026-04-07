@@ -199,8 +199,8 @@ describe('PlaylistsSection', () => {
       <PlaylistsSection playlists={playlists} gameState={null} myId="p1" emit={emit} />
     )
     fireEvent.click(screen.getByText('PLAYLISTS'))
-    expect(screen.getByText('Beginner Hands')).toBeTruthy()
-    expect(screen.getByText('Bluff Spots')).toBeTruthy()
+    expect(screen.getAllByText('Beginner Hands').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Bluff Spots').length).toBeGreaterThan(0)
   })
 
   it('Play button calls emit.activatePlaylist with playlist id', async () => {
