@@ -704,6 +704,7 @@ export default function LobbyPage() {
   const [showModal, setShowModal]       = useState(false);
   const [showTournamentWizard, setShowTournamentWizard] = useState(false);
   const [buyInTable, setBuyInTable]     = useState(null); // table object for buy-in modal
+  const [upcomingTournaments, setUpcomingTournaments] = useState([]);
 
   // ── Data loading ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -736,6 +737,13 @@ export default function LobbyPage() {
     apiFetch('/api/hands?limit=10')
       .then((d) => setHands(d?.hands ?? d ?? []))
       .catch(() => {});
+  }, []);
+
+  // Fetch upcoming public tournaments for the lobby strip (non-blocking)
+  useEffect(() => {
+    apiFetch('/api/tournament-groups?status=pending&privacy=public')
+      .then(data => setUpcomingTournaments((data.groups ?? []).slice(0, 3)))
+      .catch(() => {}); // non-blocking — lobby still works if this fails
   }, []);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -875,6 +883,59 @@ export default function LobbyPage() {
         onNewTable={() => setShowModal(true)}
         onNewTournament={() => setShowTournamentWizard(true)}
       />
+
+      {/* ── Upcoming Tournaments Strip ── */}
+      {upcomingTournaments.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div className="flex items-center justify-between mb-3">
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', color: '#6e7681', textTransform: 'uppercase' }}>
+              Upcoming Tournaments
+            </span>
+            <button
+              onClick={() => navigate('/tournaments')}
+              style={{ fontSize: 11, color: GOLD, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}
+            >
+              View All →
+            </button>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {upcomingTournaments.map(t => {
+              const scheduledAt = t.scheduled_at ? new Date(t.scheduled_at) : null;
+              const minutesUntil = scheduledAt ? Math.round((scheduledAt - Date.now()) / 60000) : null;
+              const showCountdown = minutesUntil !== null && minutesUntil >= 0 && minutesUntil <= 10;
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => navigate(`/tournaments/${t.id}`)}
+                  style={{
+                    background: '#161b22', border: `1px solid ${showCountdown ? GOLD : '#30363d'}`,
+                    borderRadius: 8, padding: '12px 14px', cursor: 'pointer', flexShrink: 0,
+                    minWidth: 200, maxWidth: 220, transition: 'all 0.12s',
+                    boxShadow: showCountdown ? '0 0 10px rgba(212,175,55,0.15)' : 'none',
+                  }}
+                  onMouseEnter={e => { if (!showCountdown) e.currentTarget.style.borderColor = 'rgba(212,175,55,0.35)'; }}
+                  onMouseLeave={e => { if (!showCountdown) e.currentTarget.style.borderColor = '#30363d'; }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#f0ece3', marginBottom: 4 }}>{t.name}</div>
+                  {scheduledAt && (
+                    <div style={{ fontSize: 10, color: '#6e7681', marginBottom: 4 }}>
+                      {scheduledAt.toLocaleString()}
+                    </div>
+                  )}
+                  {showCountdown && (
+                    <div style={{ fontSize: 11, fontWeight: 700, color: GOLD, marginBottom: 4 }}>
+                      Starts in {minutesUntil} min
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: '#6e7681' }}>
+                    {t.buy_in > 0 ? `${t.buy_in.toLocaleString()} chips` : 'Free'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Recent Activity (coach / admin) ────────────────────────────────── */}
       {isCoachOrAdmin && <ActivityFeed hands={hands} />}
