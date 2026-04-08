@@ -20,11 +20,16 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
         blindSchedule      = [],
         startingStack      = 10000,
         schoolId           = null,
+        buyIn              = 0,
+        privacy            = 'public',
+        scheduledAt        = null,
+        payoutStructure    = [],
+        lateRegEnabled     = false,
+        lateRegMinutes     = 20,
       } = req.body ?? {};
 
       if (!name) return res.status(400).json({ error: 'name is required' });
 
-      const tableCount = Math.ceil(maxPlayers / maxPlayersPerTable);
       const groupId = await TournamentGroupRepository.createGroup({
         schoolId,
         name,
@@ -32,29 +37,30 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
         maxPlayersPerTable,
         minPlayersPerTable,
         createdBy:          req.user?.stableId ?? req.user?.id,
+        buyIn,
+        privacy,
+        scheduledAt,
+        payoutStructure,
+        lateRegEnabled,
+        lateRegMinutes,
       });
 
-      // Create tables and link to group
-      const tableIds = [];
-      for (let i = 0; i < tableCount; i++) {
-        const tableId = `tournament-group-${groupId}-table-${i + 1}`;
-        await TableRepository.createTable({
-          id:        tableId,
-          name:      `${name} — Table ${i + 1}`,
-          mode:      'tournament',
-          createdBy: req.user?.stableId ?? req.user?.id,
-          config:    { starting_stack: startingStack, tournament_group_id: groupId },
-        });
-        await supabase.from('tables').update({ tournament_group_id: groupId }).eq('id', tableId);
-        await TournamentRepository.createConfig({
-          tableId,
-          blindSchedule,
-          startingStack,
-        });
-        tableIds.push(tableId);
-      }
+      res.status(201).json({ groupId });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
-      res.status(201).json({ groupId, tableIds });
+  // GET /api/tournament-groups — list all with optional ?status= and ?privacy= filters
+  app.get('/api/tournament-groups', requireAuth, async (req, res) => {
+    try {
+      const { status, privacy, schoolId } = req.query;
+      const groups = await TournamentGroupRepository.listGroups({
+        status:   status   ?? null,
+        privacy:  privacy  ?? null,
+        schoolId: schoolId ?? null,
+      });
+      res.json({ groups });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -63,16 +69,98 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
   // GET /api/tournament-groups/:id
   app.get('/api/tournament-groups/:id', requireAuth, async (req, res) => {
     try {
-      const group = await TournamentGroupRepository.getGroup(req.params.id);
+      const group         = await TournamentGroupRepository.getGroup(req.params.id);
       if (!group) return res.status(404).json({ error: 'Group not found' });
-      const tableIds = await TournamentGroupRepository.getTableIds(req.params.id);
-      res.json({ group, tableIds });
+      const tableIds      = await TournamentGroupRepository.getTableIds(req.params.id);
+      const registrations = await TournamentGroupRepository.getRegistrations(req.params.id);
+      res.json({ group, tableIds, registrations });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // POST /api/tournament-groups/:id/start — start all tables in the group
+  // POST /api/tournament-groups/:id/register — register player, debit chip bank
+  app.post('/api/tournament-groups/:id/register', requireAuth, async (req, res) => {
+    try {
+      const groupId  = req.params.id;
+      const playerId = req.user?.stableId ?? req.user?.id;
+      if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const group = await TournamentGroupRepository.getGroup(groupId);
+      if (!group) return res.status(404).json({ error: 'Tournament not found' });
+      if (group.status !== 'pending') return res.status(400).json({ error: 'Tournament is not open for registration' });
+
+      const existing = await TournamentGroupRepository.getRegistration(groupId, playerId);
+      if (existing) return res.status(409).json({ error: 'Already registered' });
+
+      const buyIn = group.buy_in ?? 0;
+
+      if (buyIn > 0) {
+        const { ChipBankRepository } = require('../db/repositories/ChipBankRepository');
+        try {
+          await ChipBankRepository.applyTransaction({
+            playerId,
+            amount:    -buyIn,
+            type:      'tournament_entry',
+            tableId:   null,
+            createdBy: null,
+            notes:     `Tournament entry: ${group.name}`,
+          });
+        } catch (err) {
+          if (err.message === 'insufficient_funds') {
+            return res.status(402).json({ error: 'Insufficient chip bank balance' });
+          }
+          throw err;
+        }
+      }
+
+      await TournamentGroupRepository.createRegistration(groupId, playerId, buyIn);
+
+      const io = req.app.get('io');
+      const registrations = await TournamentGroupRepository.getRegistrations(groupId);
+      io.to(groupId).emit('tournament_group:registration_update', { groupId, count: registrations.length });
+
+      res.status(201).json({ registered: true, buyIn });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/tournament-groups/:id/register — unregister (refund), pre-start only
+  app.delete('/api/tournament-groups/:id/register', requireAuth, async (req, res) => {
+    try {
+      const groupId  = req.params.id;
+      const playerId = req.user?.stableId ?? req.user?.id;
+      if (!playerId) return res.status(401).json({ error: 'Unauthorized' });
+
+      const group = await TournamentGroupRepository.getGroup(groupId);
+      if (!group) return res.status(404).json({ error: 'Tournament not found' });
+      if (group.status !== 'pending') return res.status(400).json({ error: 'Cannot unregister after tournament has started' });
+
+      const registration = await TournamentGroupRepository.getRegistration(groupId, playerId);
+      if (!registration) return res.status(404).json({ error: 'Not registered' });
+
+      await TournamentGroupRepository.cancelRegistration(groupId, playerId);
+
+      if (registration.buy_in_amount > 0) {
+        const { ChipBankRepository } = require('../db/repositories/ChipBankRepository');
+        await ChipBankRepository.applyTransaction({
+          playerId,
+          amount:    registration.buy_in_amount,
+          type:      'tournament_refund',
+          tableId:   null,
+          createdBy: null,
+          notes:     `Tournament refund: ${group.name}`,
+        });
+      }
+
+      res.json({ unregistered: true, refunded: registration.buy_in_amount });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/tournament-groups/:id/start — start all tables in the group (legacy)
   app.post('/api/tournament-groups/:id/start', requireAuth, requirePermission('tournament:manage'), async (req, res) => {
     try {
       const groupId = req.params.id;
@@ -106,6 +194,100 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
     }
   });
 
+  // PATCH /api/tournament-groups/:id/start — assign players to tables, init TournamentControllers
+  app.patch('/api/tournament-groups/:id/start', requireAuth, requirePermission('tournament:manage'), async (req, res) => {
+    try {
+      const groupId = req.params.id;
+      const group   = await TournamentGroupRepository.getGroup(groupId);
+      if (!group) return res.status(404).json({ error: 'Group not found' });
+      if (group.status !== 'pending') return res.status(400).json({ error: 'Tournament is not pending' });
+
+      const registrations = await TournamentGroupRepository.getRegistrations(groupId);
+      if (registrations.length < 2) return res.status(400).json({ error: 'Need at least 2 registered players to start' });
+
+      const io = req.app.get('io');
+      const groupCtrl = new TournamentGroupController(groupId, io);
+      groupCtrl.config = group;
+      SharedState.groupControllers.set(groupId, groupCtrl);
+
+      const sharedConfig = group.shared_config ?? {};
+      const players = registrations.map(r => ({
+        playerId: r.player_id,
+        name:     r.player_profiles?.display_name ?? r.player_id,
+      }));
+
+      const tableIds = await groupCtrl.assignPlayersToTables(players, {
+        blindSchedule:   sharedConfig.blind_schedule   ?? [],
+        startingStack:   sharedConfig.starting_stack   ?? 10000,
+        lateRegEnabled:  group.late_reg_enabled ?? false,
+        lateRegMinutes:  group.late_reg_minutes ?? 0,
+        payoutStructure: group.payout_structure ?? [],
+      });
+
+      await groupCtrl.start(sharedConfig, tableIds);
+
+      for (const r of registrations) {
+        await TournamentGroupRepository.updateRegistrationStatus(groupId, r.player_id, 'seated');
+      }
+
+      io.to(groupId).emit('tournament_group:started', { groupId, tableIds });
+
+      res.json({ started: true, tableIds });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/tournament-groups/:id/cancel — cancel tournament; refund all registrations
+  app.patch('/api/tournament-groups/:id/cancel', requireAuth, requirePermission('tournament:manage'), async (req, res) => {
+    try {
+      const groupId = req.params.id;
+      const group   = await TournamentGroupRepository.getGroup(groupId);
+      if (!group) return res.status(404).json({ error: 'Group not found' });
+      if (!['pending', 'running'].includes(group.status)) {
+        return res.status(400).json({ error: 'Tournament cannot be cancelled in current state' });
+      }
+
+      const registrations = await TournamentGroupRepository.getRegistrations(groupId);
+      const { ChipBankRepository } = require('../db/repositories/ChipBankRepository');
+
+      for (const r of registrations) {
+        if (!['registered', 'seated'].includes(r.status)) continue;
+        if ((r.buy_in_amount ?? 0) > 0) {
+          try {
+            await ChipBankRepository.applyTransaction({
+              playerId:  r.player_id,
+              amount:    r.buy_in_amount,
+              type:      'tournament_refund',
+              tableId:   null,
+              createdBy: null,
+              notes:     `Tournament cancelled: ${group.name}`,
+            });
+          } catch (_) { /* non-fatal */ }
+        }
+        await TournamentGroupRepository.updateRegistrationStatus(groupId, r.player_id, 'cancelled');
+      }
+
+      await TournamentGroupRepository.updateStatus(groupId, 'finished');
+
+      const groupCtrl = SharedState.groupControllers.get(groupId);
+      if (groupCtrl) {
+        groupCtrl.destroy();
+        SharedState.groupControllers.delete(groupId);
+      }
+
+      const io = req.app.get('io');
+      const refundAmount = group.buy_in ?? 0;
+      for (const r of registrations) {
+        io.to(r.player_id).emit('tournament_group:cancelled', { groupId, refundAmount });
+      }
+
+      res.json({ cancelled: true, refundedCount: registrations.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // POST /api/tournament-groups/:id/end
   app.post('/api/tournament-groups/:id/end', requireAuth, requirePermission('tournament:manage'), async (req, res) => {
     try {
@@ -113,6 +295,35 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
       if (!groupCtrl) return res.status(404).json({ error: 'Group controller not found' });
       await groupCtrl._endGroup(null);
       res.json({ ended: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/tournament-groups/:id/finalize — distribute prizes; close all tables
+  app.post('/api/tournament-groups/:id/finalize', requireAuth, requirePermission('tournament:manage'), async (req, res) => {
+    try {
+      const groupId = req.params.id;
+      const { finalStandings = [] } = req.body ?? {};
+
+      const groupCtrl = SharedState.groupControllers.get(groupId);
+      if (!groupCtrl) {
+        await TournamentGroupRepository.updateStatus(groupId, 'finished');
+        return res.json({ finalized: true });
+      }
+
+      if (finalStandings.length === 0) {
+        const standings = await TournamentGroupRepository.getStandings(groupId);
+        const computed = standings
+          .filter(s => s.finish_position != null)
+          .sort((a, b) => a.finish_position - b.finish_position)
+          .map(s => ({ playerId: s.player_id, place: s.finish_position }));
+        await groupCtrl.distributePrizes(computed);
+      } else {
+        await groupCtrl.distributePrizes(finalStandings);
+      }
+
+      res.json({ finalized: true });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
