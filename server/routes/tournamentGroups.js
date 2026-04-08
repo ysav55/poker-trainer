@@ -54,11 +54,14 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
   // GET /api/tournament-groups — list all with optional ?status= and ?privacy= filters
   app.get('/api/tournament-groups', requireAuth, async (req, res) => {
     try {
-      const { status, privacy, schoolId } = req.query;
+      const { status, privacy } = req.query;
+      // Non-admins can only see their own school's data — ignore schoolId query param
+      const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
+      const effectiveSchoolId = isAdmin ? (req.query.schoolId ?? null) : (req.user?.schoolId ?? null);
       const groups = await TournamentGroupRepository.listGroups({
-        status:   status   ?? null,
-        privacy:  privacy  ?? null,
-        schoolId: schoolId ?? null,
+        status:   status  ?? null,
+        privacy:  privacy ?? null,
+        schoolId: effectiveSchoolId,
       });
       res.json({ groups });
     } catch (err) {
@@ -90,11 +93,22 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
       if (!group) return res.status(404).json({ error: 'Tournament not found' });
       if (group.status !== 'pending') return res.status(400).json({ error: 'Tournament is not open for registration' });
 
-      const existing = await TournamentGroupRepository.getRegistration(groupId, playerId);
-      if (existing) return res.status(409).json({ error: 'Already registered' });
-
       const buyIn = group.buy_in ?? 0;
 
+      // Insert registration first — DB unique constraint on (group_id, player_id) prevents duplicates
+      // and eliminates the TOCTOU race between check and insert.
+      let registrationId;
+      try {
+        registrationId = await TournamentGroupRepository.createRegistration(groupId, playerId, buyIn);
+      } catch (insertErr) {
+        // Unique constraint violation = already registered
+        if (insertErr.code === '23505' || /unique/i.test(insertErr.message)) {
+          return res.status(409).json({ error: 'Already registered' });
+        }
+        throw insertErr;
+      }
+
+      // Debit chip bank after successful insert
       if (buyIn > 0) {
         const { ChipBankRepository } = require('../db/repositories/ChipBankRepository');
         try {
@@ -107,14 +121,14 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
             notes:     `Tournament entry: ${group.name}`,
           });
         } catch (err) {
+          // Compensate: remove the registration we just inserted
+          try { await TournamentGroupRepository.cancelRegistration(groupId, playerId); } catch (_) {}
           if (err.message === 'insufficient_funds') {
             return res.status(402).json({ error: 'Insufficient chip bank balance' });
           }
           throw err;
         }
       }
-
-      await TournamentGroupRepository.createRegistration(groupId, playerId, buyIn);
 
       const io = req.app.get('io');
       const registrations = await TournamentGroupRepository.getRegistrations(groupId);
@@ -140,8 +154,7 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
       const registration = await TournamentGroupRepository.getRegistration(groupId, playerId);
       if (!registration) return res.status(404).json({ error: 'Not registered' });
 
-      await TournamentGroupRepository.cancelRegistration(groupId, playerId);
-
+      // Refund chip bank FIRST — if this fails, registration stays active (no lost funds)
       if (registration.buy_in_amount > 0) {
         const { ChipBankRepository } = require('../db/repositories/ChipBankRepository');
         await ChipBankRepository.applyTransaction({
@@ -153,6 +166,8 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
           notes:     `Tournament refund: ${group.name}`,
         });
       }
+
+      await TournamentGroupRepository.cancelRegistration(groupId, playerId);
 
       res.json({ unregistered: true, refunded: registration.buy_in_amount });
     } catch (err) {
@@ -166,6 +181,7 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
       const groupId = req.params.id;
       const group = await TournamentGroupRepository.getGroup(groupId);
       if (!group) return res.status(404).json({ error: 'Group not found' });
+      if (group.status !== 'pending') return res.status(400).json({ error: 'Tournament is not pending' });
 
       const tableIds = await TournamentGroupRepository.getTableIds(groupId);
       if (tableIds.length === 0) return res.status(400).json({ error: 'No tables in group' });
@@ -251,6 +267,8 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
       const registrations = await TournamentGroupRepository.getRegistrations(groupId);
       const { ChipBankRepository } = require('../db/repositories/ChipBankRepository');
 
+      const failedRefunds = [];
+
       for (const r of registrations) {
         if (!['registered', 'seated'].includes(r.status)) continue;
         if ((r.buy_in_amount ?? 0) > 0) {
@@ -263,12 +281,17 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
               createdBy: null,
               notes:     `Tournament cancelled: ${group.name}`,
             });
-          } catch (_) { /* non-fatal */ }
+          } catch (refundErr) {
+            console.error(`[cancel] Failed to refund player ${r.player_id}:`, refundErr.message);
+            failedRefunds.push(r.player_id);
+            // Continue — process other refunds
+          }
         }
         await TournamentGroupRepository.updateRegistrationStatus(groupId, r.player_id, 'cancelled');
       }
 
-      await TournamentGroupRepository.updateStatus(groupId, 'finished');
+      // Use 'cancelled' status — distinct from 'finished' (migration 049 adds this value)
+      await TournamentGroupRepository.updateStatus(groupId, 'cancelled');
 
       const groupCtrl = SharedState.groupControllers.get(groupId);
       if (groupCtrl) {
@@ -277,12 +300,12 @@ function registerTournamentGroupRoutes(app, { requireAuth }) {
       }
 
       const io = req.app.get('io');
-      const refundAmount = group.buy_in ?? 0;
       for (const r of registrations) {
-        io.to(r.player_id).emit('tournament_group:cancelled', { groupId, refundAmount });
+        // Emit per-player buy_in_amount — individual registrations may differ
+        io.to(r.player_id).emit('tournament_group:cancelled', { groupId, refundAmount: r.buy_in_amount ?? 0 });
       }
 
-      res.json({ cancelled: true, refundedCount: registrations.length });
+      res.json({ cancelled: true, refundedCount: registrations.length, failedRefunds });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
