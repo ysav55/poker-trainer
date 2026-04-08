@@ -173,6 +173,9 @@ export function WizardModal({ onClose, onCreated }) {
 
   // Referee
   const [refPlayerId, setRefPlayerId] = useState('');
+  const [privacy, setPrivacy]               = useState('public');
+  const [lateRegEnabled, setLateRegEnabled] = useState(false);
+  const [lateRegMinutes, setLateRegMinutes] = useState(20);
 
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState(null);
@@ -239,7 +242,6 @@ export function WizardModal({ onClose, onCreated }) {
     setSaving(true);
     setError(null);
     try {
-      // System A field name: blindSchedule (not blindStructure)
       const blindSchedule = levels.map((l, i) => ({
         level: i + 1,
         sb: l.sb,
@@ -247,35 +249,35 @@ export function WizardModal({ onClose, onCreated }) {
         ante: l.ante,
         duration_minutes: l.durationMin,
       }));
-      const payoutStructure = payouts.map(p => ({ position: p.place, percentage: p.percent }));
+      const payoutStructure = payouts.map(p => ({ place: p.place, percentage: p.percent }));
 
-      const data = await apiFetch('/api/admin/tournaments', {
+      const data = await apiFetch('/api/tournament-groups', {
         method: 'POST',
         body: JSON.stringify({
           name,
           blindSchedule,
           startingStack,
-          rebuyAllowed,
-          addonAllowed,
+          buyIn,
+          privacy,
+          scheduledAt:    scheduledStartAt || null,
+          lateRegEnabled,
+          lateRegMinutes,
           payoutStructure,
           payoutMethod,
           showIcmOverlay,
           dealThreshold,
           minPlayers,
-          scheduledStartAt: scheduledStartAt || null,
           refPlayerId: refPlayerId.trim() || null,
         }),
       });
 
-      // Fire-and-forget: save blind structure as a named preset if requested
       if (saveAsPreset && newPresetName.trim() && levels.length > 0) {
         apiFetch('/api/blind-presets', {
           method: 'POST',
           body: JSON.stringify({ name: newPresetName.trim(), levels: blindSchedule }),
-        }).catch(() => {}); // non-fatal
+        }).catch(() => {});
       }
 
-      // data = { tableId, configId, tournamentId }
       onCreated(data);
       onClose();
     } catch (err) {
@@ -369,6 +371,35 @@ export function WizardModal({ onClose, onCreated }) {
                   onFocus={e => { e.currentTarget.style.borderColor = '#d4af37'; }}
                   onBlur={e => { e.currentTarget.style.borderColor = '#30363d'; }}
                 />
+              </div>
+              {/* Privacy */}
+              <div className="mb-4">
+                {sectionLabel('Visibility')}
+                <div className="flex gap-3">
+                  {['public', 'school', 'private'].map(v => (
+                    <label key={v} className="flex items-center gap-2 cursor-pointer" style={{ fontSize: 12, color: privacy === v ? '#d4af37' : '#8b949e' }}>
+                      <input type="radio" name="privacy" value={v} checked={privacy === v} onChange={() => setPrivacy(v)}
+                        style={{ accentColor: '#d4af37', cursor: 'pointer' }} />
+                      {v.charAt(0).toUpperCase() + v.slice(1)}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Late Registration */}
+              <div className="mb-4">
+                {sectionLabel('Late Registration')}
+                <label className="flex items-center gap-3 cursor-pointer mb-2" style={{ userSelect: 'none' }}>
+                  <input type="checkbox" checked={lateRegEnabled} onChange={e => setLateRegEnabled(e.target.checked)}
+                    style={{ accentColor: '#d4af37', width: 14, height: 14, cursor: 'pointer' }} />
+                  <span style={{ fontSize: 12, color: '#c9d1d9' }}>Allow late registration</span>
+                </label>
+                {lateRegEnabled && (
+                  <div className="flex items-center gap-3">
+                    <span style={{ fontSize: 11, color: '#6e7681' }}>Window duration (minutes):</span>
+                    <NumberInput value={lateRegMinutes} onChange={setLateRegMinutes} width={72} min={1} />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -759,9 +790,9 @@ export default function TournamentSetup() {
 
   const filtered = tournaments.filter(t => STATUS_MAP[activeTab]?.includes(t.status));
 
-  function handleCreated({ tableId }) {
+  function handleCreated({ groupId }) {
     fetchTournaments();
-    if (tableId) navigate(`/tournament/${tableId}/lobby`);
+    if (groupId) navigate(`/tournaments/${groupId}`);
   }
 
   return (

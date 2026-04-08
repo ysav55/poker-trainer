@@ -776,10 +776,10 @@ export default function LobbyPage() {
     if (tableId) navigate(`/table/${tableId}`);
   }, [navigate, refreshTables]);
 
-  const handleTournamentCreated = useCallback(({ tableId }) => {
+  const handleTournamentCreated = useCallback(({ groupId }) => {
     setShowTournamentWizard(false);
     refreshTables();
-    if (tableId) navigate(`/tournament/${tableId}/lobby`);
+    if (groupId) navigate(`/tournaments/${groupId}`);
   }, [navigate, refreshTables]);
 
   // ── Build stats rows ───────────────────────────────────────────────────────
