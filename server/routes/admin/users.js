@@ -197,7 +197,7 @@ router.post('/users', async (req, res) => {
     const body = req.body || {};
     // Accept both camelCase and snake_case from the frontend
     const displayName = body.displayName || body.display_name;
-    const { email, password, role: roleName = 'coached_student' } = body;
+    const { email, password, role: roleName = 'coached_student', coachId } = body;
 
     if (!displayName) return res.status(400).json({ error: 'displayName is required' });
     if (!password)    return res.status(400).json({ error: 'password is required' });
@@ -211,6 +211,10 @@ router.post('/users', async (req, res) => {
     });
 
     await setPlayerRole(newId, roleName, req.user?.stableId ?? req.user?.id ?? null);
+
+    if (coachId) {
+      await updatePlayer(newId, { coachId });
+    }
 
     res.status(201).json({ id: newId });
   } catch (err) {
