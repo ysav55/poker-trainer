@@ -163,6 +163,20 @@ function FullTableView() {
 
   const socketRef = socket?.socketRef;
 
+  // Derived values — must be declared before any useEffect that references them
+  // in a dependency array (dependency arrays are evaluated at render time, not lazily).
+  const tableMode = gameState?.table_mode ?? gameState?.tableMode ?? hookState?.tableMode ?? 'coached_cash';
+  const tableName = gameState?.table_name ?? gameState?.room ?? null;
+  const isSpectator = hookIsSpectator ?? false;
+  const actingAsCoach = (user?.role === 'coach' || hookIsCoach) && tableMode === 'coached_cash';
+  const myId = useMemo(() => {
+    if (!gameState?.players) return user?.id ?? null;
+    const me = gameState.players.find((p) =>
+      actingAsCoach ? p.is_coach : p.stable_id === user?.id
+    );
+    return me?.id ?? user?.id ?? null;
+  }, [gameState, actingAsCoach, user]);
+
   const handleManagerClaim = useCallback(() => {
     setIsManager(true);
   }, []);
@@ -267,23 +281,6 @@ function FullTableView() {
     const me = gameState.players.find((p) => p.id === myId);
     if (me) setSittingOut(me.in_hand === false);
   }, [gameState, myId]);
-
-  const tableMode = gameState?.table_mode ?? gameState?.tableMode ?? hookState?.tableMode ?? 'coached_cash';
-  const tableName = gameState?.table_name ?? gameState?.room ?? null;
-  const isSpectator = hookIsSpectator ?? false;
-
-  // A user with the coach role only *acts* as coach (controls the game) in coached_cash mode.
-  // In tournament and uncoached_cash they join as a regular seated player.
-  const actingAsCoach = (user?.role === 'coach' || hookIsCoach) && tableMode === 'coached_cash';
-
-  // Find this user's player entry in the game state.
-  const myId = useMemo(() => {
-    if (!gameState?.players) return user?.id ?? null;
-    const me = gameState.players.find((p) =>
-      actingAsCoach ? p.is_coach : p.stable_id === user?.id
-    );
-    return me?.id ?? user?.id ?? null;
-  }, [gameState, actingAsCoach, user]);
 
   // Build emit object expected by PokerTable / CoachSidebar
   const emit = useMemo(() => ({
