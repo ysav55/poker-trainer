@@ -48,7 +48,7 @@ export default function UserForm({ user, onClose, onSaved }) {
   const [name, setName]         = useState(user?.display_name ?? '');
   const [email, setEmail]       = useState(user?.email ?? '');
   const [password, setPassword] = useState('');
-  const [role, setRole]         = useState(user?.role ?? 'player');
+  const [role, setRole]         = useState(user?.role ?? 'coached_student');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState(null);
 
@@ -57,7 +57,7 @@ export default function UserForm({ user, onClose, onSaved }) {
     setName(user?.display_name ?? '');
     setEmail(user?.email ?? '');
     setPassword('');
-    setRole(user?.role ?? 'player');
+    setRole(user?.role ?? 'coached_student');
     setError(null);
   }, [user]);
 
