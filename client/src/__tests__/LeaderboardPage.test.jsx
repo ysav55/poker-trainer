@@ -171,7 +171,8 @@ describe('LeaderboardPage period tabs', () => {
     renderPage();
     await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
     fireEvent.click(screen.getByTestId('period-7d'));
-    // data still shown (client-side stub shows same data for all periods)
+    // wait for re-fetch to complete before asserting
+    await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
     expect(screen.getAllByText('Alice').length).toBeGreaterThanOrEqual(1);
   });
 });
@@ -215,5 +216,106 @@ describe('LeaderboardPage net chips formatting', () => {
     renderPage();
     await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
     expect(screen.getByText('-200')).toBeTruthy();
+  });
+});
+
+// ── Filter query params ────────────────────────────────────────────────────────
+
+describe('LeaderboardPage filter query params', () => {
+  it('calls apiFetch with ?period=7d when 7 Days tab is clicked', async () => {
+    renderPage();
+    // Wait for initial load to finish
+    await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
+
+    // Reset mock so we can assert the next call cleanly
+    vi.clearAllMocks();
+    mockApiFetch.mockResolvedValue({ players: PLAYERS });
+
+    fireEvent.click(screen.getByTestId('period-7d'));
+
+    await waitFor(() =>
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/players?period=7d')
+    );
+  });
+
+  it('calls apiFetch with ?period=30d when 30 Days tab is clicked', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
+
+    vi.clearAllMocks();
+    mockApiFetch.mockResolvedValue({ players: PLAYERS });
+
+    fireEvent.click(screen.getByTestId('period-30d'));
+
+    await waitFor(() =>
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/players?period=30d')
+    );
+  });
+
+  it('calls apiFetch with no query params when All Time tab is clicked (default)', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
+
+    // Switch to 7d first, then back to all — verifies the all-time path
+    vi.clearAllMocks();
+    mockApiFetch.mockResolvedValue({ players: PLAYERS });
+    fireEvent.click(screen.getByTestId('period-7d'));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalled());
+
+    vi.clearAllMocks();
+    mockApiFetch.mockResolvedValue({ players: PLAYERS });
+    fireEvent.click(screen.getByTestId('period-all'));
+
+    await waitFor(() =>
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/players')
+    );
+  });
+
+  it('calls apiFetch with ?gameType=cash when Cash tab is clicked', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
+
+    vi.clearAllMocks();
+    mockApiFetch.mockResolvedValue({ players: PLAYERS });
+
+    fireEvent.click(screen.getByText('Cash'));
+
+    await waitFor(() =>
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/players?gameType=cash')
+    );
+  });
+
+  it('calls apiFetch with ?gameType=tournament when Tournament tab is clicked', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
+
+    vi.clearAllMocks();
+    mockApiFetch.mockResolvedValue({ players: PLAYERS });
+
+    fireEvent.click(screen.getByText('Tournament'));
+
+    await waitFor(() =>
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/players?gameType=tournament')
+    );
+  });
+
+  it('calls apiFetch with both params when period and gameType are both set', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
+
+    // Set period first
+    vi.clearAllMocks();
+    mockApiFetch.mockResolvedValue({ players: PLAYERS });
+    fireEvent.click(screen.getByTestId('period-7d'));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalled());
+
+    // Now set gameType
+    vi.clearAllMocks();
+    mockApiFetch.mockResolvedValue({ players: PLAYERS });
+    fireEvent.click(screen.getByText('Cash'));
+
+    await waitFor(() =>
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/players?period=7d&gameType=cash')
+    );
   });
 });
