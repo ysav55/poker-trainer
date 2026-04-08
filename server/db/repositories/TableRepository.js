@@ -75,7 +75,7 @@ const TableRepository = {
     const { data, error } = await supabase
       .from('tables')
       .select('id, created_at')
-      .in('status', ['waiting', 'active'])
+      .in('status', ['waiting', 'active', 'paused'])
       .lt('created_at', cutoff);
     if (error) throw error;
     return data ?? [];

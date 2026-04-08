@@ -138,7 +138,7 @@ describe('BotLobbyPage creation modal', () => {
     expect(screen.queryByTestId('create-bot-modal')).toBeNull();
   });
 
-  it('Start Game submits POST and navigates to /game/:tableId', async () => {
+  it('Start Game submits POST and navigates to /table/:tableId', async () => {
     mockApiFetch
       .mockResolvedValueOnce({ tables: BOT_TABLES }) // initial GET
       .mockResolvedValueOnce({ id: 'bt-new' });       // POST response
