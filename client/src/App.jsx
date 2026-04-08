@@ -42,6 +42,9 @@ import SettingsPage from './pages/SettingsPage.jsx';
 // Tournament pages
 import TournamentLobby from './pages/TournamentLobby.jsx';
 import TournamentStandings from './pages/TournamentStandings.jsx';
+import TournamentListPage    from './pages/TournamentListPage.jsx';
+import TournamentDetailPage  from './pages/TournamentDetailPage.jsx';
+import TournamentControlPage from './pages/TournamentControlPage.jsx';
 
 // Existing single-table view components (still used in TablePage integration)
 import { useSocket } from './hooks/useSocket';
@@ -115,6 +118,11 @@ function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route path="/settings"    element={<SettingsPage />} />
           <Route path="/lobby"       element={<LobbyPage />} />
+
+          {/* Tournaments */}
+          <Route path="/tournaments"                   element={<TournamentListPage />} />
+          <Route path="/tournaments/:groupId"          element={<TournamentDetailPage />} />
+          <Route path="/tournaments/:groupId/control"  element={<TournamentControlPage />} />
           <Route path="/bot-lobby"   element={<BotLobbyPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/analysis"    element={<AnalysisPage />} />

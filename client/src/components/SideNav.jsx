@@ -61,6 +61,12 @@ const NAV_ITEMS = [
   },
   {
     icon: '🏆',
+    label: 'Tournaments',
+    path: '/tournaments',
+    roles: ['coach', ...STUDENT_ROLES, 'admin', 'superadmin'],
+  },
+  {
+    icon: '🏆',
     label: 'Leaderboard',
     path: '/leaderboard',
     roles: ['coach', ...STUDENT_ROLES, 'admin', 'superadmin'],
