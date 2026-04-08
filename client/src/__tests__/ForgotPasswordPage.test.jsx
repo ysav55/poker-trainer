@@ -13,6 +13,11 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 
+const mockApiFetch = vi.fn();
+vi.mock('../lib/api.js', () => ({
+  apiFetch: (...args) => mockApiFetch(...args),
+}));
+
 import ForgotPasswordPage from '../pages/ForgotPasswordPage.jsx';
 
 function renderPage() {
@@ -25,6 +30,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockApiFetch.mockResolvedValue({});
 });
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -58,23 +64,17 @@ describe('ForgotPasswordPage submission', () => {
   it('shows confirmation screen after submission', async () => {
     renderPage();
     fireEvent.change(screen.getByPlaceholderText('Your display name'), { target: { value: 'Alice' } });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /request reset/i }));
-    });
-
-    expect(screen.getByTestId('reset-confirmation')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /request reset/i }));
+    await waitFor(() => expect(screen.getByTestId('reset-confirmation')).toBeTruthy());
   });
 
   it('confirmation message mentions contacting coach or admin', async () => {
     renderPage();
     fireEvent.change(screen.getByPlaceholderText('Your display name'), { target: { value: 'Alice' } });
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /request reset/i }));
-    });
-
-    expect(screen.getByTestId('reset-confirmation').textContent).toMatch(/coach|administrator/i);
+    fireEvent.click(screen.getByRole('button', { name: /request reset/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId('reset-confirmation').textContent).toMatch(/coach|administrator/i)
+    );
   });
 });
 

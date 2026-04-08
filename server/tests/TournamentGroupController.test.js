@@ -52,13 +52,13 @@ describe('TournamentGroupController', () => {
   test('onPlayerEliminated records elimination and checks group end', async () => {
     const { ctrl } = makeCtrl();
     ctrl.tableIds = ['t1'];
-    // 0 active players remaining → should trigger _endGroup
+    // 0 active players remaining → should trigger distributePrizes
     SharedState.getController.mockReturnValue({
       gm: { getState: () => ({ players: [] }) },
     });
-    const endSpy = jest.spyOn(ctrl, '_endGroup').mockResolvedValue();
+    const distributeSpy = jest.spyOn(ctrl, 'distributePrizes').mockResolvedValue();
     await ctrl.onPlayerEliminated('t1', 'player-1', 0);
-    expect(endSpy).toHaveBeenCalled();
+    expect(distributeSpy).toHaveBeenCalled();
   });
 
   test('destroy clears level timer', () => {
