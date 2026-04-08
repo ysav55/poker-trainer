@@ -51,6 +51,8 @@ export default function UserForm({ user, onClose, onSaved }) {
   const [role, setRole]         = useState(user?.role ?? 'coached_student');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState(null);
+  const [coaches,  setCoaches]  = useState([]);
+  const [coachId,  setCoachId]  = useState(user?.coach_id ?? '');
 
   // Reset form if user prop changes
   useEffect(() => {
@@ -58,8 +60,28 @@ export default function UserForm({ user, onClose, onSaved }) {
     setEmail(user?.email ?? '');
     setPassword('');
     setRole(user?.role ?? 'coached_student');
+    setCoachId(user?.coach_id ?? '');
+    setCoaches([]);
     setError(null);
   }, [user]);
+
+  // Load coaches when role is coached_student
+  useEffect(() => {
+    if (role !== 'coached_student') {
+      setCoachId('');
+      setCoaches([]);
+      return;
+    }
+    let cancelled = false;
+    apiFetch('/api/admin/users?role=coach')
+      .then((data) => {
+        if (!cancelled) setCoaches(data?.players ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setCoaches([]);
+      });
+    return () => { cancelled = true; };
+  }, [role]);
 
   // Close on Escape key
   useEffect(() => {
@@ -75,6 +97,7 @@ export default function UserForm({ user, onClose, onSaved }) {
 
     try {
       const body = { display_name: name.trim(), email: email.trim(), role };
+      if (coachId) body.coachId = coachId;
       if (isCreate) body.password = password;
 
       if (isCreate) {
@@ -183,6 +206,7 @@ export default function UserForm({ user, onClose, onSaved }) {
               <FieldLabel htmlFor="uf-role">Role</FieldLabel>
               <select
                 id="uf-role"
+                data-testid="role-select"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
                 className="w-full rounded px-3 py-2 text-sm outline-none transition-colors"
@@ -202,6 +226,35 @@ export default function UserForm({ user, onClose, onSaved }) {
                 ))}
               </select>
             </div>
+
+            {/* Coach assignment — only for coached_student */}
+            {role === 'coached_student' && (
+              <div>
+                <FieldLabel htmlFor="uf-coach">Assign Coach</FieldLabel>
+                <select
+                  id="uf-coach"
+                  data-testid="coach-select"
+                  value={coachId}
+                  onChange={(e) => setCoachId(e.target.value)}
+                  className="w-full rounded px-3 py-2 text-sm outline-none transition-colors"
+                  style={{
+                    background: '#0d1117',
+                    border: '1px solid #30363d',
+                    color: '#f0ece3',
+                    cursor: 'pointer',
+                  }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = '#d4af37'; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = '#30363d'; }}
+                >
+                  <option value="" style={{ background: '#161b22' }}>— Unassigned —</option>
+                  {coaches.map((c) => (
+                    <option key={c.id} value={c.id} style={{ background: '#161b22' }}>
+                      {c.display_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Inline error */}
             {error && (
