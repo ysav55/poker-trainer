@@ -22,6 +22,10 @@ function startTableCleanup(io, tables) {
     // Activate newly-scheduled tables
     await TableRepository.activateScheduledTables().catch(() => {});
 
+    // Snapshot in-memory table IDs before eviction so the orphan guard
+    // below knows which tables were already tracked at the start of this tick.
+    const knownTableIds = new Set(tables.keys());
+
     for (const [tableId] of tables.entries()) {
       const sockets = await io.in(tableId).fetchSockets().catch(() => []);
       if (sockets.length > 0) {
@@ -54,6 +58,18 @@ function startTableCleanup(io, tables) {
               { tableId, sessionId, playerCount: playerIds.length }));
         }
       }
+    }
+    // Close DB-only tables (created via REST but never socket-joined)
+    try {
+      const orphans = await TableRepository.listOrphanedTables(IDLE_THRESHOLD_MS / 60_000);
+      for (const orphan of orphans) {
+        if (!knownTableIds.has(orphan.id)) {
+          await TableRepository.closeTable(orphan.id).catch(() => {});
+          console.log(`[tableCleanup] Closed orphaned DB table: ${orphan.id}`);
+        }
+      }
+    } catch (err) {
+      console.error('[tableCleanup] orphan cleanup failed:', err.message);
     }
   }, CHECK_INTERVAL_MS);
 }

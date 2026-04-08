@@ -65,6 +65,22 @@ const TableRepository = {
     if (error) throw error;
   },
 
+  /**
+   * Returns non-completed tables with no in-memory activity that were
+   * created more than `olderThanMinutes` minutes ago. Used by tableCleanup
+   * to close orphaned REST-created tables that were never socket-joined.
+   */
+  async listOrphanedTables(olderThanMinutes = 30) {
+    const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('tables')
+      .select('id, created_at')
+      .in('status', ['waiting', 'active'])
+      .lt('created_at', cutoff);
+    if (error) throw error;
+    return data ?? [];
+  },
+
   // Open any scheduled tables whose scheduled_for <= now
   async activateScheduledTables() {
     const { data, error } = await supabase
