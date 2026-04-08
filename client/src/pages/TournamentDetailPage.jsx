@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 const GOLD = '#d4af37';
 
 function StatusBadge({ status }) {
-  const COLOR = { pending: '#93c5fd', running: '#3fb950', paused: '#e3b341', finished: '#6e7681' };
+  const COLOR = { pending: '#93c5fd', running: '#3fb950', paused: '#e3b341', finished: '#6e7681', cancelled: '#f85149' };
   const c = COLOR[status] ?? '#6e7681';
   return (
     <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -168,6 +168,7 @@ export default function TournamentDetailPage() {
   async function handleCancel() {
     if (!window.confirm('Cancel this tournament? All players will be refunded.')) return;
     setActionBusy(true);
+    setError(null);
     try {
       await apiFetch(`/api/tournament-groups/${groupId}/cancel`, { method: 'PATCH' });
       await load();
