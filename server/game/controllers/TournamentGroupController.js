@@ -119,6 +119,14 @@ class TournamentGroupController {
       // Non-fatal
     }
 
+    // Update registration status to busted
+    try {
+      const { TournamentGroupRepository: Repo } = require('../../db/repositories/TournamentGroupRepository');
+      await Repo.updateRegistrationStatus(this.groupId, playerId, 'busted');
+    } catch (_) {
+      // Non-fatal — registration may not exist (pre-registration tournaments)
+    }
+
     // Notify all tables of the elimination
     for (const tid of this.tableIds) {
       this.io.to(tid).emit('tournament:elimination', {
@@ -134,9 +142,7 @@ class TournamentGroupController {
       const nonEmptyTables = await this._getNonEmptyTableIds();
       if (nonEmptyTables.length === 1) {
         for (const tid of this.tableIds) {
-          this.io.to(tid).emit('tournament_group:final_table', {
-            finalTableId: nonEmptyTables[0],
-          });
+          this.io.to(tid).emit('tournament_group:final_table', { finalTableId: nonEmptyTables[0] });
         }
       }
     }
@@ -144,8 +150,13 @@ class TournamentGroupController {
     // Check if entire tournament is over
     if (activeCount <= 1) {
       const winnerId = await this._findWinnerId();
-      await this._endGroup(winnerId);
+      const standings = await this._buildFinalStandings(winnerId);
+      await this.distributePrizes(standings);
+      return;
     }
+
+    // Trigger rebalancing if any table has ≤ 3 active players
+    await this.rebalanceTables();
   }
 
   async _countActivePlayers() {
@@ -347,6 +358,231 @@ class TournamentGroupController {
     }
 
     return moves;
+  }
+
+  /**
+   * Calculate table count (ceil(n/7)) and assign players round-robin.
+   * Creates tables in DB, links them to this group, creates tournament configs,
+   * then emits tournament_group:player_assigned to each player's socket.
+   */
+  async assignPlayersToTables(players, config) {
+    const { TableRepository }      = require('../../db/repositories/TableRepository');
+    const { TournamentRepository } = require('../../db/repositories/TournamentRepository');
+    const supabase                 = require('../../db/supabase');
+
+    const numTables = Math.max(1, Math.ceil(players.length / 7));
+    const tableIds  = [];
+
+    for (let i = 0; i < numTables; i++) {
+      const tableId = `tournament-group-${this.groupId}-table-${i + 1}`;
+      await TableRepository.createTable({
+        id:        tableId,
+        name:      `${this.config?.name ?? 'Tournament'} — Table ${i + 1}`,
+        mode:      'tournament',
+        createdBy: this.config?.created_by ?? null,
+        config:    { starting_stack: config.startingStack ?? 10000, tournament_group_id: this.groupId },
+      });
+      await supabase.from('tables').update({ tournament_group_id: this.groupId }).eq('id', tableId);
+      await TournamentRepository.createConfig({
+        tableId,
+        blindSchedule:   config.blindSchedule ?? [],
+        startingStack:   config.startingStack  ?? 10000,
+        lateRegMinutes:  config.lateRegMinutes ?? 0,
+        payoutStructure: config.payoutStructure ?? [],
+      });
+      tableIds.push(tableId);
+    }
+
+    this.tableIds = tableIds;
+
+    // Round-robin seat assignment — emit player_assigned to each player's socket
+    const sockets = this.io.sockets.sockets;
+    players.forEach((player, idx) => {
+      const tableId = tableIds[idx % numTables];
+
+      let socketId = null;
+      const { stableIdMap } = require('../../state/SharedState');
+      for (const [sid, stableId] of stableIdMap.entries()) {
+        if (stableId === player.playerId) { socketId = sid; break; }
+      }
+
+      this.io.to(player.playerId).emit('tournament_group:player_assigned', {
+        groupId: this.groupId,
+        tableId,
+        seat:    null,
+      });
+
+      if (socketId) {
+        const sock = sockets?.get(socketId);
+        if (sock) {
+          sock.emit('tournament_group:player_assigned', { groupId: this.groupId, tableId, seat: null });
+        }
+      }
+    });
+
+    return tableIds;
+  }
+
+  /**
+   * Rebalance tables when any table drops to ≤ 3 active players.
+   * Moves one player from the largest table to the smallest.
+   * Removes empty tables from this.tableIds.
+   * Stops when only 1 table remains (final table).
+   */
+  async rebalanceTables() {
+    const { getController } = require('../../state/SharedState');
+
+    if (this.tableIds.length <= 1) return;
+
+    // Build active-player counts per table
+    const tableCounts = this.tableIds.map(tableId => {
+      const ctrl  = getController(tableId);
+      const state = ctrl?.gm?.getState?.() ?? {};
+      const active = (state.seated ?? state.players ?? []).filter(p => (p.stack ?? 0) > 0);
+      return { tableId, count: active.length, players: active };
+    });
+
+    // Remove empty tables
+    const emptyTables = tableCounts.filter(t => t.count === 0);
+    for (const { tableId } of emptyTables) {
+      this.tableIds = this.tableIds.filter(id => id !== tableId);
+    }
+
+    if (this.tableIds.length <= 1) return;
+
+    // Re-snapshot after removal
+    const activeCounts = this.tableIds.map(tableId => {
+      const ctrl  = getController(tableId);
+      const state = ctrl?.gm?.getState?.() ?? {};
+      const active = (state.seated ?? state.players ?? []).filter(p => (p.stack ?? 0) > 0);
+      return { tableId, count: active.length, players: active };
+    });
+
+    const underTables = activeCounts.filter(t => t.count <= 3 && t.count > 0);
+    if (underTables.length === 0) return;
+
+    const sorted   = [...activeCounts].sort((a, b) => b.count - a.count);
+    const largest  = sorted[0];
+    const smallest = sorted[sorted.length - 1];
+
+    if (largest.tableId === smallest.tableId) return;
+
+    const playerToMove = largest.players[largest.players.length - 1];
+    if (!playerToMove) return;
+
+    const playerId = playerToMove.stable_id ?? playerToMove.id;
+    try {
+      await this.movePlayer(playerId, largest.tableId, smallest.tableId);
+
+      const { stableIdMap } = require('../../state/SharedState');
+      for (const [sid, stableId] of stableIdMap.entries()) {
+        if (stableId === playerId) {
+          const sock = this.io.sockets.sockets?.get(sid);
+          if (sock) {
+            sock.emit('tournament_group:rebalance', { newTableId: smallest.tableId, newSeat: null });
+          }
+          break;
+        }
+      }
+    } catch (err) {
+      for (const tableId of this.tableIds) {
+        this.io.to(tableId).emit('notification', { type: 'warning', message: `Rebalance failed: ${err.message}` });
+      }
+    }
+
+    // If largest table is now empty, remove it
+    const largestCtrl  = getController(largest.tableId);
+    const largestState = largestCtrl?.gm?.getState?.() ?? {};
+    const remaining = (largestState.seated ?? largestState.players ?? []).filter(p => (p.stack ?? 0) > 0);
+    if (remaining.length === 0) {
+      this.tableIds = this.tableIds.filter(id => id !== largest.tableId);
+    }
+  }
+
+  /**
+   * Distribute prizes to top finishers based on payout_structure.
+   * prize = totalPool * percentage / 100, rounded down.
+   * First place receives any remainder (rounding correction).
+   */
+  async distributePrizes(finalStandings) {
+    const { ChipBankRepository }        = require('../../db/repositories/ChipBankRepository');
+    const { TournamentGroupRepository } = require('../../db/repositories/TournamentGroupRepository');
+
+    const group          = await TournamentGroupRepository.getGroup(this.groupId);
+    const payoutStructure = group?.payout_structure ?? [];
+    const totalPool      = await TournamentGroupRepository.getTotalPrizePool(this.groupId);
+
+    if (totalPool <= 0 || payoutStructure.length === 0) {
+      await TournamentGroupRepository.updateStatus(this.groupId, 'finished');
+      for (const tableId of this.tableIds) {
+        this.io.to(tableId).emit('tournament_group:ended', { groupId: this.groupId, standings: finalStandings });
+      }
+      return;
+    }
+
+    const sorted = [...payoutStructure].sort((a, b) => a.place - b.place);
+    const prizes = sorted.map(tier => ({
+      place:    tier.place,
+      amount:   Math.floor(totalPool * tier.percentage / 100),
+      playerId: finalStandings.find(s => s.place === tier.place)?.playerId ?? null,
+    }));
+
+    // Give remainder to 1st place (rounding correction)
+    const distributed = prizes.reduce((s, p) => s + p.amount, 0);
+    const firstPrize  = prizes.find(p => p.place === 1);
+    if (firstPrize) firstPrize.amount += (totalPool - distributed);
+
+    for (const prize of prizes) {
+      if (!prize.playerId || prize.amount <= 0) continue;
+      try {
+        const newBalance = await ChipBankRepository.applyTransaction({
+          playerId:  prize.playerId,
+          amount:    prize.amount,
+          type:      'tournament_prize',
+          tableId:   null,
+          createdBy: null,
+          notes:     `Tournament prize — place ${prize.place}`,
+        });
+
+        const { stableIdMap } = require('../../state/SharedState');
+        for (const [sid, stableId] of stableIdMap.entries()) {
+          if (stableId === prize.playerId) {
+            const sock = this.io.sockets.sockets?.get(sid);
+            if (sock) {
+              sock.emit('tournament_group:prize_awarded', { amount: prize.amount, place: prize.place, newBalance });
+            }
+            break;
+          }
+        }
+      } catch (err) {
+        for (const tableId of this.tableIds) {
+          this.io.to(tableId).emit('notification', { type: 'warning', message: `Prize credit failed for place ${prize.place}: ${err.message}` });
+        }
+      }
+    }
+
+    await TournamentGroupRepository.updateStatus(this.groupId, 'finished');
+
+    const standings = await TournamentGroupRepository.getStandings(this.groupId);
+    for (const tableId of this.tableIds) {
+      this.io.to(tableId).emit('tournament_group:ended', { groupId: this.groupId, standings });
+    }
+  }
+
+  /**
+   * Build finalStandings array ordered 1st…nth from DB standings.
+   */
+  async _buildFinalStandings(winnerId) {
+    const standings = await TournamentGroupRepository.getStandings(this.groupId);
+    const result = standings
+      .filter(s => s.finish_position != null)
+      .sort((a, b) => a.finish_position - b.finish_position)
+      .map(s => ({ playerId: s.player_id, place: s.finish_position }));
+
+    if (winnerId && !result.find(s => s.place === 1)) {
+      result.unshift({ playerId: winnerId, place: 1 });
+    }
+    return result;
   }
 
   destroy() {
