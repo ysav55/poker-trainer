@@ -14,16 +14,36 @@ const DIFFICULTY_OPTIONS = [
   { value: 'hard',   label: 'Hard'   },
 ];
 
+// ── Privacy tile configs ───────────────────────────────────────────────────────
+
+const PLAYER_PRIVACY_OPTIONS = [
+  { value: 'solo', label: 'Solo',       subtext: 'Private — only you',           testId: 'privacy-solo' },
+  { value: 'open', label: 'Open Table', subtext: 'Listed in bot lobby',          testId: 'privacy-open' },
+];
+
+const COACH_PRIVACY_OPTIONS = [
+  { value: 'public',  label: 'Public',      subtext: 'Visible to all players',   testId: 'privacy-public'  },
+  { value: 'school',  label: 'School Only', subtext: 'Visible to your students', testId: 'privacy-school'  },
+  { value: 'private', label: 'Private',     subtext: 'Only you can join',        testId: 'privacy-private' },
+];
+
+const COACH_ROLES = new Set(['coach', 'admin', 'superadmin']);
+
 // ── Create Bot Table Modal ─────────────────────────────────────────────────────
 
 function CreateBotTableModal({ onClose, onCreated }) {
+  const { user } = useAuth();
+  const isCoachRole = COACH_ROLES.has(user?.role);
+
+  const privacyOptions = isCoachRole ? COACH_PRIVACY_OPTIONS : PLAYER_PRIVACY_OPTIONS;
+  const defaultPrivacy = isCoachRole ? 'school' : 'solo';
+
   const [difficulty,  setDifficulty]  = useState('medium');
-  const [humanSeats,  setHumanSeats]  = useState(1);
+  const [privacy,     setPrivacy]     = useState(defaultPrivacy);
   const [smallBlind,  setSmallBlind]  = useState(25);
   const [bigBlind,    setBigBlind]    = useState(50);
   const [busy,        setBusy]        = useState(false);
   const [error,       setError]       = useState('');
-  const [tableName,   setTableName]   = useState('');
 
   const handleCreate = async () => {
     setBusy(true);
@@ -32,9 +52,8 @@ function CreateBotTableModal({ onClose, onCreated }) {
       const table = await apiFetch('/api/bot-tables', {
         method: 'POST',
         body: JSON.stringify({
-          name: tableName.trim() || undefined,
           difficulty,
-          humanSeats,
+          privacy,
           blinds: { small: smallBlind, big: bigBlind },
         }),
       });
@@ -60,21 +79,37 @@ function CreateBotTableModal({ onClose, onCreated }) {
           New Bot Game
         </h2>
 
-        {/* Table name (optional) */}
+        {/* Privacy tiles */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-gray-500 tracking-widest uppercase">
-            Table Name <span className="text-gray-600">(optional)</span>
-          </label>
-          <input
-            type="text"
-            data-testid="table-name-input"
-            className="rounded-lg px-3 py-2 text-sm text-gray-100 outline-none"
-            style={{ background: '#0d1117', border: '1px solid #30363d' }}
-            value={tableName}
-            onChange={(e) => setTableName(e.target.value)}
-            placeholder="e.g. Practice Session"
-            maxLength={60}
-          />
+          <label className="text-xs text-gray-500 tracking-widest uppercase">Visibility</label>
+          <div className="flex gap-2 flex-wrap">
+            {privacyOptions.map((opt) => {
+              const isSelected = privacy === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  data-testid={opt.testId}
+                  onClick={() => setPrivacy(opt.value)}
+                  className="flex flex-col items-start px-3 py-2 rounded-lg flex-1 text-left transition-colors"
+                  style={
+                    isSelected
+                      ? { background: 'rgba(212,175,55,0.12)', border: `2px solid ${GOLD}`, minWidth: 100 }
+                      : { background: 'rgba(255,255,255,0.03)', border: '2px solid rgba(255,255,255,0.08)', minWidth: 100 }
+                  }
+                >
+                  <span
+                    className="text-xs font-semibold"
+                    style={{ color: isSelected ? GOLD : '#e5e7eb' }}
+                  >
+                    {opt.label}
+                  </span>
+                  <span className="text-[10px] mt-0.5" style={{ color: '#6b7280' }}>
+                    {opt.subtext}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Difficulty */}
@@ -97,23 +132,6 @@ function CreateBotTableModal({ onClose, onCreated }) {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Human seat count */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-gray-500 tracking-widest uppercase">
-            Human Seats <span className="text-gray-600">(bots fill the rest up to 9)</span>
-          </label>
-          <input
-            type="number"
-            min={1}
-            max={8}
-            data-testid="human-seats-input"
-            className="rounded-lg px-3 py-2 text-sm text-gray-100 outline-none"
-            style={{ background: '#0d1117', border: '1px solid #30363d', width: 80 }}
-            value={humanSeats}
-            onChange={(e) => setHumanSeats(Math.min(8, Math.max(1, Number(e.target.value))))}
-          />
         </div>
 
         {/* Blinds */}

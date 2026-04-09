@@ -258,6 +258,11 @@ module.exports = function registerJoinRoom(socket, ctx) {
     const result = gm.addPlayer(socket.id, trimmedName, isCoach, resolvedStableId);
     if (result.error) return sendError(socket, result.error);
 
+    // Mark bot players so clients can identify them in game state
+    if (socket.data.isBot && result.player) {
+      result.player.is_bot = true;
+    }
+
     // Override initial stack with buyInAmount if set
     if (socket.data.buyInAmount && socket.data.buyInAmount > 0) {
       const currentPlayer = gm.state.players.find(p => p.id === socket.id);

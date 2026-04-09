@@ -3,16 +3,34 @@
 /**
  * BotTableRepository — persistence for Play vs Bot tables.
  *
- * Visibility rules (enforced here, not in route):
- *   solo player (no coach / no school)  => privacy=private  (creator only)
- *   coached player (has school_id)      => privacy=private  (creator + coach sees via coach query)
- *   coach                               => privacy=school   (coach + all stable members)
+ * Privacy mapping (incoming → DB):
+ *   'solo'    → privacy='private'   (player-created, creator-only)
+ *   'open'    → privacy='public'    (player-created, visible to all)
+ *   'public'  → privacy='public'    (coach-created, visible to all)
+ *   'school'  → privacy='school'    (coach-created, school-members only)
+ *   'private' → privacy='private'   (coach-created, creator-only)
+ *
+ * Visibility in getBotTables:
+ *   player => own private tables + ALL public tables
+ *   coach  => own tables + school tables (same school) + ALL public tables
  *
  * Requires migration 019 (bot_cash mode, bot_config column, is_bot flag).
  */
 
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../supabase');
+
+// ─── Privacy mapping ───────────────────────────────────────────────────────────
+
+/**
+ * Map an incoming privacy value (from the route) to a DB privacy value.
+ * 'solo' and 'open' are player-tier aliases; coach roles pass through directly.
+ */
+function mapPrivacyToDb(privacy) {
+  if (privacy === 'solo') return 'private';
+  if (privacy === 'open') return 'public';
+  return privacy; // 'public' | 'school' | 'private' pass through unchanged
+}
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -24,22 +42,20 @@ const supabase = require('../supabase');
  *   creatorId: string,
  *   creatorRole: string,
  *   difficulty: 'easy'|'medium'|'hard',
- *   humanSeats: number,
+ *   privacy: 'solo'|'open'|'public'|'school'|'private',
  *   blinds: { small: number, big: number },
  *   schoolId?: string|null,
  * }} opts
  * @returns {Promise<object>} Inserted table row
  */
-async function createBotTable({ name, creatorId, creatorRole, difficulty, humanSeats, blinds, schoolId = null }) {
-  const id = uuidv4();
-
-  const privacy = creatorRole === 'coach' ? 'school' : 'private';
+async function createBotTable({ name, creatorId, creatorRole, difficulty, privacy, blinds, schoolId = null }) {
+  const id        = uuidv4();
+  const dbPrivacy = mapPrivacyToDb(privacy);
 
   const bot_config = {
     difficulty,
-    human_seats: humanSeats,
+    bot_count: 0,
     blinds,
-    ...(creatorRole !== 'coach' && schoolId ? { coach_school_id: schoolId } : {}),
   };
 
   const { data, error } = await supabase
@@ -49,7 +65,7 @@ async function createBotTable({ name, creatorId, creatorRole, difficulty, humanS
       name,
       mode:       'bot_cash',
       status:     'waiting',
-      privacy,
+      privacy:    dbPrivacy,
       bot_config,
       created_by: creatorId,
     })
@@ -62,26 +78,33 @@ async function createBotTable({ name, creatorId, creatorRole, difficulty, humanS
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
+const TABLE_SELECT = 'id, name, mode, status, privacy, bot_config, created_by, created_at';
+
 /**
  * Return bot_cash tables visible to the requesting user.
  *
  * Visibility:
- *   - coach  => all tables with privacy='school' where created_by is a member
- *               of the same school, PLUS own private tables
- *   - player => own tables only (privacy=private, created_by=requesterId)
- *
- * For simplicity in Phase 1 we return:
- *   - coach: all bot tables whose created_by = requesterId  OR  privacy='school'
- *            and the creator shares the same school_id as the coach
- *   - player: all bot tables whose created_by = requesterId
+ *   - coach  => own tables + school-privacy tables (same school) + public tables
+ *   - player => own private tables + public tables (all players' open tables)
  *
  * @param {string} requesterId  stable UUID of calling user
- * @param {string} role         'coach' | 'player' | other
+ * @param {string} role         'coach' | 'admin' | 'superadmin' | other
  * @returns {Promise<object[]>}
  */
 async function getBotTables(requesterId, role) {
-  if (role === 'coach') {
-    // Coaches see: own tables + school-privacy tables whose creator shares school
+  const COACH_ROLES = new Set(['coach', 'admin', 'superadmin']);
+
+  // Shared query: all public bot tables
+  const publicQuery = supabase
+    .from('tables')
+    .select(TABLE_SELECT)
+    .eq('mode', 'bot_cash')
+    .neq('status', 'completed')
+    .eq('privacy', 'public')
+    .order('created_at', { ascending: false });
+
+  if (COACH_ROLES.has(role)) {
+    // Coaches see: own tables + school-privacy tables (same school) + public tables
     const { data: coachProfile, error: profileErr } = await supabase
       .from('player_profiles')
       .select('school_id')
@@ -91,68 +114,84 @@ async function getBotTables(requesterId, role) {
 
     const schoolId = coachProfile?.school_id ?? null;
 
+    const queries = [
+      // Own tables
+      supabase
+        .from('tables')
+        .select(TABLE_SELECT)
+        .eq('mode', 'bot_cash')
+        .neq('status', 'completed')
+        .eq('created_by', requesterId)
+        .order('created_at', { ascending: false }),
+      // Public tables
+      publicQuery,
+    ];
+
     if (schoolId) {
-      // created_by = me  OR  (privacy=school AND creator is in same school)
-      // Supabase JS doesn't support subquery-based OR easily; do two queries and merge.
-      const [ownResult, schoolResult] = await Promise.all([
+      // School-privacy tables from same school
+      queries.push(
         supabase
           .from('tables')
-          .select('id, name, mode, status, privacy, bot_config, created_by, created_at')
-          .eq('mode', 'bot_cash')
-          .neq('status', 'completed')
-          .eq('created_by', requesterId)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('tables')
-          .select('id, name, mode, status, privacy, bot_config, created_by, created_at, player_profiles!tables_created_by_fkey(school_id)')
+          .select(`${TABLE_SELECT}, player_profiles!tables_created_by_fkey(school_id)`)
           .eq('mode', 'bot_cash')
           .neq('status', 'completed')
           .eq('privacy', 'school')
-          .order('created_at', { ascending: false }),
-      ]);
-      if (ownResult.error) throw new Error(ownResult.error.message);
-      if (schoolResult.error) throw new Error(schoolResult.error.message);
-
-      const own = ownResult.data ?? [];
-      const schoolTables = (schoolResult.data ?? []).filter(
-        t => t.player_profiles?.school_id === schoolId
+          .order('created_at', { ascending: false })
       );
-      // deduplicate by id
-      const seen = new Set();
-      const merged = [];
-      for (const t of [...own, ...schoolTables]) {
-        if (!seen.has(t.id)) {
-          seen.add(t.id);
-          // strip joined profile data before returning
-          const { player_profiles: _pp, ...row } = t;
-          merged.push(row);
-        }
-      }
-      return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
 
-    // Coach without a school: own tables only
-    const { data, error } = await supabase
+    const results = await Promise.all(queries);
+    for (const r of results) {
+      if (r.error) throw new Error(r.error.message);
+    }
+
+    const own    = results[0].data ?? [];
+    const pub    = results[1].data ?? [];
+    const school = schoolId ? (results[2].data ?? []).filter(
+      t => t.player_profiles?.school_id === schoolId
+    ) : [];
+
+    // Deduplicate by id, strip joined profile data
+    const seen   = new Set();
+    const merged = [];
+    for (const t of [...own, ...school, ...pub]) {
+      if (!seen.has(t.id)) {
+        seen.add(t.id);
+        const { player_profiles: _pp, ...row } = t;
+        merged.push(row);
+      }
+    }
+    return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+
+  // Player: own private tables + all public tables
+  const [ownResult, pubResult] = await Promise.all([
+    supabase
       .from('tables')
-      .select('id, name, mode, status, privacy, bot_config, created_by, created_at')
+      .select(TABLE_SELECT)
       .eq('mode', 'bot_cash')
       .neq('status', 'completed')
       .eq('created_by', requesterId)
-      .order('created_at', { ascending: false });
-    if (error) throw new Error(error.message);
-    return data ?? [];
-  }
+      .neq('privacy', 'public')  // avoid double-counting own public tables
+      .order('created_at', { ascending: false }),
+    publicQuery,
+  ]);
+  if (ownResult.error) throw new Error(ownResult.error.message);
+  if (pubResult.error)  throw new Error(pubResult.error.message);
 
-  // Player (solo or coached): own tables only
-  const { data, error } = await supabase
-    .from('tables')
-    .select('id, name, mode, status, privacy, bot_config, created_by, created_at')
-    .eq('mode', 'bot_cash')
-    .neq('status', 'completed')
-    .eq('created_by', requesterId)
-    .order('created_at', { ascending: false });
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const own = ownResult.data ?? [];
+  const pub = pubResult.data ?? [];
+
+  // Deduplicate (player's own open table might appear in public list)
+  const seen   = new Set();
+  const merged = [];
+  for (const t of [...own, ...pub]) {
+    if (!seen.has(t.id)) {
+      seen.add(t.id);
+      merged.push(t);
+    }
+  }
+  return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 // ─── Bot player management ────────────────────────────────────────────────────

@@ -202,6 +202,9 @@ test('human joins bot table, bots auto-join and complete a hand', async () => {
   const roomJoined = await waitFor(humanSocket, 'room_joined', 5000);
   expect(roomJoined.tableId).toBe(TABLE_ID);
 
+  // Human adds a bot (bots are now spawned on demand via bot:add)
+  humanSocket.emit('bot:add');
+
   // Human auto-acts: call/check whenever it is their turn so the hand progresses.
   // The human socket id is only known after connection, so we compare inside the listener.
   const BETTING_PHASES = ['preflop', 'flop', 'turn', 'river'];

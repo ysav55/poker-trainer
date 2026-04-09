@@ -13,23 +13,51 @@ const { createBotTable, getBotTables } = require('../db/repositories/BotTableRep
 
 const VALID_DIFFICULTIES = ['easy', 'medium', 'hard'];
 
+// Privacy values valid for non-coach roles (players)
+const PLAYER_PRIVACIES = new Set(['solo', 'open']);
+// Privacy values valid for coach/admin/superadmin roles
+const COACH_PRIVACIES  = new Set(['public', 'school', 'private']);
+
+const COACH_ROLES = new Set(['coach', 'admin', 'superadmin']);
+
 module.exports = function registerBotTableRoutes(app, { requireAuth }) {
   // ── POST /api/bot-tables ──────────────────────────────────────────────────
   app.post('/api/bot-tables', requireAuth, async (req, res) => {
-    const { name, difficulty, humanSeats, blinds } = req.body || {};
+    const { difficulty, privacy: rawPrivacy, blinds } = req.body || {};
     const user = req.user;
 
-    // ── Auto-generate name if not provided ────────────────────────────────────
-    const resolvedName = (name && typeof name === 'string' && name.trim().length > 0)
-      ? name.trim()
+    const isCoachRole = COACH_ROLES.has(user.role);
+
+    // ── Privacy validation and default ────────────────────────────────────────
+    const defaultPrivacy = isCoachRole ? 'school' : 'solo';
+    const privacy = rawPrivacy ?? defaultPrivacy;
+
+    if (isCoachRole) {
+      if (!COACH_PRIVACIES.has(privacy)) {
+        return res.status(400).json({
+          error: 'invalid_privacy',
+          message: `privacy for coaches must be one of: ${[...COACH_PRIVACIES].join(', ')}.`,
+        });
+      }
+    } else {
+      if (!PLAYER_PRIVACIES.has(privacy)) {
+        return res.status(400).json({
+          error: 'invalid_privacy',
+          message: `privacy must be one of: ${[...PLAYER_PRIVACIES].join(', ')}.`,
+        });
+      }
+    }
+
+    // ── Auto-generate name ────────────────────────────────────────────────────
+    // For open/public tables use the user's display name; solo/private get timestamp.
+    const isPublicish = privacy === 'open' || privacy === 'public';
+    const displayName = user.displayName || user.name || user.stableId;
+    const resolvedName = isPublicish
+      ? `${displayName}'s table`
       : `Bot Game — ${new Date().toISOString().replace('T', ' ').slice(0, 16)}`;
 
     if (!VALID_DIFFICULTIES.includes(difficulty))
       return res.status(400).json({ error: 'invalid_difficulty', message: `difficulty must be one of: ${VALID_DIFFICULTIES.join(', ')}.` });
-
-    const seats = parseInt(humanSeats, 10);
-    if (!Number.isInteger(seats) || seats < 1 || seats > 8)
-      return res.status(400).json({ error: 'invalid_human_seats', message: 'humanSeats must be an integer between 1 and 8.' });
 
     if (!blinds || typeof blinds.small !== 'number' || typeof blinds.big !== 'number'
         || blinds.small <= 0 || blinds.big <= 0 || blinds.big < blinds.small)
@@ -41,7 +69,7 @@ module.exports = function registerBotTableRoutes(app, { requireAuth }) {
         creatorId:   user.stableId || user.id,
         creatorRole: user.role,
         difficulty,
-        humanSeats:  seats,
+        privacy,
         blinds,
         schoolId:    user.schoolId ?? null,
       });

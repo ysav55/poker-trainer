@@ -276,6 +276,15 @@ function FullTableView() {
     return () => s.off('player_busted', onBusted);
   }, [socketRef]);
 
+  // ── table:closed listener (bot_cash) ─────────────────────────────────────
+  useEffect(() => {
+    const s = socketRef?.current;
+    if (!s || tableMode !== 'bot_cash') return;
+    const handler = () => navigate('/bot-lobby');
+    s.on('table:closed', handler);
+    return () => s.off('table:closed', handler);
+  }, [socketRef, tableMode, navigate]);
+
   // ── Sync sitting-out state from game state ────────────────────────────────
   useEffect(() => {
     if (!gameState?.players || !myId) return;
@@ -394,6 +403,8 @@ function FullTableView() {
             equityEnabled={equityEnabled}
             sharedRange={sharedRange}
             equitySettings={hookState?.equitySettings}
+            tableMode={tableMode}
+            onBotRemove={tableMode === 'bot_cash' ? (stableId) => socket?.emit('bot:remove', { stableId }) : null}
           />
         </div>
 
@@ -460,6 +471,24 @@ function FullTableView() {
           }}
         >
           {bustedMessage}
+        </div>
+      )}
+
+      {/* Add Bot button — shown for non-spectator players on bot_cash tables */}
+      {tableMode === 'bot_cash' && !isSpectator && (
+        <div style={{ position: 'fixed', bottom: 24, left: 24, zIndex: 90 }}>
+          <button
+            data-testid="add-bot-btn"
+            onClick={() => socket?.emit('bot:add')}
+            style={{
+              padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+              cursor: 'pointer', transition: 'all 0.15s',
+              background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.4)',
+              color: '#d4af37',
+            }}
+          >
+            + Add Bot
+          </button>
         </div>
       )}
 

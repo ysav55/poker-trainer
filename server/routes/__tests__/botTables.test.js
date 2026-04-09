@@ -45,19 +45,17 @@ const app = buildApp();
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const playerUser = { stableId: 'player-1', name: 'Alice', role: 'player' };
-const coachUser  = { stableId: 'coach-1',  name: 'Coach', role: 'coach'  };
+const playerUser = { stableId: 'player-1', name: 'Alice', displayName: 'Alice', role: 'player' };
+const coachUser  = { stableId: 'coach-1',  name: 'Coach Bob', displayName: 'Coach Bob', role: 'coach' };
 
 const createdTable = {
   id: 'tid-abc', name: 'My Bot Table', mode: 'bot_cash', status: 'waiting',
-  privacy: 'private', bot_config: { difficulty: 'easy', human_seats: 2, blinds: { small: 5, big: 10 } },
+  privacy: 'private', bot_config: { difficulty: 'easy', bot_count: 0, blinds: { small: 5, big: 10 } },
   created_by: 'player-1', created_at: '2026-04-01T00:00:00Z',
 };
 
 const validBody = {
-  name: 'My Bot Table',
   difficulty: 'easy',
-  humanSeats: 2,
   blinds: { small: 5, big: 10 },
 };
 
@@ -78,7 +76,7 @@ describe('POST /api/bot-tables', () => {
     expect(res.status).toBe(401);
   });
 
-  test('returns 201 with flat table object on success (player)', async () => {
+  test('returns 201 with flat table object on success (player, default solo privacy)', async () => {
     mockCurrentUser = playerUser;
     const res = await request(app).post('/api/bot-tables').send(validBody);
     expect(res.status).toBe(201);
@@ -87,44 +85,99 @@ describe('POST /api/bot-tables', () => {
     expect(res.body.table).toBeUndefined();
     expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'My Bot Table',
         creatorId:   'player-1',
         creatorRole: 'player',
         difficulty:  'easy',
-        humanSeats:  2,
+        privacy:     'solo', // default for player
         blinds:      { small: 5, big: 10 },
       })
     );
   });
 
-  test('returns 201 with flat table object on success (coach)', async () => {
+  test('does not pass humanSeats to repository (field removed)', async () => {
+    mockCurrentUser = playerUser;
+    await request(app).post('/api/bot-tables').send({ ...validBody, humanSeats: 3 });
+    expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
+      expect.not.objectContaining({ humanSeats: expect.anything() })
+    );
+  });
+
+  test('player can set privacy=solo', async () => {
+    mockCurrentUser = playerUser;
+    await request(app).post('/api/bot-tables').send({ ...validBody, privacy: 'solo' });
+    expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
+      expect.objectContaining({ privacy: 'solo' })
+    );
+  });
+
+  test('player can set privacy=open', async () => {
+    mockCurrentUser = playerUser;
+    await request(app).post('/api/bot-tables').send({ ...validBody, privacy: 'open' });
+    expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
+      expect.objectContaining({ privacy: 'open' })
+    );
+  });
+
+  test('open table auto-names using displayName', async () => {
+    mockCurrentUser = playerUser;
+    await request(app).post('/api/bot-tables').send({ ...validBody, privacy: 'open' });
+    expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Alice's table" })
+    );
+  });
+
+  test('solo table auto-names with timestamp format', async () => {
+    mockCurrentUser = playerUser;
+    await request(app).post('/api/bot-tables').send({ ...validBody, privacy: 'solo' });
+    expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
+      expect.objectContaining({ name: expect.stringMatching(/^Bot Game — /) })
+    );
+  });
+
+  test('player cannot set coach-only privacy (school)', async () => {
+    mockCurrentUser = playerUser;
+    const res = await request(app).post('/api/bot-tables').send({ ...validBody, privacy: 'school' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('invalid_privacy');
+  });
+
+  test('returns 201 with flat table object on success (coach, default school privacy)', async () => {
     mockCurrentUser = coachUser;
     const res = await request(app).post('/api/bot-tables').send(validBody);
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ id: 'tid-abc', mode: 'bot_cash' });
-    expect(res.body.table).toBeUndefined();
     expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
-      expect.objectContaining({ creatorRole: 'coach' })
+      expect.objectContaining({ creatorRole: 'coach', privacy: 'school' })
     );
   });
 
-  test('auto-generates name when name is omitted', async () => {
-    mockCurrentUser = playerUser;
-    const { name: _n, ...noName } = validBody;
-    const res = await request(app).post('/api/bot-tables').send(noName);
-    expect(res.status).toBe(201);
+  test('coach can set privacy=public', async () => {
+    mockCurrentUser = coachUser;
+    await request(app).post('/api/bot-tables').send({ ...validBody, privacy: 'public' });
     expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
-      expect.objectContaining({ name: expect.stringMatching(/^Bot Game — /) })
+      expect.objectContaining({ privacy: 'public' })
     );
   });
 
-  test('auto-generates name when name is empty string', async () => {
-    mockCurrentUser = playerUser;
-    const res = await request(app).post('/api/bot-tables').send({ ...validBody, name: '' });
-    expect(res.status).toBe(201);
+  test('public coach table auto-names using displayName', async () => {
+    mockCurrentUser = coachUser;
+    await request(app).post('/api/bot-tables').send({ ...validBody, privacy: 'public' });
     expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
-      expect.objectContaining({ name: expect.stringMatching(/^Bot Game — /) })
+      expect.objectContaining({ name: "Coach Bob's table" })
     );
+  });
+
+  test('coach cannot set player-only privacy (solo)', async () => {
+    mockCurrentUser = coachUser;
+    const res = await request(app).post('/api/bot-tables').send({ ...validBody, privacy: 'solo' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('invalid_privacy');
+  });
+
+  test('succeeds without humanSeats (field removed)', async () => {
+    mockCurrentUser = playerUser;
+    const res = await request(app).post('/api/bot-tables').send(validBody);
+    expect(res.status).toBe(201);
   });
 
   test('returns 400 when difficulty is invalid', async () => {
@@ -132,20 +185,6 @@ describe('POST /api/bot-tables', () => {
     const res = await request(app).post('/api/bot-tables').send({ ...validBody, difficulty: 'extreme' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('invalid_difficulty');
-  });
-
-  test('returns 400 when humanSeats is out of range', async () => {
-    mockCurrentUser = playerUser;
-    const res = await request(app).post('/api/bot-tables').send({ ...validBody, humanSeats: 9 });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_human_seats');
-  });
-
-  test('returns 400 when humanSeats is 0', async () => {
-    mockCurrentUser = playerUser;
-    const res = await request(app).post('/api/bot-tables').send({ ...validBody, humanSeats: 0 });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_human_seats');
   });
 
   test('returns 400 when blinds are invalid (big < small)', async () => {
@@ -169,14 +208,6 @@ describe('POST /api/bot-tables', () => {
     const res = await request(app).post('/api/bot-tables').send(validBody);
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('internal_error');
-  });
-
-  test('trims whitespace from name', async () => {
-    mockCurrentUser = playerUser;
-    await request(app).post('/api/bot-tables').send({ ...validBody, name: '  My Table  ' });
-    expect(BotTableRepo.createBotTable).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'My Table' })
-    );
   });
 });
 

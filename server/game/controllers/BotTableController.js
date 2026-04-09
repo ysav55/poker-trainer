@@ -10,15 +10,16 @@
  * They receive game_state events and emit place_bet when it is their turn.
  *
  * Hand lifecycle (fully server-driven — no coach socket required):
- *   1. Once all bots have joined AND ≥2 players are seated, _startHand() is called.
- *   2. _startHand() calls gm.startGame(), logs to HandLogger, and broadcasts state.
- *   3. Bots receive game_state, think, and emit place_bet.
- *   4. When any bot receives game_state with phase='showdown', _completeHand() fires.
- *   5. _completeHand() captures state, resets, emits hand_complete, logs endHand.
- *   6. After DEAL_DELAY_MS, _startHand() is called again for the next hand.
+ *   1. A human player joins and calls addBot() to spawn a bot.
+ *   2. Once the bot has joined AND ≥2 players are seated, _tryAutoStart() fires.
+ *   3. _startHand() calls gm.startGame(), logs to HandLogger, and broadcasts state.
+ *   4. Bots receive game_state, think, and emit place_bet.
+ *   5. When any bot receives game_state with phase='showdown', _completeHand() fires.
+ *   6. _completeHand() captures state, resets, emits hand_complete, logs endHand.
+ *   7. After DEAL_DELAY_MS, _startHand() is called again for the next hand.
+ *   8. When the last human player leaves, the table is destroyed immediately.
  *
- * Constructor reads bot_count, difficulty, and (optionally) serverUrl from
- * tableConfig.bot_config. Falls back to sensible defaults if not present.
+ * Constructor does NOT spawn bots on creation — bots are added on demand via addBot().
  */
 
 const { AutoController } = require('./AutoController');
@@ -48,18 +49,17 @@ class BotTableController extends AutoController {
 
     const cfg = tableConfig?.bot_config ?? {};
 
-    this.difficulty = cfg.difficulty  ?? 'easy';
-    this.botCount   = cfg.bot_count   ?? 1;
-    this.serverUrl  = cfg.serverUrl   ?? `http://localhost:${process.env.PORT ?? 3001}`;
+    this.difficulty = cfg.difficulty ?? 'easy';
+    this.botCount   = 0; // bots are spawned on demand via addBot()
+    this.serverUrl  = cfg.serverUrl  ?? `http://localhost:${process.env.PORT ?? 3001}`;
 
     /** @type {Array<{socket: object, stableId: string, name: string, thinkTimer: ReturnType<setTimeout>|null, joined: boolean}>} */
     this._botSockets      = [];
-    this._botsSpawned     = false;
     this._handActive      = false; // guard: ensures _completeHand runs only once per hand
     this._gracePauseTimer = null;
 
-    // Spawn bots immediately — they'll connect async and join when ready.
-    this._spawnBots();
+    // Set of stableIds that belong to bots — used for human-count detection
+    this._botStableIds = new Set();
   }
 
   getMode() { return 'bot_cash'; }
@@ -67,58 +67,81 @@ class BotTableController extends AutoController {
   // ─── Bot lifecycle ──────────────────────────────────────────────────────────
 
   /**
-   * Create N socket.io-client connections that join the table as bots.
-   * Each bot authenticates via a server-signed JWT (role='bot') so it passes
-   * socketAuthMiddleware and is trusted by the bot_cash visibility check.
+   * Spawn exactly one new bot and add it to the table.
+   * Called by the bot:add socket event handler.
    */
-  _spawnBots() {
-    if (this._botsSpawned) return;
-    this._botsSpawned = true;
-
+  addBot() {
     const diffLabel = this.difficulty.charAt(0).toUpperCase() + this.difficulty.slice(1);
     const ioClient  = _ioClient();
 
+    const stableId = uuidv4();
+    const name     = `Bot ${this._botSockets.length + 1} (${diffLabel})`;
+
+    const token  = JwtService.sign({ stableId, name, role: 'bot' });
+    const socket = ioClient(this.serverUrl, {
+      auth:         { token },
+      reconnection: false,
+      forceNew:     true,
+    });
+
+    const botEntry = { socket, stableId, name, thinkTimer: null, joined: false };
+    this._botSockets.push(botEntry);
+    this._botStableIds.add(stableId);
+
+    socket.on('connect', () => {
+      socket.emit('join_room', { name, tableId: this.tableId });
+    });
+
+    socket.on('room_joined', () => {
+      botEntry.joined = true;
+      this._tryAutoStart();
+    });
+
+    socket.on('game_state', (state) => {
+      if (!this.active) return;
+      this._onGameState(state, socket, botEntry);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error(`[BotTableController] ${name} connect error: ${err.message}`);
+    });
+  }
+
+  /**
+   * Remove a bot by stableId. Disconnects its socket and removes it from the list.
+   * @param {string} stableId
+   */
+  removeBot(stableId) {
+    const idx = this._botSockets.findIndex(b => b.stableId === stableId);
+    if (idx === -1) return;
+
+    const entry = this._botSockets[idx];
+
+    // Clear any pending think timer
+    if (entry.thinkTimer) {
+      clearTimeout(entry.thinkTimer);
+      entry.thinkTimer = null;
+    }
+
+    // Disconnect — this triggers the normal disconnect flow, removing player from GM
+    try { entry.socket.disconnect(); } catch { /* ignore */ }
+
+    this._botSockets.splice(idx, 1);
+    this._botStableIds.delete(stableId);
+  }
+
+  /**
+   * Legacy helper kept for DRY — spawns N bots. Now delegates to addBot().
+   * Only called if external code explicitly sets botCount and invokes _spawnBots().
+   */
+  _spawnBots() {
     for (let i = 0; i < this.botCount; i++) {
-      const stableId = uuidv4();
-      const name     = this.botCount === 1
-        ? `Bot (${diffLabel})`
-        : `Bot ${i + 1} (${diffLabel})`;
-
-      const token  = JwtService.sign({ stableId, name, role: 'bot' });
-      const socket = ioClient(this.serverUrl, {
-        auth:         { token },
-        reconnection: false,
-        forceNew:     true,
-      });
-
-      const botEntry = { socket, stableId, name, thinkTimer: null, joined: false };
-      this._botSockets.push(botEntry);
-
-      socket.on('connect', () => {
-        socket.emit('join_room', { name, tableId: this.tableId });
-      });
-
-      socket.on('room_joined', () => {
-        botEntry.joined = true;
-        // Once every bot has joined, try to start the first hand.
-        if (this._botSockets.every(b => b.joined)) {
-          this._tryAutoStart();
-        }
-      });
-
-      socket.on('game_state', (state) => {
-        if (!this.active) return;
-        this._onGameState(state, socket, botEntry);
-      });
-
-      socket.on('connect_error', (err) => {
-        console.error(`[BotTableController] ${name} connect error: ${err.message}`);
-      });
+      this.addBot();
     }
   }
 
   /**
-   * Start the first hand once all bots and at least one human are seated.
+   * Start the first hand once at least one bot and at least one human are seated.
    * Subsequent hands are triggered by _completeHand → onHandComplete.
    */
   _tryAutoStart() {
@@ -255,14 +278,39 @@ class BotTableController extends AutoController {
     }, DEAL_DELAY_MS);
   }
 
+  /**
+   * Override onPlayerLeave: pause bots during grace window AND check if no humans remain.
+   * If no human (non-bot, non-disconnected) players remain, destroy the table immediately.
+   */
   async onPlayerLeave(_playerId) {
     // Pause bot think-timers during the reconnect grace window.
     this._pauseBotTimers();
     if (this._gracePauseTimer) clearTimeout(this._gracePauseTimer);
     this._gracePauseTimer = setTimeout(() => {
       this._gracePauseTimer = null;
-      // Grace window expired — bots resume responding to future game_state events.
+      // Grace window expired — check if any humans remain; if not, destroy.
+      this._checkHumansRemaining();
     }, RECONNECT_GRACE_MS);
+
+    // Immediate check: if zero humans seated right now, destroy.
+    this._checkHumansRemaining();
+  }
+
+  /**
+   * Check if any non-bot, non-disconnected, seated players remain.
+   * If none, emit table:closed and destroy the controller.
+   */
+  _checkHumansRemaining() {
+    if (!this.active) return;
+    const players = this.gm.state?.players ?? [];
+    const humanCount = players.filter(
+      p => p.seat >= 0 && !p.disconnected && !this._botStableIds.has(p.stableId)
+    ).length;
+
+    if (humanCount === 0) {
+      this.io.to(this.tableId).emit('table:closed', { reason: 'no_humans' });
+      this.destroy();
+    }
   }
 
   destroy() {
@@ -302,6 +350,7 @@ class BotTableController extends AutoController {
       try { entry.socket.disconnect(); } catch { /* ignore */ }
     }
     this._botSockets = [];
+    this._botStableIds.clear();
 
     if (this._gracePauseTimer) {
       clearTimeout(this._gracePauseTimer);

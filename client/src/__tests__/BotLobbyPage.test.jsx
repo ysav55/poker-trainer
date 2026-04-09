@@ -8,7 +8,12 @@
  *  - Error state when fetch fails
  *  - "New Game" button opens creation modal
  *  - Modal cancel closes modal
- *  - Modal submit calls POST /api/bot-tables and navigates
+ *  - Modal shows Solo/Open privacy tiles for player role
+ *  - Clicking Solo tile selects it (default)
+ *  - Clicking Open tile selects it
+ *  - Modal submit sends correct payload (privacy, difficulty, blinds — no humanSeats)
+ *  - Modal submit navigates to /table/:tableId on success
+ *  - Error display when POST fails
  *  - Back to lobby navigation
  */
 
@@ -25,8 +30,11 @@ vi.mock('react-router-dom', async (importOriginal) => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
+// Default: player role (sees Solo/Open tiles)
+let mockUser = { id: 'u1', name: 'Alice', role: 'player' };
+
 vi.mock('../contexts/AuthContext.jsx', () => ({
-  useAuth: () => ({ user: { id: 'u1', name: 'Alice', role: 'player' } }),
+  useAuth: () => ({ user: mockUser }),
 }));
 
 const mockApiFetch = vi.fn();
@@ -37,8 +45,8 @@ vi.mock('../lib/api.js', () => ({
 import BotLobbyPage from '../pages/BotLobbyPage.jsx';
 
 const BOT_TABLES = [
-  { id: 'bt-1', name: 'Bot Table Alpha', phase: 'preflop', difficulty: 'easy',   human_count: 1, bot_count: 5 },
-  { id: 'bt-2', name: 'Bot Table Beta',  phase: 'waiting', difficulty: 'hard',   human_count: 2, bot_count: 7 },
+  { id: 'bt-1', name: 'Bot Table Alpha', phase: 'preflop', difficulty: 'easy',   human_count: 1, bot_count: 0 },
+  { id: 'bt-2', name: 'Bot Table Beta',  phase: 'waiting', difficulty: 'hard',   human_count: 2, bot_count: 0 },
 ];
 
 function renderPage() {
@@ -51,13 +59,14 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockUser = { id: 'u1', name: 'Alice', role: 'player' };
   mockApiFetch.mockResolvedValue({ tables: BOT_TABLES });
 });
 
 // ── Header ─────────────────────────────────────────────────────────────────────
 
 describe('BotLobbyPage header', () => {
-  it('shows "Play vs Bots" title', async () => {
+  it('shows "Bot Tables" title', async () => {
     renderPage();
     await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
     expect(screen.getByText(/Bot Tables/i)).toBeTruthy();
@@ -120,9 +129,9 @@ describe('BotLobbyPage table list', () => {
   });
 });
 
-// ── Modal ──────────────────────────────────────────────────────────────────────
+// ── Modal — player role (Solo / Open tiles) ────────────────────────────────────
 
-describe('BotLobbyPage creation modal', () => {
+describe('BotLobbyPage creation modal (player role)', () => {
   it('"New Game" button opens modal', async () => {
     renderPage();
     await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
@@ -138,6 +147,59 @@ describe('BotLobbyPage creation modal', () => {
     expect(screen.queryByTestId('create-bot-modal')).toBeNull();
   });
 
+  it('shows Solo and Open privacy tiles for player role', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    expect(screen.getByTestId('privacy-solo')).toBeTruthy();
+    expect(screen.getByTestId('privacy-open')).toBeTruthy();
+  });
+
+  it('does NOT show coach-only privacy tiles for player role', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    expect(screen.queryByTestId('privacy-public')).toBeNull();
+    expect(screen.queryByTestId('privacy-school')).toBeNull();
+  });
+
+  it('defaults to solo privacy', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ tables: BOT_TABLES })
+      .mockResolvedValueOnce({ id: 'bt-new' });
+
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    fireEvent.click(screen.getByTestId('modal-submit'));
+
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledWith(
+      '/api/bot-tables',
+      expect.objectContaining({
+        body: expect.stringContaining('"privacy":"solo"'),
+      })
+    ));
+  });
+
+  it('clicking Open tile sends privacy=open in POST', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ tables: BOT_TABLES })
+      .mockResolvedValueOnce({ id: 'bt-new' });
+
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    fireEvent.click(screen.getByTestId('privacy-open'));
+    fireEvent.click(screen.getByTestId('modal-submit'));
+
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledWith(
+      '/api/bot-tables',
+      expect.objectContaining({
+        body: expect.stringContaining('"privacy":"open"'),
+      })
+    ));
+  });
+
   it('Start Game submits POST and navigates to /table/:tableId', async () => {
     mockApiFetch
       .mockResolvedValueOnce({ tables: BOT_TABLES }) // initial GET
@@ -148,6 +210,42 @@ describe('BotLobbyPage creation modal', () => {
     fireEvent.click(screen.getByTestId('new-game-button'));
     fireEvent.click(screen.getByTestId('modal-submit'));
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/table/bt-new'));
+  });
+
+  it('POST body does NOT include humanSeats', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ tables: BOT_TABLES })
+      .mockResolvedValueOnce({ id: 'bt-new' });
+
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    fireEvent.click(screen.getByTestId('modal-submit'));
+
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledWith(
+      '/api/bot-tables',
+      expect.objectContaining({
+        body: expect.not.stringContaining('humanSeats'),
+      })
+    ));
+  });
+
+  it('POST body does NOT include name', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ tables: BOT_TABLES })
+      .mockResolvedValueOnce({ id: 'bt-new' });
+
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    fireEvent.click(screen.getByTestId('modal-submit'));
+
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledWith(
+      '/api/bot-tables',
+      expect.objectContaining({
+        body: expect.not.stringContaining('"name"'),
+      })
+    ));
   });
 
   it('shows error when POST fails', async () => {
@@ -171,15 +269,33 @@ describe('BotLobbyPage creation modal', () => {
     // Modal stays open after selecting difficulty
     expect(screen.getByTestId('create-bot-modal')).toBeTruthy();
   });
+});
 
-  it('shows a table name input in the modal', async () => {
+// ── Modal — coach role (Public / School / Private tiles) ───────────────────────
+
+describe('BotLobbyPage creation modal (coach role)', () => {
+  beforeEach(() => {
+    mockUser = { id: 'c1', name: 'Coach Bob', role: 'coach' };
+  });
+
+  it('shows Public, School Only, and Private tiles for coach role', async () => {
     renderPage();
     await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
     fireEvent.click(screen.getByTestId('new-game-button'));
-    expect(screen.getByTestId('table-name-input')).toBeTruthy();
+    expect(screen.getByTestId('privacy-public')).toBeTruthy();
+    expect(screen.getByTestId('privacy-school')).toBeTruthy();
+    expect(screen.getByTestId('privacy-private')).toBeTruthy();
   });
 
-  it('Start Game sends name in POST body when entered', async () => {
+  it('does NOT show player-only tiles for coach role', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
+    fireEvent.click(screen.getByTestId('new-game-button'));
+    expect(screen.queryByTestId('privacy-solo')).toBeNull();
+    expect(screen.queryByTestId('privacy-open')).toBeNull();
+  });
+
+  it('defaults to school privacy for coach', async () => {
     mockApiFetch
       .mockResolvedValueOnce({ tables: BOT_TABLES })
       .mockResolvedValueOnce({ id: 'bt-new' });
@@ -187,13 +303,12 @@ describe('BotLobbyPage creation modal', () => {
     renderPage();
     await waitFor(() => expect(screen.queryByTestId('loading-state')).toBeNull());
     fireEvent.click(screen.getByTestId('new-game-button'));
-    fireEvent.change(screen.getByTestId('table-name-input'), { target: { value: 'My Table' } });
     fireEvent.click(screen.getByTestId('modal-submit'));
 
     await waitFor(() => expect(mockApiFetch).toHaveBeenCalledWith(
       '/api/bot-tables',
       expect.objectContaining({
-        body: expect.stringContaining('"name":"My Table"'),
+        body: expect.stringContaining('"privacy":"school"'),
       })
     ));
   });

@@ -109,6 +109,8 @@ export default function PokerTable({
   equityEnabled = false, // coach's local EV overlay toggle
   sharedRange = null,      // { handGroups, label, sharedBy } from coach broadcast
   equitySettings = null,  // { showRangesToPlayers, showHeatmapToPlayers, showToPlayers }
+  tableMode = null,        // current table mode (e.g. 'bot_cash')
+  onBotRemove = null,      // (stableId: string) => void — called when × clicked on a bot seat
 }) {
   // ── Derived state ──────────────────────────────────────────────────────────
   const players        = gameState?.players ?? [];
@@ -420,6 +422,8 @@ export default function PokerTable({
                     actionTimer={actionTimer}
                     equity={getPlayerEquity(player)}
                     equityVisible={isEquityVisible(player)}
+                    tableMode={tableMode}
+                    onBotRemove={onBotRemove}
                   />
                 </div>
               );
