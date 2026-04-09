@@ -108,7 +108,7 @@ export default function TablePage() {
 }
 
 function FullTableView() {
-  const { gameState: hookState, socket, tableId, playlist } = useTable();
+  const { gameState: hookState, socket, tableId, playlist, replay } = useTable();
   const { user } = useAuth();
   const { bbView } = usePreferences();
 
@@ -168,7 +168,8 @@ function FullTableView() {
   const tableMode = gameState?.table_mode ?? gameState?.tableMode ?? hookState?.tableMode ?? 'coached_cash';
   const tableName = gameState?.table_name ?? gameState?.room ?? null;
   const isSpectator = hookIsSpectator ?? false;
-  const actingAsCoach = (user?.role === 'coach' || hookIsCoach) && tableMode === 'coached_cash';
+  const COACH_ROLES = new Set(['coach', 'admin', 'superadmin']);
+  const actingAsCoach = (COACH_ROLES.has(user?.role) || hookIsCoach) && tableMode === 'coached_cash';
   const myId = useMemo(() => {
     if (!gameState?.players) return user?.id ?? null;
     const me = gameState.players.find((p) =>
@@ -410,6 +411,14 @@ function FullTableView() {
             equityEnabled={equityEnabled ?? false}
             setEquityEnabled={setEquityEnabled}
             equitySettings={hookState?.equitySettings}
+            replayMeta={replay?.replayMeta ?? null}
+            loadReplay={replay?.loadReplay ?? null}
+            replayStepForward={replay?.replayStepForward ?? null}
+            replayStepBack={replay?.replayStepBack ?? null}
+            replayJumpTo={replay?.replayJumpTo ?? null}
+            replayBranch={replay?.replayBranch ?? null}
+            replayUnbranch={replay?.replayUnbranch ?? null}
+            replayExit={replay?.replayExit ?? null}
           />
         )}
 

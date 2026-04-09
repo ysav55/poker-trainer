@@ -3,6 +3,7 @@ import { useTableSocket } from '../hooks/useTableSocket.js';
 import { useGameState } from '../hooks/useGameState.js';
 import { usePlaylistManager } from '../hooks/usePlaylistManager.js';
 import { useNotifications } from '../hooks/useNotifications.js';
+import { useReplay } from '../hooks/useReplay.js';
 
 const TableContext = createContext(null);
 
@@ -13,8 +14,9 @@ export function TableProvider({ tableId, managerMode = false, children }) {
 
   const gameState = useGameState({ ...socket, addError, addNotification });
   const playlist = usePlaylistManager(socket);
+  const replay = useReplay(socket);
   return (
-    <TableContext.Provider value={{ tableId, socket, gameState, playlist, notifications }}>
+    <TableContext.Provider value={{ tableId, socket, gameState, playlist, notifications, replay }}>
       {children}
     </TableContext.Provider>
   );
