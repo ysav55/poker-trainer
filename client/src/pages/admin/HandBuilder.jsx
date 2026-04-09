@@ -160,6 +160,129 @@ function EmptyBuilder({ activeTab, onNewScenario, onNewPlaylist }) {
   );
 }
 
+// ── QuickSavePanel ────────────────────────────────────────────────────────────
+
+/**
+ * Compact inline panel shown immediately after a scenario is saved.
+ * Lets the user assign the new scenario to an existing playlist without
+ * leaving the Scenarios tab.
+ *
+ * Props:
+ *   scenario  {object}        — the just-saved scenario (must have scenario_id)
+ *   playlists {object[]}      — array of { playlist_id, name }
+ *   onDone    {() => void}    — called after save OR skip
+ */
+function QuickSavePanel({ scenario, playlists, onDone }) {
+  const [selectedId, setSelectedId] = useState('');
+  const [saving, setSaving]         = useState(false);
+  const [error, setError]           = useState(null);
+
+  async function handleSave() {
+    if (!selectedId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/playlists/${selectedId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({ scenario_id: scenario.scenario_id }),
+      });
+      onDone();
+    } catch (err) {
+      setError(err.message ?? 'Failed to add to playlist');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      data-testid="quick-save-panel"
+      style={{
+        margin: '0 16px 16px',
+        padding: '12px 16px',
+        borderRadius: 8,
+        background: '#161b22',
+        border: '1px solid #30363d',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        flexWrap: 'wrap',
+        flexShrink: 0,
+      }}
+    >
+      {playlists.length === 0 ? (
+        <>
+          <span style={{ fontSize: 11, color: '#6e7681', flex: 1 }}>
+            No playlists yet. Go to the Playlists tab to create one.
+          </span>
+          <button
+            data-testid="quick-save-skip"
+            onClick={onDone}
+            style={{ fontSize: 11, color: '#6e7681', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          >
+            Skip
+          </button>
+        </>
+      ) : (
+        <>
+          <span style={{ fontSize: 11, color: '#8b949e', flexShrink: 0 }}>
+            Save to playlist:
+          </span>
+          <select
+            data-testid="quick-save-select"
+            value={selectedId}
+            onChange={e => setSelectedId(e.target.value)}
+            style={{
+              flex: 1, minWidth: 120,
+              padding: '5px 8px', borderRadius: 4,
+              border: '1px solid #30363d',
+              background: '#0d1117',
+              color: selectedId ? '#e5e7eb' : '#6e7681',
+              fontSize: 11, outline: 'none', cursor: 'pointer',
+            }}
+          >
+            <option value="">— choose —</option>
+            {playlists.map(pl => (
+              <option key={pl.playlist_id} value={pl.playlist_id}>
+                {pl.name}
+              </option>
+            ))}
+          </select>
+          <button
+            data-testid="quick-save-btn"
+            onClick={handleSave}
+            disabled={!selectedId || saving}
+            style={{
+              padding: '5px 14px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+              background: !selectedId || saving ? 'transparent' : 'rgba(212,175,55,0.15)',
+              border: !selectedId || saving ? '1px solid #30363d' : '1px solid rgba(212,175,55,0.4)',
+              color: !selectedId || saving ? '#444' : '#d4af37',
+              cursor: !selectedId || saving ? 'not-allowed' : 'pointer',
+              transition: 'all 0.1s',
+            }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            data-testid="quick-save-skip"
+            onClick={onDone}
+            style={{
+              fontSize: 11, color: '#6e7681', background: 'none',
+              border: 'none', cursor: 'pointer', padding: '5px 4px',
+            }}
+          >
+            Skip
+          </button>
+          {error && (
+            <span style={{ width: '100%', fontSize: 11, color: '#f85149', marginTop: 2 }}>
+              {error}
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function HandBuilder() {
@@ -175,6 +298,7 @@ export default function HandBuilder() {
   // Selection state
   const [selectedScenario, setSelectedScenario] = useState(null); // scenario object or 'new'
   const [selectedPlaylist, setSelectedPlaylist] = useState(null); // playlist object or 'new'
+  const [showQuickSave, setShowQuickSave]       = useState(false);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
 
@@ -263,6 +387,7 @@ export default function HandBuilder() {
     // Stay on the saved scenario — do NOT reset to the empty splash.
     // fetchScenarios refreshes the sidebar list so the updated name/state appears.
     if (savedScenario) setSelectedScenario(savedScenario);
+    setShowQuickSave(true);
     fetchScenarios();
   }
 
@@ -296,26 +421,44 @@ export default function HandBuilder() {
   function renderRightPanel() {
     if (selectedScenario === 'new') {
       return (
-        <ScenarioBuilder
-          scenario={null}
-          folders={folders}
-          onSaved={handleScenarioSaved}
-          onDelete={handleDeleteScenario}
-          onDuplicate={handleDuplicateScenario}
-          onClose={handleScenarioSaved}
-        />
+        <>
+          <ScenarioBuilder
+            scenario={null}
+            folders={folders}
+            onSaved={handleScenarioSaved}
+            onDelete={handleDeleteScenario}
+            onDuplicate={handleDuplicateScenario}
+            onClose={handleScenarioSaved}
+          />
+          {showQuickSave && (
+            <QuickSavePanel
+              scenario={selectedScenario === 'new' ? {} : selectedScenario}
+              playlists={playlists}
+              onDone={() => setShowQuickSave(false)}
+            />
+          )}
+        </>
       );
     }
     if (selectedScenario) {
       return (
-        <ScenarioBuilder
-          scenario={selectedScenario}
-          folders={folders}
-          onSaved={handleScenarioSaved}
-          onDelete={handleDeleteScenario}
-          onDuplicate={handleDuplicateScenario}
-          onClose={handleScenarioSaved}
-        />
+        <>
+          <ScenarioBuilder
+            scenario={selectedScenario}
+            folders={folders}
+            onSaved={handleScenarioSaved}
+            onDelete={handleDeleteScenario}
+            onDuplicate={handleDuplicateScenario}
+            onClose={handleScenarioSaved}
+          />
+          {showQuickSave && (
+            <QuickSavePanel
+              scenario={selectedScenario}
+              playlists={playlists}
+              onDone={() => setShowQuickSave(false)}
+            />
+          )}
+        </>
       );
     }
     if (selectedPlaylist === 'new') {
@@ -484,6 +627,7 @@ export default function HandBuilder() {
         {/* New button */}
         <div style={{ padding: '10px 12px', borderTop: '1px solid #21262d', flexShrink: 0 }}>
           <button
+            data-testid="sidebar-new-btn"
             onClick={activeTab === 'Scenarios' ? handleNewScenario : handleNewPlaylist}
             style={{
               width: '100%', padding: '7px', borderRadius: 4,
