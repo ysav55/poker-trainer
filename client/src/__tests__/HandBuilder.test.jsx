@@ -188,4 +188,34 @@ describe('HandBuilder — QuickSavePanel', () => {
       expect.objectContaining({ method: 'POST' })
     );
   });
+
+  it('8. QuickSavePanel with empty playlists shows "No playlists" message and Skip dismisses it', async () => {
+    mockApiFetch.mockImplementation((path) => {
+      if (path === '/api/scenarios') return Promise.resolve([]);
+      if (path === '/api/scenarios/folders') return Promise.resolve({ folders: [] });
+      if (path === '/api/playlists') return Promise.resolve({ playlists: [] });
+      return Promise.resolve({});
+    });
+
+    renderPage();
+    const newBtn = await screen.findByTestId('sidebar-new-btn');
+    fireEvent.click(newBtn);
+    const trigger = await screen.findByTestId('mock-save-trigger');
+    fireEvent.click(trigger);
+
+    // Panel should appear
+    expect(await screen.findByTestId('quick-save-panel')).toBeInTheDocument();
+
+    // No playlist select when there are no playlists
+    expect(screen.queryByTestId('quick-save-select')).toBeNull();
+
+    // "No playlists" message is visible
+    expect(screen.getByText(/no playlists/i)).toBeInTheDocument();
+
+    // Skip button dismisses the panel
+    const skipBtn = screen.getByTestId('quick-save-skip');
+    expect(skipBtn).toBeInTheDocument();
+    fireEvent.click(skipBtn);
+    expect(screen.queryByTestId('quick-save-panel')).toBeNull();
+  });
 });

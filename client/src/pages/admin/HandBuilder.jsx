@@ -189,6 +189,7 @@ function QuickSavePanel({ scenario, playlists, onDone }) {
       onDone();
     } catch (err) {
       setError(err.message ?? 'Failed to add to playlist');
+    } finally {
       setSaving(false);
     }
   }
@@ -273,7 +274,7 @@ function QuickSavePanel({ scenario, playlists, onDone }) {
             Skip
           </button>
           {error && (
-            <span style={{ width: '100%', fontSize: 11, color: '#f85149', marginTop: 2 }}>
+            <span data-testid="quick-save-error" style={{ width: '100%', fontSize: 11, color: '#f85149', marginTop: 2 }}>
               {error}
             </span>
           )}
@@ -419,41 +420,22 @@ export default function HandBuilder() {
   // ── Right panel content ────────────────────────────────────────────────────
 
   function renderRightPanel() {
-    if (selectedScenario === 'new') {
-      return (
-        <>
-          <ScenarioBuilder
-            scenario={null}
-            folders={folders}
-            onSaved={handleScenarioSaved}
-            onDelete={handleDeleteScenario}
-            onDuplicate={handleDuplicateScenario}
-            onClose={handleScenarioSaved}
-          />
-          {showQuickSave && (
-            <QuickSavePanel
-              scenario={selectedScenario === 'new' ? {} : selectedScenario}
-              playlists={playlists}
-              onDone={() => setShowQuickSave(false)}
-            />
-          )}
-        </>
-      );
-    }
     if (selectedScenario) {
+      const scenarioForBuilder = selectedScenario === 'new' ? null : selectedScenario;
+      const scenarioForPanel   = selectedScenario === 'new' ? null : selectedScenario;
       return (
         <>
           <ScenarioBuilder
-            scenario={selectedScenario}
+            scenario={scenarioForBuilder}
             folders={folders}
             onSaved={handleScenarioSaved}
             onDelete={handleDeleteScenario}
             onDuplicate={handleDuplicateScenario}
             onClose={handleScenarioSaved}
           />
-          {showQuickSave && (
+          {showQuickSave && scenarioForPanel && (
             <QuickSavePanel
-              scenario={selectedScenario}
+              scenario={scenarioForPanel}
               playlists={playlists}
               onDone={() => setShowQuickSave(false)}
             />
