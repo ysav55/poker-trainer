@@ -139,7 +139,7 @@ export default function PrepBriefTab({ player }) {
                 className="text-xs font-bold tabular-nums"
                 style={{ color: '#f85149' }}
               >
-                {a.severity.toFixed(2)}
+                {a.severity?.toFixed(2) ?? '—'}
               </span>
             </div>
           ))}

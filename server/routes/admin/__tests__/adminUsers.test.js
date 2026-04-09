@@ -370,8 +370,11 @@ describe('GET /api/admin/users/:id', () => {
     expect(res.body.error).toBe('not_found');
   });
 
-  test('returns 500 when supabase returns an error', async () => {
-    supabase.maybeSingle.mockResolvedValueOnce({ data: null, error: { message: 'DB down' } });
+  test('returns 500 when supabase returns an error on both queries', async () => {
+    // Primary query (with roles join) fails, then fallback bare query also fails
+    supabase.maybeSingle
+      .mockResolvedValueOnce({ data: null, error: { message: 'DB down' } })
+      .mockResolvedValueOnce({ data: null, error: { message: 'DB down' } });
 
     const app = buildApp({ user: { id: 'admin-uuid' } });
     const res = await request(app).get('/api/admin/users/uuid-err');

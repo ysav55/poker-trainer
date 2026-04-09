@@ -167,18 +167,34 @@ router.get('/users/export-csv', async (req, res) => {
 
 router.get('/users/:id', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    // Try with nested role join; fall back to bare query if it fails (e.g. orphaned player_roles rows)
+    let data, playerRoles = [];
+    const withRoles = await supabase
       .from('player_profiles')
       .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, player_roles(assigned_at, roles(name))')
       .eq('id', req.params.id)
       .maybeSingle();
-    if (error) return res.status(500).json({ error: 'internal_error' });
-    if (!data)  return res.status(404).json({ error: 'not_found' });
 
-    const user = normalizeUser(data);
+    if (withRoles.error) {
+      // Fallback: bare profile without role history
+      const bare = await supabase
+        .from('player_profiles')
+        .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at')
+        .eq('id', req.params.id)
+        .maybeSingle();
+      if (bare.error) return res.status(500).json({ error: 'internal_error' });
+      data = bare.data;
+    } else {
+      data = withRoles.data;
+      playerRoles = data?.player_roles ?? [];
+    }
+
+    if (!data) return res.status(404).json({ error: 'not_found' });
+
+    const user = normalizeUser({ ...data, player_roles: playerRoles });
 
     // Include per-role assignment timestamps for the detail view
-    user.roles = (data.player_roles || []).map(pr => ({
+    user.roles = playerRoles.map(pr => ({
       role:        pr.roles?.name ?? null,
       assigned_at: pr.assigned_at ?? null,
       active:      true,
@@ -202,18 +218,21 @@ router.post('/users', async (req, res) => {
     if (!displayName) return res.status(400).json({ error: 'displayName is required' });
     if (!password)    return res.status(400).json({ error: 'password is required' });
 
+    const creatorId = req.user?.stableId ?? req.user?.id ?? null;
     const passwordHash = await bcrypt.hash(password, 12);
     const newId = await createPlayer({
       displayName,
       email:     email || null,
       passwordHash,
-      createdBy: req.user?.stableId ?? req.user?.id ?? null,
+      createdBy: creatorId,
     });
 
-    await setPlayerRole(newId, roleName, req.user?.stableId ?? req.user?.id ?? null);
+    await setPlayerRole(newId, roleName, creatorId);
 
-    if (coachId) {
-      await updatePlayer(newId, { coachId });
+    // If coachId explicitly provided, use it; otherwise if creator is a coach, auto-assign self
+    const resolvedCoachId = coachId || (req.user?.role === 'coach' ? creatorId : null);
+    if (resolvedCoachId) {
+      await updatePlayer(newId, { coachId: resolvedCoachId });
     }
 
     res.status(201).json({ id: newId });

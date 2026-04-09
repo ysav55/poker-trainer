@@ -72,10 +72,13 @@ function Initials({ name }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function UserDetail({ userId, onClose, onUpdated }) {
-  const [user, setUser]         = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
-  const [editing, setEditing]   = useState(false);
+  const [user, setUser]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [editing, setEditing]       = useState(false);
+  const [resetting, setResetting]   = useState(false);
+  const [resetDone, setResetDone]   = useState(false);
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     if (!userId) return;
@@ -105,6 +108,24 @@ export default function UserDetail({ userId, onClose, onUpdated }) {
   function handleSaved() {
     loadUser();
     if (onUpdated) onUpdated();
+  }
+
+  async function handleResetPassword(e) {
+    e.preventDefault();
+    if (!newPassword.trim()) return;
+    setResetting(true);
+    try {
+      await apiFetch(`/api/admin/users/${userId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ password: newPassword }),
+      });
+      setResetDone(true);
+      setNewPassword('');
+    } catch (err) {
+      setError(err.message || 'Reset failed');
+    } finally {
+      setResetting(false);
+    }
   }
 
   // If editing, render the form modal on top
@@ -260,6 +281,47 @@ export default function UserDetail({ userId, onClose, onUpdated }) {
                   </div>
                 </>
               )}
+              {/* Reset password */}
+              <div style={{ height: '1px', background: '#21262d' }} />
+              <div>
+                <span className="text-xs font-semibold tracking-wider block mb-2" style={{ color: '#6e7681' }}>
+                  RESET PASSWORD
+                </span>
+                {resetDone ? (
+                  <p className="text-xs" style={{ color: '#3fb950' }}>Password updated successfully.</p>
+                ) : (
+                  <form onSubmit={handleResetPassword} className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="New password"
+                      className="flex-1 rounded px-3 py-1.5 text-sm"
+                      style={{
+                        background: '#0d1117',
+                        border: '1px solid #30363d',
+                        color: '#f0ece3',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={resetting || !newPassword.trim()}
+                      className="px-3 py-1.5 rounded text-xs font-bold tracking-wider"
+                      style={{
+                        background: resetting || !newPassword.trim() ? '#21262d' : 'rgba(248,81,73,0.15)',
+                        border: '1px solid rgba(248,81,73,0.35)',
+                        color: resetting || !newPassword.trim() ? '#6e7681' : '#f85149',
+                        cursor: resetting || !newPassword.trim() ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {resetting ? 'Saving…' : 'SET'}
+                    </button>
+                  </form>
+                )}
+              </div>
+
             </div>
           )}
         </div>
