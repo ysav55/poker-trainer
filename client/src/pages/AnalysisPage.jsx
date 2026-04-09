@@ -53,60 +53,166 @@ function HorizBarLabel({ x, y, width, height, value }) {
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
+// ── Pill style helpers ─────────────────────────────────────────────────────────
+
+const PILL_INACTIVE = {
+  background: 'rgba(255,255,255,0.04)',
+  border:     '1px solid rgba(255,255,255,0.1)',
+  color:      '#6e7681',
+  cursor:     'pointer',
+  borderRadius: 4,
+  padding:    '2px 10px',
+  fontSize:   12,
+  fontWeight: 500,
+  lineHeight: '22px',
+  transition: 'all 0.15s',
+};
+
+const PILL_ACTIVE = {
+  background: 'rgba(212,175,55,0.15)',
+  border:     '1px solid rgba(212,175,55,0.4)',
+  color:      '#d4af37',
+  cursor:     'pointer',
+  borderRadius: 4,
+  padding:    '2px 10px',
+  fontSize:   12,
+  fontWeight: 600,
+  lineHeight: '22px',
+  transition: 'all 0.15s',
+};
+
+function Pill({ label, active, onClick, testId }) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid={testId}
+      style={active ? PILL_ACTIVE : PILL_INACTIVE}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ── Period quick-pick helpers ──────────────────────────────────────────────────
+
+function isoDate(d) {
+  return d.toISOString().split('T')[0];
+}
+
+function getDateRange(period) {
+  const today = new Date();
+  if (period === '7d') {
+    const from = new Date(today);
+    from.setDate(today.getDate() - 7);
+    return { dateFrom: isoDate(from), dateTo: isoDate(today) };
+  }
+  if (period === '30d') {
+    const from = new Date(today);
+    from.setDate(today.getDate() - 30);
+    return { dateFrom: isoDate(from), dateTo: isoDate(today) };
+  }
+  // 'all' or unknown
+  return { dateFrom: '', dateTo: '' };
+}
+
 function FilterBar({ players, filters, onChange, onRun, loading }) {
+  function handlePeriod(period) {
+    const { dateFrom, dateTo } = getDateRange(period);
+    onChange('period',   period);
+    onChange('dateFrom', dateFrom);
+    onChange('dateTo',   dateTo);
+  }
+
+  function handleDateInput(key, value) {
+    onChange(key, value);
+    onChange('period', 'custom');
+  }
+
   return (
     <div
-      className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-lg"
+      className="flex flex-col gap-3 px-4 py-3 rounded-lg"
       style={{ background: '#161b22', border: '1px solid #30363d' }}
     >
-      {/* Student selector */}
-      <select
-        value={filters.playerId}
-        onChange={e => onChange('playerId', e.target.value)}
-        data-testid="filter-player"
-        className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
-        style={{ background: '#0d1117', border: '1px solid #30363d', minWidth: 160 }}
-      >
-        <option value="">Select Student ▾</option>
-        {players.map(p => (
-          <option key={p.stableId} value={p.stableId}>{p.name}</option>
-        ))}
-      </select>
+      {/* Row 1: Student + date range + run button */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Student selector */}
+        <select
+          value={filters.playerId}
+          onChange={e => onChange('playerId', e.target.value)}
+          data-testid="filter-player"
+          className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
+          style={{ background: '#0d1117', border: '1px solid #30363d', minWidth: 160 }}
+        >
+          <option value="">Select Student ▾</option>
+          {players.map(p => (
+            <option key={p.stableId} value={p.stableId}>{p.name}</option>
+          ))}
+        </select>
 
-      {/* Date range */}
-      <input
-        type="date"
-        value={filters.dateFrom}
-        onChange={e => onChange('dateFrom', e.target.value)}
-        data-testid="filter-date-from"
-        className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
-        style={{ background: '#0d1117', border: '1px solid #30363d', colorScheme: 'dark' }}
-      />
-      <span className="text-xs text-gray-600">–</span>
-      <input
-        type="date"
-        value={filters.dateTo}
-        onChange={e => onChange('dateTo', e.target.value)}
-        data-testid="filter-date-to"
-        className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
-        style={{ background: '#0d1117', border: '1px solid #30363d', colorScheme: 'dark' }}
-      />
+        {/* Date range */}
+        <input
+          type="date"
+          value={filters.dateFrom}
+          onChange={e => handleDateInput('dateFrom', e.target.value)}
+          data-testid="filter-date-from"
+          className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
+          style={{ background: '#0d1117', border: '1px solid #30363d', colorScheme: 'dark' }}
+        />
+        <span className="text-xs text-gray-600">–</span>
+        <input
+          type="date"
+          value={filters.dateTo}
+          onChange={e => handleDateInput('dateTo', e.target.value)}
+          data-testid="filter-date-to"
+          className="rounded px-2 py-1 text-sm text-gray-200 outline-none"
+          style={{ background: '#0d1117', border: '1px solid #30363d', colorScheme: 'dark' }}
+        />
 
-      <button
-        onClick={onRun}
-        disabled={loading}
-        data-testid="run-analysis-btn"
-        className="ml-auto rounded px-4 py-1.5 text-sm font-semibold transition-opacity"
-        style={{
-          background: loading ? 'rgba(212,175,55,0.3)' : 'rgba(212,175,55,0.2)',
-          border: `1px solid rgba(212,175,55,0.5)`,
-          color: GOLD,
-          opacity: loading ? 0.7 : 1,
-          cursor: loading ? 'not-allowed' : 'pointer',
-        }}
-      >
-        {loading ? 'Analysing…' : 'Run Analysis'}
-      </button>
+        <button
+          onClick={onRun}
+          disabled={loading}
+          data-testid="run-analysis-btn"
+          className="ml-auto rounded px-4 py-1.5 text-sm font-semibold transition-opacity"
+          style={{
+            background: loading ? 'rgba(212,175,55,0.3)' : 'rgba(212,175,55,0.2)',
+            border: `1px solid rgba(212,175,55,0.5)`,
+            color: GOLD,
+            opacity: loading ? 0.7 : 1,
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {loading ? 'Analysing…' : 'Run Analysis'}
+        </button>
+      </div>
+
+      {/* Row 2: Period + Game Type + Tag Type pills */}
+      <div className="flex flex-wrap items-center gap-4">
+        {/* Period quick-picks */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-600 uppercase tracking-wider mr-1">Period</span>
+          <Pill label="All time" active={filters.period === 'all'}    onClick={() => handlePeriod('all')}  testId="period-all" />
+          <Pill label="7d"       active={filters.period === '7d'}     onClick={() => handlePeriod('7d')}   testId="period-7d" />
+          <Pill label="30d"      active={filters.period === '30d'}    onClick={() => handlePeriod('30d')}  testId="period-30d" />
+        </div>
+
+        {/* Game type */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-600 uppercase tracking-wider mr-1">Game</span>
+          <Pill label="All"        active={filters.gameType === ''}           onClick={() => onChange('gameType', '')}           testId="game-all" />
+          <Pill label="Cash"       active={filters.gameType === 'cash'}       onClick={() => onChange('gameType', 'cash')}       testId="game-cash" />
+          <Pill label="Tournament" active={filters.gameType === 'tournament'} onClick={() => onChange('gameType', 'tournament')} testId="game-tournament" />
+        </div>
+
+        {/* Tag type */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-600 uppercase tracking-wider mr-1">Tags</span>
+          <Pill label="All"      active={filters.tagType === ''}        onClick={() => onChange('tagType', '')}        testId="tagtype-all" />
+          <Pill label="Mistakes" active={filters.tagType === 'mistake'} onClick={() => onChange('tagType', 'mistake')} testId="tagtype-mistake" />
+          <Pill label="Auto"     active={filters.tagType === 'auto'}    onClick={() => onChange('tagType', 'auto')}    testId="tagtype-auto" />
+          <Pill label="Sizing"   active={filters.tagType === 'sizing'}  onClick={() => onChange('tagType', 'sizing')}  testId="tagtype-sizing" />
+          <Pill label="Coach"    active={filters.tagType === 'coach'}   onClick={() => onChange('tagType', 'coach')}   testId="tagtype-coach" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -571,7 +677,14 @@ function AnalysisPageInner() {
   const isCoachPlus = COACH_ROLES.has(user?.role);
 
   // Filter state
-  const [filters, setFilters]   = useState({ playerId: '', dateFrom: '', dateTo: '' });
+  const [filters, setFilters]   = useState({
+    playerId: '',
+    dateFrom: '',
+    dateTo:   '',
+    period:   'all',
+    gameType: '',
+    tagType:  '',
+  });
   const [players, setPlayers]   = useState([]);
   const [playersLoaded, setPlayersLoaded] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
@@ -612,6 +725,8 @@ function AnalysisPageInner() {
     if (filters.playerId) params.set('playerId', filters.playerId);
     if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
     if (filters.dateTo)   params.set('dateTo',   filters.dateTo);
+    if (filters.gameType) params.set('gameType', filters.gameType);
+    if (filters.tagType)  params.set('tagType',  filters.tagType);
 
     let fetchedTags = { totalHands: 0, tags: [] };
     try {
@@ -640,6 +755,7 @@ function AnalysisPageInner() {
           if (filters.playerId) p.set('playerId', filters.playerId);
           if (filters.dateFrom) p.set('dateFrom', filters.dateFrom);
           if (filters.dateTo)   p.set('dateTo',   filters.dateTo);
+          if (filters.gameType) p.set('gameType', filters.gameType);
           return apiFetch(`/api/analysis/hands-by-tag?${p}`)
             .then(d => ({ tag, hands: d?.hands ?? [] }));
         })

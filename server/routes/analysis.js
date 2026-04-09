@@ -18,9 +18,9 @@ module.exports = function registerAnalysisRoutes(app, { requireAuth }) {
 
   app.get('/api/analysis/tags', requireAuth, requireFeature('analysis'), async (req, res) => {
     try {
-      const { playerId, dateFrom, dateTo, tagType } = req.query;
+      const { playerId, dateFrom, dateTo, tagType, gameType } = req.query;
 
-      const handIds = await getHandIds({ playerId, dateFrom, dateTo });
+      const handIds = await getHandIds({ playerId, dateFrom, dateTo, gameType });
       if (handIds.size === 0) {
         return res.json({ totalHands: 0, tags: [] });
       }
@@ -74,10 +74,10 @@ module.exports = function registerAnalysisRoutes(app, { requireAuth }) {
 
   app.get('/api/analysis/hands-by-tag', requireAuth, requireFeature('analysis'), async (req, res) => {
     try {
-      const { tag, playerId, dateFrom, dateTo } = req.query;
+      const { tag, playerId, dateFrom, dateTo, gameType } = req.query;
       if (!tag) return res.status(400).json({ error: 'tag is required' });
 
-      const handIds = await getHandIds({ playerId, dateFrom, dateTo });
+      const handIds = await getHandIds({ playerId, dateFrom, dateTo, gameType });
       if (handIds.size === 0) return res.json({ hands: [] });
 
       const { data: tagRows, error: tErr } = await supabase
@@ -119,15 +119,24 @@ module.exports = function registerAnalysisRoutes(app, { requireAuth }) {
 
 // ── Shared helper ──────────────────────────────────────────────────────────────
 
-async function getHandIds({ playerId, dateFrom, dateTo } = {}) {
+// gameType → table_mode values
+const GAME_TYPE_MODES = {
+  cash:       ['coached_cash', 'uncoached_cash', 'bot_cash'],
+  tournament: ['tournament'],
+};
+
+async function getHandIds({ playerId, dateFrom, dateTo, gameType } = {}) {
   if (playerId) {
     // Hands this specific player was seated at
     let query = supabase
       .from('hand_players')
-      .select('hand_id, hands!inner(started_at)')
+      .select('hand_id, hands!inner(started_at, table_mode)')
       .eq('player_id', playerId);
     if (dateFrom) query = query.gte('hands.started_at', dateFrom);
     if (dateTo)   query = query.lte('hands.started_at', dateTo);
+    if (gameType && GAME_TYPE_MODES[gameType]) {
+      query = query.in('hands.table_mode', GAME_TYPE_MODES[gameType]);
+    }
 
     const { data, error } = await query;
     if (error) throw new Error(error.message);
@@ -138,6 +147,9 @@ async function getHandIds({ playerId, dateFrom, dateTo } = {}) {
   let query = supabase.from('hands').select('hand_id');
   if (dateFrom) query = query.gte('started_at', dateFrom);
   if (dateTo)   query = query.lte('started_at', dateTo);
+  if (gameType && GAME_TYPE_MODES[gameType]) {
+    query = query.in('table_mode', GAME_TYPE_MODES[gameType]);
+  }
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
