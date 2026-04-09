@@ -38,6 +38,9 @@ export function useTableSocket(tableId, { managerMode = false, forceSpectator = 
       });
     });
     sock.on('disconnect', () => setConnected(false));
+    sock.on('connect_error', (err) => {
+      console.error('[useTableSocket] connect_error:', err.message);
+    });
 
     socketRef.current = sock;
     setSocket(sock);
