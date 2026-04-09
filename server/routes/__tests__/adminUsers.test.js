@@ -79,7 +79,7 @@ beforeEach(() => {
   PlayerRepo.updatePlayer.mockResolvedValue(undefined);
   PlayerRepo.assignRole.mockResolvedValue(undefined);
   PlayerRepo.listPlayers.mockResolvedValue([]);
-  mockSupabase.single.mockResolvedValue({ data: { id: 'role-uuid-1' }, error: null });
+  mockSupabase.maybeSingle.mockResolvedValue({ data: { id: 'role-uuid-1' }, error: null });
   mockSupabase.delete.mockReturnValue({
     eq: jest.fn().mockResolvedValue({ error: null }),
   });

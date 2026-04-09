@@ -49,7 +49,8 @@ export function useTableSocket(tableId, { managerMode = false, forceSpectator = 
       socketRef.current = null;
       setSocket(null);
     };
-  }, [tableId, user?.token]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableId]);
 
   const emit = (event, data) => socketRef.current?.emit(event, data);
   return { socketRef, socket, emit, connected, isSpectator: spectateMode };

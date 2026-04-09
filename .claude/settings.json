@@ -88,7 +88,10 @@
       "Bash(grep -E \"\\\\.\\(jsx|tsx\\)$\")",
       "Bash(xargs grep:*)",
       "Bash(find /c/Users/user/poker-trainer/server -type f -name \"*.js\" -exec grep -l \"prevent.*delete\\\\|cannot.*delete\\\\|minimum.*table\\\\|only.*table\" {} \\\\;)",
-      "Bash(find /c/Users/user/poker-trainer/server -type f -name \"*.js\" -exec grep -l \"seed\\\\|fixture\\\\|bootstrap\\\\|init.*table\" {} \\\\;)"
+      "Bash(find /c/Users/user/poker-trainer/server -type f -name \"*.js\" -exec grep -l \"seed\\\\|fixture\\\\|bootstrap\\\\|init.*table\" {} \\\\;)",
+      "Bash(gh repo:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)"
     ],
     "additionalDirectories": [
       "C:\\Users\\user\\.claude\\skills\\design-an-interface",

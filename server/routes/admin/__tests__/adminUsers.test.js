@@ -190,8 +190,8 @@ describe('POST /api/admin/users', () => {
 
   test('creates user and returns 201 with new id', async () => {
     createPlayer.mockResolvedValueOnce('new-uuid-999');
-    // No role row found — assignRole won't be called
-    supabase.single.mockResolvedValueOnce({ data: null, error: null });
+    // Role resolution returns a valid role id
+    supabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'role-uuid-player' }, error: null });
 
     const app = buildApp({ user: { id: 'admin-uuid' } });
     const res = await request(app)
@@ -204,7 +204,7 @@ describe('POST /api/admin/users', () => {
 
   test('hashes password — never stores plaintext', async () => {
     createPlayer.mockResolvedValueOnce('new-uuid-abc');
-    supabase.single.mockResolvedValueOnce({ data: null, error: null });
+    supabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'role-uuid-default' }, error: null });
 
     const app = buildApp({ user: { id: 'admin-uuid' } });
     await request(app)
@@ -220,7 +220,7 @@ describe('POST /api/admin/users', () => {
 
   test('assigns role and invalidates cache when role row is found', async () => {
     createPlayer.mockResolvedValueOnce('new-uuid-xyz');
-    supabase.single.mockResolvedValueOnce({ data: { id: 'role-uuid-coach' }, error: null });
+    supabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'role-uuid-coach' }, error: null });
     assignRole.mockResolvedValueOnce(undefined);
 
     const app = buildApp({ user: { id: 'admin-uuid' } });
@@ -451,7 +451,7 @@ describe('POST /api/admin/users/:id/roles', () => {
   beforeEach(() => {
     // Restore eq to return chain (not maybeSingle override from GET tests)
     supabase.eq.mockReturnValue(supabase);
-    supabase.single.mockResolvedValue({ data: null, error: null });
+    supabase.maybeSingle.mockResolvedValue({ data: null, error: null });
   });
 
   test('returns 400 when action is missing', async () => {
@@ -485,7 +485,7 @@ describe('POST /api/admin/users/:id/roles', () => {
   });
 
   test('returns 404 when role name not found in DB', async () => {
-    supabase.single.mockResolvedValueOnce({ data: null, error: null }); // no role row
+    supabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null }); // no role row
 
     const app = buildApp({ user: { id: 'admin-uuid' } });
     const res = await request(app)
@@ -497,7 +497,7 @@ describe('POST /api/admin/users/:id/roles', () => {
   });
 
   test('assigns role and invalidates cache when action=assign', async () => {
-    supabase.single.mockResolvedValueOnce({ data: { id: 'role-uuid-coach' }, error: null });
+    supabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'role-uuid-coach' }, error: null });
     assignRole.mockResolvedValueOnce(undefined);
 
     const app = buildApp({ user: { id: 'admin-uuid' } });
@@ -512,7 +512,7 @@ describe('POST /api/admin/users/:id/roles', () => {
   });
 
   test('removes role and invalidates cache when action=remove', async () => {
-    supabase.single.mockResolvedValueOnce({ data: { id: 'role-uuid-player' }, error: null });
+    supabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'role-uuid-player' }, error: null });
     removeRole.mockResolvedValueOnce(undefined);
 
     const app = buildApp({ user: { id: 'admin-uuid' } });
@@ -535,7 +535,7 @@ describe('POST /api/admin/users/:id/roles', () => {
   });
 
   test('returns 500 when assignRole throws', async () => {
-    supabase.single.mockResolvedValueOnce({ data: { id: 'role-uuid-err' }, error: null });
+    supabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'role-uuid-err' }, error: null });
     assignRole.mockRejectedValueOnce(new Error('assign failed'));
 
     const app = buildApp({ user: { id: 'admin-uuid' } });

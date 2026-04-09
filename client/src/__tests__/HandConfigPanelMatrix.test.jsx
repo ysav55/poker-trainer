@@ -1,7 +1,7 @@
 /**
  * HandConfigPanelMatrix.test.jsx
- * Tests for HandConfigPanel focusing on the Matrix tab:
- * playerMatrixGroups state, handleMatrixToggle, and the matrix render branch.
+ * Tests for HandConfigPanel focusing on the Range tab (matrix picker):
+ * playerMatrixGroups state, handleMatrixToggle, and the range-picker render branch.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -22,7 +22,7 @@ vi.mock('../components/CardPicker', () => ({
   ),
 }))
 
-// HandConfigPanel uses RangePicker (not RangeMatrix directly) for matrix mode.
+// HandConfigPanel uses RangePicker for range mode.
 // We mock RangePicker so tests can exercise HandConfigPanel's state management
 // without needing the real picker UI.  Each trigger button calls onApply with
 // a specific range string, which HandConfigPanel parses and stores.
@@ -84,56 +84,47 @@ async function renderPanel(props = {}) {
   return { emit }
 }
 
-// Helper: find the MATRIX button for a given player name
-function getMatrixBtn(playerName) {
-  // PlayerModeToggle renders 3 buttons per player; MATRIX is the 3rd
-  // We find by text MATRIX nearest to the player's name
-  const allMatrixBtns = screen.getAllByText('MATRIX')
-  // Return all — callers can index
-  return allMatrixBtns
+// Helper: find all RANGE buttons
+function getRangeBtns() {
+  return screen.getAllByText('RANGE')
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('HandConfigPanel — Matrix tab', () => {
+describe('HandConfigPanel — Range tab (matrix picker)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  // Helper: switch a player row to MATRIX mode, then open the picker.
-  // HandConfigPanel shows a "Pick Range…" button in matrix mode; clicking it
+  // Helper: switch a player row to RANGE mode, then open the picker.
+  // HandConfigPanel shows a "Pick Range…" button in range mode; clicking it
   // opens the RangePicker (mocked above as data-testid="range-matrix").
   function openPickerForPlayer(playerIndex = 0) {
-    const matrixBtns = screen.getAllByText('MATRIX')
-    fireEvent.click(matrixBtns[playerIndex])
+    const rangeBtns = screen.getAllByText('RANGE')
+    fireEvent.click(rangeBtns[playerIndex])
     const pickBtns = screen.getAllByText('Pick Range…')
     fireEvent.click(pickBtns[0]) // first available "Pick Range…"
   }
 
-  it('renders 3 mode buttons (CARDS, RANGE, MATRIX) for each player row', async () => {
+  it('renders 2 mode buttons (CARDS, RANGE) for each player row', async () => {
     await renderPanel()
 
-    // 2 players × 3 buttons = 6 total across both rows
+    // 2 players × 2 buttons = 4 total across both rows
     const cardsBtns = screen.getAllByText('CARDS')
     expect(cardsBtns).toHaveLength(2)
 
-    // RANGE button text may include ▲/▼ suffix when active, so check base text
-    // In default 'cards' mode, range is inactive so label is plain 'RANGE'
     const rangeBtns = screen.getAllByText('RANGE')
     expect(rangeBtns).toHaveLength(2)
-
-    const matrixBtns = screen.getAllByText('MATRIX')
-    expect(matrixBtns).toHaveLength(2)
   })
 
-  it('clicking MATRIX for a player shows a "Pick Range…" button', async () => {
+  it('clicking RANGE for a player shows a "Pick Range…" button', async () => {
     await renderPanel()
 
     // Picker should not be open in default cards mode
     expect(screen.queryByTestId('range-matrix')).toBeNull()
 
-    const [firstMatrix] = screen.getAllByText('MATRIX')
-    fireEvent.click(firstMatrix)
+    const [firstRange] = screen.getAllByText('RANGE')
+    fireEvent.click(firstRange)
 
     // "Pick Range…" button should now appear (picker is not yet open)
     expect(screen.getByText('Pick Range…')).toBeTruthy()
@@ -155,8 +146,8 @@ describe('HandConfigPanel — Matrix tab', () => {
   it('shows "Pick Range…" button with no combo count when nothing is selected', async () => {
     await renderPanel()
 
-    const [firstMatrix] = screen.getAllByText('MATRIX')
-    fireEvent.click(firstMatrix)
+    const [firstRange] = screen.getAllByText('RANGE')
+    fireEvent.click(firstRange)
 
     expect(screen.getByText('Pick Range…')).toBeTruthy()
     expect(screen.queryByText(/combo/)).toBeNull()
@@ -219,7 +210,7 @@ describe('HandConfigPanel — Matrix tab', () => {
     expect(screen.getByText('Pick Range…')).toBeTruthy()
   })
 
-  it('switching from MATRIX to CARDS clears the matrix state', async () => {
+  it('switching from RANGE to CARDS clears the range state', async () => {
     await renderPanel()
     openPickerForPlayer(0)
 
@@ -230,26 +221,12 @@ describe('HandConfigPanel — Matrix tab', () => {
     const [firstCards] = screen.getAllByText('CARDS')
     fireEvent.click(firstCards)
 
-    // Matrix section is gone entirely — no picker, no combo count
+    // Range section is gone entirely — no picker, no combo count
     expect(screen.queryByTestId('range-matrix')).toBeNull()
     expect(screen.queryByText(/combo/)).toBeNull()
   })
 
-  it('switching from MATRIX to RANGE clears the matrix state', async () => {
-    await renderPanel()
-    openPickerForPlayer(0)
-
-    fireEvent.click(screen.getByTestId('toggle-AAs'))
-    expect(screen.getByText(/6 combo/)).toBeTruthy()
-
-    const rangeBtns = screen.getAllByText('RANGE')
-    fireEvent.click(rangeBtns[0])
-
-    expect(screen.queryByTestId('range-matrix')).toBeNull()
-    expect(screen.queryByText(/combo/)).toBeNull()
-  })
-
-  it('switching back to MATRIX from another mode starts with "Pick Range…"', async () => {
+  it('switching back to RANGE from CARDS starts with "Pick Range…"', async () => {
     await renderPanel()
     openPickerForPlayer(0)
 
@@ -259,9 +236,9 @@ describe('HandConfigPanel — Matrix tab', () => {
     const [firstCards] = screen.getAllByText('CARDS')
     fireEvent.click(firstCards)
 
-    // Switch back to MATRIX — should start fresh
-    const [newMatrix] = screen.getAllByText('MATRIX')
-    fireEvent.click(newMatrix)
+    // Switch back to RANGE — should start fresh
+    const rangeBtns = screen.getAllByText('RANGE')
+    fireEvent.click(rangeBtns[0])
 
     expect(screen.getByText('Pick Range…')).toBeTruthy()
     expect(screen.queryByText(/combo/)).toBeNull()
@@ -295,9 +272,9 @@ describe('HandConfigPanel — Matrix tab', () => {
   it('only the clicked player shows the "Pick Range…" button (not both players)', async () => {
     await renderPanel()
 
-    const matrixBtns = screen.getAllByText('MATRIX')
-    // Click MATRIX only for Alice (index 0)
-    fireEvent.click(matrixBtns[0])
+    const rangeBtns = screen.getAllByText('RANGE')
+    // Click RANGE only for Alice (index 0)
+    fireEvent.click(rangeBtns[0])
 
     // Only one "Pick Range…" button should appear (for Alice only)
     expect(screen.getAllByText('Pick Range…')).toHaveLength(1)
@@ -306,9 +283,9 @@ describe('HandConfigPanel — Matrix tab', () => {
   it('each player can independently open a picker', async () => {
     await renderPanel()
 
-    const matrixBtns = screen.getAllByText('MATRIX')
-    fireEvent.click(matrixBtns[0])  // Alice → matrix
-    fireEvent.click(matrixBtns[1])  // Bob → matrix
+    const rangeBtns = screen.getAllByText('RANGE')
+    fireEvent.click(rangeBtns[0])  // Alice → range
+    fireEvent.click(rangeBtns[1])  // Bob → range
 
     // Both should show "Pick Range…"
     expect(screen.getAllByText('Pick Range…')).toHaveLength(2)

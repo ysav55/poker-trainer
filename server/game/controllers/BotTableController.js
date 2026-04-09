@@ -51,7 +51,10 @@ class BotTableController extends AutoController {
 
     this.difficulty = cfg.difficulty ?? 'easy';
     this.botCount   = 0; // bots are spawned on demand via addBot()
-    this.serverUrl  = cfg.serverUrl  ?? `http://localhost:${process.env.PORT ?? 3001}`;
+    this.serverUrl  = cfg.serverUrl
+      ?? (process.env.FLY_APP_NAME
+        ? `https://${process.env.FLY_APP_NAME}.fly.dev`
+        : `http://localhost:${process.env.PORT ?? 3001}`);
 
     /** @type {Array<{socket: object, stableId: string, name: string, thinkTimer: ReturnType<setTimeout>|null, joined: boolean}>} */
     this._botSockets      = [];

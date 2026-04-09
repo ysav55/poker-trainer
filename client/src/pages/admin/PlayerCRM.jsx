@@ -2589,7 +2589,7 @@ export default function PlayerCRM() {
   return (
     <div
       className="flex"
-      style={{ height: '100%', minHeight: '100vh', background: '#060a0f', color: '#f0ece3', overflow: 'hidden' }}
+      style={{ height: '100%', background: '#060a0f', color: '#f0ece3', overflow: 'hidden' }}
     >
       {/* ── Left column ────────────────────────────────────────────────────── */}
       <div

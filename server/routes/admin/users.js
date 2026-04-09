@@ -49,7 +49,7 @@ function normalizeUser(row) {
     last_seen:    row.last_seen  ?? null,
     coach_id:     row.coach_id   ?? null,
     created_at:   row.created_at ?? null,
-    role:         normalizeRole(row.player_roles),
+    role:         row.player_roles !== undefined ? normalizeRole(row.player_roles) : (row.role ?? null),
   };
 }
 
@@ -58,7 +58,8 @@ function normalizeUser(row) {
  * Returns the role UUID or null if not found.
  */
 async function resolveRoleId(roleName) {
-  const { data } = await supabase.from('roles').select('id').eq('name', roleName).single();
+  const { data, error } = await supabase.from('roles').select('id').eq('name', roleName).maybeSingle();
+  if (error) throw new Error(`Failed to resolve role '${roleName}': ${error.message}`);
   return data?.id ?? null;
 }
 
@@ -73,9 +74,8 @@ async function setPlayerRole(playerId, roleName, assignedBy) {
   // Assign new role if given
   if (roleName) {
     const roleId = await resolveRoleId(roleName);
-    if (roleId) {
-      await assignRole(playerId, roleId, assignedBy);
-    }
+    if (!roleId) throw new Error(`Unknown role: '${roleName}'`);
+    await assignRole(playerId, roleId, assignedBy);
   }
 
   invalidatePermissionCache(playerId);

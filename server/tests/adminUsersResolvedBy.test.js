@@ -175,8 +175,8 @@ describe('PATCH /api/admin/users/:id/role — assignedBy audit trail', () => {
 
     const { assignRole } = require('../db/repositories/PlayerRepository.js');
 
-    // resolveRoleId calls supabase.from('roles').select('id').eq('name', ...).single()
-    chain.single.mockResolvedValueOnce({ data: { id: 'role-uuid-coach' }, error: null });
+    // resolveRoleId calls supabase.from('roles').select('id').eq('name', ...).maybeSingle()
+    chain.maybeSingle.mockResolvedValueOnce({ data: { id: 'role-uuid-coach' }, error: null });
 
     const res = await request(app)
       .patch(`/api/admin/users/${TARGET_PLAYER_ID}/role`)
@@ -196,7 +196,7 @@ describe('PATCH /api/admin/users/:id/role — assignedBy audit trail', () => {
     mockCurrentUser = { stableId: adminStableId, role: 'admin' };
 
     const { assignRole } = require('../db/repositories/PlayerRepository.js');
-    chain.single.mockResolvedValueOnce({ data: { id: 'role-uuid-solo' }, error: null });
+    chain.maybeSingle.mockResolvedValueOnce({ data: { id: 'role-uuid-solo' }, error: null });
 
     await request(app)
       .patch(`/api/admin/users/${TARGET_PLAYER_ID}/role`)

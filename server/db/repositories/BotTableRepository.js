@@ -5,8 +5,8 @@
  *
  * Privacy mapping (incoming → DB):
  *   'solo'    → privacy='private'   (player-created, creator-only)
- *   'open'    → privacy='public'    (player-created, visible to all)
- *   'public'  → privacy='public'    (coach-created, visible to all)
+ *   'open'    → privacy='open'      (player-created, visible to all)
+ *   'public'  → privacy='open'      (coach-created, visible to all)
  *   'school'  → privacy='school'    (coach-created, school-members only)
  *   'private' → privacy='private'   (coach-created, creator-only)
  *
@@ -28,8 +28,8 @@ const supabase = require('../supabase');
  */
 function mapPrivacyToDb(privacy) {
   if (privacy === 'solo') return 'private';
-  if (privacy === 'open') return 'public';
-  return privacy; // 'public' | 'school' | 'private' pass through unchanged
+  if (privacy === 'open' || privacy === 'public') return 'open';
+  return privacy; // 'school' | 'private' pass through unchanged
 }
 
 // ─── Create ───────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ async function getBotTables(requesterId, role) {
     .select(TABLE_SELECT)
     .eq('mode', 'bot_cash')
     .neq('status', 'completed')
-    .eq('privacy', 'public')
+    .eq('privacy', 'open')
     .order('created_at', { ascending: false });
 
   if (COACH_ROLES.has(role)) {
@@ -172,7 +172,7 @@ async function getBotTables(requesterId, role) {
       .eq('mode', 'bot_cash')
       .neq('status', 'completed')
       .eq('created_by', requesterId)
-      .neq('privacy', 'public')  // avoid double-counting own public tables
+      .neq('privacy', 'open')  // avoid double-counting own open tables
       .order('created_at', { ascending: false }),
     publicQuery,
   ]);

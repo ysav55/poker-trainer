@@ -11,6 +11,7 @@ export function usePlaylistManager(socket) {
     if (!s) return
 
     s.on('playlist_state', (payload) => setPlaylists(payload?.playlists ?? []))
+    s.emit('get_playlists')
 
     return () => {
       s.off('playlist_state')

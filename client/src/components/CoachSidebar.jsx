@@ -171,7 +171,7 @@ export default function CoachSidebar({
   return (
     <div
       className="h-full flex flex-shrink-0"
-      style={{ width: '18rem' }}
+      style={{ width: '20rem' }}
     >
       {/* Collapse tab on left edge of open sidebar */}
       <button

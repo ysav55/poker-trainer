@@ -1,6 +1,28 @@
 'use strict';
 
+const supabase = require('../db/supabase');
+
 module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger }) {
+
+  // GET /api/players/search?q=name — search players by display_name (prefix match)
+  app.get('/api/players/search', requireAuth, async (req, res) => {
+    const q = (req.query.q ?? '').trim();
+    if (q.length < 2) return res.json({ players: [] });
+    try {
+      const { data, error } = await supabase
+        .from('player_profiles')
+        .select('id, display_name, avatar_url')
+        .ilike('display_name', `${q}%`)
+        .eq('is_bot', false)
+        .neq('id', req.user.id)
+        .order('display_name')
+        .limit(10);
+      if (error) throw error;
+      res.json({ players: data ?? [] });
+    } catch (err) {
+      res.status(500).json({ error: 'search_failed' });
+    }
+  });
 
   // GET /api/players/:stableId/hover-stats  (no auth — spectators can see)
   app.get('/api/players/:stableId/hover-stats', async (req, res) => {

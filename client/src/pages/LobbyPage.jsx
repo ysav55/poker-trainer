@@ -135,11 +135,25 @@ function CreateTableModal({ onClose, onCreated }) {
   const [presetName, setPresetName] = useState('');
   const [busy, setBusy]             = useState(false);
   const [error, setError]           = useState('');
+  const [invitedPlayers, setInvitedPlayers] = useState([]);
+  const [searchQuery, setSearchQuery]       = useState('');
+  const [searchResults, setSearchResults]   = useState([]);
 
   // Load presets on mount
   useEffect(() => {
     apiFetch('/api/table-presets').then((d) => setPresets(d?.presets ?? [])).catch(() => {});
   }, []);
+
+  // Debounced player search for private table invites
+  useEffect(() => {
+    if (searchQuery.length < 2) { setSearchResults([]); return; }
+    const timer = setTimeout(() => {
+      apiFetch(`/api/players/search?q=${encodeURIComponent(searchQuery)}`)
+        .then((data) => setSearchResults(data?.players ?? []))
+        .catch(() => setSearchResults([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const applyPreset = (preset) => {
     const cfg = preset.config ?? {};
@@ -168,6 +182,18 @@ function CreateTableModal({ onClose, onCreated }) {
           method: 'POST',
           body: JSON.stringify({ name: presetName.trim(), config: { sb, bb, startingStack } }),
         }).catch(() => {});
+      }
+      // Send invite calls for private tables
+      const tableId = table.id ?? table.tableId;
+      if (privacy === 'private' && invitedPlayers.length > 0 && tableId) {
+        await Promise.allSettled(
+          invitedPlayers.map((p) =>
+            apiFetch(`/api/tables/${tableId}/invited`, {
+              method: 'POST',
+              body: JSON.stringify({ playerId: p.id }),
+            })
+          )
+        );
       }
       onCreated(table);
     } catch (err) {
@@ -293,7 +319,14 @@ function CreateTableModal({ onClose, onCreated }) {
             {PRIVACY_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setPrivacy(opt.value)}
+                onClick={() => {
+                  setPrivacy(opt.value);
+                  if (opt.value !== 'private') {
+                    setInvitedPlayers([]);
+                    setSearchQuery('');
+                    setSearchResults([]);
+                  }
+                }}
                 className="text-xs px-3 py-1.5 rounded-full font-semibold transition-colors"
                 title={opt.desc}
                 style={
@@ -307,6 +340,65 @@ function CreateTableModal({ onClose, onCreated }) {
             ))}
           </div>
         </div>
+
+        {/* Invite players (private tables only) */}
+        {privacy === 'private' && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs tracking-widest uppercase" style={{ color: '#6e7681' }}>Invite Players</label>
+            {invitedPlayers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {invitedPlayers.map((p) => (
+                  <span
+                    key={p.id}
+                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-full"
+                    style={{ background: 'rgba(212,175,55,0.12)', border: '1px solid rgba(212,175,55,0.3)', color: GOLD }}
+                  >
+                    {p.display_name}
+                    <button
+                      onClick={() => setInvitedPlayers((prev) => prev.filter((x) => x.id !== p.id))}
+                      className="ml-0.5 hover:text-gray-300"
+                      style={{ color: '#6e7681' }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search players..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                style={{ background: '#0d1117', border: '1px solid #30363d', color: '#e6edf3' }}
+              />
+              {searchResults.length > 0 && (
+                <div
+                  className="absolute top-full left-0 right-0 mt-1 rounded-lg overflow-hidden z-10"
+                  style={{ background: '#161b22', border: '1px solid #30363d' }}
+                >
+                  {searchResults
+                    .filter((p) => !invitedPlayers.some((ip) => ip.id === p.id))
+                    .map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setInvitedPlayers((prev) => [...prev, p]);
+                          setSearchQuery('');
+                          setSearchResults([]);
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-white/5"
+                      >
+                        {p.display_name}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Save as preset */}
         <div className="flex flex-col gap-1.5">

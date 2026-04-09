@@ -69,8 +69,8 @@ describe('createBotTable', () => {
     expect(insertArg.privacy).toBe('private');
   });
 
-  test('open privacy maps to DB privacy=public', async () => {
-    mockChain.single.mockResolvedValue({ data: { ...createdRow, privacy: 'public' }, error: null });
+  test('open privacy maps to DB privacy=open', async () => {
+    mockChain.single.mockResolvedValue({ data: { ...createdRow, privacy: 'open' }, error: null });
 
     await createBotTable({
       name: 'Open Table', creatorId: 'uid-1', creatorRole: 'player',
@@ -78,7 +78,7 @@ describe('createBotTable', () => {
     });
 
     const insertArg = mockChain.insert.mock.calls[0][0];
-    expect(insertArg.privacy).toBe('public');
+    expect(insertArg.privacy).toBe('open');
   });
 
   test('school privacy passes through as-is', async () => {
@@ -93,8 +93,8 @@ describe('createBotTable', () => {
     expect(insertArg.privacy).toBe('school');
   });
 
-  test('public privacy passes through as-is', async () => {
-    mockChain.single.mockResolvedValue({ data: { ...createdRow, privacy: 'public' }, error: null });
+  test('public privacy maps to DB privacy=open', async () => {
+    mockChain.single.mockResolvedValue({ data: { ...createdRow, privacy: 'open' }, error: null });
 
     await createBotTable({
       name: 'Public Table', creatorId: 'coach-1', creatorRole: 'coach',
@@ -102,7 +102,7 @@ describe('createBotTable', () => {
     });
 
     const insertArg = mockChain.insert.mock.calls[0][0];
-    expect(insertArg.privacy).toBe('public');
+    expect(insertArg.privacy).toBe('open');
   });
 
   test('stores difficulty and blinds in bot_config with bot_count=0', async () => {
@@ -173,7 +173,7 @@ describe('getBotTables', () => {
 
   const publicTables = [
     { id: 'tid-pub', name: 'Open Table', mode: 'bot_cash', status: 'waiting',
-      privacy: 'public', bot_config: {}, created_by: 'player-2', created_at: '2026-04-01T00:00:00Z' },
+      privacy: 'open', bot_config: {}, created_by: 'player-2', created_at: '2026-04-01T00:00:00Z' },
   ];
 
   test('player — queries mode=bot_cash and created_by=requesterId (own) + public tables', async () => {
