@@ -24,6 +24,12 @@ function GroupsSection({ schoolId, policy }) {
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState('');
 
+  // Member panel state
+  const [expandedId, setExpandedId]   = useState(null);
+  const [groupMembers, setGroupMembers] = useState({});   // { [groupId]: Member[] }
+  const [allStudents, setAllStudents] = useState([]);     // all coached_students in school
+  const [addingMember, setAddingMember] = useState({});  // { [groupId]: playerId being added }
+
   useEffect(() => {
     if (!schoolId) { setLoading(false); return; }
     apiFetch('/api/admin/groups/my-school')
@@ -31,6 +37,13 @@ function GroupsSection({ schoolId, policy }) {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [schoolId]);
+
+  // Fetch all coached_students once on mount
+  useEffect(() => {
+    apiFetch('/api/admin/users?role=coached_student')
+      .then(d => setAllStudents(d?.players ?? []))
+      .catch(() => {});
+  }, []);
 
   const atLimit = policy?.max_groups != null && groups.length >= policy.max_groups;
 
@@ -78,6 +91,55 @@ function GroupsSection({ schoolId, policy }) {
     try {
       await apiFetch(`/api/admin/groups/${id}`, { method: 'DELETE' });
       setGroups(prev => prev.filter(x => x.id !== id));
+      if (expandedId === id) setExpandedId(null);
+    } catch { /* silently ignore */ }
+  }
+
+  // ── Member panel handlers ────────────────────────────────────────────────────
+
+  function handleToggleExpand(id) {
+    setExpandedId(prev => prev === id ? null : id);
+    if (!groupMembers[id]) {
+      apiFetch(`/api/admin/groups/${id}/members`)
+        .then(d => setGroupMembers(prev => ({ ...prev, [id]: d?.members ?? [] })))
+        .catch(() => {});
+    }
+  }
+
+  async function handleRemoveMember(groupId, playerId) {
+    try {
+      await apiFetch(`/api/admin/groups/${groupId}/members/${playerId}`, { method: 'DELETE' });
+      setGroupMembers(prev => ({
+        ...prev,
+        [groupId]: (prev[groupId] ?? []).filter(m => m.id !== playerId),
+      }));
+      setGroups(prev => prev.map(g => g.id === groupId
+        ? { ...g, member_count: Math.max(0, (g.member_count ?? 1) - 1) }
+        : g
+      ));
+    } catch { /* silently ignore */ }
+  }
+
+  async function handleAddMember(groupId) {
+    const playerId = addingMember[groupId];
+    if (!playerId) return;
+    try {
+      await apiFetch(`/api/admin/groups/${groupId}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ playerId }),
+      });
+      const student = allStudents.find(s => s.id === playerId);
+      if (student) {
+        setGroupMembers(prev => ({
+          ...prev,
+          [groupId]: [...(prev[groupId] ?? []), student],
+        }));
+        setGroups(prev => prev.map(g => g.id === groupId
+          ? { ...g, member_count: (g.member_count ?? 0) + 1 }
+          : g
+        ));
+      }
+      setAddingMember(prev => ({ ...prev, [groupId]: '' }));
     } catch { /* silently ignore */ }
   }
 
@@ -98,69 +160,158 @@ function GroupsSection({ schoolId, policy }) {
       ) : (
         <>
           {groups.length > 0 && (
-            <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid #30363d', maxHeight: 260, overflowY: 'auto' }}>
+            <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid #30363d', maxHeight: 400, overflowY: 'auto' }}>
               {groups.map((g, i) => (
                 <div
                   key={g.id}
-                  className="flex items-center gap-3 px-3 py-2.5"
                   style={{ borderBottom: i < groups.length - 1 ? '1px solid #21262d' : 'none' }}
                 >
-                  {/* Color dot / picker */}
-                  <div className="relative flex-shrink-0">
-                    <input
-                      type="color"
-                      value={g.color}
-                      onChange={e => handleRecolor(g.id, e.target.value)}
-                      title="Change color"
-                      style={{
-                        width: 18, height: 18, border: 'none', padding: 0, cursor: 'pointer',
-                        borderRadius: '50%', background: 'none', appearance: 'none',
-                      }}
-                    />
+                  {/* ── Group row ── */}
+                  <div
+                    data-testid={`group-row-${g.id}`}
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer"
+                    onClick={() => handleToggleExpand(g.id)}
+                    style={{ userSelect: 'none' }}
+                  >
+                    {/* Color dot / picker */}
+                    <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="color"
+                        value={g.color}
+                        onChange={e => handleRecolor(g.id, e.target.value)}
+                        title="Change color"
+                        style={{
+                          width: 18, height: 18, border: 'none', padding: 0, cursor: 'pointer',
+                          borderRadius: '50%', background: 'none', appearance: 'none',
+                        }}
+                      />
+                    </div>
+
+                    {/* Name (editable inline) */}
+                    {editingId === g.id ? (
+                      <input
+                        autoFocus
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        onBlur={() => handleRename(g.id)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleRename(g.id); if (e.key === 'Escape') setEditingId(null); }}
+                        onClick={e => e.stopPropagation()}
+                        className="flex-1 rounded px-2 py-0.5 text-sm outline-none"
+                        style={{ background: '#0d1117', border: '1px solid #d4af37', color: '#f0ece3' }}
+                      />
+                    ) : (
+                      <span
+                        className="flex-1 text-sm font-semibold truncate"
+                        style={{ color: '#f0ece3' }}
+                        onDoubleClick={e => { e.stopPropagation(); setEditingId(g.id); setEditName(g.name); }}
+                        title="Double-click to rename; click to expand"
+                      >
+                        {g.name}
+                      </span>
+                    )}
+
+                    <span className="text-xs flex-shrink-0" style={{ color: '#6e7681' }}>
+                      {g.member_count ?? 0} student{(g.member_count ?? 0) !== 1 ? 's' : ''}
+                    </span>
+
+                    <button
+                      onClick={e => { e.stopPropagation(); setEditingId(g.id); setEditName(g.name); }}
+                      className="text-xs px-2 py-0.5 rounded flex-shrink-0"
+                      style={{ color: '#8b949e', background: 'transparent', border: '1px solid #30363d', cursor: 'pointer' }}
+                      title="Rename"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDelete(g.id); }}
+                      className="text-xs flex-shrink-0"
+                      style={{ color: '#f85149', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                      title="Delete group"
+                    >
+                      ✕
+                    </button>
+
+                    {/* Expand chevron */}
+                    <span className="text-xs flex-shrink-0" style={{ color: '#6e7681' }}>
+                      {expandedId === g.id ? '▲' : '▼'}
+                    </span>
                   </div>
 
-                  {/* Name (editable inline) */}
-                  {editingId === g.id ? (
-                    <input
-                      autoFocus
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      onBlur={() => handleRename(g.id)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleRename(g.id); if (e.key === 'Escape') setEditingId(null); }}
-                      className="flex-1 rounded px-2 py-0.5 text-sm outline-none"
-                      style={{ background: '#0d1117', border: '1px solid #d4af37', color: '#f0ece3' }}
-                    />
-                  ) : (
-                    <span
-                      className="flex-1 text-sm font-semibold cursor-pointer truncate"
-                      style={{ color: '#f0ece3' }}
-                      onDoubleClick={() => { setEditingId(g.id); setEditName(g.name); }}
-                      title="Double-click to rename"
+                  {/* ── Member panel ── */}
+                  {expandedId === g.id && (
+                    <div
+                      data-testid={`group-members-panel-${g.id}`}
+                      style={{
+                        background: '#0d1117',
+                        border: '1px solid #21262d',
+                        borderRadius: 4,
+                        padding: 8,
+                        marginTop: 4,
+                        marginBottom: 4,
+                        marginLeft: 12,
+                        marginRight: 12,
+                      }}
                     >
-                      {g.name}
-                    </span>
+                      {/* Member list */}
+                      {(groupMembers[g.id] ?? []).length === 0 && (
+                        <p className="text-xs mb-2" style={{ color: '#6e7681' }}>No members yet.</p>
+                      )}
+                      {(groupMembers[g.id] ?? []).map(m => (
+                        <div
+                          key={m.id}
+                          data-testid={`member-row-${m.id}`}
+                          className="flex items-center gap-2 mb-1"
+                        >
+                          <span className="flex-1 text-xs" style={{ color: '#e5e7eb' }}>{m.display_name}</span>
+                          <button
+                            data-testid={`remove-member-${m.id}`}
+                            onClick={() => handleRemoveMember(g.id, m.id)}
+                            style={{ color: '#f85149', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, padding: '0 2px' }}
+                            title={`Remove ${m.display_name}`}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* Add student row */}
+                      {(() => {
+                        const memberIds = new Set((groupMembers[g.id] ?? []).map(m => m.id));
+                        const available = allStudents.filter(s => !memberIds.has(s.id));
+                        return (
+                          <div className="flex gap-2 items-center mt-2">
+                            <select
+                              data-testid={`add-member-select-${g.id}`}
+                              value={addingMember[g.id] ?? ''}
+                              onChange={e => setAddingMember(prev => ({ ...prev, [g.id]: e.target.value }))}
+                              className="rounded px-2 py-1 text-xs outline-none flex-1"
+                              style={{ background: '#0d1117', border: '1px solid #30363d', color: '#e5e7eb' }}
+                            >
+                              <option value="">Select student…</option>
+                              {available.map(s => (
+                                <option key={s.id} value={s.id}>{s.display_name}</option>
+                              ))}
+                            </select>
+                            <button
+                              data-testid={`add-member-btn-${g.id}`}
+                              onClick={() => handleAddMember(g.id)}
+                              disabled={!addingMember[g.id]}
+                              className="text-xs px-2 py-1 rounded font-semibold flex-shrink-0"
+                              style={{
+                                background: GOLD,
+                                color: '#0d1117',
+                                opacity: !addingMember[g.id] ? 0.4 : 1,
+                                cursor: !addingMember[g.id] ? 'not-allowed' : 'pointer',
+                                border: 'none',
+                              }}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        );
+                      })()}
+                    </div>
                   )}
-
-                  <span className="text-xs flex-shrink-0" style={{ color: '#6e7681' }}>
-                    {g.member_count ?? 0} student{(g.member_count ?? 0) !== 1 ? 's' : ''}
-                  </span>
-
-                  <button
-                    onClick={() => { setEditingId(g.id); setEditName(g.name); }}
-                    className="text-xs px-2 py-0.5 rounded flex-shrink-0"
-                    style={{ color: '#8b949e', background: 'transparent', border: '1px solid #30363d', cursor: 'pointer' }}
-                    title="Rename"
-                  >
-                    Rename
-                  </button>
-                  <button
-                    onClick={() => handleDelete(g.id)}
-                    className="text-xs flex-shrink-0"
-                    style={{ color: '#f85149', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                    title="Delete group"
-                  >
-                    ✕
-                  </button>
                 </div>
               ))}
             </div>
