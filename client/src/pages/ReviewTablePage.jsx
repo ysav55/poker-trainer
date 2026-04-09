@@ -685,7 +685,7 @@ export default function ReviewTablePage() {
             <PokerTable
               gameState={gameState}
               myId={null}
-              isCoach={false}
+              isCoach={isCoach}
               emit={{}}
             />
           </div>
@@ -707,15 +707,25 @@ export default function ReviewTablePage() {
               </div>
             )
           ) : (
-            <StepControls
-              cursor={cursor}
-              actionCount={actionCount}
-              onFirst={goFirst}
-              onPrev={goPrev}
-              onNext={goNext}
-              onLast={goLast}
-              onScrub={goTo}
-            />
+            <>
+              <StepControls
+                cursor={cursor}
+                actionCount={actionCount}
+                onFirst={goFirst}
+                onPrev={goPrev}
+                onNext={goNext}
+                onLast={goLast}
+                onScrub={goTo}
+              />
+              {isCoach && (
+                <div
+                  className="px-4 py-1.5 text-center shrink-0 text-[11px]"
+                  style={{ color: '#4b5563', borderTop: '1px solid #21262d' }}
+                >
+                  To branch from a point, open a coached table → Review hand there
+                </div>
+              )}
+            </>
           )}
         </div>
 
