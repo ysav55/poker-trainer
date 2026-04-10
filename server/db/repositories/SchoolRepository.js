@@ -3,7 +3,7 @@
 const supabase = require('../supabase');
 
 const SCHOOL_COLUMNS = 'id, name, description, logo_url, primary_color, theme, status, max_coaches, max_students, created_at, updated_at, created_by, updated_by';
-const PROFILE_COLUMNS = 'id, display_name, email, status, avatar_url, school_id, player_roles(roles(name))';
+const PROFILE_COLUMNS = 'id, display_name, email, status, avatar_url, school_id, player_roles!player_id(roles!role_id(name))';
 
 // ─── School CRUD ──────────────────────────────────────────────────────────────
 

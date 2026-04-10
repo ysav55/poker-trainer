@@ -61,7 +61,8 @@ describe('requireAuth middleware', () => {
 
       requireAuth(req, res, next);
 
-      expect(req.user).toEqual(payload);
+      expect(req.user).toMatchObject(payload);
+      expect(req.user.id).toBe(payload.stableId);
     });
 
     test('passes the token string (without "Bearer ") to JwtService.verify', () => {
@@ -73,6 +74,19 @@ describe('requireAuth middleware', () => {
       requireAuth(req, res, next);
 
       expect(verify).toHaveBeenCalledWith('my-secret-token');
+    });
+
+    test('aliases req.user.id to req.user.stableId', () => {
+      const payload = { stableId: 'uuid-abc', name: 'Dave', role: 'coach' };
+      verify.mockReturnValueOnce(payload);
+      const req  = { headers: { authorization: 'Bearer token' } };
+      const res  = makeRes();
+      const next = jest.fn();
+
+      requireAuth(req, res, next);
+
+      expect(req.user.id).toBe('uuid-abc');
+      expect(req.user.stableId).toBe('uuid-abc');
     });
 
     test('works for coach role', () => {

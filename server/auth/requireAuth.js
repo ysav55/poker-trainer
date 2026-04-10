@@ -17,6 +17,7 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'invalid_token', message: 'Session expired — please log in again' });
   }
   req.user = payload;
+  req.user.id = payload.stableId;
   next();
 }
 

@@ -342,7 +342,13 @@ async function getPrimaryRole(playerId) {
 async function createPlayer({ displayName, email, passwordHash, createdBy }) {
   const { data, error } = await supabase
     .from('player_profiles')
-    .insert({ display_name: displayName, email, password_hash: passwordHash, created_by: createdBy })
+    .insert({
+      id: crypto.randomUUID(),
+      display_name: displayName,
+      email,
+      password_hash: passwordHash,
+      created_by: createdBy,
+    })
     .select('id')
     .single();
   if (error) throw error;

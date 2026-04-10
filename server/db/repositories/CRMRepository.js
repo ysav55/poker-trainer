@@ -264,9 +264,9 @@ async function getPlayerGameSessions(playerId, { limit = 20, offset = 0 } = {}) 
   const data = await q(
     supabase
       .from('session_player_stats')
-      .select('session_id, hands_played, hands_won, net_chips, vpip_count, pfr_count, wtsd_count, created_at, sessions(table_id, started_at, ended_at)')
+      .select('session_id, hands_played, hands_won, net_chips, vpip_count, pfr_count, wtsd_count, updated_at, sessions(table_id, started_at, ended_at)')
       .eq('player_id', playerId)
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
       .range(offset, offset + limit - 1)
   );
   return (data || []).map(r => {
@@ -274,7 +274,7 @@ async function getPlayerGameSessions(playerId, { limit = 20, offset = 0 } = {}) 
     return {
       session_id:   r.session_id,
       table_id:     r.sessions?.table_id ?? null,
-      started_at:   r.sessions?.started_at ?? r.created_at,
+      started_at:   r.sessions?.started_at ?? r.updated_at,
       ended_at:     r.sessions?.ended_at ?? null,
       hands_played: total,
       net_chips:    r.net_chips ?? 0,

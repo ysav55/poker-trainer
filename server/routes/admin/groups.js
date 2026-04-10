@@ -62,7 +62,7 @@ router.get('/groups', canView, async (req, res) => {
       .from('groups')
       .select(
         includeMembers === '1'
-          ? 'id, name, color, school_id, created_at, player_groups(player_id, player_profiles(id, display_name, role, status))'
+          ? 'id, name, color, school_id, created_at, player_groups(player_id, player_profiles(id, display_name, status))'
           : 'id, name, color, school_id, created_at',
       )
       .order('name');
@@ -178,7 +178,7 @@ router.get('/groups/:id/members', canView, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('player_groups')
-      .select('added_at, player_profiles(id, display_name, role, status, created_at, last_seen)')
+      .select('added_at, player_profiles(id, display_name, status, created_at, last_seen)')
       .eq('group_id', req.params.id);
 
     if (error) throw error;

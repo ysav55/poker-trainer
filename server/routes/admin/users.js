@@ -113,7 +113,7 @@ router.get('/users/pending-resets', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('password_reset_requests')
-      .select('id, player_id, requested_at, player_profiles(display_name)')
+      .select('id, player_id, requested_at, player_profiles!player_id(display_name)')
       .eq('status', 'pending')
       .order('requested_at', { ascending: false });
 
