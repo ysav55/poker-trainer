@@ -56,6 +56,8 @@ const stakingRouter             = require('./routes/staking.js');
 const { registerTournamentRoutes } = require('./routes/admin/tournaments.js');
 const scenarioBuilderRouter     = require('./routes/scenarioBuilder.js');
 const { registerTournamentGroupRoutes } = require('./routes/tournamentGroups');
+const coachStudentsRouter        = require('./routes/coachStudents.js');
+const registerLogRoutes          = require('./routes/logs.js');
 
 const { registerShutdown }  = require('./lifecycle/shutdown');
 const { registerIdleTimer } = require('./lifecycle/idleTimer');
@@ -142,6 +144,8 @@ app.use('/api/staking', requireAuth, stakingRouter);
 app.use('/api', requireAuth, scenarioBuilderRouter);
 registerTournamentRoutes(app);
 registerTournamentGroupRoutes(app, { requireAuth });
+app.use('/api/coach/students', requireAuth, requireRole('coach'), coachStudentsRouter);
+registerLogRoutes(app);
 
 // ─── Global Express error handler ────────────────────────────────────────────
 
