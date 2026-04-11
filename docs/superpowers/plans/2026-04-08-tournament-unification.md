@@ -1,6 +1,6 @@
 # Tournament System Unification Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Unify all tournaments under `TournamentGroupController` as the single orchestrator — a single-table tournament is a group with `ceil(n/7) = 1` table — and expose registration, start, cancel, finalize flows through new REST endpoints and new client pages.
 
@@ -48,7 +48,7 @@
 **Files:**
 - Create: `supabase/migrations/047_tournament_groups_registration_fields.sql`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```sql
 -- supabase/migrations/047_tournament_groups_registration_fields.sql
@@ -79,7 +79,7 @@ COMMIT;
 
 > **Note for applying:** Postgres `ALTER TYPE ... ADD VALUE` cannot run inside a transaction block on older versions. If the migration runner wraps in BEGIN/COMMIT, move the three `ALTER TYPE` statements above the `BEGIN` line or apply them manually via `psql`. Supabase Dashboard SQL editor handles this correctly.
 
-- [ ] **Step 2: Apply migration via Supabase Dashboard**
+- [x] **Step 2: Apply migration via Supabase Dashboard**
 
 Open Supabase Dashboard → SQL Editor → paste and run the migration content. Verify the three new columns appear in `tournament_groups` and the enum has the three new values:
 
@@ -96,7 +96,7 @@ ORDER BY enumsortorder;
 
 Expected: 6 columns found, enum includes `tournament_entry`, `tournament_refund`, `tournament_prize`.
 
-- [ ] **Step 3: Commit migration file**
+- [x] **Step 3: Commit migration file**
 
 ```bash
 git add supabase/migrations/047_tournament_groups_registration_fields.sql
@@ -110,7 +110,7 @@ git commit -m "feat(db): migration 047 — extend tournament_groups + tournament
 **Files:**
 - Create: `supabase/migrations/048_tournament_group_registrations.sql`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```sql
 -- supabase/migrations/048_tournament_group_registrations.sql
@@ -136,7 +136,7 @@ CREATE INDEX idx_tgr_status  ON tournament_group_registrations(group_id, status)
 COMMIT;
 ```
 
-- [ ] **Step 2: Apply migration via Supabase Dashboard**
+- [x] **Step 2: Apply migration via Supabase Dashboard**
 
 Run in SQL Editor. Verify:
 
@@ -147,7 +147,7 @@ WHERE table_name = 'tournament_group_registrations';
 
 Expected: `id`, `group_id`, `player_id`, `status`, `buy_in_amount`, `registered_at`.
 
-- [ ] **Step 3: Commit migration file**
+- [x] **Step 3: Commit migration file**
 
 ```bash
 git add supabase/migrations/048_tournament_group_registrations.sql
@@ -161,7 +161,7 @@ git commit -m "feat(db): migration 048 — tournament_group_registrations table"
 **Files:**
 - Modify: `server/db/repositories/TournamentGroupRepository.js`
 
-- [ ] **Step 1: Add registration methods to the repository**
+- [x] **Step 1: Add registration methods to the repository**
 
 Open `server/db/repositories/TournamentGroupRepository.js`. After the existing `getStandings` method (before the closing `};`), add:
 
@@ -268,7 +268,7 @@ Also **replace the existing `listGroups` method** with a version that supports f
   },
 ```
 
-- [ ] **Step 2: Run existing server tests to confirm nothing broke**
+- [x] **Step 2: Run existing server tests to confirm nothing broke**
 
 ```bash
 cd c:\Users\user\poker-trainer && npx jest server/db/__tests__ --testPathPattern="" 2>&1 | tail -20
@@ -276,7 +276,7 @@ cd c:\Users\user\poker-trainer && npx jest server/db/__tests__ --testPathPattern
 
 Expected: all DB repository tests pass (no new failures).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add server/db/repositories/TournamentGroupRepository.js
@@ -294,7 +294,7 @@ Read the file before editing. The existing class ends at line ~358. You will:
 1. Add three new methods before `destroy()`
 2. Update `onPlayerEliminated` to trigger rebalancing and update registration status
 
-- [ ] **Step 1: Add `assignPlayersToTables` method**
+- [x] **Step 1: Add `assignPlayersToTables` method**
 
 Insert before the `destroy()` method (around line 352):
 
@@ -534,7 +534,7 @@ Insert before the `destroy()` method (around line 352):
   }
 ```
 
-- [ ] **Step 2: Update `onPlayerEliminated` to call `rebalanceTables` and use `distributePrizes`**
+- [x] **Step 2: Update `onPlayerEliminated` to call `rebalanceTables` and use `distributePrizes`**
 
 The existing `onPlayerEliminated` method (lines ~106–149) needs two changes:
 1. Update registration status to `'busted'`
@@ -622,7 +622,7 @@ Replace the existing `onPlayerEliminated` method:
 
 Note: the old `_endGroup` method remains but is no longer called from `onPlayerEliminated`. Keep it — it may be called from the manual `/end` route.
 
-- [ ] **Step 3: Run controller tests**
+- [x] **Step 3: Run controller tests**
 
 ```bash
 cd c:\Users\user\poker-trainer && npx jest server/game/controllers/__tests__/controllers.test.js --no-coverage 2>&1 | tail -20
@@ -630,7 +630,7 @@ cd c:\Users\user\poker-trainer && npx jest server/game/controllers/__tests__/con
 
 Expected: existing tests pass (no regressions). The new methods have no tests yet — they're covered in Task 6.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/game/controllers/TournamentGroupController.js
@@ -644,7 +644,7 @@ git commit -m "feat(controller): tournament group assignPlayersToTables, rebalan
 **Files:**
 - Modify: `server/routes/tournamentGroups.js`
 
-- [ ] **Step 1: Extend the existing `POST /api/tournament-groups` to accept new fields**
+- [x] **Step 1: Extend the existing `POST /api/tournament-groups` to accept new fields**
 
 In `registerTournamentGroupRoutes`, replace the existing destructuring inside `POST /api/tournament-groups`:
 
@@ -733,7 +733,7 @@ Also change the response to **not** create tables upfront (remove the table-crea
 res.status(201).json({ groupId });
 ```
 
-- [ ] **Step 2: Add `GET /api/tournament-groups` list endpoint**
+- [x] **Step 2: Add `GET /api/tournament-groups` list endpoint**
 
 Add before the existing `GET /api/tournament-groups/:id` route:
 
@@ -754,7 +754,7 @@ Add before the existing `GET /api/tournament-groups/:id` route:
   });
 ```
 
-- [ ] **Step 3: Add `POST /api/tournament-groups/:id/register`**
+- [x] **Step 3: Add `POST /api/tournament-groups/:id/register`**
 
 Add after the GET list endpoint:
 
@@ -810,7 +810,7 @@ Add after the GET list endpoint:
   });
 ```
 
-- [ ] **Step 4: Add `DELETE /api/tournament-groups/:id/register`**
+- [x] **Step 4: Add `DELETE /api/tournament-groups/:id/register`**
 
 ```js
   // DELETE /api/tournament-groups/:id/register — unregister (refund), pre-start only
@@ -849,7 +849,7 @@ Add after the GET list endpoint:
   });
 ```
 
-- [ ] **Step 5: Add `PATCH /api/tournament-groups/:id/start`**
+- [x] **Step 5: Add `PATCH /api/tournament-groups/:id/start`**
 
 Replace the existing `POST /api/tournament-groups/:id/start` handler with a `PATCH` (keep the POST for backward compat but add the PATCH as the canonical version):
 
@@ -903,7 +903,7 @@ Replace the existing `POST /api/tournament-groups/:id/start` handler with a `PAT
   });
 ```
 
-- [ ] **Step 6: Add `PATCH /api/tournament-groups/:id/cancel`**
+- [x] **Step 6: Add `PATCH /api/tournament-groups/:id/cancel`**
 
 ```js
   // PATCH /api/tournament-groups/:id/cancel — cancel tournament; refund all registrations
@@ -959,7 +959,7 @@ Replace the existing `POST /api/tournament-groups/:id/start` handler with a `PAT
   });
 ```
 
-- [ ] **Step 7: Add `POST /api/tournament-groups/:id/finalize`**
+- [x] **Step 7: Add `POST /api/tournament-groups/:id/finalize`**
 
 ```js
   // POST /api/tournament-groups/:id/finalize — distribute prizes; close all tables
@@ -994,7 +994,7 @@ Replace the existing `POST /api/tournament-groups/:id/start` handler with a `PAT
   });
 ```
 
-- [ ] **Step 8: Add registrations to the GET /:id detail endpoint**
+- [x] **Step 8: Add registrations to the GET /:id detail endpoint**
 
 Replace the existing `GET /api/tournament-groups/:id` handler body:
 
@@ -1012,7 +1012,7 @@ Replace the existing `GET /api/tournament-groups/:id` handler body:
   });
 ```
 
-- [ ] **Step 9: Commit routes changes**
+- [x] **Step 9: Commit routes changes**
 
 ```bash
 git add server/routes/tournamentGroups.js server/db/repositories/TournamentGroupRepository.js
@@ -1026,7 +1026,7 @@ git commit -m "feat(api): tournament group registration, start, cancel, finalize
 **Files:**
 - Create: `server/routes/__tests__/tournamentGroups.test.js`
 
-- [ ] **Step 1: Write the test file**
+- [x] **Step 1: Write the test file**
 
 ```js
 'use strict';
@@ -1268,7 +1268,7 @@ describe('PATCH /api/tournament-groups/:id/cancel', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 ```bash
 cd c:\Users\user\poker-trainer && npx jest server/routes/__tests__/tournamentGroups.test.js --no-coverage 2>&1 | tail -30
@@ -1276,7 +1276,7 @@ cd c:\Users\user\poker-trainer && npx jest server/routes/__tests__/tournamentGro
 
 Expected: all tests pass. Fix any failures before moving on.
 
-- [ ] **Step 3: Commit tests**
+- [x] **Step 3: Commit tests**
 
 ```bash
 git add server/routes/__tests__/tournamentGroups.test.js
@@ -1295,7 +1295,7 @@ The existing wizard already has `buy_in` and `scheduledStartAt`. What's missing:
 2. **Late registration** toggle + minutes input
 3. **Change `handleCreate` to POST to `/api/tournament-groups`** instead of `/api/admin/tournaments`
 
-- [ ] **Step 1: Add privacy and lateReg state variables**
+- [x] **Step 1: Add privacy and lateReg state variables**
 
 In `WizardModal`, after the existing `const [refPlayerId, setRefPlayerId] = useState('');` line, add:
 
@@ -1306,7 +1306,7 @@ In `WizardModal`, after the existing `const [refPlayerId, setRefPlayerId] = useS
   const [lateRegMinutes, setLateRegMinutes] = useState(20);
 ```
 
-- [ ] **Step 2: Add Privacy and Late Registration fields to Step 0**
+- [x] **Step 2: Add Privacy and Late Registration fields to Step 0**
 
 In the `{step === 0 && (` block, after the `Scheduled Start Time` input block, add:
 
@@ -1342,7 +1342,7 @@ In the `{step === 0 && (` block, after the `Scheduled Start Time` input block, a
               </div>
 ```
 
-- [ ] **Step 3: Change `handleCreate` to POST to `/api/tournament-groups`**
+- [x] **Step 3: Change `handleCreate` to POST to `/api/tournament-groups`**
 
 Replace the `handleCreate` function body (the `apiFetch` call and `onCreated` call):
 
@@ -1399,7 +1399,7 @@ Replace the `handleCreate` function body (the `apiFetch` call and `onCreated` ca
   }
 ```
 
-- [ ] **Step 4: Update `handleTournamentCreated` in LobbyPage.jsx**
+- [x] **Step 4: Update `handleTournamentCreated` in LobbyPage.jsx**
 
 In `client/src/pages/LobbyPage.jsx`, find `handleTournamentCreated` (line ~779) and update it:
 
@@ -1411,7 +1411,7 @@ In `client/src/pages/LobbyPage.jsx`, find `handleTournamentCreated` (line ~779) 
   }, [navigate, refreshTables]);
 ```
 
-- [ ] **Step 5: Run client tests to confirm no regressions**
+- [x] **Step 5: Run client tests to confirm no regressions**
 
 ```bash
 cd c:\Users\user\poker-trainer\client && npm test -- --run 2>&1 | tail -30
@@ -1419,7 +1419,7 @@ cd c:\Users\user\poker-trainer\client && npm test -- --run 2>&1 | tail -30
 
 Expected: existing tests pass. The wizard tests (if any) may need to be updated to reflect the new POST target.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add client/src/pages/admin/TournamentSetup.jsx client/src/pages/LobbyPage.jsx
@@ -1434,7 +1434,7 @@ git commit -m "feat(wizard): redirect tournament creation to /api/tournament-gro
 - Modify: `client/src/App.jsx`
 - Modify: `client/src/components/SideNav.jsx`
 
-- [ ] **Step 1: Add imports and routes to App.jsx**
+- [x] **Step 1: Add imports and routes to App.jsx**
 
 At the top of App.jsx, add three imports (after the existing tournament imports on line ~43):
 
@@ -1453,7 +1453,7 @@ Inside the `<Route element={<AppLayout />}>` block (around line ~115), add:
           <Route path="/tournaments/:groupId/control"      element={<TournamentControlPage />} />
 ```
 
-- [ ] **Step 2: Add Tournaments nav item to SideNav**
+- [x] **Step 2: Add Tournaments nav item to SideNav**
 
 In `client/src/components/SideNav.jsx`, inside the `NAV_ITEMS` array, add after the `Lobby` item (after line ~16):
 
@@ -1466,7 +1466,7 @@ In `client/src/components/SideNav.jsx`, inside the `NAV_ITEMS` array, add after 
   },
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add client/src/App.jsx client/src/components/SideNav.jsx
@@ -1480,7 +1480,7 @@ git commit -m "feat(nav): add /tournaments routes and SideNav item"
 **Files:**
 - Create: `client/src/pages/TournamentListPage.jsx`
 
-- [ ] **Step 1: Write the component**
+- [x] **Step 1: Write the component**
 
 ```jsx
 import React, { useState, useEffect, useCallback } from 'react';
@@ -1663,7 +1663,7 @@ export default function TournamentListPage() {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add client/src/pages/TournamentListPage.jsx
@@ -1677,7 +1677,7 @@ git commit -m "feat(ui): TournamentListPage — three-tab list + create button"
 **Files:**
 - Create: `client/src/pages/TournamentDetailPage.jsx`
 
-- [ ] **Step 1: Write the component**
+- [x] **Step 1: Write the component**
 
 This reuses `BlindStructureSheet`, `EntrantsList`, `PayoutsTable`, `CountdownBar` from `TournamentLobby.jsx` — extract them by importing directly from that file (they are inner components). Since TournamentLobby.jsx doesn't export them, we'll reproduce the key ones inline.
 
@@ -1954,7 +1954,7 @@ export default function TournamentDetailPage() {
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add client/src/pages/TournamentDetailPage.jsx
@@ -1968,7 +1968,7 @@ git commit -m "feat(ui): TournamentDetailPage — register, unregister, start, c
 **Files:**
 - Create: `client/src/pages/TournamentControlPage.jsx`
 
-- [ ] **Step 1: Write the component**
+- [x] **Step 1: Write the component**
 
 ```jsx
 import React, { useState, useEffect, useCallback } from 'react';
@@ -2150,7 +2150,7 @@ export default function TournamentControlPage() {
 
 > **Note:** This file lives at `client/src/pages/TournamentControlPage.jsx`. The imports for `apiFetch` and `useAuth` use relative paths from `pages/`, not `pages/admin/`.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add client/src/pages/TournamentControlPage.jsx
@@ -2164,7 +2164,7 @@ git commit -m "feat(ui): TournamentControlPage — multi-table grid + global con
 **Files:**
 - Modify: `client/src/pages/LobbyPage.jsx`
 
-- [ ] **Step 1: Add upcoming tournaments state and fetch**
+- [x] **Step 1: Add upcoming tournaments state and fetch**
 
 In `LobbyPage.jsx`, add state for upcoming tournaments. Find the existing state declarations (around line ~65+) and add:
 
@@ -2183,7 +2183,7 @@ useEffect(() => {
 }, []);
 ```
 
-- [ ] **Step 2: Add the strip component below the table list**
+- [x] **Step 2: Add the strip component below the table list**
 
 In the LobbyPage JSX, find where the main table list ends. Add the strip immediately after the closing tag of the tables section and before the footer / closing tag of the main container:
 
@@ -2242,7 +2242,7 @@ In the LobbyPage JSX, find where the main table list ends. Add the strip immedia
 )}
 ```
 
-- [ ] **Step 3: Run client tests**
+- [x] **Step 3: Run client tests**
 
 ```bash
 cd c:\Users\user\poker-trainer\client && npm test -- --run 2>&1 | tail -20
@@ -2250,7 +2250,7 @@ cd c:\Users\user\poker-trainer\client && npm test -- --run 2>&1 | tail -20
 
 Expected: all tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/src/pages/LobbyPage.jsx

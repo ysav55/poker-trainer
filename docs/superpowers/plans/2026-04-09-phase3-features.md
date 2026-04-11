@@ -1,6 +1,6 @@
 # Phase 3 — End-to-End Feature Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Each batch is independently deployable. Do not start a batch until the prior one is committed and tests pass.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. Each batch is independently deployable. Do not start a batch until the prior one is committed and tests pass.
 
 **Goal:** Fix the remaining staging blockers, ship the core intelligence features (5.1 analysis filters, 5.4 replay branching, 5.5 scenario quick-save), and complete the admin UX gaps (7.2 groups UI, bot table redesign). Every batch is fully vertical — working end-to-end from DB through server to client when merged.
 
@@ -34,8 +34,8 @@ These fixes are already written in the working tree. Commit them and verify test
 
 **Tasks:**
 
-- [ ] Run `npm test` in server + client; confirm all tests pass
-- [ ] Commit: "fix(admin): PrepBriefTab null crash, users/:id defensive fallback, coach auto-assign, CRM reset password"
+- [x] Run `npm test` in server + client; confirm all tests pass
+- [x] Commit: "fix(admin): PrepBriefTab null crash, users/:id defensive fallback, coach auto-assign, CRM reset password"
 
 **Regression targets:** UserDetail renders without 500 for any user; PrepBriefTab renders with null severity; new users created by a coach get coach_id set automatically; admin can reset student passwords from user detail panel.
 
@@ -85,10 +85,10 @@ When no `playerId`: the existing `hands` query — add `.in('table_mode', [...])
 
 Both route handlers (`/api/analysis/tags` and `/api/analysis/hands-by-tag`) must extract `gameType` from `req.query` and pass it to `getHandIds`.
 
-- [ ] **Step 1:** Write failing server test in `server/routes/__tests__/analysisRoutes.test.js` verifying `GET /api/analysis/tags?gameType=cash` returns only hands with cash table modes
-- [ ] **Step 2:** Extend `getHandIds` to accept and apply `gameType`
-- [ ] **Step 3:** Pass `gameType` through both route handlers
-- [ ] **Step 4:** Run server tests — confirm new tests pass, existing pass
+- [x] **Step 1:** Write failing server test in `server/routes/__tests__/analysisRoutes.test.js` verifying `GET /api/analysis/tags?gameType=cash` returns only hands with cash table modes
+- [x] **Step 2:** Extend `getHandIds` to accept and apply `gameType`
+- [x] **Step 3:** Pass `gameType` through both route handlers
+- [x] **Step 4:** Run server tests — confirm new tests pass, existing pass
 
 ### Task 2 — Client: period quick-picks + gameType + tag-type toggle
 
@@ -115,10 +115,10 @@ When `period` changes, compute and set `dateFrom`/`dateTo` accordingly. When `da
 
 Wire `gameType` and `tagType` into the `apiFetch('/api/analysis/tags?...')` call.
 
-- [ ] **Step 1:** Write failing client tests in `client/src/__tests__/AnalysisPage.test.jsx` asserting the correct query strings for 7d, 30d, cash, tournament combinations
-- [ ] **Step 2:** Add period pills, gameType pills, tagType pills to FilterBar
-- [ ] **Step 3:** Wire new state to API call
-- [ ] **Step 4:** Run client tests — confirm pass
+- [x] **Step 1:** Write failing client tests in `client/src/__tests__/AnalysisPage.test.jsx` asserting the correct query strings for 7d, 30d, cash, tournament combinations
+- [x] **Step 2:** Add period pills, gameType pills, tagType pills to FilterBar
+- [x] **Step 3:** Wire new state to API call
+- [x] **Step 4:** Run client tests — confirm pass
 
 ---
 
@@ -170,10 +170,10 @@ Body: { scenarioId: scenario.scenario_id }
 
 Check what endpoint HandBuilder currently uses to add scenarios to playlists (look in `PlaylistEditor` component) — use the same one.
 
-- [ ] **Step 1:** Read `PlaylistEditor.jsx` and the playlist items server route to confirm the correct endpoint and body format
-- [ ] **Step 2:** Write failing test in `client/src/__tests__/HandBuilder.test.jsx` — after scenario save, quick-save panel appears; selecting playlist and clicking Save calls correct endpoint
-- [ ] **Step 3:** Add `QuickSavePanel` component and wire `handleScenarioSaved`
-- [ ] **Step 4:** Run tests
+- [x] **Step 1:** Read `PlaylistEditor.jsx` and the playlist items server route to confirm the correct endpoint and body format
+- [x] **Step 2:** Write failing test in `client/src/__tests__/HandBuilder.test.jsx` — after scenario save, quick-save panel appears; selecting playlist and clicking Save calls correct endpoint
+- [x] **Step 3:** Add `QuickSavePanel` component and wire `handleScenarioSaved`
+- [x] **Step 4:** Run tests
 
 ---
 
@@ -205,9 +205,9 @@ Check what endpoint HandBuilder currently uses to add scenarios to playlists (lo
 
 ### Task 1 — Verify server and hook wiring
 
-- [ ] **Step 1:** Read `server/socket/handlers/replay.js` — confirm `replay:branch` and `replay:unbranch` are handled
-- [ ] **Step 2:** Read `client/src/hooks/useReplay.js` — confirm emit helpers exist
-- [ ] **Step 3:** If either is missing, add the missing handler/emit — follow the existing `replay:step` pattern exactly
+- [x] **Step 1:** Read `server/socket/handlers/replay.js` — confirm `replay:branch` and `replay:unbranch` are handled
+- [x] **Step 2:** Read `client/src/hooks/useReplay.js` — confirm emit helpers exist
+- [x] **Step 3:** If either is missing, add the missing handler/emit — follow the existing `replay:step` pattern exactly
 
 ### Task 2 — Branch UI in ReplayControlsSection
 
@@ -227,9 +227,9 @@ In review mode, hole cards are in `gameState.players[n].hole_cards` (already sen
 
 Condition: `gameState.tableMode === 'review'` (or equivalent flag) → render all players' cards face-up.
 
-- [ ] **Step 1:** Inspect how cards are currently rendered and under what condition they show/hide
-- [ ] **Step 2:** Add condition: if in review mode, show all hole cards regardless of `is_visible` flag
-- [ ] **Step 3:** Smoke-test in a review session
+- [x] **Step 1:** Inspect how cards are currently rendered and under what condition they show/hide
+- [x] **Step 2:** Add condition: if in review mode, show all hole cards regardless of `is_visible` flag
+- [x] **Step 3:** Smoke-test in a review session
 
 ---
 
@@ -268,10 +268,10 @@ Condition: `gameState.tableMode === 'review'` (or equivalent flag) → render al
 
 **Group member endpoint check:** Verify `GET /api/admin/groups/:id/members` exists. If not, it may be a route that's in `groups.js` but needs confirmation — read the route file first.
 
-- [ ] **Step 1:** Read `server/routes/admin/groups.js` to confirm member GET/POST/DELETE endpoints and their exact paths and response shapes
-- [ ] **Step 2:** Write failing test: clicking a group card reveals member list; add/remove calls correct endpoints
-- [ ] **Step 3:** Add `expandedId` toggle + member panel to `GroupsSection`
-- [ ] **Step 4:** Run tests
+- [x] **Step 1:** Read `server/routes/admin/groups.js` to confirm member GET/POST/DELETE endpoints and their exact paths and response shapes
+- [x] **Step 2:** Write failing test: clicking a group card reveals member list; add/remove calls correct endpoints
+- [x] **Step 3:** Add `expandedId` toggle + member panel to `GroupsSection`
+- [x] **Step 4:** Run tests
 
 ---
 
@@ -338,16 +338,16 @@ Condition: `gameState.tableMode === 'review'` (or equivalent flag) → render al
 
 ### Tasks
 
-- [ ] **Step 1:** Read `server/socket/handlers/` directory to understand handler registration pattern (where to add `bot:add`)
-- [ ] **Step 2:** Server — update `POST /api/bot-tables` (privacy param, drop humanSeats, bot_count=0)
-- [ ] **Step 3:** Server — update `BotTableController`: remove constructor spawn, add `addBot()`, add human-count guard → instant destroy
-- [ ] **Step 4:** Server — add `bot:add` socket handler
-- [ ] **Step 5:** Client — redesign `CreateBotTableModal` (Solo/Open + coach privacy)
-- [ ] **Step 6:** Client — `TablePage` bot_cash mode: GhostSeat component + `bot:add` emit + `table:closed` redirect
-- [ ] **Step 7:** Client — each occupied bot seat shows an "×" remove button (bot_cash mode only, visible to the human creator); clicking emits `bot:remove` with the bot's stableId
-- [ ] **Step 8:** Server — add `bot:remove` socket handler; `BotTableController.removeBot(stableId)` disconnects that bot's socket and removes it from `_botSockets`; GM handles the player-left state (existing leave flow)
-- [ ] **Step 9:** Update/add tests for new bot flow
-- [ ] **Step 10:** End-to-end smoke: create solo table → Add Bot → bot joins → hand starts → × removes bot → bot leaves
+- [x] **Step 1:** Read `server/socket/handlers/` directory to understand handler registration pattern (where to add `bot:add`)
+- [x] **Step 2:** Server — update `POST /api/bot-tables` (privacy param, drop humanSeats, bot_count=0)
+- [x] **Step 3:** Server — update `BotTableController`: remove constructor spawn, add `addBot()`, add human-count guard → instant destroy
+- [x] **Step 4:** Server — add `bot:add` socket handler
+- [x] **Step 5:** Client — redesign `CreateBotTableModal` (Solo/Open + coach privacy)
+- [x] **Step 6:** Client — `TablePage` bot_cash mode: GhostSeat component + `bot:add` emit + `table:closed` redirect
+- [x] **Step 7:** Client — each occupied bot seat shows an "×" remove button (bot_cash mode only, visible to the human creator); clicking emits `bot:remove` with the bot's stableId
+- [x] **Step 8:** Server — add `bot:remove` socket handler; `BotTableController.removeBot(stableId)` disconnects that bot's socket and removes it from `_botSockets`; GM handles the player-left state (existing leave flow)
+- [x] **Step 9:** Update/add tests for new bot flow
+- [x] **Step 10:** End-to-end smoke: create solo table → Add Bot → bot joins → hand starts → × removes bot → bot leaves
 
 ---
 
@@ -366,11 +366,11 @@ Batch ζ  →  Bot table redesign (UX polish)
 
 ## Definition of Done (each batch)
 
-- [ ] Feature works end-to-end in the browser (not just in tests)
-- [ ] All new tests pass; no existing tests broken
-- [ ] No console errors introduced
-- [ ] API endpoints have auth middleware
-- [ ] Committed on `feat/phase2` branch
+- [x] Feature works end-to-end in the browser (not just in tests)
+- [x] All new tests pass; no existing tests broken
+- [x] No console errors introduced
+- [x] API endpoints have auth middleware
+- [x] Committed on `feat/phase2` branch
 
 ---
 

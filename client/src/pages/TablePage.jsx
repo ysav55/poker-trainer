@@ -173,7 +173,7 @@ function FullTableView() {
   const myId = useMemo(() => {
     if (!gameState?.players) return user?.id ?? null;
     const me = gameState.players.find((p) =>
-      actingAsCoach ? p.is_coach : p.stable_id === user?.id
+      actingAsCoach ? p.is_coach : (p.stableId === user?.id || p.stable_id === user?.id)
     );
     return me?.id ?? user?.id ?? null;
   }, [gameState, actingAsCoach, user]);

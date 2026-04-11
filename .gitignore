@@ -42,6 +42,12 @@ coverage/
 client/coverage/
 server/coverage/
 
+# Playwright
+e2e/.auth/
+playwright-report/
+test-results/
+blob-report/
+
 # Vite
 client/.vite/
 
@@ -49,3 +55,4 @@ client/.vite/
 *.xlsx
 *.pdf
 COACH_GUIDE.html
+e2e/screenshots/

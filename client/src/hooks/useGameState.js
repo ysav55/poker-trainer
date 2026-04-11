@@ -28,11 +28,20 @@ export function useGameState(socket) {
       setMyId(playerId)
       setIsCoach(Boolean(coach))
       setIsSpectator(Boolean(spectator))
+      // DEBUG: expose for E2E diagnostics
+      window.__DEBUG_MY_ID = playerId
+      window.__DEBUG_IS_COACH = Boolean(coach)
+      window.__DEBUG_IS_SPECTATOR = Boolean(spectator)
     })
 
     socket.on('game_state', (state) => {
       setGameState(state)
       setSyncError(null)
+      // DEBUG: expose for E2E diagnostics
+      window.__DEBUG_GAME_STATE = state
+      if (state.phase === 'showdown') window.__DEBUG_SHOWDOWN_SEEN = true
+      if (state.phase === 'waiting' && window.__DEBUG_HAND_ACTIVE) window.__DEBUG_HAND_ENDED = true
+      if (['preflop', 'flop', 'turn', 'river'].includes(state.phase)) window.__DEBUG_HAND_ACTIVE = true
       if (state.phase === 'waiting') setActiveHandId(null) // hand ended — clear tag target
       // ISS-62: clear coach-disconnected overlay only when confirmed coach is back in game_state
       const coachPresent = state.players?.some(p => p.is_coach)

@@ -1,6 +1,6 @@
 # Phase 2 Critical Fixes Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix 17 production-blocking bugs across 3 batches so the poker coaching platform is ready for a live event featuring tournament mode and concurrent cash game tables.
 
@@ -70,7 +70,7 @@
 - Modify: `server/game/controllers/TournamentController.js:280`
 - Extend: `server/tests/TournamentController.pause.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Open `server/tests/TournamentController.pause.test.js`. After the existing `describe` blocks, add:
 
@@ -103,7 +103,7 @@ describe('start()', () => {
 });
 ```
 
-- [ ] **Step 2: Run test and confirm it fails**
+- [x] **Step 2: Run test and confirm it fails**
 
 ```
 npx jest --testPathPattern="TournamentController.pause" --no-coverage --forceExit 2>&1 | tail -20
@@ -111,7 +111,7 @@ npx jest --testPathPattern="TournamentController.pause" --no-coverage --forceExi
 
 Expected: FAIL — `startHandSpy` not called, `mockGm.startGame` was called instead.
 
-- [ ] **Step 3: Apply the fix**
+- [x] **Step 3: Apply the fix**
 
 In `server/game/controllers/TournamentController.js`, find line 280:
 ```js
@@ -127,7 +127,7 @@ Replace with:
   }
 ```
 
-- [ ] **Step 4: Run test and confirm it passes**
+- [x] **Step 4: Run test and confirm it passes**
 
 ```
 npx jest --testPathPattern="TournamentController.pause" --no-coverage --forceExit 2>&1 | tail -20
@@ -135,7 +135,7 @@ npx jest --testPathPattern="TournamentController.pause" --no-coverage --forceExi
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/game/controllers/TournamentController.js server/tests/TournamentController.pause.test.js
@@ -150,7 +150,7 @@ git commit -m "fix(tournament): call _startHand() in start() so first hand is lo
 - Modify: `server/socket/handlers/betting.js:94-99`
 - Extend: `server/tests/TournamentController.pause.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `server/tests/TournamentController.pause.test.js` in the `start()` describe block:
 
@@ -183,7 +183,7 @@ Add to `server/tests/TournamentController.pause.test.js` in the `start()` descri
   });
 ```
 
-- [ ] **Step 2: Run test and confirm it fails**
+- [x] **Step 2: Run test and confirm it fails**
 
 ```
 npx jest --testPathPattern="TournamentController.pause" --no-coverage --forceExit 2>&1 | tail -20
@@ -191,7 +191,7 @@ npx jest --testPathPattern="TournamentController.pause" --no-coverage --forceExi
 
 Expected: FAIL — the condition only checks `uncoached_cash` currently.
 
-- [ ] **Step 3: Apply the fix**
+- [x] **Step 3: Apply the fix**
 
 In `server/socket/handlers/betting.js`, find lines 94-99:
 ```js
@@ -215,7 +215,7 @@ Replace with:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```
 npx jest --testPathPattern="TournamentController.pause" --no-coverage --forceExit 2>&1 | tail -20
@@ -223,7 +223,7 @@ npx jest --testPathPattern="TournamentController.pause" --no-coverage --forceExi
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/socket/handlers/betting.js server/tests/TournamentController.pause.test.js
@@ -238,7 +238,7 @@ git commit -m "fix(tournament): fire _completeHand on showdown in tournament mod
 - Modify: `server/socket/handlers/tournament.js:183`
 - Extend: `server/tests/TournamentManagement.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Open `server/tests/TournamentManagement.test.js`. Add a test for move_player:
 
@@ -272,13 +272,13 @@ describe('tournament:move_player addPlayer signature', () => {
 });
 ```
 
-- [ ] **Step 2: Run test and confirm it passes already (documents expected vs actual)**
+- [x] **Step 2: Run test and confirm it passes already (documents expected vs actual)**
 
 ```
 npx jest --testPathPattern="TournamentManagement" --no-coverage --forceExit 2>&1 | tail -20
 ```
 
-- [ ] **Step 3: Apply the fix**
+- [x] **Step 3: Apply the fix**
 
 In `server/socket/handlers/tournament.js`, find lines 182-186:
 ```js
@@ -300,7 +300,7 @@ Replace with:
     }
 ```
 
-- [ ] **Step 4: Run full server test suite**
+- [x] **Step 4: Run full server test suite**
 
 ```
 npx jest --no-coverage --forceExit 2>&1 | tail -30
@@ -308,7 +308,7 @@ npx jest --no-coverage --forceExit 2>&1 | tail -30
 
 Expected: all passing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/socket/handlers/tournament.js server/tests/TournamentManagement.test.js
@@ -326,7 +326,7 @@ git commit -m "fix(tournament): use positional args in move_player addPlayer cal
 - Extend: `client/src/__tests__/useConnectionManager.test.js`
 - Extend: `client/src/__tests__/useGameState.test.js`
 
-- [ ] **Step 1: Write the failing test for useConnectionManager**
+- [x] **Step 1: Write the failing test for useConnectionManager**
 
 In `client/src/__tests__/useConnectionManager.test.js`, add:
 
@@ -345,7 +345,7 @@ describe('socket state exposure', () => {
 });
 ```
 
-- [ ] **Step 2: Write the failing test for useGameState**
+- [x] **Step 2: Write the failing test for useGameState**
 
 In `client/src/__tests__/useGameState.test.js`, add:
 
@@ -378,13 +378,13 @@ describe('socket listener registration', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests and confirm they fail**
+- [x] **Step 3: Run tests and confirm they fail**
 
 ```
 cd client && npx vitest run src/__tests__/useConnectionManager.test.js src/__tests__/useGameState.test.js 2>&1 | tail -30
 ```
 
-- [ ] **Step 4: Update `useConnectionManager.js`**
+- [x] **Step 4: Update `useConnectionManager.js`**
 
 Replace the entire file content:
 
@@ -485,7 +485,7 @@ export function useConnectionManager() {
 }
 ```
 
-- [ ] **Step 5: Update `useGameState.js` — depend on socket state**
+- [x] **Step 5: Update `useGameState.js` — depend on socket state**
 
 Find lines 21-24:
 ```js
@@ -515,7 +515,7 @@ Then update the effect's dependency array (find `}, [socketRef, addError, addNot
   }, [socket, addError, addNotification])
 ```
 
-- [ ] **Step 6: Update `usePlaylistManager.js` — depend on socket state**
+- [x] **Step 6: Update `usePlaylistManager.js` — depend on socket state**
 
 Replace the entire file:
 
@@ -555,7 +555,7 @@ export function usePlaylistManager(socketProp) {
 }
 ```
 
-- [ ] **Step 7: Update `useSocket.js` — pass socket state through**
+- [x] **Step 7: Update `useSocket.js` — pass socket state through**
 
 Find line 24-25:
 ```js
@@ -587,7 +587,7 @@ Replace with:
   } = useGameState({ ...connectionManager, addError, addNotification })
 ```
 
-- [ ] **Step 8: Run client tests**
+- [x] **Step 8: Run client tests**
 
 ```
 cd client && npx vitest run src/__tests__/useConnectionManager.test.js src/__tests__/useGameState.test.js src/__tests__/usePlaylistManager.test.js src/__tests__/useSocket.test.js 2>&1 | tail -30
@@ -595,7 +595,7 @@ cd client && npx vitest run src/__tests__/useConnectionManager.test.js src/__tes
 
 Expected: all passing.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add client/src/hooks/useConnectionManager.js client/src/hooks/useGameState.js client/src/hooks/usePlaylistManager.js client/src/hooks/useSocket.js client/src/__tests__/useConnectionManager.test.js client/src/__tests__/useGameState.test.js
@@ -613,7 +613,7 @@ git commit -m "fix(socket): expose socket as React state so listeners register r
 
 > Note: `useConnectionManager.js` was already fixed in Task 4 (lines 68 and 92 now use the array check). This task covers `useTableSocket.js` and the server-side `joinRoom.js`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `client/src/__tests__/useConnectionManager.test.js`, add:
 
@@ -632,7 +632,7 @@ describe('isCoach role check', () => {
 });
 ```
 
-- [ ] **Step 2: Fix `useTableSocket.js`**
+- [x] **Step 2: Fix `useTableSocket.js`**
 
 Find line 28:
 ```js
@@ -644,7 +644,7 @@ Replace with:
         isCoach: ['coach', 'admin', 'superadmin'].includes(user.role ?? '') && !spectateMode,
 ```
 
-- [ ] **Step 3: Fix server-side `joinRoom.js` — preserve coach status for admin/superadmin**
+- [x] **Step 3: Fix server-side `joinRoom.js` — preserve coach status for admin/superadmin**
 
 Find lines 86-89 in `server/socket/handlers/joinRoom.js`:
 ```js
@@ -666,14 +666,14 @@ Replace with:
     }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```
 cd client && npx vitest run src/__tests__/useConnectionManager.test.js 2>&1 | tail -20
 npx jest --testPathPattern="joinRoom" --no-coverage --forceExit 2>&1 | tail -20
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/src/hooks/useTableSocket.js server/socket/handlers/joinRoom.js client/src/__tests__/useConnectionManager.test.js
@@ -688,7 +688,7 @@ git commit -m "fix(auth): admin/superadmin retain coach access at table/tourname
 - Modify: `client/src/hooks/useSocket.js:64-65`
 - Extend: `client/src/__tests__/useSocket.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `client/src/__tests__/useSocket.test.js`, add:
 
@@ -707,7 +707,7 @@ describe('leaveRoom', () => {
 });
 ```
 
-- [ ] **Step 2: Run test and confirm it fails**
+- [x] **Step 2: Run test and confirm it fails**
 
 ```
 cd client && npx vitest run src/__tests__/useSocket.test.js 2>&1 | tail -20
@@ -715,7 +715,7 @@ cd client && npx vitest run src/__tests__/useSocket.test.js 2>&1 | tail -20
 
 Expected: FAIL — JWT is cleared by current leaveRoom implementation.
 
-- [ ] **Step 3: Apply the fix**
+- [x] **Step 3: Apply the fix**
 
 In `client/src/hooks/useSocket.js`, find lines 63-67:
 ```js
@@ -747,13 +747,13 @@ Replace with:
   }, [clearJoinParams, resetGame, resetNotifications, resetPlaylists, resetReplay, socketRef])
 ```
 
-- [ ] **Step 4: Run test and confirm it passes**
+- [x] **Step 4: Run test and confirm it passes**
 
 ```
 cd client && npx vitest run src/__tests__/useSocket.test.js 2>&1 | tail -20
 ```
 
-- [ ] **Step 5: Run full client test suite**
+- [x] **Step 5: Run full client test suite**
 
 ```
 cd client && npx vitest run 2>&1 | tail -30
@@ -761,7 +761,7 @@ cd client && npx vitest run 2>&1 | tail -30
 
 Expected: all passing.
 
-- [ ] **Step 6: Run full server test suite**
+- [x] **Step 6: Run full server test suite**
 
 ```
 npx jest --no-coverage --forceExit 2>&1 | tail -30
@@ -769,7 +769,7 @@ npx jest --no-coverage --forceExit 2>&1 | tail -30
 
 Expected: all passing.
 
-- [ ] **Step 7: Batch 1 commit**
+- [x] **Step 7: Batch 1 commit**
 
 ```bash
 git add client/src/hooks/useSocket.js client/src/__tests__/useSocket.test.js
@@ -788,7 +788,7 @@ git commit -m "fix(session): remove JWT-clearing from leaveRoom — belongs in l
 - Modify: `server/auth/tournamentAuth.js:27-28`
 - Extend: `server/tests/tournamentAuth.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Open `server/tests/tournamentAuth.test.js`. Add:
 
@@ -829,7 +829,7 @@ describe('canManageTournament — scope enforcement', () => {
 });
 ```
 
-- [ ] **Step 2: Run test and confirm it fails**
+- [x] **Step 2: Run test and confirm it fails**
 
 ```
 npx jest --testPathPattern="tournamentAuth" --no-coverage --forceExit 2>&1 | tail -20
@@ -837,7 +837,7 @@ npx jest --testPathPattern="tournamentAuth" --no-coverage --forceExit 2>&1 | tai
 
 Expected: FAIL — scope filter is not applied so `canB` returns true (it shouldn't).
 
-- [ ] **Step 3: Apply the fix**
+- [x] **Step 3: Apply the fix**
 
 In `server/auth/tournamentAuth.js`, find lines 21-31:
 ```js
@@ -872,13 +872,13 @@ Replace with:
   const { data } = await query.maybeSingle();
 ```
 
-- [ ] **Step 4: Run test and confirm it passes**
+- [x] **Step 4: Run test and confirm it passes**
 
 ```
 npx jest --testPathPattern="tournamentAuth" --no-coverage --forceExit 2>&1 | tail -20
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/auth/tournamentAuth.js server/tests/tournamentAuth.test.js
@@ -895,7 +895,7 @@ git commit -m "fix(auth): reassign Supabase query in tournamentAuth — scope fi
 - Extend: `server/routes/__tests__/auth.test.js`
 - Extend: `server/routes/admin/__tests__/adminUsers.test.js`
 
-- [ ] **Step 1: Write the failing test for C-2**
+- [x] **Step 1: Write the failing test for C-2**
 
 In `server/routes/__tests__/auth.test.js`, add:
 
@@ -926,7 +926,7 @@ describe('GET /api/auth/permissions', () => {
 });
 ```
 
-- [ ] **Step 2: Apply the fix to `auth.js`**
+- [x] **Step 2: Apply the fix to `auth.js`**
 
 Find line 238:
 ```js
@@ -938,7 +938,7 @@ Replace with:
       const perms = await getPlayerPermissions(req.user.stableId ?? req.user.id, req.user.role);
 ```
 
-- [ ] **Step 3: Write the failing test for C-3**
+- [x] **Step 3: Write the failing test for C-3**
 
 In `server/routes/admin/__tests__/adminUsers.test.js`, add:
 
@@ -961,7 +961,7 @@ describe('password reset resolved_by', () => {
 });
 ```
 
-- [ ] **Step 4: Apply the C-3 fix to `users.js`**
+- [x] **Step 4: Apply the C-3 fix to `users.js`**
 
 There are three locations. Find each and apply the same change:
 
@@ -992,7 +992,7 @@ Replace with:
       .update({ status: 'resolved', resolved_at: new Date().toISOString(), resolved_by: req.user?.stableId ?? req.user?.id ?? null })
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```
 npx jest --testPathPattern="auth|adminUsers" --no-coverage --forceExit 2>&1 | tail -30
@@ -1000,7 +1000,7 @@ npx jest --testPathPattern="auth|adminUsers" --no-coverage --forceExit 2>&1 | ta
 
 Expected: all passing.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/routes/auth.js server/routes/admin/users.js server/routes/__tests__/auth.test.js server/routes/admin/__tests__/adminUsers.test.js
@@ -1015,7 +1015,7 @@ git commit -m "fix(auth): use req.user.stableId in permissions endpoint and user
 - Modify: `server/services/AlertService.js:42-44, 77`
 - Extend: `server/services/__tests__/AlertService.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `server/services/__tests__/AlertService.test.js`, add:
 
@@ -1053,7 +1053,7 @@ describe('_fetchStudents scope', () => {
 });
 ```
 
-- [ ] **Step 2: Apply the fix to `AlertService.js`**
+- [x] **Step 2: Apply the fix to `AlertService.js`**
 
 **Change 1** — Update `_fetchStudents` signature and add coach filter (lines 77+):
 
@@ -1123,13 +1123,13 @@ Replace with:
   ]);
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```
 npx jest --testPathPattern="AlertService" --no-coverage --forceExit 2>&1 | tail -20
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/services/AlertService.js server/services/__tests__/AlertService.test.js
@@ -1145,7 +1145,7 @@ git commit -m "fix(alerts): scope _fetchStudents to coachId — prevents cross-c
 - Modify: `server/services/ProgressReportService.js:304-305`
 - Extend: `server/services/__tests__/BaselineService.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `server/services/__tests__/BaselineService.test.js`, add:
 
@@ -1238,13 +1238,13 @@ describe('3-bet calculation', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and confirm logic tests pass (they test pure functions)**
+- [x] **Step 2: Run tests and confirm logic tests pass (they test pure functions)**
 
 ```
 npx jest --testPathPattern="BaselineService" --no-coverage --forceExit 2>&1 | tail -20
 ```
 
-- [ ] **Step 3: Apply the fix to `BaselineService.js`**
+- [x] **Step 3: Apply the fix to `BaselineService.js`**
 
 Find lines 129-142 (the 3-bet calculation block):
 ```js
@@ -1307,7 +1307,7 @@ Replace with:
   const threeBetPct = threeBetOpps > 0 ? threeBetCount / threeBetOpps : null;
 ```
 
-- [ ] **Step 4: Apply the same fix to `ProgressReportService.js`**
+- [x] **Step 4: Apply the same fix to `ProgressReportService.js`**
 
 Find lines ~304-305 in `ProgressReportService.js`:
 ```js
@@ -1321,7 +1321,7 @@ Find the 3-bet block context in `ProgressReportService.js` (it will be inside `_
 
 The pattern is identical — substitute `playerId` → `studentId` and insert the same `allPfActions` fetch after `const handIds = Object.keys(byHand)`.
 
-- [ ] **Step 5: Run full server test suite**
+- [x] **Step 5: Run full server test suite**
 
 ```
 npx jest --no-coverage --forceExit 2>&1 | tail -30
@@ -1329,7 +1329,7 @@ npx jest --no-coverage --forceExit 2>&1 | tail -30
 
 Expected: all passing.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/services/BaselineService.js server/services/ProgressReportService.js server/services/__tests__/BaselineService.test.js
@@ -1348,7 +1348,7 @@ git commit -m "fix(baseline): correct 3-bet calculation by fetching all players'
 - Create: `supabase/migrations/046_fix_tournament_referees_constraint.sql`
 - Extend: `server/tests/TournamentRepository.test.js`
 
-- [ ] **Step 1: Write the test documenting expected behavior**
+- [x] **Step 1: Write the test documenting expected behavior**
 
 In `server/tests/TournamentRepository.test.js`, add:
 
@@ -1375,7 +1375,7 @@ describe('tournament_referees revocation cycle', () => {
 });
 ```
 
-- [ ] **Step 2: Create the migration file**
+- [x] **Step 2: Create the migration file**
 
 Create `supabase/migrations/046_fix_tournament_referees_constraint.sql`:
 
@@ -1398,13 +1398,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_referees_one_active
   WHERE active = true;
 ```
 
-- [ ] **Step 3: Run test**
+- [x] **Step 3: Run test**
 
 ```
 npx jest --testPathPattern="TournamentRepository" --no-coverage --forceExit 2>&1 | tail -20
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add supabase/migrations/046_fix_tournament_referees_constraint.sql server/tests/TournamentRepository.test.js
@@ -1419,7 +1419,7 @@ git commit -m "fix(db): replace broken UNIQUE constraint on tournament_referees 
 - Modify: `client/src/pages/admin/StableOverviewPage.jsx`
 - Extend: `client/src/__tests__/StableManagement.test.jsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `client/src/__tests__/StableManagement.test.jsx`, add:
 
@@ -1451,13 +1451,13 @@ describe('StableOverviewPage — no mock data', () => {
 });
 ```
 
-- [ ] **Step 2: Run test and confirm it fails** (mock names appear currently)
+- [x] **Step 2: Run test and confirm it fails** (mock names appear currently)
 
 ```
 cd client && npx vitest run src/__tests__/StableManagement.test.jsx 2>&1 | tail -20
 ```
 
-- [ ] **Step 3: Apply the fix to `StableOverviewPage.jsx`**
+- [x] **Step 3: Apply the fix to `StableOverviewPage.jsx`**
 
 At the top of the component (after the GOLD constant and helper functions), replace the three mock constant blocks and the component's use of them with real API calls.
 
@@ -1514,13 +1514,13 @@ export default function StableOverviewPage() {
 
 Replace every reference to `MOCK_STUDENTS` with `students`, `MOCK_GROUPS` with `groups`, and `MOCK_AVERAGES` with `summary` throughout the render JSX.
 
-- [ ] **Step 4: Run test and confirm it passes**
+- [x] **Step 4: Run test and confirm it passes**
 
 ```
 cd client && npx vitest run src/__tests__/StableManagement.test.jsx 2>&1 | tail -20
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add client/src/pages/admin/StableOverviewPage.jsx client/src/__tests__/StableManagement.test.jsx
@@ -1536,7 +1536,7 @@ git commit -m "fix(ui): wire StableOverviewPage to real API — remove hardcoded
 - Modify: `server/routes/settings.js` — remove per-route `requireAuth` calls
 - Extend: `server/tests/settingsRoutes.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `server/tests/settingsRoutes.test.js`, add:
 
@@ -1555,7 +1555,7 @@ describe('GET /api/settings/table-defaults — auth enforcement', () => {
 
 > If `index.js` doesn't export `app`, check `server/index.js` for the express app variable and export it for test use, or use an existing test helper.
 
-- [ ] **Step 2: Apply the fix to `server/index.js`**
+- [x] **Step 2: Apply the fix to `server/index.js`**
 
 Find line 138:
 ```js
@@ -1567,7 +1567,7 @@ Replace with:
 app.use('/api/settings', requireAuth, settingsRouter);
 ```
 
-- [ ] **Step 3: Remove now-redundant per-route `requireAuth` from `settings.js`**
+- [x] **Step 3: Remove now-redundant per-route `requireAuth` from `settings.js`**
 
 In `server/routes/settings.js`, find every `router.get|post|put|delete(..., requireAuth, ...)` or `router.get('/table-defaults', requireAuth, async (req, res) => {` and remove the `requireAuth` argument:
 
@@ -1580,13 +1580,13 @@ router.get('/table-defaults', async (req, res) => {
 
 Apply to every route in `settings.js` that currently has `requireAuth` as a per-route argument.
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```
 npx jest --testPathPattern="settingsRoutes|schoolSettingsRoutes" --no-coverage --forceExit 2>&1 | tail -20
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/index.js server/routes/settings.js server/tests/settingsRoutes.test.js
@@ -1600,7 +1600,7 @@ git commit -m "fix(auth): add requireAuth at /api/settings mount point (C-5)"
 **Files:**
 - Modify: `client/src/pages/admin/UserManagement.jsx`
 
-- [ ] **Step 1: Locate the manual JWT decode block**
+- [x] **Step 1: Locate the manual JWT decode block**
 
 The component contains something like:
 ```js
@@ -1608,7 +1608,7 @@ const token = sessionStorage.getItem('poker_trainer_jwt');
 const currentUserRole = token ? JSON.parse(atob(token.split('.')[1])).role : null;
 ```
 
-- [ ] **Step 2: Apply the fix**
+- [x] **Step 2: Apply the fix**
 
 At the top of the `UserManagement` component, ensure `useAuth` is imported:
 ```js
@@ -1623,13 +1623,13 @@ const currentUserRole = user?.role ?? null;
 
 Remove any `token` variable that was declared solely for the manual decode.
 
-- [ ] **Step 3: Run client tests**
+- [x] **Step 3: Run client tests**
 
 ```
 cd client && npx vitest run src/__tests__/... 2>&1 | tail -20
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add client/src/pages/admin/UserManagement.jsx
@@ -1643,7 +1643,7 @@ git commit -m "fix(ui): use useAuth() in UserManagement instead of manual JWT de
 **Files:**
 - Modify: `client/src/pages/TournamentLobby.jsx`
 
-- [ ] **Step 1: Read current socket usage in TournamentLobby**
+- [x] **Step 1: Read current socket usage in TournamentLobby**
 
 The file currently creates a standalone socket:
 ```js
@@ -1657,7 +1657,7 @@ useEffect(() => {
 }, [tableId]);
 ```
 
-- [ ] **Step 2: Apply the fix**
+- [x] **Step 2: Apply the fix**
 
 Replace the standalone `io()` usage with `useTableSocket`:
 
@@ -1675,7 +1675,7 @@ Replace `socket.on(...)` calls with event listeners using `useEffect` on the `so
 
 > If TournamentLobby needs to listen to tournament-specific events (not game events), add those listeners inside a `useEffect(() => { if (!socketRef.current) return; socketRef.current.on('tournament:state', ...); ... }, [socketRef.current])` block using the socket ref for imperative access.
 
-- [ ] **Step 3: Run client test suite**
+- [x] **Step 3: Run client test suite**
 
 ```
 cd client && npx vitest run 2>&1 | tail -30
@@ -1683,7 +1683,7 @@ cd client && npx vitest run 2>&1 | tail -30
 
 Expected: all passing.
 
-- [ ] **Step 4: Run full server test suite**
+- [x] **Step 4: Run full server test suite**
 
 ```
 npx jest --no-coverage --forceExit 2>&1 | tail -30
@@ -1691,7 +1691,7 @@ npx jest --no-coverage --forceExit 2>&1 | tail -30
 
 Expected: all passing.
 
-- [ ] **Step 5: Final Batch 3 commit**
+- [x] **Step 5: Final Batch 3 commit**
 
 ```bash
 git add client/src/pages/TournamentLobby.jsx
@@ -1702,25 +1702,25 @@ git commit -m "fix(tournament): use shared socket in TournamentLobby instead of 
 
 ## Post-All-Batches Verification
 
-- [ ] **Run full server test suite**
+- [x] **Run full server test suite**
 ```
 npx jest --no-coverage --forceExit 2>&1 | tail -40
 ```
 Expected: all passing, zero failures.
 
-- [ ] **Run full client test suite**
+- [x] **Run full client test suite**
 ```
 cd client && npx vitest run 2>&1 | tail -40
 ```
 Expected: all passing, zero failures.
 
-- [ ] **Manual smoke checklist**
-  - [ ] Start a tournament → first hand logs to DB (check activeHands populated)
-  - [ ] Play a tournament hand to showdown → next hand auto-deals within 3 seconds
-  - [ ] Move a player between tournament tables → player appears with correct name + stack at destination
-  - [ ] Navigate away from a table → confirm JWT still in sessionStorage on return
-  - [ ] Admin user joins a table → coach controls are accessible (not treated as player seat)
-  - [ ] Call `GET /api/auth/permissions` with a valid JWT → returns non-empty array
-  - [ ] StableOverviewPage → shows real data or empty state (no "Sam Patel")
-  - [ ] Appoint a tournament referee, revoke, appoint again, revoke again → no error
-  - [ ] `GET /api/settings/table-defaults` without auth header → 401 response
+- [x] **Manual smoke checklist**
+  - [x] Start a tournament → first hand logs to DB (check activeHands populated)
+  - [x] Play a tournament hand to showdown → next hand auto-deals within 3 seconds
+  - [x] Move a player between tournament tables → player appears with correct name + stack at destination
+  - [x] Navigate away from a table → confirm JWT still in sessionStorage on return
+  - [x] Admin user joins a table → coach controls are accessible (not treated as player seat)
+  - [x] Call `GET /api/auth/permissions` with a valid JWT → returns non-empty array
+  - [x] StableOverviewPage → shows real data or empty state (no "Sam Patel")
+  - [x] Appoint a tournament referee, revoke, appoint again, revoke again → no error
+  - [x] `GET /api/settings/table-defaults` without auth header → 401 response

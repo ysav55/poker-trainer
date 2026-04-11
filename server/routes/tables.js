@@ -145,6 +145,35 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
     }
   });
 
+  // POST /api/tables/:id/toggle-pause — toggle pause via REST (coach/admin only)
+  app.post('/api/tables/:id/toggle-pause', requireAuth, async (req, res) => {
+    try {
+      const COACH_ROLES = new Set(['coach', 'admin', 'superadmin']);
+      if (!COACH_ROLES.has(req.user?.role)) {
+        return res.status(403).json({ error: 'Only coaches can pause' });
+      }
+      const { tables } = require('../state/SharedState');
+      const gm = tables.get(req.params.id);
+      if (!gm) return res.status(404).json({ error: 'Table not active' });
+      const result = gm.togglePause();
+      // Broadcast state change to all connected sockets
+      const io = req.app.get('io');
+      if (io) {
+        const room = io.sockets.adapter.rooms.get(req.params.id);
+        if (room) {
+          for (const socketId of room) {
+            const sock = io.sockets.sockets.get(socketId);
+            if (!sock) continue;
+            sock.emit('game_state', gm.getPublicState(socketId, sock.data.isCoach));
+          }
+        }
+      }
+      res.json({ ok: true, paused: result.paused });
+    } catch (err) {
+      res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
   // GET /api/tables/:id/invited — list invited players
   app.get('/api/tables/:id/invited', requireAuth, async (req, res) => {
     try {

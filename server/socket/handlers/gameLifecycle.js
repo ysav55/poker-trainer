@@ -60,7 +60,6 @@ module.exports = function registerGameLifecycle(socket, ctx) {
     startActionTimer(tableId);
     log.info('game', 'hand_start', `hand started mode=${mode}`, { tableId, mode, sessionId: gm.sessionId });
     log.trackSocket('start_game', tableId, socket.data.stableId, { mode });
-    console.log(`[start_game] mode=${mode}`);
   });
 
   socket.on('reset_hand', async () => {
