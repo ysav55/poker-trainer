@@ -21,6 +21,9 @@ jest.mock('../../services/ProgressReportService', () => ({
   stableOverview: jest.fn(),
 }));
 
+let mockStudentAccessGranted = true;
+jest.mock('../../auth/requireStudentAssignment', () => jest.fn());
+
 let mockCurrentUser = null;
 
 jest.mock('../../auth/requireAuth.js', () =>
@@ -47,6 +50,7 @@ const request      = require('supertest');
 const express      = require('express');
 const requireAuth  = require('../../auth/requireAuth.js');
 const requireRole  = require('../../auth/requireRole.js');
+const requireStudentAssignment = require('../../auth/requireStudentAssignment');
 const registerReportRoutes    = require('../reports');
 const ProgressReportService   = require('../../services/ProgressReportService');
 
@@ -81,6 +85,14 @@ const SAMPLE_REPORT = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockCurrentUser = null;
+  mockStudentAccessGranted = true;
+  requireStudentAssignment.mockImplementation((req, res, next) => {
+    if (!mockStudentAccessGranted) {
+      return res.status(403).json({ error: 'forbidden', message: 'Student not assigned to you' });
+    }
+    req.studentId = req.params.id;
+    next();
+  });
   ProgressReportService.generate.mockResolvedValue(SAMPLE_REPORT);
   ProgressReportService.list.mockResolvedValue([SAMPLE_REPORT]);
   ProgressReportService.getById.mockResolvedValue(SAMPLE_REPORT);
@@ -247,5 +259,35 @@ describe('GET /api/coach/reports/stable', () => {
     ProgressReportService.stableOverview.mockRejectedValue(new Error('fail'));
     const res = await request(app).get('/api/coach/reports/stable');
     expect(res.status).toBe(500);
+  });
+});
+
+// ─── student assignment guard ─────────────────────────────────────────────────
+
+describe('student assignment guard', () => {
+  test('GET /reports returns 403 when student not assigned', async () => {
+    mockCurrentUser = { id: 'coach-1', stableId: 'coach-1', role: 'coach' };
+    mockStudentAccessGranted = false;
+    const res = await request(app).get('/api/coach/students/student-99/reports');
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('forbidden');
+  });
+
+  test('GET /reports/:rid returns 403 when student not assigned', async () => {
+    mockCurrentUser = { id: 'coach-1', stableId: 'coach-1', role: 'coach' };
+    mockStudentAccessGranted = false;
+    const res = await request(app).get('/api/coach/students/student-99/reports/report-1');
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('forbidden');
+  });
+
+  test('POST /reports returns 403 when student not assigned', async () => {
+    mockCurrentUser = { id: 'coach-1', stableId: 'coach-1', role: 'coach' };
+    mockStudentAccessGranted = false;
+    const res = await request(app)
+      .post('/api/coach/students/student-99/reports')
+      .send({ period_start: '2026-01-01', period_end: '2026-01-31' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('forbidden');
   });
 });

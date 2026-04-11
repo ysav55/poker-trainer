@@ -14,6 +14,7 @@
  */
 
 const SessionPrepService = require('../services/SessionPrepService');
+const requireStudentAssignment = require('../auth/requireStudentAssignment');
 
 module.exports = function registerPrepBriefRoutes(app, { requireAuth, requireRole }) {
 
@@ -22,9 +23,10 @@ module.exports = function registerPrepBriefRoutes(app, { requireAuth, requireRol
     '/api/coach/students/:id/prep-brief',
     requireAuth,
     requireRole('coach'),
+    requireStudentAssignment,
     async (req, res) => {
       const coachId   = req.user.id ?? req.user.stableId;
-      const studentId = req.params.id;
+      const studentId = req.studentId;
 
       try {
         const brief = await SessionPrepService.generate(coachId, studentId);
@@ -40,9 +42,10 @@ module.exports = function registerPrepBriefRoutes(app, { requireAuth, requireRol
     '/api/coach/students/:id/prep-brief/refresh',
     requireAuth,
     requireRole('coach'),
+    requireStudentAssignment,
     async (req, res) => {
       const coachId   = req.user.id ?? req.user.stableId;
-      const studentId = req.params.id;
+      const studentId = req.studentId;
 
       try {
         const brief = await SessionPrepService.refresh(coachId, studentId);

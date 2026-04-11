@@ -13,6 +13,7 @@
 
 const express  = require('express');
 const supabase = require('../db/supabase');
+const requireStudentAssignment = require('../auth/requireStudentAssignment');
 
 const router = express.Router({ mergeParams: true });
 
@@ -22,42 +23,11 @@ function uid(req) {
   return req.user?.id ?? req.user?.stableId;
 }
 
-/**
- * Verify that the requesting coach owns this student, unless caller is admin/superadmin.
- * Returns studentId on success, or sends a 403 and returns null.
- */
-async function verifyStudentAccess(req, res) {
-  const coachId   = uid(req);
-  const studentId = req.params.id;
-  const role      = req.user?.role;
-
-  if (role === 'admin' || role === 'superadmin') {
-    return studentId;
-  }
-
-  const { data, error } = await supabase
-    .from('player_profiles')
-    .select('id')
-    .eq('id', studentId)
-    .eq('coach_id', coachId)
-    .maybeSingle();
-
-  if (error) throw error;
-
-  if (!data) {
-    res.status(403).json({ error: 'forbidden', message: 'Student not assigned to you' });
-    return null;
-  }
-
-  return studentId;
-}
-
 // ─── GET /:id/playlists (W-2) ─────────────────────────────────────────────────
 
-router.get('/:id/playlists', async (req, res) => {
+router.get('/:id/playlists', requireStudentAssignment, async (req, res) => {
   try {
-    const studentId = await verifyStudentAccess(req, res);
-    if (!studentId) return;
+    const studentId = req.studentId;
 
     const coachId = uid(req);
 
@@ -122,10 +92,9 @@ router.get('/:id/playlists', async (req, res) => {
 
 // ─── GET /:id/scenario-history (W-3) ─────────────────────────────────────────
 
-router.get('/:id/scenario-history', async (req, res) => {
+router.get('/:id/scenario-history', requireStudentAssignment, async (req, res) => {
   try {
-    const studentId = await verifyStudentAccess(req, res);
-    if (!studentId) return;
+    const studentId = req.studentId;
 
     // 1. All hands that have a scenario_id, most recent first
     const { data: hands, error: handsError } = await supabase
@@ -190,10 +159,9 @@ router.get('/:id/scenario-history', async (req, res) => {
 
 // ─── GET /:id/staking (W-4) ──────────────────────────────────────────────────
 
-router.get('/:id/staking', async (req, res) => {
+router.get('/:id/staking', requireStudentAssignment, async (req, res) => {
   try {
-    const studentId = await verifyStudentAccess(req, res);
-    if (!studentId) return;
+    const studentId = req.studentId;
 
     const coachId = uid(req);
 
@@ -261,10 +229,9 @@ router.get('/:id/staking', async (req, res) => {
 
 // ─── POST /:id/staking/notes (W-5) ───────────────────────────────────────────
 
-router.post('/:id/staking/notes', async (req, res) => {
+router.post('/:id/staking/notes', requireStudentAssignment, async (req, res) => {
   try {
-    const studentId = await verifyStudentAccess(req, res);
-    if (!studentId) return;
+    const studentId = req.studentId;
 
     const coachId = uid(req);
 

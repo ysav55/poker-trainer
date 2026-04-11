@@ -16,6 +16,7 @@
  */
 
 const ProgressReportService = require('../services/ProgressReportService');
+const requireStudentAssignment = require('../auth/requireStudentAssignment');
 
 const VALID_TYPES = new Set(['weekly', 'monthly', 'custom']);
 
@@ -43,9 +44,10 @@ module.exports = function registerReportRoutes(app, { requireAuth, requireRole }
     '/api/coach/students/:id/reports',
     requireAuth,
     requireRole('coach'),
+    requireStudentAssignment,
     async (req, res) => {
       const coachId   = req.user.id ?? req.user.stableId;
-      const studentId = req.params.id;
+      const studentId = req.studentId;
       const type      = req.query.type;
       const limit     = Math.min(parseInt(req.query.limit) || 10, 50);
 
@@ -67,9 +69,10 @@ module.exports = function registerReportRoutes(app, { requireAuth, requireRole }
     '/api/coach/students/:id/reports/:rid',
     requireAuth,
     requireRole('coach'),
+    requireStudentAssignment,
     async (req, res) => {
       const coachId   = req.user.id ?? req.user.stableId;
-      const studentId = req.params.id;
+      const studentId = req.studentId;
       const reportId  = req.params.rid;
 
       try {
@@ -87,9 +90,10 @@ module.exports = function registerReportRoutes(app, { requireAuth, requireRole }
     '/api/coach/students/:id/reports',
     requireAuth,
     requireRole('coach'),
+    requireStudentAssignment,
     async (req, res) => {
       const coachId   = req.user.id ?? req.user.stableId;
-      const studentId = req.params.id;
+      const studentId = req.studentId;
       const { period_start, period_end, type } = req.body ?? {};
 
       if (!period_start || !period_end) {

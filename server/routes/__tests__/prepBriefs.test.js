@@ -17,6 +17,9 @@ jest.mock('../../services/SessionPrepService', () => ({
   refresh:  jest.fn(),
 }));
 
+let mockStudentAccessGranted = true;
+jest.mock('../../auth/requireStudentAssignment', () => jest.fn());
+
 let mockCurrentUser = null;
 jest.mock('../../auth/requireAuth.js', () =>
   jest.fn((req, res, next) => {
@@ -43,6 +46,7 @@ const request  = require('supertest');
 const express  = require('express');
 const requireAuth = require('../../auth/requireAuth.js');
 const requireRole = require('../../auth/requireRole.js');
+const requireStudentAssignment = require('../../auth/requireStudentAssignment');
 const registerPrepBriefRoutes = require('../prepBriefs');
 const SessionPrepService      = require('../../services/SessionPrepService');
 
@@ -70,6 +74,14 @@ const SAMPLE_BRIEF = {
 beforeEach(() => {
   jest.clearAllMocks();
   mockCurrentUser = null;
+  mockStudentAccessGranted = true;
+  requireStudentAssignment.mockImplementation((req, res, next) => {
+    if (!mockStudentAccessGranted) {
+      return res.status(403).json({ error: 'forbidden', message: 'Student not assigned to you' });
+    }
+    req.studentId = req.params.id;
+    next();
+  });
   SessionPrepService.generate.mockResolvedValue(SAMPLE_BRIEF);
   SessionPrepService.refresh.mockResolvedValue({ ...SAMPLE_BRIEF, from_cache: false });
 });
@@ -176,5 +188,27 @@ describe('POST /api/coach/students/:id/prep-brief/refresh', () => {
     const res = await request(app).post('/api/coach/students/student-uuid/prep-brief/refresh');
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('internal_error');
+  });
+});
+
+// ─── student assignment guard ─────────────────────────────────────────────────
+
+describe('student assignment guard', () => {
+  const app = buildApp();
+
+  test('GET /prep-brief returns 403 when student not assigned to coach', async () => {
+    mockCurrentUser = { id: 'coach-1', stableId: 'coach-1', role: 'coach' };
+    mockStudentAccessGranted = false;
+    const res = await request(app).get('/api/coach/students/student-99/prep-brief');
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('forbidden');
+  });
+
+  test('POST /prep-brief/refresh returns 403 when student not assigned to coach', async () => {
+    mockCurrentUser = { id: 'coach-1', stableId: 'coach-1', role: 'coach' };
+    mockStudentAccessGranted = false;
+    const res = await request(app).post('/api/coach/students/student-99/prep-brief/refresh');
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('forbidden');
   });
 });

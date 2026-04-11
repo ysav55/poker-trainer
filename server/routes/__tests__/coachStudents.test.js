@@ -14,6 +14,9 @@
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+let mockStudentAccessGranted = true;
+jest.mock('../../auth/requireStudentAssignment', () => jest.fn());
+
 const mockFrom = jest.fn();
 jest.mock('../../db/supabase', () => ({ from: mockFrom }));
 
@@ -44,6 +47,7 @@ const request      = require('supertest');
 const express      = require('express');
 const requireAuth  = require('../../auth/requireAuth.js');
 const requireRole  = require('../../auth/requireRole.js');
+const requireStudentAssignment = require('../../auth/requireStudentAssignment');
 const coachStudentsRouter = require('../coachStudents');
 
 function buildApp() {
@@ -94,15 +98,22 @@ const STUDENT_ID   = 'student-uuid-1';
 beforeEach(() => {
   jest.clearAllMocks();
   mockCurrentUser = null;
+  mockStudentAccessGranted = true;
+  requireStudentAssignment.mockImplementation((req, res, next) => {
+    if (!mockStudentAccessGranted) {
+      return res.status(403).json({ error: 'forbidden', message: 'Student not assigned to you' });
+    }
+    req.studentId = req.params.id;
+    next();
+  });
 });
 
-// ─── verifyStudentAccess ──────────────────────────────────────────────────────
+// ─── requireStudentAssignment guard ──────────────────────────────────────────
 
-describe('verifyStudentAccess', () => {
+describe('requireStudentAssignment', () => {
   test('returns 403 when student not assigned to requesting coach', async () => {
     mockCurrentUser = COACH_USER;
-    // player_profiles lookup returns no row → student not theirs
-    mockFrom.mockReturnValueOnce(makeChain({ data: null, error: null }));
+    mockStudentAccessGranted = false;
 
     const res = await request(app).get(`/api/coach/students/${STUDENT_ID}/playlists`);
     expect(res.status).toBe(403);
@@ -111,7 +122,7 @@ describe('verifyStudentAccess', () => {
 
   test('admin bypasses student ownership check', async () => {
     mockCurrentUser = ADMIN_USER;
-    // No player_profiles call expected; straight to playlists query
+    mockStudentAccessGranted = true;
     // playlists query returns empty → expect 200 with empty array
     mockFrom.mockReturnValueOnce(makeChain({ data: [], error: null }));
 
@@ -122,18 +133,11 @@ describe('verifyStudentAccess', () => {
 
   test('superadmin bypasses student ownership check', async () => {
     mockCurrentUser = { id: 'super-uuid', stableId: 'super-uuid', role: 'superadmin' };
+    mockStudentAccessGranted = true;
     mockFrom.mockReturnValueOnce(makeChain({ data: [], error: null }));
 
     const res = await request(app).get(`/api/coach/students/${STUDENT_ID}/playlists`);
     expect(res.status).toBe(200);
-  });
-
-  test('returns 500 when player_profiles DB call throws', async () => {
-    mockCurrentUser = COACH_USER;
-    mockFrom.mockReturnValueOnce(makeChain({ data: null, error: { message: 'db error' } }));
-
-    const res = await request(app).get(`/api/coach/students/${STUDENT_ID}/playlists`);
-    expect(res.status).toBe(500);
   });
 });
 
@@ -142,13 +146,7 @@ describe('verifyStudentAccess', () => {
 describe('GET /api/coach/students/:id/playlists', () => {
   beforeEach(() => { mockCurrentUser = COACH_USER; });
 
-  function mockAccessGranted() {
-    // verifyStudentAccess: player_profiles returns the student row
-    mockFrom.mockReturnValueOnce(makeChain({ data: { id: STUDENT_ID }, error: null }));
-  }
-
   test('returns playlists with id, name, total, played fields', async () => {
-    mockAccessGranted();
 
     const playlists = [
       { playlist_id: 'pl-1', name: 'Basics',   created_at: '2026-01-01' },
@@ -187,7 +185,6 @@ describe('GET /api/coach/students/:id/playlists', () => {
   });
 
   test('returns empty array when no playlists exist for coach', async () => {
-    mockAccessGranted();
     // playlists query returns empty
     mockFrom.mockReturnValueOnce(makeChain({ data: [], error: null }));
 
@@ -197,7 +194,6 @@ describe('GET /api/coach/students/:id/playlists', () => {
   });
 
   test('returns empty array when playlists data is null', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: null, error: null }));
 
     const res = await request(app).get(`/api/coach/students/${STUDENT_ID}/playlists`);
@@ -206,7 +202,6 @@ describe('GET /api/coach/students/:id/playlists', () => {
   });
 
   test('returns 500 on playlists DB error', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: null, error: { message: 'timeout' } }));
 
     const res = await request(app).get(`/api/coach/students/${STUDENT_ID}/playlists`);
@@ -215,7 +210,6 @@ describe('GET /api/coach/students/:id/playlists', () => {
   });
 
   test('returns 500 on playlist_items DB error', async () => {
-    mockAccessGranted();
     // playlists ok
     mockFrom.mockReturnValueOnce(makeChain({
       data: [{ playlist_id: 'pl-1', name: 'Basics', created_at: '2026-01-01' }],
@@ -234,13 +228,7 @@ describe('GET /api/coach/students/:id/playlists', () => {
 describe('GET /api/coach/students/:id/scenario-history', () => {
   beforeEach(() => { mockCurrentUser = COACH_USER; });
 
-  function mockAccessGranted() {
-    mockFrom.mockReturnValueOnce(makeChain({ data: { id: STUDENT_ID }, error: null }));
-  }
-
   test('returns history array with scenario names', async () => {
-    mockAccessGranted();
-
     const hands = [
       { hand_id: 'h-1', scenario_id: 'sc-1', created_at: '2026-04-01T10:00:00Z' },
       { hand_id: 'h-2', scenario_id: 'sc-2', created_at: '2026-04-01T09:00:00Z' },
@@ -275,7 +263,6 @@ describe('GET /api/coach/students/:id/scenario-history', () => {
   });
 
   test('returns empty history when no scenario hands exist', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: [], error: null }));
 
     const res = await request(app).get(`/api/coach/students/${STUDENT_ID}/scenario-history`);
@@ -284,7 +271,6 @@ describe('GET /api/coach/students/:id/scenario-history', () => {
   });
 
   test('returns empty history when student was not a player in any of the hands', async () => {
-    mockAccessGranted();
     // hands exist
     mockFrom.mockReturnValueOnce(makeChain({
       data: [{ hand_id: 'h-1', scenario_id: 'sc-1', created_at: '2026-04-01' }],
@@ -299,7 +285,6 @@ describe('GET /api/coach/students/:id/scenario-history', () => {
   });
 
   test('returns 500 on hands DB error', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: null, error: { message: 'hands db error' } }));
 
     const res = await request(app).get(`/api/coach/students/${STUDENT_ID}/scenario-history`);
@@ -308,7 +293,6 @@ describe('GET /api/coach/students/:id/scenario-history', () => {
   });
 
   test('scenario_name is null when scenario not found in DB', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({
       data: [{ hand_id: 'h-1', scenario_id: 'sc-unknown', created_at: '2026-04-01' }],
       error: null,
@@ -328,18 +312,12 @@ describe('GET /api/coach/students/:id/scenario-history', () => {
 describe('GET /api/coach/students/:id/staking', () => {
   beforeEach(() => { mockCurrentUser = COACH_USER; });
 
-  function mockAccessGranted() {
-    mockFrom.mockReturnValueOnce(makeChain({ data: { id: STUDENT_ID }, error: null }));
-  }
-
   const CONTRACT = {
     id: 'contract-1', coach_id: 'coach-uuid', player_id: STUDENT_ID,
     status: 'active', stake_percent: 80, created_at: '2026-01-01',
   };
 
   test('returns contract, monthly aggregation, and notes when contract exists', async () => {
-    mockAccessGranted();
-
     // staking_contracts query
     mockFrom.mockReturnValueOnce(makeChain({ data: [CONTRACT], error: null }));
     // staking_sessions query
@@ -369,7 +347,6 @@ describe('GET /api/coach/students/:id/staking', () => {
   });
 
   test('monthly aggregation computes net correctly', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: [CONTRACT], error: null }));
     mockFrom.mockReturnValueOnce(makeChain({
       data: [
@@ -390,7 +367,6 @@ describe('GET /api/coach/students/:id/staking', () => {
   });
 
   test('returns contract null, empty monthly, empty notes when no active contract', async () => {
-    mockAccessGranted();
     // staking_contracts returns empty array
     mockFrom.mockReturnValueOnce(makeChain({ data: [], error: null }));
 
@@ -402,7 +378,6 @@ describe('GET /api/coach/students/:id/staking', () => {
   });
 
   test('returns 500 on staking_contracts DB error', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: null, error: { message: 'db failure' } }));
 
     const res = await request(app).get(`/api/coach/students/${STUDENT_ID}/staking`);
@@ -411,7 +386,6 @@ describe('GET /api/coach/students/:id/staking', () => {
   });
 
   test('returns 500 on staking_sessions DB error', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: [CONTRACT], error: null }));
     mockFrom.mockReturnValueOnce(makeChain({ data: null, error: { message: 'sessions db error' } }));
 
@@ -425,15 +399,10 @@ describe('GET /api/coach/students/:id/staking', () => {
 describe('POST /api/coach/students/:id/staking/notes', () => {
   beforeEach(() => { mockCurrentUser = COACH_USER; });
 
-  function mockAccessGranted() {
-    mockFrom.mockReturnValueOnce(makeChain({ data: { id: STUDENT_ID }, error: null }));
-  }
-
   const CONTRACT = { id: 'contract-1' };
   const NEW_NOTE = { id: 'note-new', text: 'Watch bet sizing', created_at: '2026-04-10T12:00:00Z' };
 
   test('returns 201 with created note on success', async () => {
-    mockAccessGranted();
     // staking_contracts lookup
     mockFrom.mockReturnValueOnce(makeChain({ data: [CONTRACT], error: null }));
     // insert note
@@ -448,7 +417,6 @@ describe('POST /api/coach/students/:id/staking/notes', () => {
   });
 
   test('trims whitespace from text', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: [CONTRACT], error: null }));
     mockFrom.mockReturnValueOnce(makeChain({ data: { id: 'n-2', text: 'Trimmed', created_at: '2026-04-10' }, error: null }));
 
@@ -460,8 +428,6 @@ describe('POST /api/coach/students/:id/staking/notes', () => {
   });
 
   test('returns 400 when text is empty string', async () => {
-    mockAccessGranted();
-
     const res = await request(app)
       .post(`/api/coach/students/${STUDENT_ID}/staking/notes`)
       .send({ text: '' });
@@ -471,8 +437,6 @@ describe('POST /api/coach/students/:id/staking/notes', () => {
   });
 
   test('returns 400 when text is whitespace only', async () => {
-    mockAccessGranted();
-
     const res = await request(app)
       .post(`/api/coach/students/${STUDENT_ID}/staking/notes`)
       .send({ text: '   ' });
@@ -482,8 +446,6 @@ describe('POST /api/coach/students/:id/staking/notes', () => {
   });
 
   test('returns 400 when text field is missing from body', async () => {
-    mockAccessGranted();
-
     const res = await request(app)
       .post(`/api/coach/students/${STUDENT_ID}/staking/notes`)
       .send({});
@@ -493,7 +455,6 @@ describe('POST /api/coach/students/:id/staking/notes', () => {
   });
 
   test('returns 404 when no active or paused contract exists', async () => {
-    mockAccessGranted();
     // contracts returns empty
     mockFrom.mockReturnValueOnce(makeChain({ data: [], error: null }));
 
@@ -506,7 +467,6 @@ describe('POST /api/coach/students/:id/staking/notes', () => {
   });
 
   test('returns 500 on insert DB error', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: [CONTRACT], error: null }));
     mockFrom.mockReturnValueOnce(makeChain({ data: null, error: { message: 'insert failed' } }));
 
@@ -519,7 +479,6 @@ describe('POST /api/coach/students/:id/staking/notes', () => {
   });
 
   test('returns 500 on contracts DB error', async () => {
-    mockAccessGranted();
     mockFrom.mockReturnValueOnce(makeChain({ data: null, error: { message: 'db down' } }));
 
     const res = await request(app)
