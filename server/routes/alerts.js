@@ -62,35 +62,6 @@ module.exports = function registerAlertRoutes(app, { requireAuth, requireRole })
     }
   );
 
-  // ── GET /api/admin/alerts — alias for nav badge in CRM/Lobby ───────────────
-  // Same handler as /api/coach/alerts. Admin/superadmin pass requireRole('coach')
-  // via hierarchy check.
-  app.get(
-    '/api/admin/alerts',
-    requireAuth,
-    requireRole('coach'),
-    async (req, res) => {
-      const coachId = req.user.id ?? req.user.stableId;
-      const status  = req.query.status ?? 'active';
-      const limit   = Math.min(parseInt(req.query.limit) || 50, 200);
-
-      try {
-        const { data, error } = await supabase
-          .from('alert_instances')
-          .select('id, player_id, alert_type, severity, data, status, created_at')
-          .eq('coach_id', coachId)
-          .eq('status', status)
-          .order('severity', { ascending: false })
-          .limit(limit);
-
-        if (error) throw error;
-        return res.json({ alerts: data ?? [] });
-      } catch (err) {
-        return res.status(500).json({ error: 'internal_error', message: err.message });
-      }
-    }
-  );
-
   // ── PATCH /api/coach/alerts/:id ──────────────────────────────────────────────
   app.patch(
     '/api/coach/alerts/:id',

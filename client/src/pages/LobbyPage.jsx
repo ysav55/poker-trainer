@@ -820,7 +820,7 @@ export default function LobbyPage() {
 
   useEffect(() => {
     if (!isCoachOrAdmin) return;
-    apiFetch('/api/admin/alerts')
+    apiFetch('/api/coach/alerts')
       .then((d) => setAlerts(d?.alerts ?? d ?? []))
       .catch(() => {});
   }, [isCoachOrAdmin]);

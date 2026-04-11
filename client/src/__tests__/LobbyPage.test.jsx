@@ -57,7 +57,7 @@ function renderPage() {
 // alerts must be an array; the page does `d?.alerts ?? d ?? []` — if d is {}
 // that resolves to {} which then blows up on .filter().
 function defaultMock(path) {
-  if (path === '/api/admin/alerts')    return Promise.resolve({ alerts: [] });
+  if (path === '/api/coach/alerts')    return Promise.resolve({ alerts: [] });
   if (path === '/api/hands')           return Promise.resolve({ hands: [] });
   if (path === '/api/hands?limit=10')  return Promise.resolve({ hands: [] });
   if (path === '/api/table-presets')   return Promise.resolve({ presets: [] });

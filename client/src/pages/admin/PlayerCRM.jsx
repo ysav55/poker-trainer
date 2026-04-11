@@ -2484,7 +2484,7 @@ export default function PlayerCRM() {
     apiFetch('/api/admin/schools')
       .then(d => setSchools(d?.schools ?? []))
       .catch(() => {});
-    apiFetch('/api/admin/alerts')
+    apiFetch('/api/coach/alerts')
       .then((d) => {
         const raw = d?.alerts ?? d;
         setAlerts(Array.isArray(raw) ? raw : []);
