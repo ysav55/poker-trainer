@@ -18,6 +18,8 @@ function uid(req) {
   return req.user?.stableId ?? req.user?.id;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Verify caller is the coach or player on the contract. */
 function assertParty(contract, callerId) {
   if (contract.coach_id !== callerId && contract.player_id !== callerId) {
@@ -366,6 +368,9 @@ router.post('/contracts/:id/settlements', async (req, res) => {
 // ─── PATCH /api/staking/settlements/:id/approve ──────────────────────────────
 router.patch('/settlements/:id/approve', async (req, res) => {
   try {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ error: 'invalid_id', message: 'The provided ID is not valid.' });
+    }
     const settlement = await Repo.findSettlementById(req.params.id);
     if (!settlement) return res.status(404).json({ error: 'not_found' });
     if (settlement.status !== 'proposed') {
@@ -407,6 +412,9 @@ router.patch('/settlements/:id/approve', async (req, res) => {
 // ─── PATCH /api/staking/settlements/:id/reject ───────────────────────────────
 router.patch('/settlements/:id/reject', async (req, res) => {
   try {
+    if (!UUID_RE.test(req.params.id)) {
+      return res.status(400).json({ error: 'invalid_id', message: 'The provided ID is not valid.' });
+    }
     const settlement = await Repo.findSettlementById(req.params.id);
     if (!settlement) return res.status(404).json({ error: 'not_found' });
     if (settlement.status !== 'proposed') {
