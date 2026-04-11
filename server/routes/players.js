@@ -8,11 +8,14 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
   app.get('/api/players/search', requireAuth, async (req, res) => {
     const q = (req.query.q ?? '').trim();
     if (q.length < 2) return res.json({ players: [] });
+    // Strip ILIKE wildcards to prevent pattern injection
+    const sanitized = q.replace(/[%_]/g, '');
+    if (sanitized.length < 2) return res.json({ players: [] });
     try {
       const { data, error } = await supabase
         .from('player_profiles')
         .select('id, display_name, avatar_url')
-        .ilike('display_name', `${q}%`)
+        .ilike('display_name', `${sanitized}%`)
         .eq('is_bot', false)
         .neq('id', req.user.id)
         .order('display_name')
@@ -20,6 +23,7 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
       if (error) throw error;
       res.json({ players: data ?? [] });
     } catch (err) {
+      console.error('Player search failed:', err.message, err.details ?? '', err.hint ?? '');
       res.status(500).json({ error: 'search_failed' });
     }
   });
