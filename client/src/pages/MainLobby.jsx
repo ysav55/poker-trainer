@@ -334,7 +334,7 @@ export default function MainLobby() {
 
   // user.id holds the stableId (see AuthContext — `id: payload.stableId`)
   const userId = user?.id;
-  const isTrial = user?.role === 'trial';
+  const isTrial = user?.role === 'trial' || user?.trialStatus === 'active';
   const isAdmin = hasPermission('admin:access');
 
   useEffect(() => {
@@ -366,7 +366,7 @@ export default function MainLobby() {
         const sorted = [...players].sort(
           (a, b) => Number(b.total_net_chips ?? b.net_chips ?? 0) - Number(a.total_net_chips ?? a.net_chips ?? 0)
         );
-        const pos = sorted.findIndex((p) => p.stable_id === userId || p.id === userId);
+        const pos = sorted.findIndex((p) => p.stableId === userId || p.stable_id === userId || p.id === userId);
         setRank(pos >= 0 ? pos + 1 : null);
       })
       .catch(() => {});

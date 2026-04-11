@@ -116,12 +116,11 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
     const playerProfile = await findById(stableId).catch(() => null);
     const trialStatus   = computeTrialStatus(playerProfile);
 
-    const jwtPayload = { stableId, name: entry.name, role: entry.role };
-    if (trialStatus) jwtPayload.trialStatus = trialStatus;
+    const jwtPayload = { stableId, name: entry.name, role: entry.role, trialStatus: trialStatus || null };
 
     const token = JwtService.sign(jwtPayload);
     log.info('auth', 'login_ok', `${entry.name} logged in`, { name: entry.name, role: entry.role, playerId: stableId });
-    res.json({ stableId, name: entry.name, role: entry.role, ...(trialStatus && { trialStatus }), token });
+    res.json({ stableId, name: entry.name, role: entry.role, trialStatus: trialStatus || null, token });
   });
 
   // ── POST /api/auth/reset-password ────────────────────────────────────────────
@@ -255,6 +254,7 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
         email:        player.email ?? null,
         role:         req.user.role ?? null,
         school_id:    player.school_id ?? null,
+        trialStatus:  computeTrialStatus(player),
       });
     } catch (err) {
       log.error('auth', 'profile_get_error', err.message, { err });

@@ -706,17 +706,18 @@ function SessionWidget({ sessions }) {
 
 // ─── Tables Section ───────────────────────────────────────────────────────────
 
-function TablesSection({ tables, role, userId, canCreate, onAction, onManageAction, onNewTable, onNewTournament }) {
+function TablesSection({ tables, role, userId, isTrial: iTrialProp, canCreate, onAction, onManageAction, onNewTable, onNewTournament }) {
   const [tab, setTab] = useState('all');
+  const isTrial = iTrialProp ?? (role === 'trial');
 
   const tabDefs = (role === 'coach' || role === 'admin' || role === 'superadmin')
     ? COACH_TABLE_TABS
-    : role === 'trial'
+    : isTrial
       ? TRIAL_TABLE_TABS
       : STUDENT_TABLE_TABS;
 
   const showController = role === 'coach' || role === 'admin' || role === 'superadmin';
-  const baseTables = role === 'trial'
+  const baseTables = isTrial
     ? tables.filter((t) => t.privacy === 'open' || t.privacy == null)
     : tables;
 
@@ -782,7 +783,7 @@ export default function LobbyPage() {
   const userId    = user?.id;
   const isCoach   = role === 'coach';
   const isAdmin   = role === 'admin' || role === 'superadmin';
-  const isTrial   = role === 'trial';
+  const isTrial   = role === 'trial' || user?.trialStatus === 'active';
   const isCoachOrAdmin = isCoach || isAdmin;
   const canCreate = hasPermission('table:create');
 
@@ -812,7 +813,7 @@ export default function LobbyPage() {
         const sorted = [...list].sort(
           (a, b) => Number(b.total_net_chips ?? 0) - Number(a.total_net_chips ?? 0),
         );
-        const pos = sorted.findIndex((p) => p.stable_id === userId || p.id === userId);
+        const pos = sorted.findIndex((p) => p.stableId === userId || p.stable_id === userId || p.id === userId);
         setRank(pos >= 0 ? pos + 1 : null);
       })
       .catch(() => {});
@@ -969,6 +970,7 @@ export default function LobbyPage() {
         tables={activeTables}
         role={role}
         userId={userId}
+        isTrial={isTrial}
         canCreate={canCreate}
         onAction={handleTableAction}
         onManageAction={handleManageAction}
