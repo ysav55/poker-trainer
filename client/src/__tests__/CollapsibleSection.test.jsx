@@ -121,6 +121,62 @@ describe('CollapsibleSection — headerExtra', () => {
   })
 })
 
+// ── localStorage persistence ─────────────────────────────────────────────────
+
+describe('CollapsibleSection — localStorage persistence', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('persists collapsed state when storageKey is provided', () => {
+    const { unmount } = renderSection({
+      title: 'PERSIST',
+      storageKey: 'test-section',
+      defaultOpen: true,
+    })
+    fireEvent.click(screen.getByText('PERSIST'))
+    expect(localStorage.getItem('section-test-section')).toBe('false')
+    unmount()
+
+    // Re-render — should start collapsed
+    renderSection({
+      title: 'PERSIST',
+      storageKey: 'test-section',
+      defaultOpen: true,
+    })
+    expect(screen.queryByTestId('section-content')).toBeNull()
+  })
+
+  it('persists open state in localStorage', () => {
+    const { unmount } = renderSection({
+      title: 'PERSIST',
+      storageKey: 'test-section-2',
+      defaultOpen: false,
+    })
+    fireEvent.click(screen.getByText('PERSIST'))
+    expect(localStorage.getItem('section-test-section-2')).toBe('true')
+    expect(screen.getByTestId('section-content')).toBeTruthy()
+    unmount()
+
+    // Re-render — should start open
+    renderSection({
+      title: 'PERSIST',
+      storageKey: 'test-section-2',
+      defaultOpen: false,
+    })
+    expect(screen.getByTestId('section-content')).toBeTruthy()
+  })
+
+  it('ignores localStorage when no storageKey', () => {
+    renderSection({
+      title: 'NO KEY',
+      defaultOpen: true,
+    })
+    fireEvent.click(screen.getByText('NO KEY'))
+    expect(localStorage.getItem('section-undefined')).toBeNull()
+  })
+})
+
 // ── Multiple independent instances ────────────────────────────────────────────
 
 describe('CollapsibleSection — independent instances', () => {
