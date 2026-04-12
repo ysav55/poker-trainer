@@ -8,7 +8,7 @@ const INPUT_STYLE = {
   caretColor: '#d4af37',
 };
 
-function AuthInput({ type = 'text', value, onChange, placeholder, maxLength }) {
+function AuthInput({ type = 'text', value, onChange, placeholder, maxLength, name, id, autoComplete }) {
   return (
     <input
       type={type}
@@ -16,6 +16,9 @@ function AuthInput({ type = 'text', value, onChange, placeholder, maxLength }) {
       onChange={onChange}
       placeholder={placeholder}
       maxLength={maxLength}
+      name={name}
+      id={id}
+      autoComplete={autoComplete}
       className="w-full rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-all duration-150"
       style={INPUT_STYLE}
       onFocus={(e) => {
@@ -93,7 +96,7 @@ export default function LoginPage() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+        <form onSubmit={handleSubmit} method="post" className="flex flex-col gap-4" noValidate>
           <div className="flex flex-col gap-1.5">
             <label className="label-sm">Name</label>
             <AuthInput
@@ -101,6 +104,9 @@ export default function LoginPage() {
               onChange={(e) => { setName(e.target.value); setError(''); }}
               placeholder="Enter your name"
               maxLength={32}
+              name="name"
+              id="login-name"
+              autoComplete="username"
             />
           </div>
 
@@ -111,6 +117,9 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(''); }}
               placeholder="Password"
+              name="password"
+              id="login-password"
+              autoComplete="current-password"
             />
           </div>
 
@@ -163,6 +172,9 @@ export default function LoginPage() {
             </Link>
           </p>
         </div>
+        <p className="text-[10px] text-gray-600 text-center">
+          Your session expires when you close this tab.
+        </p>
       </div>
     </div>
   );
