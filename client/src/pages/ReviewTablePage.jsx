@@ -618,6 +618,7 @@ export default function ReviewTablePage() {
         overflow: 'hidden',
       }}
     >
+      <h1 className="sr-only">Review Table</h1>
       {/* Top bar */}
       <header
         className="flex items-center justify-between px-4 shrink-0"

@@ -920,6 +920,7 @@ export default function LobbyPage() {
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-6xl">
+      <h1 className="sr-only">Lobby</h1>
 
       {/* ── Trial Banner ───────────────────────────────────────────────────── */}
       {isTrial && (
