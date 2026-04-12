@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiFetch } from '../lib/api.js';
 import PokerTable from '../components/PokerTable.jsx';
+import SaveAsScenarioModal from '../components/scenarios/SaveAsScenarioModal.jsx';
 
 const GOLD = '#d4af37';
 const STREET_ORDER = ['preflop', 'flop', 'turn', 'river'];
@@ -563,6 +564,9 @@ export default function ReviewTablePage() {
     socketRef.current?.emit('transition_back_to_play');
   }, []);
 
+  // Save-as-scenario modal state (coach only)
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+
   // Simulate gameState at cursor (static mode only)
   const staticGameState = useMemo(() => buildGameState(hand, cursor), [hand, cursor]);
 
@@ -662,6 +666,24 @@ export default function ReviewTablePage() {
           >
             {isSocketMode ? 'Live Review' : 'Review'}
           </span>
+          {/* "Save as Scenario" — coach only, any review mode, requires loaded hand */}
+          {isCoach && hand && (
+            <button
+              data-testid="save-as-scenario-btn"
+              onClick={() => setSaveModalOpen(true)}
+              className="text-xs px-3 py-1 rounded transition-colors"
+              style={{
+                color: GOLD,
+                border: '1px solid rgba(212,175,55,0.4)',
+                background: 'rgba(212,175,55,0.08)',
+                letterSpacing: '0.04em',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.18)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.08)'; }}
+            >
+              + Save as Scenario
+            </button>
+          )}
           {/* "Back to Play" — only for coach in socket review mode */}
           {isSocketMode && isCoach && (
             <button
@@ -824,6 +846,15 @@ export default function ReviewTablePage() {
           )}
         </div>
       </div>
+
+      {/* Save-as-Scenario modal (coach only) */}
+      {isCoach && saveModalOpen && hand && (
+        <SaveAsScenarioModal
+          hand={hand}
+          onClose={() => setSaveModalOpen(false)}
+          onSaved={() => setSaveModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

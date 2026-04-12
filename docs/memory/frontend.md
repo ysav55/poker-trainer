@@ -173,3 +173,24 @@ ReviewTablePage supports two distinct modes depending on how it is entered.
 - Listens for `transition_to_review` event → `navigate('/review?handId=X', { state: { tableId, isReviewSession: true } })`
 - Listens for `transition_back_to_play` event → `navigate('/table/:tableId')`
 - Inline ScenarioBuilder modal: `showScenarioBuilder` state controls visibility; `onOpenScenarioBuilder` no longer navigates away
+
+---
+
+## Save as Scenario Modal (UI Redesign V2 — Phase 6)
+
+**Component**: `client/src/components/scenarios/SaveAsScenarioModal.jsx`.
+Reusable modal rendered from both HandHistoryPage (per-row "+ Save" button) and ReviewTablePage (top-bar "+ Save as Scenario" button). Coach-only — gated by `COACH_ROLES.has(user?.role)` / role-string check; students do not see the buttons.
+
+**Inputs**: the hand detail object (`{ hand_id, board: [...], players: [...], tags? }`). HandHistoryPage fetches detail lazily via `GET /api/hands/:id` on button click; ReviewTablePage passes the already-loaded `hand` object.
+
+**Save flow (three API calls)**:
+1. `POST /api/scenarios/from-hand` `{ hand_id, include_board: true }` — server builds seat_configs/stack_configs from hand_players, picks name from tags.
+2. `PATCH /api/scenarios/:id` — applies coach edits: `{ name, board_flop, board_turn, board_river, primary_playlist_id }`. Safe because new scenarios have `play_count === 0` → edit-in-place (no versioning).
+3. `POST /api/playlists/:id/items` `{ scenario_id }` — explicit playlist link row.
+
+**Auto-generated name**: `autoName()` helper — hole cards reduced to shorthand (`AKo` / `AQs` / `AA`) + flop ranks + texture suffix (`r` rainbow / `t` two-tone / `m` monotone). Example: `"AKo on K72r"`. Falls back to `"Hand #abc123"` when hole or flop incomplete. Fully overridable in the name input.
+
+**Playlist picker**: fetches `GET /api/playlists` (handles `{playlists:[]}` or bare-array response). Colors via `generatePlaylistColor(index)` from `PLAYLIST_COLORS.js`. Default selection: first playlist whose name (lowercased) contains any hand tag, else the first playlist.
+
+**Design tokens**: uses `colors` from `lib/colors.js` + `generatePlaylistColor`. The only raw hex is `#000` on the gold CTA (idiomatic — matches HandBuilderHeader / EmptyBuilder).
+

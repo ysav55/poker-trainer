@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiFetch } from '../lib/api.js';
+import SaveAsScenarioModal from '../components/scenarios/SaveAsScenarioModal.jsx';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -275,7 +276,7 @@ function FilterBar({ isCoach, players, tableIds, availableTags, filters, onFilte
 
 // ── Results Table ──────────────────────────────────────────────────────────────
 
-function ResultsTable({ hands, showNet, onHandClick }) {
+function ResultsTable({ hands, showNet, onHandClick, isCoach, onSaveAsScenario }) {
   if (hands.length === 0) {
     return (
       <div className="flex items-center justify-center py-16 text-gray-500 text-sm">
@@ -295,6 +296,9 @@ function ResultsTable({ hands, showNet, onHandClick }) {
             <th className="text-left px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">Tags</th>
             {showNet && (
               <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Net</th>
+            )}
+            {isCoach && (
+              <th className="text-right px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Actions</th>
             )}
           </tr>
         </thead>
@@ -342,6 +346,28 @@ function ResultsTable({ hands, showNet, onHandClick }) {
                 {showNet && (
                   <td className="px-3 py-2.5 text-right font-mono text-sm font-semibold" style={{ color: netColor(hand.net) }}>
                     {formatNet(hand.net)}
+                  </td>
+                )}
+                {isCoach && (
+                  <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      data-testid={`save-as-scenario-btn-${hand.hand_id}`}
+                      onClick={(e) => { e.stopPropagation(); onSaveAsScenario?.(hand.hand_id); }}
+                      className="text-[10px] font-semibold px-2 py-1 rounded transition-colors"
+                      style={{
+                        background: 'rgba(212,175,55,0.1)',
+                        border: '1px solid rgba(212,175,55,0.35)',
+                        color: GOLD,
+                        letterSpacing: '0.04em',
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.2)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(212,175,55,0.1)'; }}
+                    >
+                      + Save
+                    </button>
                   </td>
                 )}
               </tr>
@@ -494,6 +520,21 @@ export default function HandHistoryPage() {
     navigate(`/review?handId=${encodeURIComponent(handId)}`);
   };
 
+  // Save-as-scenario modal state (coach only)
+  const [saveModalHand, setSaveModalHand] = useState(null);
+  const [saveModalLoading, setSaveModalLoading] = useState(false);
+  const openSaveAsScenario = useCallback(async (handId) => {
+    setSaveModalLoading(true);
+    try {
+      const detail = await apiFetch(`/api/hands/${encodeURIComponent(handId)}`);
+      setSaveModalHand(detail);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaveModalLoading(false);
+    }
+  }, []);
+
   // Show net column only when a specific player is in scope
   const showNet = isCoach ? !!filters.playerId : true;
 
@@ -529,6 +570,26 @@ export default function HandHistoryPage() {
         </div>
       )}
 
+      {/* Save as Scenario modal (coach only) */}
+      {isCoach && saveModalHand && (
+        <SaveAsScenarioModal
+          hand={saveModalHand}
+          onClose={() => setSaveModalHand(null)}
+          onSaved={() => setSaveModalHand(null)}
+        />
+      )}
+      {saveModalLoading && (
+        <div
+          data-testid="save-modal-loading"
+          className="fixed inset-0 flex items-center justify-center pointer-events-none"
+          style={{ zIndex: 55 }}
+        >
+          <div className="text-xs text-gray-400 px-3 py-2 rounded" style={{ background: 'rgba(0,0,0,0.7)' }}>
+            Loading hand…
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       {(searched || loading) && (
         <div style={PANEL}>
@@ -542,6 +603,8 @@ export default function HandHistoryPage() {
                 hands={hands}
                 showNet={showNet}
                 onHandClick={handleHandClick}
+                isCoach={isCoach}
+                onSaveAsScenario={openSaveAsScenario}
               />
               <Pagination
                 offset={offset}
