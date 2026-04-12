@@ -24,6 +24,8 @@ import LeaderboardPage from './pages/LeaderboardPage.jsx';
 import AnalysisPage from './pages/AnalysisPage.jsx';
 import HandHistoryPage from './pages/HandHistoryPage.jsx';
 import LobbyPage from './pages/LobbyPage.jsx';
+import DashboardPage from './pages/DashboardPage.jsx';
+import TablesPage from './pages/TablesPage.jsx';
 import BotLobbyPage from './pages/BotLobbyPage.jsx';
 import TablePage from './pages/TablePage.jsx';
 import MultiTablePage from './pages/MultiTablePage.jsx';
@@ -120,16 +122,18 @@ function AppRoutes() {
         <Route path="/tournament/:tableId/standings"     element={<TournamentStandings />} />
         <Route path="/tournament-group/:groupId/lobby"   element={<TournamentLobby />} />
 
-        {/* Lobby-style pages — wrapped in AppLayout (TopBar + SideNav) */}
+        {/* Lobby-style pages — wrapped in AppLayout (SideNav + content) */}
         <Route element={<AppLayout />}>
           <Route path="/settings"    element={<SettingsPage />} />
-          <Route path="/lobby"       element={<LobbyPage />} />
+          <Route path="/dashboard"   element={<DashboardPage />} />
+          <Route path="/tables"      element={<TablesPage />} />
+          <Route path="/lobby"       element={<Navigate to="/dashboard" replace />} />
 
           {/* Tournaments */}
           <Route path="/tournaments"                   element={<TournamentListPage />} />
           <Route path="/tournaments/:groupId"          element={<TournamentDetailPage />} />
           <Route path="/tournaments/:groupId/control"  element={<TournamentControlPage />} />
-          <Route path="/bot-lobby"   element={<BotLobbyPage />} />
+          <Route path="/bot-lobby"   element={<Navigate to="/tables?filter=bot" replace />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/analysis"    element={<AnalysisPage />} />
           <Route path="/history"     element={<HandHistoryPage />} />
@@ -152,8 +156,8 @@ function AppRoutes() {
         </Route>
       </Route>
 
-      {/* Default: redirect to lobby (will bounce to /login if not authed) */}
-      <Route path="*" element={<Navigate to="/lobby" replace />} />
+      {/* Default: redirect to dashboard (will bounce to /login if not authed) */}
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

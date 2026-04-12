@@ -1,5 +1,6 @@
 import React from 'react';
 import { useLocation, NavLink } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext.jsx';
 
 /**
  * Role matrix — 5 canonical roles:
@@ -64,6 +65,7 @@ const NAV_ITEMS = [
     label: 'Tournaments',
     path: '/tournaments',
     roles: ['coach', ...STUDENT_ROLES, 'admin', 'superadmin'],
+    permission: 'tournament:manage',
   },
   {
     icon: '🏆',
