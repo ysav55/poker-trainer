@@ -30,6 +30,8 @@ import BotLobbyPage from './pages/BotLobbyPage.jsx';
 import TablePage from './pages/TablePage.jsx';
 import MultiTablePage from './pages/MultiTablePage.jsx';
 import ReviewTablePage from './pages/ReviewTablePage.jsx';
+import StudentsRosterPage from './pages/StudentsRosterPage.jsx';
+import StudentDashboardPage from './pages/StudentDashboardPage.jsx';
 
 // Admin pages
 import UserManagement from './pages/admin/UserManagement.jsx';
@@ -141,15 +143,19 @@ function AppRoutes() {
           {/* Player staking view */}
           <Route path="/staking" element={<StakingPlayerPage />} />
 
+          {/* CRM / Students — coach+ access (not admin-only) */}
+          <Route path="/students" element={<StudentsRosterPage />} />
+          <Route path="/students/:playerId" element={<StudentDashboardPage />} />
+
           {/* Admin — require admin:access */}
           <Route element={<RequirePermission permission="admin:access" />}>
             <Route path="/admin/users"        element={<UserManagement />} />
             <Route path="/admin/hands"        element={<HandBuilder />} />
-            <Route path="/admin/crm"          element={<PlayerCRM />} />
+            <Route path="/admin/crm"          element={<Navigate to="/students" replace />} />
             <Route path="/admin/tournaments"  element={<TournamentSetup />} />
             <Route path="/admin/referee"      element={<RefereeDashboard />} />
             <Route path="/admin/alerts"       element={<CoachAlertsPage />} />
-            <Route path="/admin/stable"       element={<Navigate to="/admin/crm" replace />} />
+            <Route path="/admin/stable"       element={<Navigate to="/students" replace />} />
             <Route path="/admin/staking"      element={<StakingPage />} />
             <Route path="/admin/tournaments/group/:groupId/balancer" element={<TournamentBalancer />} />
           </Route>
