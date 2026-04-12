@@ -56,7 +56,16 @@ module.exports = function registerHandRoutes(app, { requireAuth, HandLogger, Equ
     }
   });
 
-  // GET /api/hands
+  /**
+   * GET /api/hands — paginated hand list.
+   *
+   * Query params:
+   *   tableId  {string?}  — filter by table ID
+   *   limit    {number?}  — max results, default 20, capped at 100
+   *   offset   {number?}  — pagination offset, default 0
+   *
+   * Response: { hands: Hand[], limit: number, offset: number }
+   */
   app.get('/api/hands', requireAuth, async (req, res) => {
     try {
       const limit  = Math.min(parseInt(req.query.limit)  || 20, 100);
