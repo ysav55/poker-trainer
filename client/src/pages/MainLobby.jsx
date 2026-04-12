@@ -409,6 +409,7 @@ export default function MainLobby() {
 
   return (
     <div style={{ color: '#e5e7eb' }}>
+      <h1 className="sr-only">Lobby</h1>
 
       {/* Ambient glow */}
       <div

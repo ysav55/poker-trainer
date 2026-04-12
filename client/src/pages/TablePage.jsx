@@ -372,6 +372,7 @@ function FullTableView() {
         overflow: 'hidden',
       }}
     >
+      <h1 className="sr-only">Table</h1>
       {/* Top bar — logo, table name, mode badge, spectating indicator, back button */}
       <TableTopBar
         tableName={tableName}

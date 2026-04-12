@@ -75,8 +75,8 @@ async function loginViaUI(page, { name, password }) {
  */
 async function expectLobbyLoaded(page) {
   await page.waitForURL('**/lobby', { timeout: 10_000 });
-  // Lobby should show the sidebar nav (use button title to avoid strict mode violation)
-  await expect(page.locator('nav button[title="Lobby"]')).toBeVisible({ timeout: 10_000 });
+  // Lobby should show the sidebar nav (use anchor title to avoid strict mode violation)
+  await expect(page.locator('nav a[title="Lobby"]')).toBeVisible({ timeout: 10_000 });
 }
 
 /**

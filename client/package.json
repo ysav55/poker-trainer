@@ -10,6 +10,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@holdem-poker-tools/hand-matrix": "^0.2.3",
     "@supabase/supabase-js": "^2.99.2",
     "lucide-react": "^1.8.0",

@@ -135,6 +135,7 @@ export default function MultiTablePage() {
         overflow: 'hidden',
       }}
     >
+      <h1 className="sr-only">Multi-Table</h1>
       {/* Top navigation bar */}
       <div
         style={{

@@ -481,6 +481,7 @@ export default function HandBuilder() {
         color: '#f0ece3',
       }}
     >
+      <h1 className="sr-only">Hand Builder</h1>
       {/* ── Left: Library panel ──────────────────────────────────────────────── */}
       <div
         style={{
