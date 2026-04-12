@@ -23,10 +23,8 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
 import LeaderboardPage from './pages/LeaderboardPage.jsx';
 import AnalysisPage from './pages/AnalysisPage.jsx';
 import HandHistoryPage from './pages/HandHistoryPage.jsx';
-import LobbyPage from './pages/LobbyPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import TablesPage from './pages/TablesPage.jsx';
-import BotLobbyPage from './pages/BotLobbyPage.jsx';
 import TablePage from './pages/TablePage.jsx';
 import MultiTablePage from './pages/MultiTablePage.jsx';
 import ReviewTablePage from './pages/ReviewTablePage.jsx';
@@ -37,7 +35,6 @@ import StudentDashboardPage from './pages/StudentDashboardPage.jsx';
 import UserManagement from './pages/admin/UserManagement.jsx';
 import HandBuilder from './pages/admin/HandBuilder.jsx';
 import TournamentSetup from './pages/admin/TournamentSetup.jsx';
-import PlayerCRM from './pages/admin/PlayerCRM.jsx';
 import RefereeDashboard from './pages/admin/RefereeDashboard.jsx';
 import CoachAlertsPage from './pages/admin/CoachAlertsPage.jsx';
 import StakingPage from './pages/admin/StakingPage.jsx';
@@ -92,13 +89,13 @@ function RequireAuth() {
 }
 
 /**
- * Redirects to /lobby if the user lacks the required permission.
+ * Redirects to /dashboard if the user lacks the required permission.
  * Pass the `permission` prop (e.g. "admin:access").
  */
 function RequirePermission({ permission }) {
   const { hasPermission } = useAuth();
 
-  if (!hasPermission(permission)) return <Navigate to="/lobby" replace />;
+  if (!hasPermission(permission)) return <Navigate to="/dashboard" replace />;
 
   return <Outlet />;
 }
