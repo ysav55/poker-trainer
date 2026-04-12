@@ -1,110 +1,151 @@
 # Poker Trainer
 
-A real-time poker coaching platform for training sessions. Coaches control the game; players act from their own devices.
+A real-time multi-table poker coaching platform. Coaches control coached tables (deal, undo, configure cards, manage playlists); players join from any browser and act in turn. Everything is persisted to **Supabase (PostgreSQL)** so hand history, player stats, and chip balances survive restarts and are accessible from any device.
 
 ## Quick Start (Local Development)
 
 ```bash
-# 1. Install all dependencies
-npm run install-all
+# Install dependencies
+cd server && npm install && cd ..
+cd client && npm install && cd ..
+```
 
-# 2. Start the server (terminal 1)
-npm run dev:server
+**`/.env`** (project root):
+```
+SUPABASE_URL=https://<your-project>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service_role_key>
+SESSION_SECRET=<random-string-32-chars>
+```
+
+```bash
+# Terminal 1 — server
+cd server && node index.js
 # → http://localhost:3001
 
-# 3. Start the client dev server (terminal 2)
-npm run dev:client
+# Terminal 2 — client (dev hot-reload)
+cd client && npm run dev
 # → http://localhost:5173
 ```
 
-## Production Build (Single Service)
-
-In production, the Express server serves the React build directly — one port, one process.
+## Production Build
 
 ```bash
 # Build the React client
-npm run build
+cd client && npm run build && cd ..
 
-# Start the production server
-npm start
-# → http://localhost:3001  (serves both API and React app)
+# Start the server — serves both API and React SPA on port 3001
+cd server && node index.js
 ```
 
-## Docker
+## Deployment (Fly.io)
 
 ```bash
-# Build the image
-docker build -t poker-trainer .
-
-# Run with a persistent database volume
-docker run -p 3001:3001 -v poker-data:/data poker-trainer
-```
-
-## One-Click Cloud Deployment
-
-### Render.com
-
-1. Push this repo to GitHub
-2. Create a new **Web Service** on [Render](https://render.com)
-3. Connect your GitHub repository
-4. Configure:
-   - **Build Command:** `npm run install-all && npm run build`
-   - **Start Command:** `npm start`
-   - **Environment:** Node
-5. Add environment variables:
-   | Variable | Description | Example |
-   |---|---|---|
-   | `PORT` | Server port (set automatically by Render) | `10000` |
-   | `DATABASE_PATH` | Path to SQLite file (use a Render Disk) | `/data/poker_trainer.sqlite` |
-6. Add a **Disk** (Render > your service > Disks): mount at `/data`
-
-### Railway.app
-
-1. Connect your GitHub repo to [Railway](https://railway.app)
-2. Railway auto-detects the `npm start` script
-3. Add environment variables:
-   - `DATABASE_PATH=/data/poker_trainer.sqlite`
-4. Add a **Volume** mounted at `/data`
-
-### Fly.io
-
-```bash
-# Install flyctl, then:
 fly launch --name poker-trainer
-fly volumes create poker_data --size 1
-fly secrets set DATABASE_PATH=/data/poker_trainer.sqlite
+fly secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... SESSION_SECRET=...
 fly deploy
 ```
 
+Current production app: `poker-trainer-ysav55` (region `iad`, 512 MB shared CPU, scale-to-zero).
+
 ## Environment Variables
 
-| Variable | Default | Description |
+| Variable | Required | Description |
 |---|---|---|
-| `PORT` | `3001` | HTTP server port |
-| `DATABASE_PATH` | `./poker_trainer.sqlite` | SQLite database file path |
-| `NODE_ENV` | `development` | Set to `production` in deployment |
+| `SUPABASE_URL` | Yes | Your Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Service-role key (server-side only, never sent to browser) |
+| `SESSION_SECRET` | Yes | Random string — signs JWTs. Server exits on startup if missing. |
+| `ANTHROPIC_API_KEY` | No | Enables NarratorService (Claude Haiku LLM narration). Gracefully absent. |
+| `PORT` | No | HTTP port (default `3001`) |
+| `IDLE_TIMEOUT_MINUTES` | No | Auto-shutdown idle timer (default `20`) |
+| `ALLOWED_ORIGIN` | No | CORS origin (defaults to `http://localhost:5173` in dev) |
 
 ## Architecture
 
 ```
-Single Express server (PORT 3001)
-├── Socket.io   — real-time game events
-├── REST API    — /api/hands, /api/playlists, /api/sessions
-├── /health     — health check endpoint
-└── /*          — React SPA (served from client/dist in production)
+Express server (port 3001)
+├── Socket.io       — real-time game events (11 handler groups)
+├── REST API        — /api/* (18 route files)
+├── /health         — Supabase ping; returns 503 if DB is down
+└── /*              — React SPA (served from client/dist in production)
+
+Database: Supabase (PostgreSQL)
+├── Service-role key on server only
+├── No Supabase credentials in the browser
+└── All client data access via Express + JWT
 ```
 
 ## Roles
 
-| Role | How to join | Capabilities |
-|---|---|---|
-| **Coach** | Toggle "Join as Coach" | Full game control, undo, pause, playlists, scenario loading |
-| **Player** | Default join | Fold/Check/Call/Raise betting actions |
-| **Spectator** | Second coach join | View-only; no controls |
+| Role | Description |
+|---|---|
+| `superadmin` | Full unrestricted access |
+| `admin` | All admin panels, user management, all permissions |
+| `coach` | Leads coached tables, tags hands, builds scenarios, manages playlists, runs coach intelligence |
+| `moderator` | Can tag hands and run tables; limited admin access |
+| `referee` | Creates and manages tournaments |
+| `player` | Standard seated player |
+| `trial` | 7-day / 20-hand trial access |
+| `coached_student` | Trial student registered under a specific coach |
+| `solo_student` | Trial student registered without a coach |
+
+Roles map to 12 granular permissions enforced in both Express middleware and socket handlers.
+
+## Game Modes
+
+| Mode | Description |
+|---|---|
+| `coached_cash` | Coach controls dealing, undo, card config. Players bet. Coach is an observer. |
+| `uncoached_cash` | Auto-deals. All users (including coaches) are seated players. |
+| `tournament` | Auto-deals with a blind schedule and elimination tracking. |
+| `bot_cash` | Autonomous table — no coach required; `BotDecisionService` plays all seats. |
 
 ## Tech Stack
 
-- **Server:** Node.js 18+, Express 4, Socket.io 4, better-sqlite3
+- **Server:** Node.js 18+, Express 4, Socket.io 4
 - **Client:** React 18, Vite 5, Tailwind CSS 3, Socket.io client 4
-- **Database:** SQLite (WAL mode, foreign keys enabled)
-- **Tests:** Jest (server, 635 tests), Vitest + RTL (client, 8 tests)
+- **Database:** Supabase (PostgreSQL) — 24 migrations applied
+- **Auth:** `players.csv` (bcrypt, primary) + DB-backed `player_profiles.password_hash` (secondary); JWT (7-day expiry)
+- **LLM:** Claude Haiku via Anthropic API (optional — NarratorService only)
+- **Tests:** Jest (server, 2148+ tests across 85 suites)
+
+## Key Directories
+
+```
+server/
+├── auth/           JwtService, requireAuth, requireRole, socketAuthMiddleware
+├── game/           GameManager, SessionManager, HandEvaluator, AnalyzerService, tagAnalyzers/
+├── db/             repositories/ (Hand, Player, Playlist, Tag, Session, School, ChipBank, …)
+├── routes/         18 REST route files
+├── socket/         handlers/ (11 groups: gameLifecycle, betting, replay, …)
+├── services/       BaselineService, AlertService, ProgressReportService, SessionPrepService, NarratorService
+├── state/          SharedState.js (7 shared Maps)
+└── lifecycle/      shutdown.js, idleTimer.js
+
+client/src/
+├── hooks/          useSocket.js + 6 focused hooks
+├── pages/          26 page components
+├── components/     45+ components including AppLayout, CoachSidebar, PokerTable
+└── lib/            api.js (apiFetch with JWT header)
+```
+
+## Adding Players
+
+Edit `players.csv` (gitignored) — one player per line: `name,password_hash,role`
+
+```bash
+# After editing plain-text passwords:
+node scripts/hash-passwords.js
+```
+
+Or use **Admin → User Management** in the app to create accounts via the UI.
+
+## Database Migrations
+
+All 24 migrations live in `supabase/migrations/`. Apply with:
+
+```bash
+supabase db push
+# or paste individual SQL files into the Supabase SQL editor
+```
+
+Migrations 001–020b are applied to the live database. Migrations 021–024 cover hand annotations, schema fixes, and the groups/cohorts system.

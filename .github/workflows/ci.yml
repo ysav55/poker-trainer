@@ -80,6 +80,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create players.csv stub (gitignored — Dockerfile requires it)
+        run: echo "name,password_hash,role" > players.csv
+
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Deploy to poker-trainer-staging

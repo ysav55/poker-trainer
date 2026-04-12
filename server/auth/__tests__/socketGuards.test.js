@@ -6,6 +6,15 @@
  * Verifies that requireCoach() blocks non-coaches and passes coaches through.
  */
 
+// socketGuards re-exports requireSocketPermission from socketPermissions, which
+// imports requirePermission.js, which imports supabase.js. Mock supabase so the
+// module can load in CI without SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.
+jest.mock('../../db/supabase.js', () => ({
+  from: jest.fn().mockReturnValue({
+    select: jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
+  }),
+}));
+
 const { requireCoach } = require('../socketGuards');
 
 function makeSocket(isCoach) {

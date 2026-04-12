@@ -10,10 +10,6 @@ export default function UndoControlsSection({ emit, can_undo, can_rollback_stree
     if (emit.rollbackStreet && can_rollback_street) emit.rollbackStreet();
   }, [emit, can_rollback_street]);
 
-  const handleForceNextStreet = useCallback(() => {
-    if (emit.forceNextStreet) emit.forceNextStreet();
-  }, [emit]);
-
   return (
     <CollapsibleSection title="UNDO CONTROLS" defaultOpen={false}>
       <div className="flex flex-col gap-1.5">
@@ -36,15 +32,6 @@ export default function UndoControlsSection({ emit, can_undo, can_rollback_stree
             <path d="M1.5 6h5a2 2 0 1 1 0 4H5M1.5 6L4 3.5M1.5 6L4 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Rollback Street
-        </button>
-        <button
-          onClick={handleForceNextStreet}
-          className="btn-ghost w-full flex items-center justify-center gap-2"
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M2 6h6M5.5 3l3 3-3 3M9.5 3v6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Force Next Street
         </button>
       </div>
     </CollapsibleSection>

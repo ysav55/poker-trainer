@@ -6,9 +6,6 @@ function TopBar({ gameState, isCoach, connected, playerCount, onLeave, bbView, o
   const mode      = gameState?.mode ?? 'live';
   const phase     = gameState?.phase ?? 'waiting';
 
-  const replayActive   = gameState?.replay_mode?.active;
-  const replayBranched = gameState?.replay_mode?.branched;
-
   const modeBadgeClasses =
     mode === 'review'
       ? 'bg-purple-900/60 text-purple-300 border border-purple-700/40'
@@ -64,18 +61,10 @@ function TopBar({ gameState, isCoach, connected, playerCount, onLeave, bbView, o
             ▶ Playlist {(gameState.playlist_mode.currentIndex ?? 0) + 1}/{gameState.playlist_mode.totalHands ?? '?'}
           </span>
         )}
-        {replayActive && (
-          <span
-            className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest"
-            style={{ background: replayBranched ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)', color: replayBranched ? '#f59e0b' : '#60a5fa', border: `1px solid ${replayBranched ? 'rgba(245,158,11,0.4)' : 'rgba(59,130,246,0.4)'}` }}
-          >
-            {replayBranched ? 'BRANCHED' : 'REPLAY'}
-          </span>
-        )}
       </div>
 
       {/* Center: phase */}
-      {phase && phase !== 'waiting' && phase !== 'replay' && (
+      {phase && phase !== 'waiting' && (
         <span className="text-[10px] text-gray-500 tracking-[0.25em] uppercase absolute left-1/2 -translate-x-1/2">
           {phase}
         </span>

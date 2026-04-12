@@ -10,28 +10,18 @@ export default function BettingControls({
   emit,
   bbView = false,
   bigBlind = 10,
+  equityData = null,
 }) {
   const fmt = (v) => fmtChips(v ?? 0, bigBlind, bbView);
   const player = gameState?.players?.find(p => p.id === myId) ?? null;
+  const activePlayer = player;
 
-  // In branched replay the coach acts for the current shadow player
-  const isBranchedReplay = gameState?.is_replay_branch && isCoach;
-  const shadowPlayer = isBranchedReplay
-    ? (gameState?.players?.find(p => p.id === gameState?.current_turn && p.is_shadow) ?? null)
-    : null;
-
-  // Use shadow player stats when coach is acting for them, otherwise use own stats
-  const activePlayer = shadowPlayer ?? player;
-
-  // Guard: only render when it's our turn (or coach's shadow turn), active phase, not paused
+  // Guard: only render when it's our turn, active phase, not paused
   const isMyTurn =
     gameState &&
     ACTIVE_PHASES.has(gameState.phase) &&
     !gameState.paused &&
-    (
-      (player && gameState.current_turn === myId) ||
-      (isBranchedReplay && shadowPlayer !== null)
-    );
+    player && gameState.current_turn === myId;
 
   const currentBet = gameState?.current_bet ?? 0;
   const minRaise = gameState?.min_raise ?? currentBet;
@@ -112,6 +102,12 @@ export default function BettingControls({
   const onePot   = pot;
   const twoPot   = pot * 2;
 
+  // Equity line — shown when coach has enabled showToPlayers
+  const myEquity = equityData?.showToPlayers
+    ? (equityData?.equities?.find(e => e.playerId === player?.stableId || e.playerId === myId)?.equity ?? null)
+    : null;
+  const equityColor = myEquity == null ? '#8b949e' : myEquity > 55 ? '#22c55e' : myEquity > 40 ? '#f59e0b' : '#ef4444';
+
   return (
     <div
       className={`
@@ -149,8 +145,15 @@ export default function BettingControls({
               </div>
             )}
           </div>
-          <div className="label-sm text-gold-500/60 tracking-widest">
-            {shadowPlayer ? `ACT FOR ${shadowPlayer.name.toUpperCase()}` : 'YOUR TURN'}
+          <div className="flex flex-col items-end gap-0.5">
+            <div className="label-sm text-gold-500/60 tracking-widest">
+              YOUR TURN
+            </div>
+            {myEquity != null && (
+              <div className="text-[11px] font-mono font-semibold" style={{ color: equityColor }}>
+                Equity: {myEquity}%
+              </div>
+            )}
           </div>
         </div>
 

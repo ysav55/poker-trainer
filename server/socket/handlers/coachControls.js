@@ -3,6 +3,7 @@
 module.exports = function registerCoachControls(socket, ctx) {
   const { tables, activeHands, stableIdMap, io,
           broadcastState, sendError, sendSyncError, startActionTimer, clearActionTimer,
+          equityCache, equitySettings, emitEquityUpdate,
           requireCoach, HandLogger, log } = ctx;
 
   socket.on('manual_deal_card', ({ targetType, targetId, position, card } = {}) => {
@@ -45,7 +46,9 @@ module.exports = function registerCoachControls(socket, ctx) {
       broadcastState(socket.data.tableId);
       return;
     }
-    broadcastState(socket.data.tableId, { type: 'rollback', message: 'Coach rolled back to the previous street' });
+    const tableId = socket.data.tableId;
+    broadcastState(tableId, { type: 'rollback', message: 'Coach rolled back to the previous street' });
+    emitEquityUpdate(tableId);
   });
 
   socket.on('set_player_in_hand', ({ playerId, inHand } = {}) => {
@@ -61,7 +64,9 @@ module.exports = function registerCoachControls(socket, ctx) {
   });
 
   socket.on('toggle_pause', () => {
-    if (requireCoach(socket, 'pause')) return;
+    if (!socket.data.isCoach) {
+      return sendSyncError(socket, 'Only the coach can pause');
+    }
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     const tableId = socket.data.tableId;
@@ -108,6 +113,7 @@ module.exports = function registerCoachControls(socket, ctx) {
     if (result.error) return sendError(socket, result.error);
     const tableId = socket.data.tableId;
     broadcastState(tableId, { type: 'street_advance', message: `Coach advanced to ${gm.state.phase}` });
+    emitEquityUpdate(tableId);
     const freshState = gm.getPublicState(socket.id, socket.data.isCoach);
     if (freshState.phase === 'showdown' && freshState.showdown_result) {
       io.to(tableId).emit('showdown_result', freshState.showdown_result);
@@ -147,5 +153,62 @@ module.exports = function registerCoachControls(socket, ctx) {
       HandLogger.logStackAdjustment(sessionId, stableId, Number(amount)).catch(() => {});
     }
     broadcastState(socket.data.tableId);
+  });
+
+  // ── Equity visibility toggles ────────────────────────────────────────────
+
+  socket.on('toggle_range_display', () => {
+    if (requireCoach(socket, 'toggle range display')) return;
+    const tableId = socket.data.tableId;
+    const current = equitySettings.get(tableId) || { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, showRangesToPlayers: !current.showRangesToPlayers };
+    equitySettings.set(tableId, updated);
+    io.to(tableId).emit('equity_settings', updated);
+  });
+
+  socket.on('toggle_heatmap_display', () => {
+    if (requireCoach(socket, 'toggle heatmap display')) return;
+    const tableId = socket.data.tableId;
+    const current = equitySettings.get(tableId) || { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, showHeatmapToPlayers: !current.showHeatmapToPlayers };
+    equitySettings.set(tableId, updated);
+    io.to(tableId).emit('equity_settings', updated);
+  });
+
+  // ── Range sharing ─────────────────────────────────────────────────────────
+
+  socket.on('share_range', ({ handGroups, label } = {}) => {
+    if (requireCoach(socket, 'share a range')) return;
+    if (!Array.isArray(handGroups)) return sendError(socket, 'handGroups must be an array');
+    const tableId = socket.data.tableId;
+    io.to(tableId).emit('range_shared', { handGroups, label: label || '', sharedBy: socket.data.name });
+  });
+
+  socket.on('clear_shared_range', () => {
+    if (requireCoach(socket, 'clear shared range')) return;
+    io.to(socket.data.tableId).emit('range_shared', null);
+  });
+
+  // transfer_controller — current coach hands table control to another player
+  socket.on('transfer_controller', async ({ toPlayerId } = {}) => {
+    if (requireCoach(socket, 'transfer controller')) return;
+    if (!toPlayerId || typeof toPlayerId !== 'string') {
+      return sendError(socket, 'toPlayerId is required');
+    }
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+
+    const { TableRepository } = require('../../db/repositories/TableRepository');
+    await TableRepository.setController(tableId, toPlayerId).catch(err =>
+      log.error('db', 'set_controller_failed', '[coachControls] setController', { err, tableId })
+    );
+
+    io.to(tableId).emit('controller_transferred', {
+      toPlayerId,
+      byPlayerId: socket.data.stableId,
+      byName:     socket.data.name,
+    });
+    log.info('game', 'controller_transfer', `controller transferred to ${toPlayerId}`, { tableId, by: socket.data.stableId });
   });
 };

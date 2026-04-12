@@ -16,6 +16,17 @@
  *  8. start_game / place_bet — non-coach cannot call these outside turn
  */
 
+// ── Mock supabase client — CI has no DB credentials ──────────────────────────
+// index.js requires supabase directly; without this mock it throws at load time.
+jest.mock('../../db/supabase', () => ({
+  from: jest.fn().mockReturnValue({
+    select:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
+    insert:  jest.fn().mockResolvedValue({ data: [], error: null }),
+    update:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
+    delete:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
+  }),
+}));
+
 // ── Mock HandLoggerSupabase (replaces SQLite Database mock) ──────────────────
 // Stateful in-memory store so loginRosterPlayer → isRegisteredPlayer works.
 jest.mock('../../db/HandLoggerSupabase', () => {
@@ -138,8 +149,9 @@ beforeAll((done) => {
 afterAll((done) => {
   allClients.forEach(c => { try { c.disconnect(); } catch {} });
   // Give sockets a tick to close, then shut down the server
-  setTimeout(() => httpServer.close(done), 100);
-});
+  if (!httpServer) return done();
+  setTimeout(() => httpServer.close(done), 300);
+}, 15000);
 
 // ─────────────────────────────────────────────
 //  Helper: register a player in the DB and return their stableId
@@ -572,9 +584,11 @@ describe('set_blind_levels socket event', () => {
     await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
     await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
-    // Drain the initial game_state broadcast so subsequent waitForEvent calls don't pick up stale state
-    await waitForEvent(coach,   'game_state', 2000);
-    await waitForEvent(player1, 'game_state', 2000);
+    // Yield to the event loop twice so any in-flight game_state broadcasts from the
+    // join sequence are delivered to (no listeners) before tests register their own.
+    // setImmediate runs in the "check" phase — after pending I/O callbacks (TCP data).
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
 
     return { p1, p2 };
   }
@@ -668,16 +682,16 @@ describe('adjust_stack socket event', () => {
     player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
 
     await joinRoom(coach,   { name: 'StackCoach', tableId: TABLE + tableSuffix });
-    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
-    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
+    const j1 = await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
+    const j2 = await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
-    // Drain the initial game_state broadcast; also capture player IDs for the coach
-    const state = await waitForEvent(coach, 'game_state', 2000);
-    // Drain player1's pending game_state so it doesn't pollute subsequent waitForEvent calls
-    await waitForEvent(player1, 'game_state', 2000);
+    // Flush in-flight game_state broadcasts from joins before tests register listeners.
+    // room_joined already carries the socket ID, so no game_state drain is needed.
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
 
-    const p1ServerObj = state.players.find(p => p.name === p1.name);
-    const p2ServerObj = state.players.find(p => p.name === p2.name);
+    const p1ServerObj = { id: j1.data.playerId, name: p1.name };
+    const p2ServerObj = { id: j2.data.playerId, name: p2.name };
 
     return { p1, p2, p1ServerObj, p2ServerObj };
   }

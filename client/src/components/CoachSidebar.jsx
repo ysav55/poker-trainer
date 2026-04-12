@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useHistory } from '../hooks/useHistory';
 import GameControlsSection from './sidebar/GameControlsSection';
 import BlindLevelsSection from './sidebar/BlindLevelsSection';
@@ -8,6 +8,7 @@ import PlayersSection from './sidebar/PlayersSection';
 import PlaylistsSection from './sidebar/PlaylistsSection';
 import HandLibrarySection from './sidebar/HandLibrarySection';
 import HistorySection from './sidebar/HistorySection';
+import ReplayControlsSection from './sidebar/ReplayControlsSection';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,8 @@ const PHASE_COLORS = {
   RIVER:     { bg: '#2d1a1a', text: '#f85149' },
   SHOWDOWN:  { bg: '#2b1f3a', text: '#bc8cff' },
 };
+
+const TABS = ['GAME', 'HANDS', 'PLAYLISTS'];
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -49,9 +52,38 @@ export default function CoachSidebar({
   handTagsSaved = null,
   setBlindLevels = null,
   myId = null,
+  onOpenScenarioBuilder = null,
+  equityEnabled = false,
+  setEquityEnabled = null,
+  equitySettings = null,
+  // replay props
+  replayMeta = null,
+  loadReplay = null,
+  replayStepForward = null,
+  replayStepBack = null,
+  replayJumpTo = null,
+  replayBranch = null,
+  replayUnbranch = null,
+  replayExit = null,
 }) {
   // History hook — called once; results shared with HandLibrarySection and HistorySection
   const { hands, loading: historyLoading, handDetail, fetchHands, fetchHandDetail, clearDetail } = useHistory();
+
+  // Active tab state
+  const [activeTab, setActiveTab] = useState('GAME');
+
+  // Track the last hand loaded as a scenario (so we can offer "Save to Playlist")
+  const [lastLoadedHandId, setLastLoadedHandId] = useState(null);
+  const [saveToPlaylistId, setSaveToPlaylistId] = useState('');
+
+  // Intercept loadHandScenario to record the loaded hand
+  const augmentedEmit = {
+    ...emit,
+    loadHandScenario: (handId, stackMode) => {
+      setLastLoadedHandId(handId);
+      emit.loadHandScenario?.(handId, stackMode);
+    },
+  };
 
   // Destructure game state with safe defaults
   const {
@@ -139,7 +171,7 @@ export default function CoachSidebar({
   return (
     <div
       className="h-full flex flex-shrink-0"
-      style={{ width: '18rem' }}
+      style={{ width: '20rem' }}
     >
       {/* Collapse tab on left edge of open sidebar */}
       <button
@@ -190,10 +222,14 @@ export default function CoachSidebar({
           boxShadow: '-8px 0 40px rgba(0,0,0,0.7)',
         }}
       >
-        {/* Panel header */}
+        {/* ── Sticky info strip (non-scrolling, 48px) ────────────────────── */}
         <div
-          className="flex items-center justify-between px-4 py-3 flex-shrink-0"
-          style={{ borderBottom: '1px solid #30363d' }}
+          className="flex items-center justify-between px-3 flex-shrink-0"
+          style={{
+            height: '48px',
+            borderBottom: '1px solid #30363d',
+            background: '#0d1117',
+          }}
         >
           <div className="flex items-center gap-2">
             <span
@@ -202,19 +238,19 @@ export default function CoachSidebar({
             >
               COACH
             </span>
-            <span
-              className="text-xs tracking-[0.1em]"
-              style={{ color: '#30363d' }}
-            >
-              /
-            </span>
+            <span style={{ color: '#30363d', fontSize: '11px' }}>/</span>
             <PhaseBadge phase={phase} />
           </div>
-          <div className="flex items-center gap-2">
-            <div
-              className="text-xs font-mono"
-              style={{ color: '#444' }}
-            >
+          <div className="flex items-center gap-3">
+            {pot > 0 && (
+              <span
+                className="font-mono text-xs font-semibold"
+                style={{ color: '#e3b341' }}
+              >
+                ${Number(pot).toLocaleString()}
+              </span>
+            )}
+            <div className="text-xs font-mono" style={{ color: '#444' }}>
               {is_paused ? (
                 <span style={{ color: '#e3b341' }}>⏸ PAUSED</span>
               ) : phase !== 'WAITING' ? (
@@ -224,71 +260,225 @@ export default function CoachSidebar({
           </div>
         </div>
 
-        {/* Scrollable content */}
+        {/* ── Tab bar ────────────────────────────────────────────────────── */}
+        <div
+          className="flex flex-shrink-0"
+          style={{
+            background: '#0d1117',
+            borderBottom: '1px solid #30363d',
+            height: '40px',
+          }}
+        >
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  flex: 1,
+                  height: '100%',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: isActive ? '2px solid #d4af37' : '2px solid transparent',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  letterSpacing: '0.12em',
+                  color: isActive ? '#d4af37' : '#6e7681',
+                  transition: 'color 0.15s, border-color 0.15s',
+                  padding: '0 4px',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) e.currentTarget.style.color = '#a08030';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) e.currentTarget.style.color = '#6e7681';
+                }}
+              >
+                {tab}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Scrollable tab content ──────────────────────────────────────── */}
         <div className="flex-1 overflow-y-auto" style={{ padding: '12px 12px 20px' }}>
 
-          {/* ── 1: GAME CONTROLS ──────────────────────────────────────────── */}
-          <GameControlsSection
-            gameState={gameState}
-            emit={emit}
-            is_paused={is_paused}
-            phase={phase}
-          />
+          {/* ── GAME tab ─────────────────────────────────────────────────── */}
+          {activeTab === 'GAME' && (
+            <>
+              {/* Replay controls — shown at top when replay mode is active */}
+              {(gameState?.phase === 'replay' || gameState?.replay_mode?.active) && replayExit && (
+                <ReplayControlsSection
+                  gameState={gameState}
+                  replayMeta={replayMeta}
+                  isCoach
+                  onStepForward={replayStepForward}
+                  onStepBack={replayStepBack}
+                  onJumpTo={replayJumpTo}
+                  onBranch={replayBranch}
+                  onUnbranch={replayUnbranch}
+                  onExit={replayExit}
+                />
+              )}
 
-          {/* ── 2: BLIND LEVELS ───────────────────────────────────────────── */}
-          {setBlindLevels && (
-            <BlindLevelsSection
-              gameState={gameState}
-              setBlindLevels={setBlindLevels}
-            />
+              <GameControlsSection
+                gameState={gameState}
+                emit={emit}
+                is_paused={is_paused}
+                phase={phase}
+                equityEnabled={equityEnabled}
+                setEquityEnabled={setEquityEnabled}
+                showToPlayers={equitySettings?.showToPlayers ?? false}
+              />
+
+              {setBlindLevels && (
+                <BlindLevelsSection
+                  gameState={gameState}
+                  setBlindLevels={setBlindLevels}
+                />
+              )}
+
+              <UndoControlsSection
+                emit={emit}
+                can_undo={can_undo}
+                can_rollback_street={can_rollback_street}
+              />
+
+              <AdjustStacksSection
+                emit={emit}
+                seatedPlayers={seatedPlayers}
+              />
+
+              <PlayersSection
+                seatedPlayers={seatedPlayers}
+                phase={phase}
+                emit={emit}
+              />
+            </>
           )}
 
-          {/* ── 5: UNDO CONTROLS ──────────────────────────────────────────── */}
-          <UndoControlsSection
-            emit={emit}
-            can_undo={can_undo}
-            can_rollback_street={can_rollback_street}
-          />
+          {/* ── HANDS tab ────────────────────────────────────────────────── */}
+          {activeTab === 'HANDS' && (
+            <>
+              <HandLibrarySection
+                hands={hands}
+                emit={augmentedEmit}
+                playlists={playlists}
+              />
 
-          {/* ── 6: PLAYERS ────────────────────────────────────────────────── */}
-          <PlayersSection
-            seatedPlayers={seatedPlayers}
-            phase={phase}
-            emit={emit}
-          />
+              <HistorySection
+                phase={phase}
+                emit={augmentedEmit}
+                hands={hands}
+                historyLoading={historyLoading}
+                handDetail={handDetail}
+                fetchHands={fetchHands}
+                fetchHandDetail={fetchHandDetail}
+                clearDetail={clearDetail}
+                onLoadReplay={loadReplay}
+              />
 
-          {/* ── 8: PLAYLISTS ──────────────────────────────────────────────── */}
-          <PlaylistsSection
-            playlists={playlists}
-            gameState={gameState}
-            myId={myId}
-            emit={emit}
-          />
+              {/* Save loaded scenario to playlist */}
+              {lastLoadedHandId && config_phase && playlists.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: '10px 10px 10px',
+                    borderRadius: 6,
+                    border: '1px solid rgba(212,175,55,0.3)',
+                    background: 'rgba(212,175,55,0.05)',
+                  }}
+                >
+                  <p style={{ fontSize: 10, color: '#d4af37', fontWeight: 700, letterSpacing: '0.08em', marginBottom: 6 }}>
+                    SAVE SCENARIO TO PLAYLIST
+                  </p>
+                  <div className="flex gap-1">
+                    <select
+                      value={saveToPlaylistId}
+                      onChange={e => setSaveToPlaylistId(e.target.value)}
+                      className="flex-1 min-w-0 rounded outline-none"
+                      style={{ background: '#161b22', border: '1px solid #30363d', padding: '3px 6px', fontSize: '10px', color: '#c9c3b8' }}
+                    >
+                      <option value="">— select playlist —</option>
+                      {playlists.map(pl => (
+                        <option key={pl.playlist_id} value={pl.playlist_id}>{pl.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => {
+                        if (saveToPlaylistId) {
+                          augmentedEmit.addToPlaylist?.(saveToPlaylistId, lastLoadedHandId);
+                          setSaveToPlaylistId('');
+                          setLastLoadedHandId(null);
+                        }
+                      }}
+                      disabled={!saveToPlaylistId}
+                      style={{
+                        padding: '3px 10px',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        borderRadius: 4,
+                        border: '1px solid rgba(212,175,55,0.4)',
+                        background: saveToPlaylistId ? 'rgba(212,175,55,0.15)' : 'transparent',
+                        color: saveToPlaylistId ? '#d4af37' : '#6e7681',
+                        cursor: saveToPlaylistId ? 'pointer' : 'not-allowed',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              )}
 
-          {/* ── 9: HAND LIBRARY ───────────────────────────────────────────── */}
-          <HandLibrarySection
-            hands={hands}
-            emit={emit}
-            playlists={playlists}
-          />
+              {/* + Build Scenario button */}
+              <button
+                onClick={() => {
+                  if (onOpenScenarioBuilder) {
+                    onOpenScenarioBuilder();
+                  } else {
+                    console.log('open scenario builder');
+                  }
+                }}
+                style={{
+                  marginTop: '12px',
+                  width: '100%',
+                  padding: '10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  border: '1px solid rgba(212,175,55,0.4)',
+                  background: 'rgba(212,175,55,0.06)',
+                  color: '#d4af37',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(212,175,55,0.12)';
+                  e.currentTarget.style.borderColor = 'rgba(212,175,55,0.65)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(212,175,55,0.06)';
+                  e.currentTarget.style.borderColor = 'rgba(212,175,55,0.4)';
+                }}
+              >
+                + Build Scenario
+              </button>
+            </>
+          )}
 
-          {/* ── 10: ADJUST STACKS ─────────────────────────────────────────── */}
-          <AdjustStacksSection
-            emit={emit}
-            seatedPlayers={seatedPlayers}
-          />
-
-          {/* ── 11: HISTORY ───────────────────────────────────────────────── */}
-          <HistorySection
-            phase={phase}
-            emit={emit}
-            hands={hands}
-            historyLoading={historyLoading}
-            handDetail={handDetail}
-            fetchHands={fetchHands}
-            fetchHandDetail={fetchHandDetail}
-            clearDetail={clearDetail}
-          />
+          {/* ── PLAYLISTS tab ─────────────────────────────────────────────── */}
+          {activeTab === 'PLAYLISTS' && (
+            <PlaylistsSection
+              playlists={playlists}
+              gameState={gameState}
+              myId={myId}
+              emit={emit}
+            />
+          )}
 
           {/* Bottom spacer */}
           <div style={{ height: '8px' }} />

@@ -4,9 +4,15 @@ module.exports = function registerGameLifecycle(socket, ctx) {
   const { tables, activeHands, stableIdMap, io,
           broadcastState, sendError, sendSyncError, startActionTimer, clearActionTimer,
           pausedTimerRemainders,
+          equityCache, equitySettings, emitEquityUpdate,
           requireCoach, HandLogger, AnalyzerService, log, uuidv4, advancePlaylist } = ctx;
 
   socket.on('start_game', async ({ mode = 'rng' } = {}) => {
+    const { getController } = require('../../state/SharedState');
+    const ctrl = getController(socket.data.tableId);
+    if (ctrl?.getMode() === 'uncoached_cash') {
+      return socket.emit('error', { message: 'Auto-deal tables start automatically' });
+    }
     if (requireCoach(socket, 'start the game')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
@@ -21,6 +27,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
 
     if (!gm.state.replay_mode.branched) {
       const handId = uuidv4();
+      const tableMode = ctrl?.getMode?.() ?? null;
       const allSeatedPlayers = gm.state.players
         .filter(p => !p.is_shadow && !p.is_observer)
         .map(p => ({ id: stableIdMap.get(p.id) || p.id, name: p.name, seat: p.seat, stack: p.stack, is_coach: p.is_coach }));
@@ -39,6 +46,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
         bigBlind: gm.state.big_blind,
         isScenario: false,
         sessionType: 'live',
+        tableMode,
       }).then(() => {
         activeHands.set(tableId, { handId, sessionId: gm.sessionId });
         socket.emit('hand_started', { handId });
@@ -48,10 +56,10 @@ module.exports = function registerGameLifecycle(socket, ctx) {
     }
 
     broadcastState(tableId, { type: 'game_start', message: `New hand started (${mode.toUpperCase()} mode)` });
+    emitEquityUpdate(tableId);
     startActionTimer(tableId);
     log.info('game', 'hand_start', `hand started mode=${mode}`, { tableId, mode, sessionId: gm.sessionId });
     log.trackSocket('start_game', tableId, socket.data.stableId, { mode });
-    console.log(`[start_game] mode=${mode}`);
   });
 
   socket.on('reset_hand', async () => {
@@ -74,7 +82,19 @@ module.exports = function registerGameLifecycle(socket, ctx) {
 
     gm.resetForNextHand();
 
+    equityCache.delete(tableId);
+
     if (handInfo && stateCopy) {
+      const handResult = stateCopy.showdown_result ?? null;
+      {
+        const { getController } = require('../../state/SharedState');
+        const ctrl = getController(tableId);
+        if (ctrl) {
+          await ctrl.onHandComplete(handResult);
+        } else {
+          io.to(tableId).emit('hand_complete', handResult);
+        }
+      }
       HandLogger.endHand({ handId: handInfo.handId, state: stateCopy, socketToStable: Object.fromEntries(stableIdMap) })
         .then(() => AnalyzerService.analyzeAndTagHand(handInfo.handId))
         .catch(err => log.error('db', 'end_hand_failed', '[HandLogger] endHand/analyzeAndTagHand', { err, tableId }));
@@ -108,6 +128,8 @@ module.exports = function registerGameLifecycle(socket, ctx) {
     const dealSnapshot = gm.state.players
       .filter(p => p.hole_cards?.length > 0)
       .map(p => ({ id: stableIdMap.get(p.id) || p.id, hole_cards: [...p.hole_cards] }));
+    const { getController: getCtrl2 } = require('../../state/SharedState');
+    const tableMode2 = getCtrl2(tableId)?.getMode?.() ?? null;
     await HandLogger.startHand({
       handId,
       sessionId: gm.sessionId,
@@ -119,6 +141,7 @@ module.exports = function registerGameLifecycle(socket, ctx) {
       bigBlind: gm.state.big_blind,
       isScenario: true,
       sessionType: 'drill',
+      tableMode: tableMode2,
     }).catch(err => log.error('db', 'start_hand_configured_failed', '[HandLogger] startHand (configured)', { err, tableId }));
     activeHands.set(tableId, { handId, sessionId: gm.sessionId, isManualScenario: true });
     socket.emit('hand_started', { handId });
@@ -126,6 +149,21 @@ module.exports = function registerGameLifecycle(socket, ctx) {
       .catch(err => log.error('db', 'record_deal_failed', '[HandLogger] recordDeal (configured)', { err, tableId }));
 
     broadcastState(tableId, { type: 'game_start', message: 'Configured hand started' });
+    emitEquityUpdate(tableId);
     startActionTimer(tableId);
+  });
+
+  socket.on('toggle_equity_display', () => {
+    if (requireCoach(socket, 'toggle equity display')) return;
+    const tableId = socket.data.tableId;
+    const current = equitySettings.get(tableId) || { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, showToPlayers: !current.showToPlayers };
+    equitySettings.set(tableId, updated);
+    io.to(tableId).emit('equity_settings', updated);
+    // Re-emit cached equity so clients update immediately without waiting for next action
+    const cached = equityCache.get(tableId);
+    if (cached) {
+      io.to(tableId).emit('equity_update', { ...cached, showToPlayers: updated.showToPlayers });
+    }
   });
 };

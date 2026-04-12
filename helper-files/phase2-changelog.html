@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poker Trainer — Phase 2 Changelog</title>
+<style>
+:root {
+  --bg:      #0d1117;
+  --panel:   #161b22;
+  --border:  #30363d;
+  --text:    #e6edf3;
+  --muted:   #8b949e;
+  --dim:     #6e7681;
+  --gold:    #d4af37;
+  --gold2:   #c9a227;
+  --green:   #3fb950;
+  --blue:    #58a6ff;
+  --yellow:  #e3b341;
+  --red:     #f85149;
+  --purple:  #bc8cff;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── Typography ── */
+h1 { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.02em; }
+h2 { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); margin-bottom: 1.2rem; }
+h3 { font-size: 1rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.8rem; }
+
+/* ── Layout ── */
+.container { max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
+section { padding: 4rem 0; }
+section + section { border-top: 1px solid var(--border); }
+
+/* ── Nav ── */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(13,17,23,0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 2rem;
+}
+.nav-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; gap: 2rem; flex-wrap: wrap;
+}
+.nav-logo { font-weight: 800; font-size: 1rem; color: var(--gold); letter-spacing: 0.05em; white-space: nowrap; }
+.nav-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.nav-links a { color: var(--muted); text-decoration: none; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.04em; transition: color .2s; }
+.nav-links a:hover { color: var(--gold); }
+
+/* ── Hero ── */
+.hero {
+  padding: 6rem 0 4rem;
+  position: relative; overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+  width: 900px; height: 600px;
+  background: radial-gradient(ellipse at center, rgba(212,175,55,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-title { color: var(--text); }
+.hero-title span { color: var(--gold); }
+.hero-sub { color: var(--muted); font-size: 1.1rem; margin-top: 1rem; max-width: 600px; }
+.hero-stats { display: flex; gap: 1.5rem; margin-top: 2.5rem; flex-wrap: wrap; }
+.stat-pill {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1rem 1.5rem; min-width: 130px; text-align: center;
+}
+.stat-pill .num { font-size: 2rem; font-weight: 800; color: var(--gold); display: block; }
+.stat-pill .lbl { font-size: 0.72rem; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* ── Panels / Cards ── */
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.5rem;
+}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 1.5rem; }
+.grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; }
+@media(max-width:900px){ .grid-2,.grid-3,.grid-4 { grid-template-columns:1fr; } }
+@media(max-width:700px){ .hero h1 { font-size:1.8rem; } }
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em;
+}
+.badge-gold   { background: rgba(212,175,55,.15); color: var(--gold);   border: 1px solid rgba(212,175,55,.35); }
+.badge-green  { background: rgba(63,185,80,.12);  color: var(--green);  border: 1px solid rgba(63,185,80,.3);  }
+.badge-blue   { background: rgba(88,166,255,.1);  color: var(--blue);   border: 1px solid rgba(88,166,255,.3); }
+.badge-red    { background: rgba(248,81,73,.1);   color: var(--red);    border: 1px solid rgba(248,81,73,.3);  }
+.badge-grey   { background: rgba(48,54,61,.6);    color: var(--muted);  border: 1px solid rgba(48,54,61,.9);   }
+.badge-purple { background: rgba(188,140,255,.1); color: var(--purple); border: 1px solid rgba(188,140,255,.3);}
+
+/* ── UI Mockups ── */
+.mockup-chrome {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden; box-shadow: 0 8px 48px rgba(0,0,0,0.6);
+}
+.mockup-titlebar {
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 8px 14px; display: flex; align-items: center; gap: 8px;
+}
+.dot { width:10px; height:10px; border-radius:50%; }
+.dot-r { background:#f85149; }
+.dot-y { background:#e3b341; }
+.dot-g { background:#3fb950; }
+.url-bar {
+  flex: 1; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 5px; padding: 3px 10px;
+  font-size: 0.72rem; color: var(--muted); font-family: monospace;
+}
+.mockup-body { padding: 1rem; }
+
+/* ── Lobby Mockup ── */
+.lobby-topbar {
+  background: var(--panel); border-bottom: 1px solid var(--border);
+  padding: 10px 16px; display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.78rem;
+}
+.lobby-brand { color: var(--gold); font-weight: 800; font-size: 0.9rem; letter-spacing: 0.05em; }
+.lobby-content { display: grid; grid-template-columns: 200px 1fr; gap: 12px; padding: 12px; min-height: 320px; }
+.lobby-sidebar { display: flex; flex-direction: column; gap: 8px; }
+.lobby-main { display: flex; flex-direction: column; gap: 10px; }
+.sidebar-section { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+.sidebar-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; color: var(--dim); text-transform: uppercase; margin-bottom: 6px; }
+.sidebar-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 6px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; color: var(--muted);
+  transition: background .15s;
+}
+.sidebar-item:hover { background: rgba(255,255,255,0.05); }
+.sidebar-item.active { color: var(--gold); background: rgba(212,175,55,0.08); }
+.sidebar-icon { width: 14px; text-align: center; }
+
+.stat-row { display: flex; gap: 8px; }
+.stat-mini {
+  flex: 1; background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px;
+}
+.stat-mini .v { font-size: 1.2rem; font-weight: 800; color: var(--text); }
+.stat-mini .l { font-size: 0.6rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.table-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.table-card-m {
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px; cursor: pointer; transition: border-color .2s;
+}
+.table-card-m:hover { border-color: rgba(212,175,55,0.4); }
+.table-card-m .tc-name { font-size: 0.78rem; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.table-card-m .tc-sub { font-size: 0.65rem; color: var(--muted); }
+.table-card-m .tc-join {
+  display: inline-block; margin-top: 6px;
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em;
+  padding: 3px 8px; border-radius: 4px;
+  background: rgba(212,175,55,0.12); border: 1px solid rgba(212,175,55,0.35); color: var(--gold);
+}
+.ghost-tile {
+  border: 1px dashed rgba(212,175,55,0.3); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 90px; font-size: 0.75rem; font-weight: 600;
+  color: rgba(212,175,55,0.5); cursor: pointer;
+  transition: border-color .2s, color .2s;
+}
+.ghost-tile:hover { border-color: var(--gold); color: var(--gold); }
+.admin-links { display: flex; flex-direction: column; gap: 4px; }
+.admin-link {
+  padding: 5px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600;
+  color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 6px;
+  transition: background .15s, color .15s;
+}
+.admin-link:hover { background: rgba(212,175,55,0.08); color: var(--gold); }
+
+/* ── Permission Matrix ── */
+.perm-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+.perm-table th, .perm-table td { padding: 6px 10px; border: 1px solid var(--border); text-align: center; }
+.perm-table th { background: rgba(255,255,255,0.04); font-size: 0.68rem; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; }
+.perm-table td:first-child { text-align: left; font-weight: 600; color: var(--text); font-size: 0.72rem; }
+.perm-table tr:hover td { background: rgba(255,255,255,0.02); }
+.check { color: var(--green); font-size: 1rem; }
+.dash  { color: rgba(255,255,255,0.1); }
+.perm-cat { font-size: 0.6rem; letter-spacing: 0.08em; color: var(--dim); display: block; font-weight: 400; }
+
+/* ── Arch Diagram ── */
+.arch-diagram { position: relative; }
+.arch-layer {
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem 1.5rem; margin-bottom: 0.5rem;
+  position: relative;
+}
+.arch-layer::after {
+  content: '↓';
+  position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+  color: var(--border); font-size: 1.2rem; z-index: 1;
+}
+.arch-layer:last-child::after { display: none; }
+.arch-layer-title { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.75rem; }
+.arch-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.arch-chip {
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px; font-size: 0.72rem; font-weight: 600;
+  color: var(--muted); white-space: nowrap;
+}
+.arch-chip.gold  { border-color: rgba(212,175,55,0.4); color: var(--gold);  background: rgba(212,175,55,0.08); }
+.arch-chip.green { border-color: rgba(63,185,80,0.4);  color: var(--green); background: rgba(63,185,80,0.08); }
+.arch-chip.blue  { border-color: rgba(88,166,255,0.4); color: var(--blue);  background: rgba(88,166,255,0.08); }
+.arch-chip.red   { border-color: rgba(248,81,73,0.4);  color: var(--red);   background: rgba(248,81,73,0.08); }
+
+/* ── Tournament Panel ── */
+.tourn-panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1rem; font-size: 0.82rem;
+}
+.tourn-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.tourn-title { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; color: var(--gold); text-transform: uppercase; }
+.tourn-blind { font-size: 1.4rem; font-weight: 800; color: var(--text); text-align: center; margin-bottom: 4px; }
+.tourn-level { font-size: 0.65rem; color: var(--muted); text-align: center; margin-bottom: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.timer-bar-track { background: rgba(255,255,255,0.06); border-radius: 4px; height: 6px; overflow: hidden; margin-bottom: 8px; }
+.timer-bar-fill { height: 100%; border-radius: 4px; background: var(--green); transition: width .5s; }
+.tourn-timer { font-size: 1.6rem; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; margin-bottom: 12px; }
+.elim-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 0.72rem; }
+.elim-pos { color: var(--gold); font-weight: 700; width: 28px; text-align: center; }
+.elim-name { color: var(--muted); flex: 1; }
+.elim-chips { color: var(--dim); font-size: 0.65rem; }
+
+/* ── Sidebar Mockup ── */
+.sidebar-mock {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  width: 220px; padding: 10px; font-size: 0.75rem; flex-shrink: 0;
+}
+.sidebar-tabs { display: flex; gap: 2px; margin-bottom: 10px; }
+.sidebar-tab {
+  flex: 1; padding: 5px 4px; text-align: center;
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em;
+  border-radius: 4px; cursor: pointer; color: var(--dim);
+  transition: background .15s, color .15s;
+}
+.sidebar-tab.active { background: rgba(212,175,55,0.12); color: var(--gold); }
+.ctrl-section { margin-bottom: 10px; }
+.ctrl-header {
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; color: var(--dim);
+  text-transform: uppercase; padding: 4px 0; border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.ctrl-btn {
+  display: block; width: 100%; padding: 6px 8px; border-radius: 4px;
+  font-size: 0.72rem; font-weight: 600; text-align: center; cursor: pointer;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  color: var(--muted); margin-bottom: 4px; transition: all .15s;
+}
+.ctrl-btn:hover { background: rgba(212,175,55,0.08); color: var(--gold); border-color: rgba(212,175,55,0.3); }
+.ctrl-btn.primary { background: rgba(212,175,55,0.12); border-color: rgba(212,175,55,0.4); color: var(--gold); }
+
+/* ── Poker Table Mockup ── */
+.poker-table-wrap {
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.felt {
+  flex: 1; background: #0e2a1a; border: 3px solid #1a4a2e; border-radius: 50%;
+  aspect-ratio: 16/9; max-width: 500px; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.5), 0 4px 20px rgba(0,0,0,0.6);
+  overflow: hidden;
+}
+.pot-display { text-align: center; }
+.pot-label { font-size: 0.6rem; color: rgba(255,255,255,0.4); letter-spacing: 0.08em; text-transform: uppercase; }
+.pot-value { font-size: 1rem; font-weight: 800; color: var(--gold); }
+.board-cards { display: flex; gap: 4px; margin-top: 6px; }
+.card-m {
+  width: 24px; height: 36px; background: white; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.6rem; font-weight: 800; border: 1px solid #ccc;
+}
+.card-m.red { color: #c0392b; }
+.card-m.face-down { background: #1a3a2a; border-color: #2a5a3a; }
+.seat {
+  position: absolute; background: rgba(22,27,34,0.85); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px; font-size: 0.65rem; text-align: center; min-width: 60px;
+}
+.seat .sname { font-weight: 700; color: var(--text); }
+.seat .sstack { color: var(--gold); font-size: 0.6rem; }
+.seat.active { border-color: var(--yellow); box-shadow: 0 0 8px rgba(227,179,65,0.4); }
+.seat.dealer::after { content:'D'; position:absolute; top:-8px; right:-8px; background:var(--gold); color:var(--bg); border-radius:50%; width:14px; height:14px; font-size:0.55rem; font-weight:800; display:flex; align-items:center; justify-content:center; }
+
+/* ── CRM Mockup ── */
+.crm-grid { display: grid; grid-template-columns: 180px 1fr; gap: 12px; }
+.crm-player-list { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+.crm-player-item {
+  padding: 7px 8px; border-radius: 4px; cursor: pointer;
+  font-size: 0.75rem; color: var(--muted); transition: background .15s;
+}
+.crm-player-item:hover { background: rgba(255,255,255,0.04); }
+.crm-player-item.selected { background: rgba(212,175,55,0.1); color: var(--gold); }
+.crm-detail { display: flex; flex-direction: column; gap: 10px; }
+.crm-stat-row { display: flex; gap: 8px; }
+.crm-stat {
+  flex: 1; background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 5px; padding: 8px; text-align: center;
+}
+.crm-stat .cv { font-size: 1.1rem; font-weight: 800; color: var(--text); }
+.crm-stat .cl { font-size: 0.6rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.mini-bar {
+  height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; margin-top: 4px;
+}
+.mini-bar-fill { height: 100%; border-radius: 2px; background: var(--gold); }
+.note-item { padding: 8px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; border: 1px solid var(--border); margin-bottom: 6px; }
+.note-date { font-size: 0.6rem; color: var(--dim); margin-bottom: 3px; }
+.note-text { font-size: 0.73rem; color: var(--muted); }
+
+/* ── Test Counts ── */
+.test-before-after {
+  display: flex; gap: 1.5rem; align-items: center;
+}
+.test-box {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1.5rem 2rem; text-align: center; flex: 1;
+}
+.test-num { font-size: 3rem; font-weight: 800; }
+.test-lbl { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 4px; }
+.arrow-big { font-size: 2rem; color: var(--gold); }
+.delta-chip {
+  background: rgba(63,185,80,0.12); border: 1px solid rgba(63,185,80,0.3);
+  color: var(--green); border-radius: 20px; padding: 4px 12px;
+  font-size: 0.8rem; font-weight: 700;
+}
+
+/* ── Tag list ── */
+.tag { display: inline-block; margin: 2px; padding: 2px 8px; border-radius: 12px; font-size: 0.68rem; font-weight: 600; }
+.tag-blue   { background: rgba(88,166,255,.12);  color: var(--blue);  border: 1px solid rgba(88,166,255,.3); }
+.tag-green  { background: rgba(63,185,80,.12);   color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+.tag-yellow { background: rgba(227,179,65,.12);  color: var(--yellow);border: 1px solid rgba(227,179,65,.3); }
+.tag-red    { background: rgba(248,81,73,.12);   color: var(--red);   border: 1px solid rgba(248,81,73,.3); }
+.tag-gold   { background: rgba(212,175,55,.12);  color: var(--gold);  border: 1px solid rgba(212,175,55,.3); }
+.tag-grey   { background: rgba(110,118,129,.12); color: var(--dim);   border: 1px solid rgba(110,118,129,.3); }
+
+/* ── Scroll animation ── */
+.fade-in { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .6s ease; }
+.fade-in.visible { opacity: 1; transform: none; }
+
+/* ── Flow diagram ── */
+.flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+.flow-box {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 14px; font-size: 0.75rem; font-weight: 600; color: var(--text); white-space: nowrap;
+}
+.flow-box.gold  { border-color: rgba(212,175,55,.5); color: var(--gold); background: rgba(212,175,55,.07); }
+.flow-box.green { border-color: rgba(63,185,80,.5);  color: var(--green); background: rgba(63,185,80,.07); }
+.flow-box.blue  { border-color: rgba(88,166,255,.5); color: var(--blue); background: rgba(88,166,255,.07); }
+.flow-box.red   { border-color: rgba(248,81,73,.5);  color: var(--red); background: rgba(248,81,73,.07); }
+.flow-arr { color: var(--border); font-size: 1.1rem; padding: 0 6px; }
+
+/* ── Role card ── */
+.role-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1.25rem; display: flex; flex-direction: column; gap: 10px;
+}
+.role-card-title { font-size: 1rem; font-weight: 800; }
+.role-card-desc { font-size: 0.78rem; color: var(--muted); }
+.role-perms { display: flex; flex-direction: column; gap: 3px; }
+.perm-row { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; }
+.perm-row .pi { width: 16px; text-align: center; }
+.perm-row.has { color: var(--green); }
+.perm-row.no  { color: rgba(255,255,255,.15); text-decoration: line-through; }
+
+/* ── Code snippet ── */
+.code-block {
+  background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+  padding: 1rem 1.2rem; font-family: 'Courier New', monospace; font-size: 0.78rem;
+  line-height: 1.7; overflow-x: auto; color: #e6edf3;
+}
+.code-block .kw { color: #ff7b72; }
+.code-block .fn { color: #d2a8ff; }
+.code-block .str { color: #a5d6ff; }
+.code-block .cm { color: #8b949e; }
+.code-block .num { color: #79c0ff; }
+.code-block .op  { color: #ff9c54; }
+
+/* ── divider ── */
+.divider { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════ NAV ══════════════════════════════ -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-logo">♠ POKER TRAINER</div>
+    <div class="nav-links">
+      <a href="#overview">Overview</a>
+      <a href="#roles">Roles & Permissions</a>
+      <a href="#lobbies">Lobby Views</a>
+      <a href="#game-modes">Game Modes</a>
+      <a href="#components">New Components</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#tests">Tests</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════ HERO ══════════════════════════════ -->
+<div class="hero">
+  <div class="container">
+    <h1 class="hero-title">Phase 2 &mdash; <span>What's New</span></h1>
+    <p class="hero-sub">Multi-table support, full RBAC, tournament mode, hand builder, player CRM, and a completely new lobby — all shipping in one phase.</p>
+
+    <div class="hero-stats">
+      <div class="stat-pill"><span class="num">7</span><span class="lbl">Roles</span></div>
+      <div class="stat-pill"><span class="num">12</span><span class="lbl">Permissions</span></div>
+      <div class="stat-pill"><span class="num" style="color:var(--green)">1,598</span><span class="lbl">Server Tests</span></div>
+      <div class="stat-pill"><span class="num" style="color:var(--blue)">237</span><span class="lbl">Client Tests</span></div>
+      <div class="stat-pill"><span class="num">9</span><span class="lbl">DB Migrations</span></div>
+      <div class="stat-pill"><span class="num" style="color:var(--purple)">3</span><span class="lbl">Game Modes</span></div>
+      <div class="stat-pill"><span class="num">40+</span><span class="lbl">New Files</span></div>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1.5rem;">
+      <span class="badge badge-green">✓ RBAC System</span>
+      <span class="badge badge-green">✓ Multi-Table Frontend</span>
+      <span class="badge badge-green">✓ Tournament Mode</span>
+      <span class="badge badge-green">✓ Player CRM</span>
+      <span class="badge badge-green">✓ Hand Builder</span>
+      <span class="badge badge-green">✓ User Management</span>
+      <span class="badge badge-green">✓ Frontend Routing</span>
+      <span class="badge badge-green">✓ requirePermission Bug Fixed</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ OVERVIEW ══════════════════════════════ -->
+<section id="overview">
+<div class="container">
+  <h2>What Shipped</h2>
+
+  <div class="grid-3 fade-in">
+    <div class="card">
+      <h3 style="color:var(--gold)">🏗 Infrastructure</h3>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+        <div class="flow" style="gap:6px;flex-wrap:wrap;">
+          <span class="badge badge-blue">RBAC System (008)</span>
+          <span class="badge badge-blue">User Mgmt (009)</span>
+          <span class="badge badge-blue">Multi-Table Registry</span>
+          <span class="badge badge-blue">Tournament DB (012)</span>
+          <span class="badge badge-blue">CRM Schema (011)</span>
+          <span class="badge badge-blue">Hand Builder (010)</span>
+        </div>
+        <p style="font-size:0.78rem;color:var(--muted);margin-top:8px;">6 new DB migrations. In-memory permission cache with invalidation. Table registry with TTL cleanup. Game controller class hierarchy.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="color:var(--gold)">🖥 Server</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">
+        <span class="badge badge-grey">TableRepository</span>
+        <span class="badge badge-grey">TournamentRepository</span>
+        <span class="badge badge-grey">CRMRepository</span>
+        <span class="badge badge-grey">requirePermission.js</span>
+        <span class="badge badge-grey">socketPermissions.js</span>
+        <span class="badge badge-grey">TableController</span>
+        <span class="badge badge-grey">AutoController</span>
+        <span class="badge badge-grey">CoachedController</span>
+        <span class="badge badge-grey">TournamentController</span>
+        <span class="badge badge-grey">BlindSchedule</span>
+        <span class="badge badge-grey">routes/tables.js</span>
+        <span class="badge badge-grey">routes/admin/</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="color:var(--gold)">⚛ Client</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">
+        <span class="badge badge-gold">AuthContext</span>
+        <span class="badge badge-gold">LobbyContext</span>
+        <span class="badge badge-gold">TableContext</span>
+        <span class="badge badge-gold">MainLobby</span>
+        <span class="badge badge-gold">TablePage</span>
+        <span class="badge badge-gold">MultiTablePage</span>
+        <span class="badge badge-gold">LoginPage</span>
+        <span class="badge badge-gold">TournamentInfoPanel</span>
+        <span class="badge badge-gold">PlayerCRM</span>
+        <span class="badge badge-gold">ScenarioBuilder</span>
+        <span class="badge badge-gold">UserManagement</span>
+        <span class="badge badge-gold">TableStatusChip</span>
+        <span class="badge badge-gold">TableTile</span>
+        <span class="badge badge-gold">BroadcastBar</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bug fix callout -->
+  <div style="background:rgba(248,81,73,0.07);border:1px solid rgba(248,81,73,0.3);border-radius:10px;padding:1.25rem;margin-top:1.5rem;" class="fade-in">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <span style="font-size:1.2rem;">🐛</span>
+      <span style="font-weight:700;color:var(--red);font-size:0.85rem;letter-spacing:0.06em;text-transform:uppercase;">Production Bug Fixed</span>
+      <span class="badge badge-red">requirePermission.js</span>
+    </div>
+    <p style="font-size:0.82rem;color:var(--muted);">
+      <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;">requirePermission</code> was checking <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;">req.user.id</code> but the JWT payload stores <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;">req.user.stableId</code> — every permission-guarded route (playlist mutations, all admin endpoints) was always returning <strong style="color:var(--red)">401 Unauthorized</strong> in production. Fixed to use <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;">stableId ?? id</code> fallback.
+    </p>
+  </div>
+</div>
+</section>
+
+<!-- ══════════════════════════════ ROLES & PERMISSIONS ══════════════════════════════ -->
+<section id="roles">
+<div class="container">
+  <h2>Roles &amp; Permissions</h2>
+  <p style="color:var(--muted);font-size:0.85rem;margin-bottom:2rem;">Migration 008 — 7 system roles, 12 granular permissions, many-to-many join tables. In-memory per-player cache with explicit invalidation on role change.</p>
+
+  <!-- Role Cards -->
+  <div class="grid-4 fade-in" style="margin-bottom:2rem;">
+    <div class="role-card">
+      <div class="role-card-title" style="color:var(--gold)">Coach <span class="badge badge-gold" style="font-size:0.6rem;vertical-align:middle;">8 perms</span></div>
+      <div class="role-card-desc">Leads tables, tags hands, manages playlists and students. Primary power user.</div>
+      <div class="role-perms">
+        <div class="perm-row has"><span class="pi">✓</span> table:create / manage</div>
+        <div class="perm-row has"><span class="pi">✓</span> hand:tag / analyze</div>
+        <div class="perm-row has"><span class="pi">✓</span> playlist:create / manage</div>
+        <div class="perm-row has"><span class="pi">✓</span> crm:view</div>
+        <div class="perm-row has"><span class="pi">✓</span> admin:access</div>
+        <div class="perm-row no"><span class="pi">✗</span> user:manage</div>
+        <div class="perm-row no"><span class="pi">✗</span> tournament:manage</div>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-card-title" style="color:var(--blue)">Moderator <span class="badge badge-blue" style="font-size:0.6rem;vertical-align:middle;">4 perms</span></div>
+      <div class="role-card-desc">Can tag hands and run tables. Limited admin access, no user management.</div>
+      <div class="role-perms">
+        <div class="perm-row has"><span class="pi">✓</span> hand:tag / analyze</div>
+        <div class="perm-row has"><span class="pi">✓</span> table:create / manage</div>
+        <div class="perm-row no"><span class="pi">✗</span> playlist:manage</div>
+        <div class="perm-row no"><span class="pi">✗</span> crm:view</div>
+        <div class="perm-row no"><span class="pi">✗</span> admin:access</div>
+        <div class="perm-row no"><span class="pi">✗</span> user:manage</div>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-card-title" style="color:var(--purple)">Admin <span class="badge badge-purple" style="font-size:0.6rem;vertical-align:middle;">12 perms</span></div>
+      <div class="role-card-desc">All permissions except superadmin scope. Full user, CRM, and tournament management.</div>
+      <div class="role-perms">
+        <div class="perm-row has"><span class="pi">✓</span> All 12 permissions</div>
+        <div class="perm-row has"><span class="pi">✓</span> user:manage / view</div>
+        <div class="perm-row has"><span class="pi">✓</span> crm:view / edit</div>
+        <div class="perm-row has"><span class="pi">✓</span> tournament:manage</div>
+        <div class="perm-row has"><span class="pi">✓</span> admin:access</div>
+      </div>
+    </div>
+
+    <div class="role-card">
+      <div class="role-card-title" style="color:var(--muted)">Player / Trial</div>
+      <div class="role-card-desc">Standard player. No elevated permissions. Trial role grants read-only lobby access only.</div>
+      <div class="role-perms">
+        <div class="perm-row no"><span class="pi">✗</span> table:create</div>
+        <div class="perm-row no"><span class="pi">✗</span> hand:tag</div>
+        <div class="perm-row no"><span class="pi">✗</span> playlist:manage</div>
+        <div class="perm-row no"><span class="pi">✗</span> admin:access</div>
+        <div style="font-size:0.68rem;color:var(--dim);margin-top:4px;">Can: join tables, view stats, see hands dealt</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full Permission Matrix -->
+  <h3>Full Permission Matrix</h3>
+  <div style="overflow-x:auto;" class="fade-in">
+    <table class="perm-table">
+      <thead>
+        <tr>
+          <th style="text-align:left;min-width:180px;">Permission</th>
+          <th>superadmin</th><th>admin</th><th>coach</th><th>moderator</th><th>referee</th><th>player</th><th>trial</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>table:create <span class="perm-cat">table</span></td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>table:manage <span class="perm-cat">table</span></td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>hand:tag <span class="perm-cat">hand</span></td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>hand:analyze <span class="perm-cat">hand</span></td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>user:manage <span class="perm-cat">user</span></td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>user:view <span class="perm-cat">user</span></td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>playlist:create <span class="perm-cat">playlist</span></td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>playlist:manage <span class="perm-cat">playlist</span></td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>crm:view <span class="perm-cat">crm</span></td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>crm:edit <span class="perm-cat">crm</span></td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>admin:access <span class="perm-cat">admin</span></td><td class="check">✓</td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+        <tr><td>tournament:manage <span class="perm-cat">tournament</span></td><td class="check">✓</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td><td class="check">✓</td><td class="dash">—</td><td class="dash">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <!-- How RBAC works in the stack -->
+  <h3>How It Works End-to-End</h3>
+  <div class="code-block fade-in">
+<span class="cm">// 1. Login → JWT issued with stableId + role</span>
+<span class="kw">POST</span> <span class="str">/api/auth/login</span>  →  <span class="fn">JwtService.sign</span>({ stableId, name, role })
+
+<span class="cm">// 2. AuthContext fetches permissions after login</span>
+<span class="kw">GET</span>  <span class="str">/api/auth/permissions</span>  →  [<span class="str">"hand:tag"</span>, <span class="str">"table:create"</span>, ...]
+
+<span class="cm">// 3. Express middleware chain on guarded routes</span>
+app.<span class="fn">post</span>(<span class="str">'/api/playlists'</span>, requireAuth, <span class="fn">requirePermission</span>(<span class="str">'playlist:manage'</span>), handler)
+
+<span class="cm">// 4. requirePermission fetches from DB (or cache)</span>
+supabase.<span class="fn">from</span>(<span class="str">'player_roles'</span>)
+  .<span class="fn">select</span>(<span class="str">'roles(role_permissions(permissions(key)))'</span>)
+  .<span class="fn">eq</span>(<span class="str">'player_id'</span>, uid)  <span class="cm">// uid = req.user.stableId</span>
+
+<span class="cm">// 5. Socket guards for real-time events</span>
+<span class="kw">if</span> (!<span class="kw">await</span> <span class="fn">requireSocketPermission</span>(socket, <span class="str">'hand:tag'</span>)) <span class="kw">return</span>;
+  </div>
+</div>
+</section>
+
+<!-- ══════════════════════════════ LOBBY VIEWS ══════════════════════════════ -->
+<section id="lobbies">
+<div class="container">
+  <h2>Role-Based Lobby Views</h2>
+  <p style="color:var(--muted);font-size:0.85rem;margin-bottom:2rem;">The same URL <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;">/lobby</code> renders differently per role. Admin links only appear when <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;">hasPermission('admin:access')</code> returns true.</p>
+
+  <!-- Student Lobby -->
+  <div style="margin-bottom:2.5rem;" class="fade-in">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <h3 style="color:var(--text);font-size:0.9rem;text-transform:none;letter-spacing:0;">Player / Student View</h3>
+      <span class="badge badge-grey">No elevated permissions</span>
+    </div>
+    <div class="mockup-chrome">
+      <div class="mockup-titlebar">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <div class="url-bar">localhost:5173/lobby</div>
+      </div>
+      <div class="lobby-topbar">
+        <div class="lobby-brand">♠ POKER TRAINER</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:0.72rem;color:var(--muted);">Alex Kim</span>
+          <span class="badge badge-grey">Player</span>
+          <span style="background:rgba(48,54,61,0.6);border:1px solid var(--border);color:var(--dim);font-size:0.65rem;padding:2px 8px;border-radius:4px;cursor:pointer;">Logout</span>
+        </div>
+      </div>
+      <div class="lobby-content">
+        <div class="lobby-sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-label">Navigation</div>
+            <div class="sidebar-item active"><span class="sidebar-icon">🏠</span> Lobby</div>
+            <div class="sidebar-item"><span class="sidebar-icon">📊</span> My Stats</div>
+            <div class="sidebar-item"><span class="sidebar-icon">🃏</span> Hand History</div>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-label">Session</div>
+            <div style="font-size:0.68rem;color:var(--dim);padding:4px 0;">Hands today: <strong style="color:var(--text)">18</strong></div>
+            <div style="font-size:0.68rem;color:var(--dim);padding:4px 0;">Net chips: <strong style="color:var(--green)">+2,450</strong></div>
+            <div style="font-size:0.68rem;color:var(--dim);padding:4px 0;">VPIP: <strong style="color:var(--text)">24%</strong></div>
+          </div>
+        </div>
+        <div class="lobby-main">
+          <div class="stat-row">
+            <div class="stat-mini"><div class="v">142</div><div class="l">Total Hands</div></div>
+            <div class="stat-mini"><div class="v" style="color:var(--green)">+8.2k</div><div class="l">Net Chips</div></div>
+            <div class="stat-mini"><div class="v">24%</div><div class="l">VPIP</div></div>
+            <div class="stat-mini"><div class="v">18%</div><div class="l">PFR</div></div>
+          </div>
+          <div style="font-size:0.65rem;color:var(--dim);letter-spacing:0.08em;text-transform:uppercase;margin-top:4px;">Active Tables</div>
+          <div class="table-grid">
+            <div class="table-card-m">
+              <div class="tc-name">Main Table</div>
+              <div class="tc-sub">3 players · <span style="color:#93c5fd">PREFLOP</span></div>
+              <span class="tc-join">JOIN</span>
+            </div>
+            <div class="table-card-m">
+              <div class="tc-name">Practice Table</div>
+              <div class="tc-sub">2 players · WAITING</div>
+              <span class="tc-join">JOIN</span>
+            </div>
+            <!-- No ghost tile for player — can't create tables -->
+          </div>
+          <div style="font-size:0.68rem;color:var(--dim);margin-top:4px;font-style:italic;">Ask your coach to create a new table.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coach Lobby -->
+  <div style="margin-bottom:2.5rem;" class="fade-in">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <h3 style="color:var(--text);font-size:0.9rem;text-transform:none;letter-spacing:0;">Coach View</h3>
+      <span class="badge badge-gold">admin:access · table:create · playlist:manage · crm:view</span>
+    </div>
+    <div class="mockup-chrome">
+      <div class="mockup-titlebar">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <div class="url-bar">localhost:5173/lobby</div>
+      </div>
+      <div class="lobby-topbar">
+        <div class="lobby-brand">♠ POKER TRAINER</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:0.72rem;color:var(--muted);">Coach Rivera</span>
+          <span class="badge badge-gold">Coach</span>
+          <span style="background:rgba(48,54,61,0.6);border:1px solid var(--border);color:var(--dim);font-size:0.65rem;padding:2px 8px;border-radius:4px;cursor:pointer;">Logout</span>
+        </div>
+      </div>
+      <div class="lobby-content">
+        <div class="lobby-sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-label">Navigation</div>
+            <div class="sidebar-item active"><span class="sidebar-icon">🏠</span> Lobby</div>
+            <div class="sidebar-item"><span class="sidebar-icon">📊</span> Analytics</div>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-label" style="color:var(--gold);">Admin</div>
+            <div class="admin-link">👤 User Management</div>
+            <div class="admin-link">🏗 Hand Builder</div>
+            <div class="admin-link">📋 Player CRM</div>
+            <div class="admin-link">🏆 Tournaments</div>
+          </div>
+        </div>
+        <div class="lobby-main">
+          <div class="stat-row">
+            <div class="stat-mini"><div class="v">6</div><div class="l">Students</div></div>
+            <div class="stat-mini"><div class="v">3</div><div class="l">Active Tables</div></div>
+            <div class="stat-mini"><div class="v">847</div><div class="l">Total Hands</div></div>
+            <div class="stat-mini"><div class="v">12</div><div class="l">Playlists</div></div>
+          </div>
+          <div style="font-size:0.65rem;color:var(--dim);letter-spacing:0.08em;text-transform:uppercase;margin-top:4px;">Tables</div>
+          <div class="table-grid">
+            <div class="table-card-m" style="border-color:rgba(212,175,55,0.3);">
+              <div class="tc-name">Main Table</div>
+              <div class="tc-sub">3 players · <span style="color:#93c5fd">PREFLOP</span> · Coached</div>
+              <span class="tc-join">MANAGE</span>
+            </div>
+            <div class="table-card-m">
+              <div class="tc-name">Practice</div>
+              <div class="tc-sub">2 players · Auto Cash</div>
+              <span class="tc-join">VIEW</span>
+            </div>
+            <div class="ghost-tile">+ New Table</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Lobby -->
+  <div style="margin-bottom:2.5rem;" class="fade-in">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <h3 style="color:var(--text);font-size:0.9rem;text-transform:none;letter-spacing:0;">Admin / Superadmin View</h3>
+      <span class="badge badge-purple">All 12 permissions</span>
+    </div>
+    <div class="mockup-chrome">
+      <div class="mockup-titlebar">
+        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+        <div class="url-bar">localhost:5173/lobby</div>
+      </div>
+      <div class="lobby-topbar">
+        <div class="lobby-brand">♠ POKER TRAINER</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:0.72rem;color:var(--muted);">System Admin</span>
+          <span class="badge badge-purple">Admin</span>
+        </div>
+      </div>
+      <div class="lobby-content">
+        <div class="lobby-sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-label">Navigation</div>
+            <div class="sidebar-item active"><span class="sidebar-icon">🏠</span> Lobby</div>
+            <div class="sidebar-item"><span class="sidebar-icon">📊</span> Reports</div>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-label" style="color:var(--purple);">Admin Panel</div>
+            <div class="admin-link" style="color:var(--purple);">👤 User Management</div>
+            <div class="admin-link" style="color:var(--purple);">🏗 Hand Builder</div>
+            <div class="admin-link" style="color:var(--purple);">📋 Player CRM</div>
+            <div class="admin-link" style="color:var(--purple);">🏆 Tournaments</div>
+            <div class="admin-link" style="color:var(--purple);">🔐 Roles &amp; Perms</div>
+          </div>
+        </div>
+        <div class="lobby-main">
+          <div class="stat-row">
+            <div class="stat-mini"><div class="v">14</div><div class="l">Users</div></div>
+            <div class="stat-mini"><div class="v">5</div><div class="l">Active Tables</div></div>
+            <div class="stat-mini"><div class="v">2,341</div><div class="l">Total Hands</div></div>
+            <div class="stat-mini"><div class="v" style="color:var(--green)">3</div><div class="l">Online Now</div></div>
+          </div>
+          <div style="font-size:0.65rem;color:var(--dim);letter-spacing:0.08em;text-transform:uppercase;margin-top:4px;">All Tables</div>
+          <div class="table-grid">
+            <div class="table-card-m">
+              <div class="tc-name">Main Table</div>
+              <div class="tc-sub">3 players · <span style="color:#93c5fd">PREFLOP</span></div>
+              <span class="tc-join">MANAGE</span>
+            </div>
+            <div class="table-card-m">
+              <div class="tc-name">Tournament #1</div>
+              <div class="tc-sub">6 players · <span style="color:var(--gold)">FLOP</span> · Tournament</div>
+              <span class="tc-join">MONITOR</span>
+            </div>
+            <div class="ghost-tile">+ New Table</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ══════════════════════════════ GAME MODES ══════════════════════════════ -->
+<section id="game-modes">
+<div class="container">
+  <h2>3 Game Modes</h2>
+  <div class="grid-3 fade-in" style="margin-bottom:2rem;">
+    <div class="card" style="border-color:rgba(212,175,55,0.3);">
+      <div style="font-size:0.65rem;letter-spacing:0.1em;color:var(--gold);text-transform:uppercase;font-weight:700;margin-bottom:8px;">CoachedController</div>
+      <h3 style="color:var(--text);font-size:1rem;font-weight:800;text-transform:none;letter-spacing:0;margin-bottom:8px;">Coached Cash</h3>
+      <p style="font-size:0.78rem;color:var(--muted);">Coach controls dealing manually. Coach is not a seated player. Full sidebar with pause, undo, card picker, stacks, playlists.</p>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:10px;">
+        <span class="tag tag-gold">Manual deal</span>
+        <span class="tag tag-gold">Pause/resume</span>
+        <span class="tag tag-gold">Undo action</span>
+        <span class="tag tag-gold">CoachSidebar</span>
+      </div>
+    </div>
+    <div class="card" style="border-color:rgba(88,166,255,0.3);">
+      <div style="font-size:0.65rem;letter-spacing:0.1em;color:var(--blue);text-transform:uppercase;font-weight:700;margin-bottom:8px;">AutoController</div>
+      <h3 style="color:var(--text);font-size:1rem;font-weight:800;text-transform:none;letter-spacing:0;margin-bottom:8px;">Auto Cash</h3>
+      <p style="font-size:0.78rem;color:var(--muted);">Hands deal automatically every 2s. Coach joins as a regular seated player. No coaching sidebar — everyone plays.</p>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:10px;">
+        <span class="tag tag-blue">Auto-deal 2s</span>
+        <span class="tag tag-blue">Coach is player</span>
+        <span class="tag tag-blue">≥2 seated</span>
+      </div>
+    </div>
+    <div class="card" style="border-color:rgba(188,140,255,0.3);">
+      <div style="font-size:0.65rem;letter-spacing:0.1em;color:var(--purple);text-transform:uppercase;font-weight:700;margin-bottom:8px;">TournamentController</div>
+      <h3 style="color:var(--text);font-size:1rem;font-weight:800;text-transform:none;letter-spacing:0;margin-bottom:8px;">Tournament</h3>
+      <p style="font-size:0.78rem;color:var(--muted);">Extends AutoController. Blind level timer, elimination tracking, tournament end detection. Coach joins as player.</p>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:10px;">
+        <span class="tag tag-grey">Blind schedule</span>
+        <span class="tag tag-grey">Level timer</span>
+        <span class="tag tag-grey">Eliminations</span>
+        <span class="tag tag-grey">final_level event</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coach-as-player fix callout -->
+  <div style="background:rgba(63,185,80,0.06);border:1px solid rgba(63,185,80,0.25);border-radius:10px;padding:1.25rem;margin-bottom:2rem;" class="fade-in">
+    <div style="font-weight:700;color:var(--green);font-size:0.82rem;letter-spacing:0.06em;margin-bottom:6px;">✓ FIXED — Coach-as-Player in Non-Coached Modes</div>
+    <p style="font-size:0.82rem;color:var(--muted);">
+      <code style="background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:3px;">joinRoom.js</code> now awaits the table's <code>mode</code> from the DB before applying coach logic. In <code>uncoached_cash</code> and <code>tournament</code> modes, <code>isCoach</code> is forced to <code>false</code> regardless of JWT role — so coaches get dealt cards and sit at the table like any player.
+    </p>
+    <div class="code-block" style="margin-top:10px;">
+<span class="kw">const</span> tableRow = <span class="kw">await</span> TableRepository.<span class="fn">getTable</span>(tableId).<span class="fn">catch</span>(() => <span class="kw">null</span>);
+<span class="kw">const</span> mode = tableRow?.mode ?? <span class="str">'coached_cash'</span>;
+<span class="kw">if</span> (mode !== <span class="str">'coached_cash'</span>) isCoach = <span class="kw">false</span>; <span class="cm">// coach becomes a player</span>
+    </div>
+  </div>
+
+  <!-- Tournament Panel mockup -->
+  <h3>Tournament Info Panel</h3>
+  <div class="grid-2 fade-in">
+    <div class="tourn-panel">
+      <div class="tourn-header">
+        <span class="tourn-title">🏆 Tournament #1</span>
+        <span class="badge badge-gold">Level 3</span>
+      </div>
+      <div class="tourn-blind">100 / 200</div>
+      <div class="tourn-level">Blinds · Ante 25</div>
+      <div class="timer-bar-track">
+        <div class="timer-bar-fill" style="width:62%;background:var(--yellow);"></div>
+      </div>
+      <div class="tourn-timer" style="color:var(--yellow);">12:18</div>
+      <div style="font-size:0.65rem;color:var(--dim);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">Eliminations</div>
+      <div class="elim-item">
+        <div class="elim-pos">4th</div>
+        <div class="elim-name">Marcus T.</div>
+        <div class="elim-chips">0 chips</div>
+        <span class="badge badge-grey" style="font-size:0.6rem;">out</span>
+      </div>
+      <div class="elim-item">
+        <div class="elim-pos">5th</div>
+        <div class="elim-name">Alex K.</div>
+        <div class="elim-chips">0 chips</div>
+        <span class="badge badge-grey" style="font-size:0.6rem;">out</span>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:6px;">
+        <button class="ctrl-btn" style="margin:0;flex:1;">Next Level</button>
+        <button class="ctrl-btn primary" style="margin:0;flex:1;">End Tournament</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="card" style="flex:1;">
+        <div style="font-size:0.65rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Blind Schedule</div>
+        <table style="width:100%;font-size:0.72rem;border-collapse:collapse;">
+          <tr style="color:var(--dim)"><th style="text-align:left;padding:3px 6px;">Lvl</th><th style="padding:3px 6px;">SB</th><th style="padding:3px 6px;">BB</th><th style="padding:3px 6px;">Ante</th><th style="padding:3px 6px;">Min</th></tr>
+          <tr style="color:var(--muted)"><td style="padding:3px 6px;">1</td><td style="padding:3px 6px;">25</td><td style="padding:3px 6px;">50</td><td style="padding:3px 6px;">0</td><td style="padding:3px 6px;">20</td></tr>
+          <tr style="color:var(--muted)"><td style="padding:3px 6px;">2</td><td style="padding:3px 6px;">50</td><td style="padding:3px 6px;">100</td><td style="padding:3px 6px;">10</td><td style="padding:3px 6px;">20</td></tr>
+          <tr style="background:rgba(212,175,55,0.08);color:var(--gold)"><td style="padding:3px 6px;">3 ▶</td><td style="padding:3px 6px;">100</td><td style="padding:3px 6px;">200</td><td style="padding:3px 6px;">25</td><td style="padding:3px 6px;">20</td></tr>
+          <tr style="color:var(--dim)"><td style="padding:3px 6px;">4</td><td style="padding:3px 6px;">200</td><td style="padding:3px 6px;">400</td><td style="padding:3px 6px;">50</td><td style="padding:3px 6px;">15</td></tr>
+        </table>
+      </div>
+      <div class="card" style="flex:1;">
+        <div style="font-size:0.65rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">Socket Events</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div><span class="badge badge-blue" style="font-size:0.62rem;">tournament:blind_up</span> <span style="font-size:0.7rem;color:var(--muted);">level advanced</span></div>
+          <div><span class="badge badge-blue" style="font-size:0.62rem;">tournament:time_remaining</span> <span style="font-size:0.7rem;color:var(--muted);">countdown tick</span></div>
+          <div><span class="badge badge-red" style="font-size:0.62rem;">tournament:elimination</span> <span style="font-size:0.7rem;color:var(--muted);">player bust out</span></div>
+          <div><span class="badge badge-gold" style="font-size:0.62rem;">tournament:final_level</span> <span style="font-size:0.7rem;color:var(--muted);">last level reached</span></div>
+          <div><span class="badge badge-green" style="font-size:0.62rem;">tournament:ended</span> <span style="font-size:0.7rem;color:var(--muted);">winner declared</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ══════════════════════════════ NEW COMPONENTS ══════════════════════════════ -->
+<section id="components">
+<div class="container">
+  <h2>New UI Components</h2>
+
+  <!-- CoachSidebar 3-tab -->
+  <div class="grid-2 fade-in" style="margin-bottom:2rem;align-items:start;">
+    <div>
+      <h3>CoachSidebar — 3-Tab Design</h3>
+      <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;">Refactored from 1,626 lines to 299 lines. Three tabs: GAME (controls), HANDS (library + history), PLAYLISTS. Replay controls moved to PokerTable.</p>
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div class="sidebar-mock">
+          <div class="sidebar-tabs">
+            <div class="sidebar-tab active">GAME</div>
+            <div class="sidebar-tab">HANDS</div>
+            <div class="sidebar-tab">PLAYLISTS</div>
+          </div>
+          <div class="ctrl-section">
+            <div class="ctrl-header">Game Controls</div>
+            <button class="ctrl-btn primary">Start Hand</button>
+            <button class="ctrl-btn">Pause</button>
+            <button class="ctrl-btn">Force Next Street</button>
+          </div>
+          <div class="ctrl-section">
+            <div class="ctrl-header">Blind Levels</div>
+            <div style="display:flex;gap:4px;font-size:0.7rem;color:var(--muted);margin-bottom:4px;">
+              <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:3px;padding:4px;text-align:center;">SB: 25</div>
+              <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:3px;padding:4px;text-align:center;">BB: 50</div>
+            </div>
+          </div>
+          <div class="ctrl-section">
+            <div class="ctrl-header">Undo Controls</div>
+            <button class="ctrl-btn">Undo Action</button>
+            <button class="ctrl-btn">Rollback Street</button>
+          </div>
+          <div class="ctrl-section">
+            <div class="ctrl-header">Players</div>
+            <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--muted);padding:3px 0;">
+              <span>Alex K.</span><span style="color:var(--gold)">1,000</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--muted);padding:3px 0;">
+              <span>Marcus T.</span><span style="color:var(--gold)">850</span>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-mock">
+          <div class="sidebar-tabs">
+            <div class="sidebar-tab">GAME</div>
+            <div class="sidebar-tab active">HANDS</div>
+            <div class="sidebar-tab">PLAYLISTS</div>
+          </div>
+          <div class="ctrl-section">
+            <div class="ctrl-header">Hand Library</div>
+            <div style="font-size:0.68rem;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border);">AA vs KK — Preflop</div>
+            <div style="font-size:0.68rem;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border);">Check-raise flop bluff</div>
+            <div style="font-size:0.68rem;color:var(--gold);padding:4px 0;">+ Build Scenario</div>
+          </div>
+          <div class="ctrl-section">
+            <div class="ctrl-header">History</div>
+            <div style="font-size:0.68rem;color:var(--muted);padding:3px 0;">Hand #142 — Won 450</div>
+            <div style="font-size:0.68rem;color:var(--muted);padding:3px 0;">Hand #141 — Lost 200</div>
+            <div style="font-size:0.68rem;color:var(--muted);padding:3px 0;">Hand #140 — Won 150</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Poker Table with players -->
+    <div>
+      <h3>Poker Table — Role-Aware Layout</h3>
+      <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem;">In coached mode: coach sees sidebar, not seated. In auto/tournament: coach is a seated player, no sidebar shown.</p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;">
+        <div style="font-size:0.65rem;color:var(--dim);margin-bottom:6px;text-align:center;letter-spacing:0.06em;text-transform:uppercase;">Coached Mode — Coach sees sidebar + controls</div>
+        <div class="poker-table-wrap">
+          <div class="sidebar-mock" style="width:160px;font-size:0.68rem;">
+            <div class="ctrl-btn primary" style="font-size:0.65rem;">Deal Hand</div>
+            <div style="font-size:0.6rem;color:var(--dim);margin-top:6px;">Coach is NOT seated</div>
+            <div style="font-size:0.6rem;color:var(--dim);">Controls dealing manually</div>
+          </div>
+          <div class="felt" style="max-width:280px;aspect-ratio:16/10;">
+            <div class="pot-display">
+              <div class="pot-label">POT</div>
+              <div class="pot-value">$450</div>
+              <div class="board-cards">
+                <div class="card-m red">A♥</div>
+                <div class="card-m">K♠</div>
+                <div class="card-m red">7♦</div>
+                <div class="card-m face-down"></div>
+                <div class="card-m face-down"></div>
+              </div>
+            </div>
+            <div class="seat active" style="top:8px;left:50%;transform:translateX(-50%);">
+              <div class="sname">Alex</div><div class="sstack">$750</div>
+            </div>
+            <div class="seat dealer" style="bottom:8px;left:30%;">
+              <div class="sname">Marcus</div><div class="sstack">$1,200</div>
+            </div>
+          </div>
+        </div>
+        <hr class="divider" style="margin:10px 0;">
+        <div style="font-size:0.65rem;color:var(--dim);margin-bottom:6px;text-align:center;letter-spacing:0.06em;text-transform:uppercase;">Tournament Mode — Coach is seated player, no sidebar</div>
+        <div style="display:flex;justify-content:center;">
+          <div class="felt" style="max-width:320px;aspect-ratio:16/10;">
+            <div class="pot-display">
+              <div class="pot-label">POT</div>
+              <div class="pot-value">$1,200</div>
+              <div class="board-cards">
+                <div class="card-m">Q♠</div>
+                <div class="card-m red">Q♥</div>
+                <div class="card-m">8♣</div>
+                <div class="card-m face-down"></div>
+                <div class="card-m face-down"></div>
+              </div>
+            </div>
+            <div class="seat" style="top:8px;left:20%;">
+              <div class="sname">Coach</div><div class="sstack">$3,200</div>
+            </div>
+            <div class="seat active" style="top:8px;right:20%;">
+              <div class="sname">Alex</div><div class="sstack">$1,800</div>
+            </div>
+            <div class="seat dealer" style="bottom:8px;left:50%;transform:translateX(-50%);">
+              <div class="sname">Marcus</div><div class="sstack">$2,100</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Player CRM -->
+  <h3 style="margin-bottom:1rem;">Player CRM — Admin View</h3>
+  <div class="mockup-chrome fade-in" style="margin-bottom:2rem;">
+    <div class="mockup-titlebar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <div class="url-bar">localhost:5173/admin/crm</div>
+    </div>
+    <div style="padding:12px;background:var(--bg);">
+      <div class="crm-grid">
+        <div class="crm-player-list">
+          <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.08em;padding:4px 8px;margin-bottom:4px;">Students (6)</div>
+          <div class="crm-player-item selected">Alex Kim</div>
+          <div class="crm-player-item">Marcus Torres</div>
+          <div class="crm-player-item">Jordan Lee</div>
+          <div class="crm-player-item">Sam Patel</div>
+          <div class="crm-player-item">Taylor Wong</div>
+          <div class="crm-player-item">Riley Chen</div>
+        </div>
+        <div class="crm-detail">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:1rem;font-weight:800;color:var(--text);">Alex Kim</div>
+              <div style="font-size:0.72rem;color:var(--muted);">Student · Joined 2026-01-15</div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <span class="tag tag-blue">aggressive</span>
+              <span class="tag tag-yellow">improving</span>
+            </div>
+          </div>
+          <div class="crm-stat-row">
+            <div class="crm-stat"><div class="cv">24%</div><div class="cl">VPIP</div><div class="mini-bar"><div class="mini-bar-fill" style="width:24%"></div></div></div>
+            <div class="crm-stat"><div class="cv">18%</div><div class="cl">PFR</div><div class="mini-bar"><div class="mini-bar-fill" style="width:18%;background:var(--blue)"></div></div></div>
+            <div class="crm-stat"><div class="cv">8%</div><div class="cl">3-Bet%</div><div class="mini-bar"><div class="mini-bar-fill" style="width:8%;background:var(--purple)"></div></div></div>
+            <div class="crm-stat"><div class="cv" style="color:var(--green);">+8.2k</div><div class="cl">Net Chips</div></div>
+          </div>
+          <div>
+            <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Coach Notes</div>
+            <div class="note-item"><div class="note-date">2026-03-28</div><div class="note-text">Tendency to over-bet the turn. Need to work on sizing relative to pot.</div></div>
+            <div class="note-item"><div class="note-date">2026-03-21</div><div class="note-text">Great improvement on 3-bet defense this week. BTN opens are cleaner.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TableStatusChip -->
+  <h3 style="margin-bottom:1rem;">TableStatusChip — Compact Live Summary</h3>
+  <div class="grid-4 fade-in">
+    <div class="card" style="padding:10px;">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text);display:flex;justify-content:space-between;align-items:center;">
+        Main Table
+        <span style="background:rgba(59,130,246,0.2);color:#93c5fd;border:1px solid rgba(59,130,246,0.35);padding:1px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;letter-spacing:0.1em;">PREFLOP</span>
+      </div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">3 players · preflop</div>
+      <div style="font-size:0.68rem;color:var(--gold);margin-top:2px;">Pot: 150</div>
+      <div style="font-size:0.68rem;color:var(--gold);margin-top:2px;">Acting: Alex K.</div>
+    </div>
+    <div class="card" style="padding:10px;">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text);display:flex;justify-content:space-between;align-items:center;">
+        Practice
+        <span style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid rgba(100,116,139,0.35);padding:1px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;letter-spacing:0.1em;">WAITING</span>
+      </div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">0 players</div>
+    </div>
+    <div class="card" style="padding:10px;">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text);display:flex;justify-content:space-between;align-items:center;">
+        Tournament #1
+        <span style="background:rgba(34,197,94,0.2);color:#86efac;border:1px solid rgba(34,197,94,0.35);padding:1px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;letter-spacing:0.1em;">FLOP</span>
+      </div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">5 players · flop</div>
+      <div style="font-size:0.68rem;color:var(--gold);margin-top:2px;">Pot: 2,400</div>
+    </div>
+    <div class="card" style="padding:10px;">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text);display:flex;justify-content:space-between;align-items:center;">
+        Deep Stack
+        <span style="background:rgba(212,175,55,0.2);color:#d4af37;border:1px solid rgba(212,175,55,0.35);padding:1px 6px;border-radius:4px;font-size:0.62rem;font-weight:700;letter-spacing:0.1em;">SHOWDOWN</span>
+      </div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:4px;">2 players · showdown</div>
+      <div style="font-size:0.68rem;color:var(--gold);margin-top:2px;">Pot: 8,900</div>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ══════════════════════════════ ARCHITECTURE ══════════════════════════════ -->
+<section id="architecture">
+<div class="container">
+  <h2>Architecture — Layer Diagram</h2>
+
+  <div class="grid-2 fade-in" style="align-items:start;">
+    <div>
+      <!-- Layer stack -->
+      <div class="arch-layer" style="background:rgba(88,166,255,0.05);border-color:rgba(88,166,255,0.3);">
+        <div class="arch-layer-title" style="color:var(--blue);">UI Layer — React + Vite (port 5173)</div>
+        <div class="arch-chips">
+          <span class="arch-chip blue">AuthContext</span>
+          <span class="arch-chip blue">LobbyContext</span>
+          <span class="arch-chip blue">TableContext</span>
+          <span class="arch-chip">MainLobby</span>
+          <span class="arch-chip">TablePage</span>
+          <span class="arch-chip">CoachSidebar</span>
+          <span class="arch-chip">TournamentInfoPanel</span>
+          <span class="arch-chip">PlayerCRM</span>
+        </div>
+      </div>
+      <div class="arch-layer" style="background:rgba(212,175,55,0.04);border-color:rgba(212,175,55,0.3);">
+        <div class="arch-layer-title" style="color:var(--gold);">Auth &amp; Transport</div>
+        <div class="arch-chips">
+          <span class="arch-chip gold">JWT (7d expiry)</span>
+          <span class="arch-chip gold">requireAuth</span>
+          <span class="arch-chip gold">requirePermission</span>
+          <span class="arch-chip gold">socketAuthMiddleware</span>
+          <span class="arch-chip gold">socketPermissions</span>
+          <span class="arch-chip">Socket.io rooms</span>
+          <span class="arch-chip">REST (Express)</span>
+        </div>
+      </div>
+      <div class="arch-layer" style="background:rgba(63,185,80,0.04);border-color:rgba(63,185,80,0.3);">
+        <div class="arch-layer-title" style="color:var(--green);">Game Engine — Node.js (port 3001)</div>
+        <div class="arch-chips">
+          <span class="arch-chip green">GameManager</span>
+          <span class="arch-chip green">SessionManager</span>
+          <span class="arch-chip green">CoachedController</span>
+          <span class="arch-chip green">AutoController</span>
+          <span class="arch-chip green">TournamentController</span>
+          <span class="arch-chip green">BlindSchedule</span>
+          <span class="arch-chip">ShowdownResolver</span>
+          <span class="arch-chip">ReplayEngine</span>
+          <span class="arch-chip">HandEvaluator</span>
+          <span class="arch-chip">AnalyzerService</span>
+        </div>
+      </div>
+      <div class="arch-layer" style="background:rgba(248,81,73,0.04);border-color:rgba(248,81,73,0.3);">
+        <div class="arch-layer-title" style="color:var(--red);">Persistence Layer</div>
+        <div class="arch-chips">
+          <span class="arch-chip red">HandRepository</span>
+          <span class="arch-chip red">PlayerRepository</span>
+          <span class="arch-chip red">PlaylistRepository</span>
+          <span class="arch-chip red">TableRepository</span>
+          <span class="arch-chip red">TournamentRepository</span>
+          <span class="arch-chip red">SessionRepository</span>
+          <span class="arch-chip">TagRepository</span>
+          <span class="arch-chip">CRMRepository</span>
+        </div>
+      </div>
+      <div class="arch-layer" style="background:rgba(188,140,255,0.04);border-color:rgba(188,140,255,0.3);">
+        <div class="arch-layer-title" style="color:var(--purple);">Database — Supabase PostgreSQL</div>
+        <div class="arch-chips">
+          <span class="arch-chip">player_profiles</span>
+          <span class="arch-chip">roles / permissions</span>
+          <span class="arch-chip">player_roles</span>
+          <span class="arch-chip">hand_logs / actions</span>
+          <span class="arch-chip">hand_tags</span>
+          <span class="arch-chip">playlists</span>
+          <span class="arch-chip">tables</span>
+          <span class="arch-chip">tournaments</span>
+          <span class="arch-chip">player_notes</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Request flow diagram -->
+    <div style="display:flex;flex-direction:column;gap:1rem;">
+      <div class="card">
+        <h3>HTTP Request Flow</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          <div class="flow">
+            <div class="flow-box blue">Browser</div><div class="flow-arr">→</div>
+            <div class="flow-box gold">requireAuth</div><div class="flow-arr">→</div>
+            <div class="flow-box gold">requirePermission</div><div class="flow-arr">→</div>
+            <div class="flow-box green">Handler</div><div class="flow-arr">→</div>
+            <div class="flow-box red">Repository</div>
+          </div>
+          <div style="font-size:0.72rem;color:var(--muted);">401 if no JWT · 403 if wrong permissions · 200/201 if OK</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Socket Event Flow</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          <div class="flow">
+            <div class="flow-box blue">Client emit</div><div class="flow-arr">→</div>
+            <div class="flow-box gold">socketAuth</div><div class="flow-arr">→</div>
+            <div class="flow-box gold">socketPerm</div><div class="flow-arr">→</div>
+            <div class="flow-box green">GameManager</div>
+          </div>
+          <div style="font-size:0.72rem;color:var(--muted);">socket.data.stableId populated · requireSocketPermission checks cache</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Permission Cache</h3>
+        <div class="code-block" style="font-size:0.72rem;margin-top:8px;">
+<span class="cm">// In-memory Map per server process</span>
+<span class="kw">const</span> permissionCache = <span class="kw">new</span> <span class="fn">Map</span>();
+<span class="cm">// &lt;playerId, Set&lt;permKey&gt;&gt;</span>
+
+<span class="cm">// Invalidate on role change:</span>
+<span class="fn">invalidatePermissionCache</span>(playerId);
+
+<span class="cm">// DB query (on cache miss):</span>
+supabase.<span class="fn">from</span>(<span class="str">'player_roles'</span>)
+  .<span class="fn">select</span>(<span class="str">'roles(role_permissions(permissions(key)))'</span>)
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Multi-Table Strategy</h3>
+        <p style="font-size:0.78rem;color:var(--muted);margin-top:6px;">One socket per table — zero server changes. Each table view opens an isolated socket.io connection via <code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px;">useTableSocket(tableId)</code>. Acceptable for ≤4 concurrent tables.</p>
+        <div class="flow" style="margin-top:8px;gap:4px;flex-wrap:wrap;">
+          <div class="flow-box" style="font-size:0.68rem;">Table 1 socket</div>
+          <div class="flow-arr" style="font-size:0.8rem;">+</div>
+          <div class="flow-box" style="font-size:0.68rem;">Table 2 socket</div>
+          <div class="flow-arr" style="font-size:0.8rem;">+</div>
+          <div class="flow-box" style="font-size:0.68rem;">Table 3 socket</div>
+          <div class="flow-arr">→</div>
+          <div class="flow-box green" style="font-size:0.68rem;">Same server</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DB Schema snippet -->
+  <h3 style="margin-top:2rem;">Key DB Schema — RBAC Tables (Migration 008)</h3>
+  <div class="grid-2 fade-in">
+    <div class="code-block" style="font-size:0.72rem;">
+<span class="cm">-- 4 new tables seeded at migration</span>
+<span class="kw">CREATE TABLE</span> roles (
+  id UUID <span class="op">PRIMARY KEY</span>,
+  name VARCHAR(<span class="num">50</span>) <span class="op">UNIQUE NOT NULL</span>,  <span class="cm">-- 'coach','admin'…</span>
+  is_system BOOLEAN
+);
+<span class="kw">CREATE TABLE</span> permissions (
+  id UUID <span class="op">PRIMARY KEY</span>,
+  key VARCHAR(<span class="num">100</span>) <span class="op">UNIQUE NOT NULL</span>, <span class="cm">-- 'hand:tag'</span>
+  category VARCHAR(<span class="num">50</span>)            <span class="cm">-- 'hand','table'…</span>
+);
+<span class="kw">CREATE TABLE</span> role_permissions (
+  role_id UUID, permission_id UUID,
+  <span class="op">PRIMARY KEY</span> (role_id, permission_id)
+);
+<span class="kw">CREATE TABLE</span> player_roles (
+  player_id UUID, role_id UUID,
+  assigned_by UUID, assigned_at TIMESTAMPTZ,
+  <span class="op">PRIMARY KEY</span> (player_id, role_id)
+);
+    </div>
+    <div class="code-block" style="font-size:0.72rem;">
+<span class="cm">-- Migration 009: User Management</span>
+<span class="kw">ALTER TABLE</span> player_profiles
+  <span class="op">ADD COLUMN</span> email         VARCHAR(<span class="num">255</span>),
+  <span class="op">ADD COLUMN</span> password_hash VARCHAR(<span class="num">255</span>),
+  <span class="op">ADD COLUMN</span> status        VARCHAR(<span class="num">20</span>)
+    <span class="op">CHECK</span> (status <span class="op">IN</span> (<span class="str">'active'</span>,<span class="str">'suspended'</span>,<span class="str">'archived'</span>)),
+  <span class="op">ADD COLUMN</span> avatar_url    TEXT,
+  <span class="op">ADD COLUMN</span> notes         TEXT,
+  <span class="op">ADD COLUMN</span> metadata      JSONB,
+  <span class="op">ADD COLUMN</span> created_by    UUID;
+
+<span class="cm">-- is_coach / is_roster columns deprecated</span>
+<span class="cm">-- (moved to player_roles)</span>
+
+<span class="cm">-- Future migrations: 010 scenario_configs</span>
+<span class="cm">-- 011 crm tables, 012 tournament tables</span>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ══════════════════════════════ TEST COVERAGE ══════════════════════════════ -->
+<section id="tests">
+<div class="container">
+  <h2>Test Coverage — Before vs After</h2>
+
+  <div class="test-before-after fade-in" style="margin-bottom:2rem;">
+    <div class="test-box">
+      <div class="test-num" style="color:var(--muted)">1,245</div>
+      <div class="test-lbl">Server Tests<br>Before Phase 2</div>
+    </div>
+    <div class="arrow-big">→</div>
+    <div class="test-box" style="border-color:rgba(63,185,80,0.3);">
+      <div class="test-num" style="color:var(--green)">1,598</div>
+      <div class="test-lbl">Server Tests<br>After Phase 2</div>
+      <div class="delta-chip" style="display:inline-block;margin-top:8px;">+353 tests</div>
+    </div>
+    <div style="width:60px;text-align:center;">
+      <div style="font-size:1.8rem;color:var(--border);">|</div>
+    </div>
+    <div class="test-box">
+      <div class="test-num" style="color:var(--muted)">189</div>
+      <div class="test-lbl">Client Tests<br>Before Phase 2</div>
+    </div>
+    <div class="arrow-big">→</div>
+    <div class="test-box" style="border-color:rgba(88,166,255,0.3);">
+      <div class="test-num" style="color:var(--blue)">237</div>
+      <div class="test-lbl">Client Tests<br>After Phase 2</div>
+      <div class="delta-chip" style="display:inline-block;margin-top:8px;border-color:rgba(88,166,255,0.3);color:var(--blue);background:rgba(88,166,255,0.1);">+48 tests</div>
+    </div>
+  </div>
+
+  <h3>New Test Files Added</h3>
+  <div class="grid-2 fade-in">
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="card" style="padding:12px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text);margin-bottom:6px;">server/tests/requirePermission.test.js</div>
+        <div style="font-size:0.7rem;color:var(--muted);">Multi-key checks · empty/null Supabase data · socket permission tests · cache invalidation</div>
+        <div style="margin-top:6px;"><span class="badge badge-green">26 tests</span></div>
+      </div>
+      <div class="card" style="padding:12px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text);margin-bottom:6px;">server/tests/TableRepository.test.js</div>
+        <div style="font-size:0.7rem;color:var(--muted);">CRUD ops · null getTable · idempotent closeTable · partial update · status filter</div>
+        <div style="margin-top:6px;"><span class="badge badge-green">15 tests</span></div>
+      </div>
+      <div class="card" style="padding:12px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text);margin-bottom:6px;">server/tests/TournamentRepository.test.js</div>
+        <div style="font-size:0.7rem;color:var(--muted);">recordElimination winner · empty standings · null config · standings ordering</div>
+        <div style="margin-top:6px;"><span class="badge badge-green">12 tests</span></div>
+      </div>
+      <div class="card" style="padding:12px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text);margin-bottom:6px;">server/game/controllers/__tests__/BlindSchedule.test.js</div>
+        <div style="font-size:0.7rem;color:var(--muted);">Empty schedule · single level final · advance returns null · time remaining</div>
+        <div style="margin-top:6px;"><span class="badge badge-green">11 tests</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="card" style="padding:12px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text);margin-bottom:6px;">server/game/controllers/__tests__/controllers.test.js <span class="badge badge-gold" style="font-size:0.6rem;">extended</span></div>
+        <div style="font-size:0.7rem;color:var(--muted);">_advanceLevel final level · destroy clears timer · onHandComplete all bust · winner position 1</div>
+        <div style="margin-top:6px;"><span class="badge badge-green">13 tests</span></div>
+      </div>
+      <div class="card" style="padding:12px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text);margin-bottom:6px;">server/db/__tests__/REST.api.test.js <span class="badge badge-gold" style="font-size:0.6rem;">extended</span></div>
+        <div style="font-size:0.7rem;color:var(--muted);">POST/DELETE playlists · auth 401/403/201 · coach vs student role separation</div>
+        <div style="margin-top:6px;"><span class="badge badge-green">+9 tests</span></div>
+      </div>
+      <div class="card" style="padding:12px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text);margin-bottom:6px;">client/src/__tests__/CoachSidebar.test.jsx <span class="badge badge-gold" style="font-size:0.6rem;">rewritten</span></div>
+        <div style="font-size:0.7rem;color:var(--muted);">3-tab design · HANDS tab · PLAYLISTS tab · Build Scenario callback · replay controls absent · pot display</div>
+        <div style="margin-top:6px;"><span class="badge badge-blue">46 tests</span></div>
+      </div>
+      <div class="card" style="padding:12px;">
+        <div style="font-size:0.72rem;font-weight:700;color:var(--text);margin-bottom:6px;">server/routes/__tests__/tables.test.js + adminUsers.test.js</div>
+        <div style="font-size:0.7rem;color:var(--muted);">GET/POST/DELETE/PATCH tables · admin user CRUD · role assignment · 401/403/404/500 paths</div>
+        <div style="margin-top:6px;"><span class="badge badge-green">26 tests</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ══════════════════════════════ FOOTER ══════════════════════════════ -->
+<footer style="border-top:1px solid var(--border);padding:2rem 0;margin-top:0;">
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+    <div style="color:var(--dim);font-size:0.78rem;">
+      Poker Trainer — Phase 2 Changelog · Generated 2026-03-30
+    </div>
+    <div style="display:flex;gap:8px;">
+      <span class="badge badge-green">59 server suites</span>
+      <span class="badge badge-blue">1,598 passing</span>
+      <span class="badge badge-gold">0 failures</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+// Scroll-triggered fade-in
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

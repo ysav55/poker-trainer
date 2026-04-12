@@ -1,0 +1,1194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Poker Trainer — Auth System Audit</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --surface2: #252840;
+    --surface3: #2e3250;
+    --border: #3a3f60;
+    --accent: #6c7fff;
+    --accent2: #a78bfa;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --orange: #fb923c;
+    --cyan: #22d3ee;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --code-bg: #0d1117;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+
+  /* Layout */
+  #sidebar { position: fixed; left: 0; top: 0; width: 260px; height: 100vh; overflow-y: auto; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; z-index: 100; }
+  #content { margin-left: 260px; padding: 40px 48px; max-width: 1100px; }
+
+  /* Sidebar */
+  .sidebar-title { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--accent); text-transform: uppercase; padding: 0 20px 12px; }
+  .sidebar-section { margin-bottom: 4px; }
+  .sidebar-section > a { display: block; padding: 7px 20px; color: var(--text-muted); text-decoration: none; font-size: 13px; transition: all .15s; border-left: 2px solid transparent; }
+  .sidebar-section > a:hover, .sidebar-section > a.active { color: var(--text); background: var(--surface2); border-left-color: var(--accent); }
+  .sidebar-children { display: none; }
+  .sidebar-children a { display: block; padding: 5px 20px 5px 36px; color: var(--text-muted); text-decoration: none; font-size: 12px; transition: all .15s; }
+  .sidebar-children a:hover { color: var(--text); }
+  .sidebar-section.open .sidebar-children { display: block; }
+
+  /* Headings */
+  h1 { font-size: 28px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+  h2 { font-size: 20px; font-weight: 700; color: var(--text); margin: 48px 0 16px; padding-top: 8px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  h3 { font-size: 15px; font-weight: 700; color: var(--accent2); margin: 28px 0 10px; }
+  h4 { font-size: 13px; font-weight: 700; color: var(--cyan); margin: 18px 0 8px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .card.warn { border-color: var(--yellow); }
+  .card.danger { border-color: var(--red); }
+  .card.info { border-color: var(--accent); }
+  .card.success { border-color: var(--green); }
+
+  /* Code */
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; padding: 16px; overflow-x: auto; margin: 12px 0; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 12.5px; line-height: 1.7; }
+  code { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 12.5px; }
+  .inline-code { background: var(--surface3); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 12px; color: var(--cyan); }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  .badge-green { background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
+  .badge-yellow { background: rgba(251,191,36,.15); color: var(--yellow); border: 1px solid rgba(251,191,36,.3); }
+  .badge-red { background: rgba(248,113,113,.15); color: var(--red); border: 1px solid rgba(248,113,113,.3); }
+  .badge-blue { background: rgba(108,127,255,.15); color: var(--accent); border: 1px solid rgba(108,127,255,.3); }
+  .badge-purple { background: rgba(167,139,250,.15); color: var(--accent2); border: 1px solid rgba(167,139,250,.3); }
+  .badge-orange { background: rgba(251,146,60,.15); color: var(--orange); border: 1px solid rgba(251,146,60,.3); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th { background: var(--surface2); color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 10px 14px; text-align: left; border: 1px solid var(--border); }
+  td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; font-size: 13px; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+
+  /* Flow diagrams */
+  .flow { display: flex; align-items: flex-start; gap: 0; flex-wrap: wrap; margin: 16px 0; }
+  .flow-step { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; font-size: 12px; position: relative; }
+  .flow-arrow { align-self: center; color: var(--text-muted); font-size: 18px; padding: 0 6px; flex-shrink: 0; }
+  .flow-step.green { border-color: var(--green); background: rgba(52,211,153,.08); }
+  .flow-step.red { border-color: var(--red); background: rgba(248,113,113,.08); }
+  .flow-step.yellow { border-color: var(--yellow); background: rgba(251,191,36,.08); }
+  .flow-step.blue { border-color: var(--accent); background: rgba(108,127,255,.08); }
+  .flow-label { font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 3px; text-transform: uppercase; letter-spacing: .06em; }
+
+  /* Lists */
+  ul, ol { padding-left: 20px; margin: 8px 0; }
+  li { margin-bottom: 4px; color: var(--text); }
+  li strong { color: var(--text); }
+
+  /* Misc */
+  .subtitle { color: var(--text-muted); margin-bottom: 32px; }
+  .section-anchor { display: block; height: 80px; margin-top: -80px; visibility: hidden; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  p { margin: 8px 0; color: var(--text-muted); }
+  p strong { color: var(--text); }
+  .callout { background: var(--surface2); border-left: 4px solid var(--accent); border-radius: 0 6px 6px 0; padding: 12px 16px; margin: 12px 0; }
+  .callout.warn { border-color: var(--yellow); }
+  .callout.danger { border-color: var(--red); }
+  .callout.success { border-color: var(--green); }
+  .tag { display: inline-block; background: var(--surface3); border: 1px solid var(--border); border-radius: 3px; padding: 1px 7px; font-size: 11px; color: var(--text-muted); margin: 2px; }
+  details { border: 1px solid var(--border); border-radius: 6px; margin: 8px 0; }
+  details > summary { padding: 10px 14px; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--accent2); background: var(--surface); border-radius: 6px; }
+  details[open] > summary { border-bottom: 1px solid var(--border); border-radius: 6px 6px 0 0; }
+  details > div { padding: 16px; }
+  .route-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .route-row:last-child { border-bottom: none; }
+  .method { font-weight: 700; font-size: 11px; width: 48px; flex-shrink: 0; text-align: center; padding: 2px 0; border-radius: 3px; }
+  .method.GET { background: rgba(52,211,153,.15); color: var(--green); }
+  .method.POST { background: rgba(108,127,255,.15); color: var(--accent); }
+  .method.PUT { background: rgba(251,191,36,.15); color: var(--yellow); }
+  .method.PATCH { background: rgba(251,146,60,.15); color: var(--orange); }
+  .method.DELETE { background: rgba(248,113,113,.15); color: var(--red); }
+  .route-path { font-family: monospace; font-size: 12.5px; color: var(--cyan); flex: 1; }
+  .route-guards { font-size: 11px; color: var(--text-muted); }
+  .tree { font-family: monospace; font-size: 13px; line-height: 1.8; color: var(--text-muted); }
+  .tree .highlight { color: var(--green); }
+  .tree .warn { color: var(--yellow); }
+  .tree .key { color: var(--accent2); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
+<nav id="sidebar">
+  <div class="sidebar-title">Auth System Audit</div>
+
+  <div class="sidebar-section">
+    <a href="#overview">🗺 Overview</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#architecture">🏗 Architecture</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#jwt">🔑 JWT Service</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#http-middleware">🛡 HTTP Middleware</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#socket-auth">⚡ Socket Auth</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#player-roster">👤 PlayerRoster</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#auth-routes">🛣 Auth Routes</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#rbac">🔐 RBAC System</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#trial">⏳ Trial System</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#join-room">🚪 join_room Guards</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#admin-users">👑 Admin User Mgmt</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#route-matrix">📋 Route Auth Matrix</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#client">💻 Client Side</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#db-schema">🗄 DB Schema</a>
+  </div>
+  <div class="sidebar-section">
+    <a href="#security">🔍 Security Notes</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════ CONTENT ═══════════════════════ -->
+<main id="content">
+
+<!-- ─── HEADER ─── -->
+<h1>🔐 Auth System Audit</h1>
+<p class="subtitle">Poker Trainer · <span class="inline-code">feat/phase2</span> · Full code audit as of 2026-04-05</p>
+
+<div class="grid-3">
+  <div class="card success">
+    <h4 style="margin-top:0">Auth Model</h4>
+    <p>JWT-based, server-issued, 7-day expiry. <strong>HS256</strong> signed with <code>SESSION_SECRET</code>.</p>
+  </div>
+  <div class="card info">
+    <h4 style="margin-top:0">Access Control</h4>
+    <p>Two-layer: <strong>requireRole()</strong> for coarse role checks, <strong>requirePermission()</strong> for 12 fine-grained keys.</p>
+  </div>
+  <div class="card warn">
+    <h4 style="margin-top:0">Identity</h4>
+    <p>Stable UUID in DB (<span class="inline-code">player_profiles.id</span>). Stored in <span class="inline-code">localStorage</span> on client.</p>
+  </div>
+</div>
+
+<!-- ─── OVERVIEW ─── -->
+<a class="section-anchor" id="overview"></a>
+<h2>🗺 System Overview</h2>
+
+<p>The auth system is <strong>fully custom</strong> — no Supabase Auth or OAuth. Every token is issued by the Express server and verified server-side. The browser never touches the Supabase service-role key.</p>
+
+<div class="card">
+  <h4 style="margin-top:0">Key design decisions</h4>
+  <ul>
+    <li><strong>Single JWT secret</strong>: <span class="inline-code">SESSION_SECRET</span> env var. Server exits on startup if missing.</li>
+    <li><strong>No refresh tokens</strong>: 7-day sliding expiry. Expired tokens force re-login.</li>
+    <li><strong>No anon access to Supabase</strong>: Client uses <span class="inline-code">apiFetch()</span> → Express → Supabase service-role key. A Proxy stub throws on any direct Supabase import in the browser.</li>
+    <li><strong>Dual identity</strong>: Socket connections use <span class="inline-code">socket.id</span> internally, but <span class="inline-code">stableId</span> (UUID from JWT/localStorage) is what gets written to the DB.</li>
+    <li><strong>Spectators</strong>: Unauthenticated users <em>can</em> connect via Socket.IO, but only as spectators. They cannot act at the table.</li>
+    <li><strong>Bot role</strong>: Server-spawned bot sockets bypass human-join checks. Role <span class="inline-code">'bot'</span> is set in JWT.</li>
+  </ul>
+</div>
+
+<!-- ─── ARCHITECTURE ─── -->
+<a class="section-anchor" id="architecture"></a>
+<h2>🏗 Architecture</h2>
+
+<h3>Auth module map</h3>
+<pre class="tree">
+server/auth/
+├── <span class="highlight">JwtService.js</span>          ← ONLY module that imports jsonwebtoken
+├── <span class="highlight">requireAuth.js</span>         ← HTTP middleware: validates Bearer token → req.user
+├── <span class="highlight">requireRole.js</span>         ← HTTP middleware factory: role exact match
+├── <span class="highlight">requirePermission.js</span>   ← HTTP middleware factory: permission key lookup (cached)
+├── <span class="highlight">socketAuthMiddleware.js</span> ← Socket.IO io.use(): populates socket.data.*
+├── <span class="highlight">socketGuards.js</span>        ← requireCoach() + re-exports requireSocketPermission
+├── <span class="highlight">socketPermissions.js</span>   ← requireSocketPermission() for socket events
+└── <span class="highlight">PlayerRoster.js</span>        ← authenticate(name, pass) → DB lookup + bcrypt
+
+server/routes/
+├── auth.js                 ← /api/auth/* — login, register, reset-password, profile
+└── admin/
+    └── users.js            ← /api/admin/users — user + role management (requires user:manage)
+
+server/routes/admin (all behind requireAuth at registration):
+├── users.js               ← requirePermission('user:manage')
+├── crm.js                 ← requirePermission('crm:view' / 'crm:edit')
+├── schools.js             ← requirePermission('school:manage')
+├── groups.js              ← requirePermission('crm:view' / 'crm:edit')
+├── scenarios.js           ← requirePermission('hand:tag')
+├── tournaments.js         ← requirePermission('tournament:manage')
+└── orgSettings.js         ← requirePermission('user:manage')
+</pre>
+
+<h3>HTTP request auth flow</h3>
+<div class="flow">
+  <div class="flow-step blue"><span class="flow-label">Client</span>apiFetch(path)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step"><span class="flow-label">Header</span>Authorization: Bearer &lt;jwt&gt;</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Middleware</span>requireAuth()</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Middleware</span>requireRole() or requirePermission()</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step green"><span class="flow-label">Handler</span>req.user set</div>
+</div>
+
+<h3>Socket connection auth flow</h3>
+<div class="flow">
+  <div class="flow-step blue"><span class="flow-label">Client</span>io({ auth: { token } })</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">io.use()</span>socketAuthMiddleware</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step"><span class="flow-label">socket.data</span>authenticated, stableId, role, isCoach, isBot</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">join_room</span>Enforces login, privacy, trial gates</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step green"><span class="flow-label">Joined</span>socket.data.tableId set</div>
+</div>
+
+<!-- ─── JWT SERVICE ─── -->
+<a class="section-anchor" id="jwt"></a>
+<h2>🔑 JWT Service — <span class="inline-code">server/auth/JwtService.js</span></h2>
+
+<div class="grid-2">
+  <div class="card">
+    <h4 style="margin-top:0">Token structure (payload)</h4>
+    <pre>{
+  stableId: "uuid",   // player_profiles.id
+  name:     "Alice",  // display_name
+  role:     "coach"   // primary role name
+}</pre>
+    <p>Plus standard JWT claims: <span class="inline-code">iat</span>, <span class="inline-code">exp</span>.</p>
+  </div>
+  <div class="card">
+    <h4 style="margin-top:0">Configuration</h4>
+    <table>
+      <tr><th>Field</th><th>Value</th></tr>
+      <tr><td>Algorithm</td><td>HS256 (jsonwebtoken default)</td></tr>
+      <tr><td>Expiry</td><td><strong>7 days</strong></td></tr>
+      <tr><td>Secret source</td><td><span class="inline-code">process.env.SESSION_SECRET</span></td></tr>
+      <tr><td>Required?</td><td><span class="badge badge-red">FATAL if missing</span> — server exits</td></tr>
+    </table>
+  </div>
+</div>
+
+<details>
+  <summary>Full source — JwtService.js</summary>
+  <div>
+<pre>'use strict';
+const jwt = require('jsonwebtoken');
+const SECRET = process.env.SESSION_SECRET;
+
+function sign(payload) {
+  return jwt.sign(payload, SECRET, { expiresIn: '7d' });
+}
+
+function verify(token) {
+  if (!token) return null;
+  try {
+    return jwt.verify(token, SECRET);
+  } catch {
+    return null;   // expired, tampered, or missing
+  }
+}
+
+module.exports = { sign, verify };</pre>
+  </div>
+</details>
+
+<div class="callout warn">
+  <strong>⚠ No token revocation.</strong> JWTs are stateless — a stolen token is valid until it expires (7 days). There is no logout endpoint, no token blacklist. Logging out on the client just deletes <span class="inline-code">localStorage.poker_trainer_jwt</span>.
+</div>
+
+<!-- ─── HTTP MIDDLEWARE ─── -->
+<a class="section-anchor" id="http-middleware"></a>
+<h2>🛡 HTTP Middleware</h2>
+
+<h3>requireAuth — <span class="inline-code">server/auth/requireAuth.js</span></h3>
+<p>The fundamental gate. Reads <span class="inline-code">Authorization: Bearer &lt;token&gt;</span>, verifies via JwtService, and attaches the decoded payload to <span class="inline-code">req.user</span>.</p>
+
+<div class="grid-2">
+  <div>
+    <h4>What it sets on req.user</h4>
+    <pre>{
+  stableId: "uuid",
+  name:     "Alice",
+  role:     "coach",
+  iat:      1234567890,
+  exp:      1235172690
+}</pre>
+  </div>
+  <div>
+    <h4>Failure responses</h4>
+    <table>
+      <tr><th>Condition</th><th>Response</th></tr>
+      <tr><td>No / malformed header</td><td><span class="badge badge-red">401</span> <code>auth_required</code></td></tr>
+      <tr><td>Invalid / expired token</td><td><span class="badge badge-red">401</span> <code>invalid_token</code></td></tr>
+    </table>
+  </div>
+</div>
+
+<details>
+  <summary>Full source — requireAuth.js</summary>
+  <div>
+<pre>'use strict';
+const JwtService = require('./JwtService');
+
+function requireAuth(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'auth_required', message: 'Login required' });
+  }
+  const payload = JwtService.verify(auth.slice(7));
+  if (!payload) {
+    return res.status(401).json({ error: 'invalid_token', message: 'Session expired — please log in again' });
+  }
+  req.user = payload;
+  next();
+}
+
+module.exports = requireAuth;</pre>
+  </div>
+</details>
+
+<hr>
+
+<h3>requireRole — <span class="inline-code">server/auth/requireRole.js</span></h3>
+<p>Middleware factory for coarse role-level gating. Must follow <span class="inline-code">requireAuth</span>. Does a <strong>strict equality check</strong> on <span class="inline-code">req.user.role</span>.</p>
+
+<div class="callout warn">
+  <strong>⚠ Exact match only.</strong> <span class="inline-code">requireRole('coach')</span> will reject <span class="inline-code">admin</span> and <span class="inline-code">superadmin</span>. There is no role hierarchy in this middleware — only the permission system in <span class="inline-code">requirePermission</span> handles that.
+</div>
+
+<div class="card">
+  <h4 style="margin-top:0">Usage in routes</h4>
+  <pre>// coach-only alert endpoints
+app.get('/api/coach/alerts', requireAuth, requireRole('coach'), handler);
+
+// coach-only playlist mutations
+app.post('/api/blind-presets', requireAuth, requireRole('coach'), handler);
+
+// coach-only announcements
+app.post('/api/announcements', requireAuth, requireRole('coach'), handler);</pre>
+</div>
+
+<details>
+  <summary>Full source — requireRole.js</summary>
+  <div>
+<pre>'use strict';
+
+function requireRole(role) {
+  return function (req, res, next) {
+    if (!req.user || req.user.role !== role) {
+      return res.status(403).json({ error: 'forbidden', message: `Requires role: ${role}` });
+    }
+    next();
+  };
+}
+
+module.exports = requireRole;</pre>
+  </div>
+</details>
+
+<hr>
+
+<h3>requirePermission — <span class="inline-code">server/auth/requirePermission.js</span></h3>
+<p>Fine-grained permission middleware backed by the DB. Queries <span class="inline-code">player_roles → roles → role_permissions → permissions</span>. Results are cached in-memory per player.</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h4 style="margin-top:0">Cache behaviour</h4>
+    <ul>
+      <li>In-memory <span class="inline-code">Map&lt;playerId, Set&lt;permKey&gt;&gt;</span></li>
+      <li>Populated on first permission check per player</li>
+      <li>Invalidated explicitly via <span class="inline-code">invalidatePermissionCache(playerId)</span></li>
+      <li>Called after any role change in admin/users.js</li>
+      <li><strong>No TTL</strong> — cache lives until server restart or explicit invalidation</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4 style="margin-top:0">CSV fallback</h4>
+    <p>If the DB query returns zero permission keys (e.g. player created via old CSV path with no <span class="inline-code">player_roles</span> rows), it falls back to a role-name lookup on the <span class="inline-code">roles</span> table using the JWT's <span class="inline-code">role</span> field as a hint.</p>
+  </div>
+</div>
+
+<details>
+  <summary>Full source — requirePermission.js</summary>
+  <div>
+<pre>'use strict';
+const supabase = require('../db/supabase.js');
+
+// In-memory cache: Map&lt;playerId, Set&lt;permKey&gt;&gt;
+const permissionCache = new Map();
+
+async function getPlayerPermissions(playerId, roleHint = null) {
+  if (permissionCache.has(playerId)) return permissionCache.get(playerId);
+
+  const { data } = await supabase
+    .from('player_roles')
+    .select('roles(role_permissions(permissions(key)))')
+    .eq('player_id', playerId);
+
+  let keys = new Set(
+    data?.flatMap(pr =>
+      pr.roles?.role_permissions?.map(rp => rp.permissions?.key).filter(Boolean) ?? []
+    ) ?? []
+  );
+
+  // Fallback: players with no player_roles rows → derive from JWT role name
+  if (keys.size === 0 && roleHint) {
+    const { data: roleData } = await supabase
+      .from('roles')
+      .select('role_permissions(permissions(key))')
+      .eq('name', roleHint)
+      .single();
+    keys = new Set(
+      roleData?.role_permissions?.map(rp => rp.permissions?.key).filter(Boolean) ?? []
+    );
+  }
+
+  permissionCache.set(playerId, keys);
+  return keys;
+}
+
+function invalidatePermissionCache(playerId) {
+  permissionCache.delete(playerId);
+}
+
+function requirePermission(...keys) {
+  return async (req, res, next) => {
+    const uid = req.user?.stableId ?? req.user?.id;
+    if (!uid) return res.status(401).json({ error: 'Unauthorized' });
+    const perms = await getPlayerPermissions(uid, req.user?.role);
+    if (keys.every(k => perms.has(k))) return next();
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  };
+}
+
+module.exports = { getPlayerPermissions, invalidatePermissionCache, requirePermission };</pre>
+  </div>
+</details>
+
+<!-- ─── SOCKET AUTH ─── -->
+<a class="section-anchor" id="socket-auth"></a>
+<h2>⚡ Socket Authentication</h2>
+
+<h3>socketAuthMiddleware — <span class="inline-code">server/auth/socketAuthMiddleware.js</span></h3>
+<p>Runs at connection time via <span class="inline-code">io.use()</span>. Reads <span class="inline-code">socket.handshake.auth.token</span>. <strong>Does NOT reject unauthenticated connections</strong> — spectators are allowed through.</p>
+
+<div class="card">
+  <h4 style="margin-top:0">socket.data fields after middleware runs</h4>
+  <table>
+    <tr><th>Field</th><th>Type</th><th>Authenticated?</th><th>Unauthenticated?</th></tr>
+    <tr><td><code>socket.data.authenticated</code></td><td>boolean</td><td>true</td><td>false</td></tr>
+    <tr><td><code>socket.data.stableId</code></td><td>string (UUID)</td><td>set from JWT</td><td><em>not set</em></td></tr>
+    <tr><td><code>socket.data.role</code></td><td>string</td><td>set from JWT</td><td><em>not set</em></td></tr>
+    <tr><td><code>socket.data.isCoach</code></td><td>boolean</td><td>role === 'coach'</td><td><em>not set</em></td></tr>
+    <tr><td><code>socket.data.isBot</code></td><td>boolean</td><td>role === 'bot'</td><td><em>not set</em></td></tr>
+    <tr><td><code>socket.data.jwtName</code></td><td>string</td><td>payload.name</td><td><em>not set</em></td></tr>
+  </table>
+</div>
+
+<details>
+  <summary>Full source — socketAuthMiddleware.js</summary>
+  <div>
+<pre>'use strict';
+const JwtService = require('./JwtService');
+
+function socketAuthMiddleware(socket, next) {
+  const token = socket.handshake.auth?.token || '';
+  const payload = JwtService.verify(token);
+
+  if (payload) {
+    socket.data.authenticated = true;
+    socket.data.stableId      = payload.stableId;
+    socket.data.role          = payload.role;
+    socket.data.isCoach       = payload.role === 'coach';
+    socket.data.isBot         = payload.role === 'bot';
+    socket.data.jwtName       = payload.name;
+  } else {
+    socket.data.authenticated = false;
+  }
+
+  next();  // always call next() — spectators allowed through
+}
+
+module.exports = socketAuthMiddleware;</pre>
+  </div>
+</details>
+
+<hr>
+
+<h3>socketGuards — <span class="inline-code">server/auth/socketGuards.js</span></h3>
+<p>Guards for individual socket event handlers. <span class="inline-code">requireCoach()</span> is used in 30+ places across handler files.</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h4 style="margin-top:0">requireCoach(socket, action)</h4>
+    <p>Checks <span class="inline-code">socket.data.isCoach</span>. If not a coach, emits an error event and returns <span class="inline-code">true</span> (caller should return). Returns <span class="inline-code">false</span> if allowed.</p>
+    <pre>// Usage pattern in all handler files:
+if (requireCoach(socket, 'start the game')) return;</pre>
+  </div>
+  <div class="card">
+    <h4 style="margin-top:0">requireSocketPermission(socket, ...keys)</h4>
+    <p>Async variant — queries the DB permission cache for the socket's <span class="inline-code">playerId</span>. Returns <span class="inline-code">false</span> and emits error if lacking permissions.</p>
+    <pre>// Note: uses socket.data.playerId (not stableId)
+// This is a different field name than HTTP middleware!
+const ok = await requireSocketPermission(socket, 'hand:tag');
+if (!ok) return;</pre>
+  </div>
+</div>
+
+<div class="callout danger">
+  <strong>⚠ Field name inconsistency.</strong> <span class="inline-code">socketPermissions.js</span> reads <span class="inline-code">socket.data.playerId</span>, but <span class="inline-code">socketAuthMiddleware.js</span> sets <span class="inline-code">socket.data.stableId</span>. These are different field names. If <span class="inline-code">requireSocketPermission</span> is called on a newly-connected socket (before join_room sets <span class="inline-code">socket.data.playerId</span>), it will always fail with "Not authenticated".
+</div>
+
+<!-- ─── PLAYER ROSTER ─── -->
+<a class="section-anchor" id="player-roster"></a>
+<h2>👤 PlayerRoster — <span class="inline-code">server/auth/PlayerRoster.js</span></h2>
+
+<p>The authentication entry point. Validates credentials and returns the player identity for JWT signing.</p>
+
+<div class="card success">
+  <h4 style="margin-top:0">Current state: Fully DB-backed</h4>
+  <p>The old CSV-based system (<span class="inline-code">players.csv</span>) has been fully replaced. <span class="inline-code">load()</span> and <span class="inline-code">reload()</span> are now no-ops. Authentication queries <span class="inline-code">player_profiles</span> directly.</p>
+</div>
+
+<h3>authenticate(name, password) flow</h3>
+<div class="flow">
+  <div class="flow-step"><span class="flow-label">Input</span>name, password</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">DB</span>findByDisplayName(name)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step red"><span class="flow-label">Check</span>player.status?</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Bcrypt</span>compare(password, hash)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">DB</span>getPrimaryRole(id)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step green"><span class="flow-label">Return</span>{ id, name, role }</div>
+</div>
+
+<div class="card">
+  <h4 style="margin-top:0">Account status gates</h4>
+  <table>
+    <tr><th>Status</th><th>authenticate() result</th></tr>
+    <tr><td><span class="badge badge-green">active</span></td><td>Proceeds to bcrypt check</td></tr>
+    <tr><td><span class="badge badge-yellow">pending</span></td><td>No check — <code>status</code> isn't 'suspended' or 'archived', so login proceeds if password matches</td></tr>
+    <tr><td><span class="badge badge-red">suspended</span></td><td>Returns <code>null</code> — login rejected</td></tr>
+    <tr><td><span class="badge badge-red">archived</span></td><td>Returns <code>null</code> — login rejected</td></tr>
+  </table>
+  <p style="margin-top:8px">⚠ <strong>Note:</strong> 'pending' accounts (coach applications awaiting approval) can currently log in if they know their password, because the status check only blocks 'suspended' and 'archived'.</p>
+</div>
+
+<details>
+  <summary>Full source — PlayerRoster.js</summary>
+  <div>
+<pre>'use strict';
+
+const { findByDisplayName, getPrimaryRole } = require('../db/repositories/PlayerRepository');
+const bcrypt = require('bcrypt');
+
+async function authenticate(name, password) {
+  if (!name || !password) return null;
+
+  const player = await findByDisplayName(name.trim());
+  if (!player || !player.password_hash) return null;
+
+  // Reject suspended or archived accounts
+  if (player.status === 'suspended' || player.status === 'archived') return null;
+
+  const valid = await bcrypt.compare(password, player.password_hash);
+  if (!valid) return null;
+
+  const role = await getPrimaryRole(player.id);
+  return { id: player.id, name: player.display_name, role: role ?? 'player' };
+}
+
+function load()   { /* no-op */ }
+function reload() { /* no-op */ }
+function getRole(_name) { return null; }
+
+module.exports = { authenticate, load, reload, getRole };</pre>
+  </div>
+</details>
+
+<!-- ─── AUTH ROUTES ─── -->
+<a class="section-anchor" id="auth-routes"></a>
+<h2>🛣 Auth Routes — <span class="inline-code">server/routes/auth.js</span></h2>
+
+<div class="card">
+  <h4 style="margin-top:0">All auth endpoints</h4>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div>
+      <div class="route-path">/api/auth/login</div>
+      <div class="route-guards">No auth required · Rate limited (20/15min) · Returns JWT</div>
+    </div>
+  </div>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div>
+      <div class="route-path">/api/auth/register</div>
+      <div class="route-guards">No auth required · Rate limited · Creates trial student account · Optional <code>coachId</code> + <code>schoolId</code></div>
+    </div>
+  </div>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div>
+      <div class="route-path">/api/auth/register-coach</div>
+      <div class="route-guards">No auth required · Rate limited · Creates pending coach application · No JWT returned</div>
+    </div>
+  </div>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div>
+      <div class="route-path">/api/auth/reset-password</div>
+      <div class="route-guards">requireAuth · Verifies current password · Rehashes at bcrypt rounds=12</div>
+    </div>
+  </div>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div>
+      <div class="route-path">/api/auth/verify-password</div>
+      <div class="route-guards">requireAuth · Read-only check · Used to gate destructive UI actions</div>
+    </div>
+  </div>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div>
+      <div class="route-path">/api/auth/deactivate</div>
+      <div class="route-guards">requireAuth · Requires current password · Sets status = 'archived'</div>
+    </div>
+  </div>
+  <div class="route-row">
+    <div class="method GET">GET</div>
+    <div>
+      <div class="route-path">/api/auth/profile</div>
+      <div class="route-guards">requireAuth · Returns own profile (no password_hash)</div>
+    </div>
+  </div>
+  <div class="route-row">
+    <div class="method PUT">PUT</div>
+    <div>
+      <div class="route-path">/api/auth/profile</div>
+      <div class="route-guards">requireAuth · Updates display_name and/or email · Checks name uniqueness</div>
+    </div>
+  </div>
+  <div class="route-row">
+    <div class="method GET">GET</div>
+    <div>
+      <div class="route-path">/api/auth/permissions</div>
+      <div class="route-guards">requireAuth · Returns caller's permission keys as array</div>
+    </div>
+  </div>
+</div>
+
+<h3>Login flow (detail)</h3>
+<div class="flow">
+  <div class="flow-step"><span class="flow-label">Request</span>POST /api/auth/login<br>{ name, password }</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Rate check</span>20 req / 15 min</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Roster</span>PlayerRoster.authenticate()</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">DB</span>HandLogger.loginRosterPlayer()<br>(upserts player_profiles)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">JWT</span>JwtService.sign(payload)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step green"><span class="flow-label">Response</span>{ stableId, name, role, token }</div>
+</div>
+
+<h3>Registration flow (detail)</h3>
+<div class="flow">
+  <div class="flow-step"><span class="flow-label">Request</span>name, password, email?,<br>coachId?, schoolId?</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Validate</span>name ≥ 2 chars<br>password ≥ 8 chars<br>email format</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">School check</span>canAddStudent(schoolId)<br>capacity enforcement</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Create</span>bcrypt rounds=12<br>createPlayer()</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Trial</span>trial_expires_at = +7 days<br>trial_hands_remaining = 20</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Role</span>coached_student OR solo_student<br>based on coachId</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step green"><span class="flow-label">Return</span>201 + JWT</div>
+</div>
+
+<!-- ─── RBAC ─── -->
+<a class="section-anchor" id="rbac"></a>
+<h2>🔐 RBAC System</h2>
+
+<h3>9 roles</h3>
+<div class="grid-3">
+  <div class="card">
+    <h4 style="margin-top:0">System roles (from migration 008)</h4>
+    <ul>
+      <li><span class="badge badge-red">superadmin</span> — all 12 permissions</li>
+      <li><span class="badge badge-red">admin</span> — all 12 permissions</li>
+      <li><span class="badge badge-blue">coach</span> — 8 permissions</li>
+      <li><span class="badge badge-purple">moderator</span> — 4 permissions</li>
+      <li><span class="badge badge-orange">referee</span> — 3 permissions</li>
+      <li><span class="badge badge-green">player</span> — 0 permissions</li>
+      <li><span class="badge badge-yellow">trial</span> — 0 permissions</li>
+    </ul>
+  </div>
+  <div class="card" style="grid-column: span 2">
+    <h4 style="margin-top:0">Student roles (from migration 014b)</h4>
+    <ul>
+      <li><span class="badge badge-green">coached_student</span> — registered under a specific coach · inherits player permissions (none)</li>
+      <li><span class="badge badge-green">solo_student</span> — registered without a coach · inherits player permissions (none)</li>
+    </ul>
+    <p>Both student roles are assigned 0 permissions in role_permissions. They identify the registration path, not a privilege level.</p>
+  </div>
+</div>
+
+<h3>12 permission keys</h3>
+<table>
+  <tr><th>Key</th><th>Category</th><th>Who has it</th><th>Used on routes</th></tr>
+  <tr><td><code>table:create</code></td><td>table</td><td>superadmin, admin, coach, moderator, referee</td><td>POST /api/tables</td></tr>
+  <tr><td><code>table:manage</code></td><td>table</td><td>superadmin, admin, coach, moderator, referee</td><td>table management ops</td></tr>
+  <tr><td><code>hand:tag</code></td><td>hand</td><td>superadmin, admin, coach, moderator</td><td>/api/admin/scenarios</td></tr>
+  <tr><td><code>hand:analyze</code></td><td>hand</td><td>superadmin, admin, coach, moderator</td><td>analysis endpoints</td></tr>
+  <tr><td><code>user:manage</code></td><td>user</td><td>superadmin, admin</td><td>/api/admin/users, /api/admin/org-settings</td></tr>
+  <tr><td><code>user:view</code></td><td>user</td><td>superadmin, admin</td><td>user detail views</td></tr>
+  <tr><td><code>playlist:create</code></td><td>playlist</td><td>superadmin, admin, coach</td><td>playlist creation</td></tr>
+  <tr><td><code>playlist:manage</code></td><td>playlist</td><td>superadmin, admin, coach</td><td>playlist mutations</td></tr>
+  <tr><td><code>crm:view</code></td><td>crm</td><td>superadmin, admin, coach</td><td>GET /api/admin/crm/*, groups</td></tr>
+  <tr><td><code>crm:edit</code></td><td>crm</td><td>superadmin, admin</td><td>POST/PUT /api/admin/crm/*, groups</td></tr>
+  <tr><td><code>admin:access</code></td><td>admin</td><td>superadmin, admin, coach</td><td>alpha-report</td></tr>
+  <tr><td><code>tournament:manage</code></td><td>tournament</td><td>superadmin, admin, referee</td><td>tournament start/stop</td></tr>
+  <tr><td><code>school:manage</code></td><td>admin</td><td>superadmin, admin</td><td>/api/admin/schools</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Note:</strong> <span class="inline-code">school:manage</span> is used in code but is NOT in the migration 008 seed. It was added later (migration 017). The 12-key count in docs may be 13 in practice.
+</div>
+
+<h3>DB tables backing RBAC</h3>
+<pre class="tree">
+player_profiles
+  └── player_roles (player_id FK, role_id FK, assigned_by FK, assigned_at)
+        └── roles (id, name, description, is_system)
+              └── role_permissions (role_id FK, permission_id FK)
+                    └── permissions (id, key, description, category)
+</pre>
+
+<h3>Permission resolution chain</h3>
+<div class="flow">
+  <div class="flow-step"><span class="flow-label">Input</span>req.user.stableId</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Cache check</span>permissionCache.has(id)?</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step blue"><span class="flow-label">DB query</span>player_roles→roles→<br>role_permissions→permissions</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step yellow"><span class="flow-label">Fallback</span>if 0 keys: lookup by role name<br>(CSV migration compatibility)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step green"><span class="flow-label">Check</span>keys.every(k => perms.has(k))</div>
+</div>
+
+<!-- ─── TRIAL SYSTEM ─── -->
+<a class="section-anchor" id="trial"></a>
+<h2>⏳ Trial System</h2>
+
+<p>Self-registered students start on a trial. Limits are set at registration time and enforced at the <span class="inline-code">join_room</span> socket handler (not currently shown in joinRoom.js — enforcement may be in a separate location or feature-flagged).</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h4 style="margin-top:0">Trial limits</h4>
+    <ul>
+      <li><strong>Duration</strong>: 7 days (<span class="inline-code">TRIAL_DAYS = 7</span>)</li>
+      <li><strong>Hands</strong>: 20 hands (<span class="inline-code">TRIAL_HANDS = 20</span>)</li>
+    </ul>
+    <h4>DB fields (player_profiles)</h4>
+    <ul>
+      <li><span class="inline-code">trial_expires_at</span> — TIMESTAMPTZ</li>
+      <li><span class="inline-code">trial_hands_remaining</span> — INTEGER</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4 style="margin-top:0">Trial role path</h4>
+    <p>Registration with <span class="inline-code">coachId</span> → role = <span class="inline-code">coached_student</span></p>
+    <p>Registration without <span class="inline-code">coachId</span> → role = <span class="inline-code">solo_student</span></p>
+    <p>Both are trial accounts. Role <span class="inline-code">trial</span> is not assigned by the registration route — it's available for admin use.</p>
+    <div class="callout warn" style="margin-top:12px">
+      <strong>⚠</strong> Trial enforcement (checking <span class="inline-code">trial_expires_at</span> and decrementing <span class="inline-code">trial_hands_remaining</span>) is referenced in memory but the active code path is not in <span class="inline-code">joinRoom.js</span> as of this audit. Verify enforcement exists.
+    </div>
+  </div>
+</div>
+
+<!-- ─── JOIN ROOM ─── -->
+<a class="section-anchor" id="join-room"></a>
+<h2>🚪 join_room Socket Guards — <span class="inline-code">server/socket/handlers/joinRoom.js</span></h2>
+
+<p>The <span class="inline-code">join_room</span> event is the primary socket-level access gate. It enforces multiple layers of access control after the connection-level JWT check.</p>
+
+<h3>Guard layers (in order)</h3>
+<table>
+  <tr><th>#</th><th>Check</th><th>Condition</th><th>Action on fail</th></tr>
+  <tr><td>1</td><td>Name required</td><td>name must be non-empty string</td><td>sendError</td></tr>
+  <tr><td>2</td><td>Authentication required (non-spectators)</td><td><span class="inline-code">socket.data.authenticated === false</span></td><td>sendError — "Authentication required"</td></tr>
+  <tr><td>3</td><td>Bot table auth check</td><td>mode = 'bot_cash' and human join</td><td>sendError if not authenticated</td></tr>
+  <tr><td>4</td><td>Bot table privacy: private</td><td>privacy = 'private': only creator can join</td><td>sendError</td></tr>
+  <tr><td>5</td><td>Bot table privacy: school</td><td>privacy = 'school': creator + same school</td><td>sendError — school_id comparison via Supabase</td></tr>
+  <tr><td>6</td><td>Coach override in non-coached mode</td><td>mode ≠ 'coached_cash' → isCoach forced false</td><td>Silently demotes coach to player</td></tr>
+  <tr><td>7</td><td>Private table invite check</td><td>privacy = 'private', not coach</td><td>sendError — "need an invitation"</td></tr>
+  <tr><td>8</td><td>Duplicate tab detection</td><td>same stableId connected on another socket</td><td>Kicks old socket with error message</td></tr>
+  <tr><td>9</td><td>Coach seat conflict</td><td>coached_cash: second coach joins</td><td>Downgrades to player, emits notification</td></tr>
+  <tr><td>10</td><td>Tournament late-reg</td><td>tournament mode + not reconnect + started</td><td>Emits <code>tournament:late_reg_rejected</code> and returns</td></tr>
+  <tr><td>11</td><td>Chip bank buy-in</td><td>buyInAmount provided + authenticated</td><td>Deducts from chip bank or rejects</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Spectator path:</strong> If <span class="inline-code">isSpectator=true</span> is sent in payload AND the user is not a coach, they bypass all further checks and join as a read-only spectator. Unauthenticated users can only join as spectators.
+</div>
+
+<h3>stableId resolution</h3>
+<p>This is critical for DB identity. The resolved stableId is what gets written to hand_players, hand_actions, leaderboard, etc.</p>
+<pre>const resolvedStableId = (stableId && typeof stableId === 'string' && stableId.length > 0)
+  ? stableId        // from JWT (trusted)
+  : socket.id;      // fallback for spectators / unauthenticated</pre>
+
+<div class="callout warn">
+  Unauthenticated spectators get <span class="inline-code">socket.id</span> as their stableId. This is ephemeral and changes every connection. This is intentional — spectators are not DB entities.
+</div>
+
+<!-- ─── ADMIN USERS ─── -->
+<a class="section-anchor" id="admin-users"></a>
+<h2>👑 Admin User Management — <span class="inline-code">server/routes/admin/users.js</span></h2>
+
+<p>All routes require <span class="inline-code">requireAuth</span> (applied at <span class="inline-code">app.use()</span> registration) + <span class="inline-code">requirePermission('user:manage')</span> (applied at router level). Only <span class="inline-code">superadmin</span> and <span class="inline-code">admin</span> have this permission.</p>
+
+<div class="card">
+  <div class="route-row">
+    <div class="method GET">GET</div>
+    <div><div class="route-path">/api/admin/users</div><div class="route-guards">Lists all players. Filters: status, role, limit, offset. Role filter applied in-memory.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method GET">GET</div>
+    <div><div class="route-path">/api/admin/users/export-csv</div><div class="route-guards">Full player export as CSV. Up to 10,000 rows.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method GET">GET</div>
+    <div><div class="route-path">/api/admin/users/:id</div><div class="route-guards">Returns player profile + all role assignments with timestamps.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div><div class="route-path">/api/admin/users</div><div class="route-guards">Creates player with given role. bcrypt rounds=12.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method PUT">PUT</div>
+    <div><div class="route-path">/api/admin/users/:id</div><div class="route-guards">Updates profile fields + optionally replaces role.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method DELETE">DELETE</div>
+    <div><div class="route-path">/api/admin/users/:id</div><div class="route-guards">Soft delete — sets status = 'archived'. Does not delete DB row.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method PATCH">PATCH</div>
+    <div><div class="route-path">/api/admin/users/:id/status</div><div class="route-guards">Sets status to: active | suspended | archived</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method PATCH">PATCH</div>
+    <div><div class="route-path">/api/admin/users/:id/role</div><div class="route-guards">Replaces ALL roles with a single new role. Invalidates permission cache.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method PATCH">PATCH</div>
+    <div><div class="route-path">/api/admin/users/:id/coach</div><div class="route-guards">Sets or clears coach_id assignment.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div><div class="route-path">/api/admin/users/:id/reset-password</div><div class="route-guards">Admin-forced password reset. bcrypt rounds=12. No current-password verification.</div></div>
+  </div>
+  <div class="route-row">
+    <div class="method POST">POST</div>
+    <div><div class="route-path">/api/admin/users/:id/roles</div><div class="route-guards">Granular role assign/remove. action: "assign" | "remove".</div></div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <strong>Role priority order</strong> for display normalization: <span class="inline-code">superadmin → admin → coach → moderator → referee → player → trial</span>. Users can technically have multiple roles (many-to-many). The display layer normalizes to the highest-priority role.
+</div>
+
+<!-- ─── ROUTE MATRIX ─── -->
+<a class="section-anchor" id="route-matrix"></a>
+<h2>📋 Complete Route Auth Matrix</h2>
+
+<h3>Auth routes (no auth required)</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Rate Limited</th><th>Notes</th></tr>
+  <tr><td><span class="badge badge-blue">POST</span></td><td>/api/auth/login</td><td>✅ 20/15min</td><td>Returns JWT</td></tr>
+  <tr><td><span class="badge badge-blue">POST</span></td><td>/api/auth/register</td><td>✅ 20/15min</td><td>Creates trial student</td></tr>
+  <tr><td><span class="badge badge-blue">POST</span></td><td>/api/auth/register-coach</td><td>✅ 20/15min</td><td>Pending status, no JWT</td></tr>
+  <tr><td><span class="badge badge-green">GET</span></td><td>/api/health</td><td>No</td><td>No auth — pings Supabase</td></tr>
+</table>
+
+<h3>requireAuth only</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Notes</th></tr>
+  <tr><td>GET/POST</td><td>/api/hands/*</td><td>Any logged-in user</td></tr>
+  <tr><td>GET</td><td>/api/players/*</td><td>Any logged-in user</td></tr>
+  <tr><td>GET</td><td>/api/sessions/*</td><td>Any logged-in user</td></tr>
+  <tr><td>GET/POST/DEL</td><td>/api/annotations/*</td><td>Any logged-in user</td></tr>
+  <tr><td>GET</td><td>/api/tables, /api/tables/:id</td><td>Any logged-in user</td></tr>
+  <tr><td>PATCH</td><td>/api/tables/:id</td><td>Any logged-in user (table ownership not enforced at route level)</td></tr>
+  <tr><td>GET</td><td>/api/auth/profile, /api/auth/permissions</td><td>Own profile</td></tr>
+  <tr><td>GET</td><td>/api/analysis/tags, /api/analysis/hands-by-tag</td><td>+ feature gate: 'analysis'</td></tr>
+  <tr><td>GET</td><td>/api/announcements, /api/announcements/unread-count</td><td>Any logged-in user</td></tr>
+  <tr><td>PATCH</td><td>/api/announcements/:id/read</td><td>Any logged-in user</td></tr>
+  <tr><td>GET</td><td>/api/blind-presets, /api/blind-presets/:id</td><td>Any logged-in user</td></tr>
+</table>
+
+<h3>requireAuth + requireRole('coach')</h3>
+<table>
+  <tr><th>Route group</th><th>Endpoints</th></tr>
+  <tr><td>Alerts</td><td>GET/PATCH /api/coach/alerts, POST /api/coach/alerts/:id/resolve</td></tr>
+  <tr><td>Reports</td><td>GET /api/coach/students/:id/reports, /api/coach/reports/stable</td></tr>
+  <tr><td>Prep Briefs</td><td>GET/POST /api/coach/students/:id/prep-brief</td></tr>
+  <tr><td>Announcements</td><td>POST /api/announcements</td></tr>
+  <tr><td>Blind Presets</td><td>POST/DELETE /api/blind-presets (mutations)</td></tr>
+</table>
+
+<h3>requireAuth + requirePermission(key)</h3>
+<table>
+  <tr><th>Permission</th><th>Routes protected</th></tr>
+  <tr><td><code>user:manage</code></td><td>/api/admin/users/* (all), /api/admin/org-settings</td></tr>
+  <tr><td><code>crm:view</code></td><td>GET /api/admin/crm/*, GET /api/admin/groups/*</td></tr>
+  <tr><td><code>crm:edit</code></td><td>POST/PUT /api/admin/crm/*, POST/PUT /api/admin/groups/*</td></tr>
+  <tr><td><code>hand:tag</code></td><td>/api/admin/scenarios/*</td></tr>
+  <tr><td><code>tournament:manage</code></td><td>POST /api/tables/:id/tournament/start, tournament mutations</td></tr>
+  <tr><td><code>school:manage</code></td><td>/api/admin/schools/*</td></tr>
+  <tr><td><code>playlist:manage</code></td><td>POST/DELETE /api/playlists, playlist mutations</td></tr>
+  <tr><td><code>table:create</code></td><td>POST /api/tables</td></tr>
+  <tr><td><code>admin:access</code></td><td>GET /api/alpha-report</td></tr>
+</table>
+
+<!-- ─── CLIENT ─── -->
+<a class="section-anchor" id="client"></a>
+<h2>💻 Client Side</h2>
+
+<h3>apiFetch — <span class="inline-code">client/src/lib/api.js</span></h3>
+<p>All API calls go through this single function. It reads the JWT from localStorage and attaches it as a Bearer token.</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h4 style="margin-top:0">Token storage</h4>
+    <ul>
+      <li>JWT stored in <span class="inline-code">localStorage.poker_trainer_jwt</span></li>
+      <li>Player UUID in <span class="inline-code">localStorage.poker_trainer_player_id</span></li>
+      <li>On 401 with token present → clears both + throws "Session expired"</li>
+      <li>On 401 without token → throws HTTP error (login attempt failure)</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4 style="margin-top:0">Environment config</h4>
+    <pre>const API_BASE = import.meta.env.DEV
+  ? 'http://localhost:3001'
+  : '';  // same origin in production</pre>
+    <p>In production, Express serves the built React app. No CORS issues.</p>
+  </div>
+</div>
+
+<details>
+  <summary>Full source — api.js</summary>
+  <div>
+<pre>const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
+export async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem('poker_trainer_jwt');
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try { message = (await res.json()).message || message; } catch { /* not JSON */ }
+    if (res.status === 401) {
+      const hadToken = !!localStorage.getItem('poker_trainer_jwt');
+      localStorage.removeItem('poker_trainer_jwt');
+      localStorage.removeItem('poker_trainer_player_id');
+      const err = new Error(hadToken ? 'Session expired — please log in again' : message);
+      err.status = 401;
+      throw err;
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}</pre>
+  </div>
+</details>
+
+<h3>Socket connection</h3>
+<p>The socket sends the JWT at connect time via <span class="inline-code">socket.handshake.auth.token</span>:</p>
+<pre>// In useConnectionManager.js (inferred from architecture)
+const socket = io(SERVER_URL, {
+  auth: { token: localStorage.getItem('poker_trainer_jwt') }
+});</pre>
+
+<div class="callout warn">
+  <strong>Token refresh gap:</strong> If the JWT expires while the user has a socket connection open, the socket remains connected (no re-auth on expiry). The token is only re-validated on new HTTP requests via <span class="inline-code">apiFetch</span>. A new socket connection would fail after the 7-day expiry.
+</div>
+
+<!-- ─── DB SCHEMA ─── -->
+<a class="section-anchor" id="db-schema"></a>
+<h2>🗄 Database Schema</h2>
+
+<h3>player_profiles — core auth table</h3>
+<table>
+  <tr><th>Column</th><th>Type</th><th>Migration</th><th>Notes</th></tr>
+  <tr><td>id</td><td>UUID PK</td><td>001</td><td>Stable player identity</td></tr>
+  <tr><td>display_name</td><td>VARCHAR</td><td>001</td><td>Case-insensitive unique. Login uses <span class="inline-code">.eq()</span> not <span class="inline-code">.ilike()</span></td></tr>
+  <tr><td>email</td><td>VARCHAR(255)</td><td>009</td><td>Nullable. Unique partial index (WHERE email IS NOT NULL)</td></tr>
+  <tr><td>password_hash</td><td>VARCHAR(255)</td><td>009</td><td>bcrypt, rounds=12</td></tr>
+  <tr><td>status</td><td>VARCHAR(20)</td><td>009</td><td>active | suspended | archived | pending</td></tr>
+  <tr><td>avatar_url</td><td>TEXT</td><td>009</td><td>Optional profile image</td></tr>
+  <tr><td>notes</td><td>TEXT</td><td>009</td><td>Admin notes</td></tr>
+  <tr><td>metadata</td><td>JSONB</td><td>009</td><td>Stores <span class="inline-code">{ requestedRole: 'coach' }</span> for pending applications</td></tr>
+  <tr><td>created_by</td><td>UUID FK</td><td>009</td><td>Admin who created the account</td></tr>
+  <tr><td>trial_expires_at</td><td>TIMESTAMPTZ</td><td>014b</td><td>Set at registration to +7 days</td></tr>
+  <tr><td>trial_hands_remaining</td><td>INTEGER</td><td>014b</td><td>Initialized to 20</td></tr>
+  <tr><td>school_id</td><td>UUID FK</td><td>017</td><td>School assignment</td></tr>
+  <tr><td>coach_id</td><td>UUID FK</td><td>020b</td><td>Assigned coach</td></tr>
+  <tr><td>is_coach</td><td>BOOLEAN</td><td>001</td><td><span class="badge badge-yellow">DEPRECATED</span> — superseded by player_roles</td></tr>
+</table>
+
+<h3>RBAC tables (migration 008)</h3>
+<table>
+  <tr><th>Table</th><th>Purpose</th><th>Key columns</th></tr>
+  <tr><td>roles</td><td>Role definitions</td><td>id, name, description, is_system</td></tr>
+  <tr><td>permissions</td><td>Permission key registry</td><td>id, key, description, category</td></tr>
+  <tr><td>role_permissions</td><td>Role → Permission assignments</td><td>role_id FK, permission_id FK (composite PK)</td></tr>
+  <tr><td>player_roles</td><td>Player → Role assignments</td><td>player_id FK, role_id FK, assigned_by FK, assigned_at</td></tr>
+</table>
+
+<h3>RLS policies (migration 005b)</h3>
+<div class="card">
+  <p>Supabase Row Level Security is configured, but since the Express server uses the <strong>service-role key</strong>, RLS is bypassed for all server-side operations. RLS only applies if a client were to connect directly to Supabase — which is prevented by the Proxy stub in the client.</p>
+  <p>The policies that exist:</p>
+  <ul>
+    <li><span class="inline-code">player_profiles</span>: authenticated read all, own update</li>
+    <li><span class="inline-code">hands</span>, <span class="inline-code">hand_actions</span>, <span class="inline-code">hand_tags</span>: authenticated read</li>
+    <li><span class="inline-code">hand_players</span>: coaches see all, students see own rows</li>
+    <li><span class="inline-code">sessions</span>, <span class="inline-code">leaderboard</span>, <span class="inline-code">playlists</span>: authenticated read</li>
+  </ul>
+</div>
+
+<!-- ─── SECURITY ─── -->
+<a class="section-anchor" id="security"></a>
+<h2>🔍 Security Notes &amp; Observations</h2>
+
+<h3>Strengths</h3>
+<div class="card success">
+  <ul>
+    <li>✅ <strong>Single JWT module</strong>: Only <span class="inline-code">JwtService.js</span> imports <span class="inline-code">jsonwebtoken</span>. No accidental key usage elsewhere.</li>
+    <li>✅ <strong>Server exits if SESSION_SECRET missing</strong>: No silent degradation to an empty secret.</li>
+    <li>✅ <strong>bcrypt rounds=12</strong>: Strong hashing for all passwords.</li>
+    <li>✅ <strong>Rate limiting on auth endpoints</strong>: 20 requests per 15 minutes.</li>
+    <li>✅ <strong>No Supabase keys in browser</strong>: Client Proxy stub throws on any Supabase import. All DB access goes through Express.</li>
+    <li>✅ <strong>Soft deletes only</strong>: Archived accounts keep their data. No cascading deletes on auth operations.</li>
+    <li>✅ <strong>Permission cache invalidation</strong>: Called after every role change to prevent stale permission grants.</li>
+    <li>✅ <strong>Duplicate tab detection</strong>: Old socket kicked when same stableId joins from a second window.</li>
+    <li>✅ <strong>Password confirm on destructive operations</strong>: <span class="inline-code">/api/auth/deactivate</span> requires current password re-entry.</li>
+  </ul>
+</div>
+
+<h3>Potential issues &amp; gaps</h3>
+<div class="card danger">
+  <ul>
+    <li>⚠ <strong>No token revocation</strong>: Stolen tokens are valid for 7 days. No logout endpoint, no blacklist. If an admin suspends an account, the suspended user can still make HTTP requests with their existing JWT until it expires.</li>
+    <li>⚠ <strong>Admin password reset — no current password</strong>: <span class="inline-code">POST /api/admin/users/:id/reset-password</span> lets any <span class="inline-code">user:manage</span> admin reset anyone's password without knowing the old one. This is expected for admin workflows but worth noting.</li>
+    <li>⚠ <strong>requireRole() is exact match only</strong>: <span class="inline-code">requireRole('coach')</span> blocks admin/superadmin. This means superadmin can't access coach-only endpoints without a role change. Check if this is intentional.</li>
+    <li>⚠ <strong>socketPermissions.js reads socket.data.playerId</strong>: The field set by <span class="inline-code">socketAuthMiddleware</span> is <span class="inline-code">socket.data.stableId</span>. Calling <span class="inline-code">requireSocketPermission</span> before <span class="inline-code">join_room</span> populates <span class="inline-code">socket.data.playerId</span> will silently fail as "Not authenticated".</li>
+    <li>⚠ <strong>Pending coach accounts can log in</strong>: The authenticate() check only blocks 'suspended' and 'archived'. A pending coach application account can log in and receive a JWT. Their permissions will be 0 (no role assigned), but they can still hit <span class="inline-code">requireAuth</span>-only endpoints.</li>
+    <li>⚠ <strong>No CSRF protection</strong>: JWT in Authorization header (not cookies) means CSRF is not a concern for API calls. But the deactivate endpoint uses body parameters — if a route were accidentally cookie-auth'd, CSRF would apply. Not currently an issue.</li>
+    <li>⚠ <strong>Permission cache has no TTL</strong>: Cache lives until server restart or explicit <span class="inline-code">invalidatePermissionCache()</span> call. Multi-instance deployments (Fly.io scaling to multiple machines) will have stale caches across instances.</li>
+    <li>⚠ <strong>CORS origin from env</strong>: If <span class="inline-code">CORS_ORIGIN</span> is not set in production, all cross-origin requests are blocked (which is safe), but there's a warning log — not a hard startup failure like SESSION_SECRET.</li>
+    <li>⚠ <strong>trial_hands_remaining enforcement path unclear</strong>: The DB fields exist and are set at registration, but the active enforcement code (checking/decrementing hands during play) should be verified.</li>
+  </ul>
+</div>
+
+<h3>Encryption &amp; hashing summary</h3>
+<table>
+  <tr><th>What</th><th>How</th><th>Config</th></tr>
+  <tr><td>Passwords at rest</td><td>bcrypt</td><td>rounds=12</td></tr>
+  <tr><td>JWT signing</td><td>HMAC-SHA256 (HS256)</td><td>SESSION_SECRET env var</td></tr>
+  <tr><td>Transport</td><td>HTTPS (Fly.io TLS termination)</td><td>Enforced by platform</td></tr>
+  <tr><td>DB connection</td><td>Supabase service-role key over HTTPS</td><td>SUPABASE_SERVICE_KEY env var</td></tr>
+  <tr><td>Supabase anon key</td><td>Not used in browser</td><td>Proxy stub blocks access</td></tr>
+</table>
+
+<h3>Environment variables required</h3>
+<table>
+  <tr><th>Variable</th><th>Required?</th><th>Effect if missing</th></tr>
+  <tr><td>SESSION_SECRET</td><td><span class="badge badge-red">FATAL</span></td><td>Server exits at startup</td></tr>
+  <tr><td>SUPABASE_URL</td><td><span class="badge badge-red">Required</span></td><td>All DB operations fail</td></tr>
+  <tr><td>SUPABASE_SERVICE_KEY</td><td><span class="badge badge-red">Required</span></td><td>All DB operations fail</td></tr>
+  <tr><td>CORS_ORIGIN</td><td><span class="badge badge-yellow">Recommended</span></td><td>Dev: defaults to localhost:5173. Prod: warning logged, cross-origin blocked.</td></tr>
+  <tr><td>ANTHROPIC_API_KEY</td><td><span class="badge badge-green">Optional</span></td><td>NarratorService returns null gracefully</td></tr>
+</table>
+
+<hr>
+<p style="text-align:center; color: var(--text-muted); font-size: 12px; margin-top: 40px;">
+  Generated 2026-04-05 · poker-trainer · branch: feat/phase2
+</p>
+
+</main>
+
+<script>
+  // Sidebar active link tracking
+  const sections = document.querySelectorAll('.section-anchor');
+  const sideLinks = document.querySelectorAll('#sidebar a');
+
+  function updateActive() {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 120) current = s.id;
+    });
+    sideLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+
+  window.addEventListener('scroll', updateActive, { passive: true });
+  updateActive();
+
+  // Smooth scroll
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const el = document.querySelector(a.getAttribute('href'));
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+</script>
+</body>
+</html>

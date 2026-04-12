@@ -2,6 +2,8 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import Card from './Card';
 import CardPicker from './CardPicker';
 import { validateRange, parseRange } from '../utils/rangeParser';
+import RangePicker from './RangePicker';
+import { comboArrayToHandGroups, selectedHandGroupsToComboArray } from '../utils/comboUtils';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -172,14 +174,14 @@ function ModeSelector({ value, onChange }) {
 }
 
 /** Cards / Range toggle for a single player row */
-function PlayerModeToggle({ mode, rangeOpen, onChange }) {
+function PlayerModeToggle({ mode, onChange }) {
+  const TABS = ['cards', 'range'];
   return (
     <div className="flex rounded overflow-hidden" style={{ border: '1px solid #30363d', flexShrink: 0 }}>
-      {['cards', 'range'].map((m, idx) => {
+      {TABS.map((m, idx) => {
         const isActive = mode === m;
-        const label = (m === 'range' && isActive)
-          ? (rangeOpen ? 'RANGE ▲' : 'RANGE ▼')
-          : m.toUpperCase();
+        const isLast = idx === TABS.length - 1;
+        const label = m.toUpperCase();
         return (
           <button
             key={m}
@@ -189,8 +191,8 @@ function PlayerModeToggle({ mode, rangeOpen, onChange }) {
               background: isActive ? '#d4af37' : '#161b22',
               color: isActive ? '#000' : '#6e7681',
               border: 'none',
-              borderRight: idx === 0 ? '1px solid #30363d' : 'none',
-              borderRadius: idx === 0 ? '3px 0 0 3px' : '0 3px 3px 0',
+              borderRight: !isLast ? '1px solid #30363d' : 'none',
+              borderRadius: idx === 0 ? '3px 0 0 3px' : isLast ? '0 3px 3px 0' : '0',
               cursor: 'pointer', fontSize: '9px', fontWeight: 600,
               textTransform: 'uppercase', letterSpacing: '0.06em',
             }}
@@ -225,6 +227,10 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
 
   // Per-player range picker open/collapsed state (true = open, false = collapsed summary)
   const [rangeOpen, setRangeOpen] = useState({});
+
+  // Per-player matrix selected hand groups: configKey → Set<string>
+  const [playerMatrixGroups, setPlayerMatrixGroups] = useState({});
+  const [matrixPickerOpen, setMatrixPickerOpen]     = useState({});
 
   // pickerTarget: null | { type: 'player'|'board', playerId?, position }
   const [pickerTarget, setPickerTarget] = useState(null);
@@ -340,19 +346,19 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
     });
   }, [emitConfig]);
 
-  // ── Player input mode toggle (cards ↔ range) ──────────────────────────────────
+  // ── Player input mode toggle (cards ↔ range) ────────────────────────────────
 
   const handlePlayerModeToggle = useCallback((configKey, newMode) => {
     setPlayerInputMode((prev) => ({ ...prev, [configKey]: newMode }));
     setConfig((prev) => {
       let nextConfig;
       if (newMode === 'range') {
-        // Clear specific hole cards for this player; preset picker takes over
+        // Clear specific hole cards; combo-based mode takes over
         const nextHoleCards = { ...prev.hole_cards };
         delete nextHoleCards[configKey];
         nextConfig = { ...prev, hole_cards: nextHoleCards };
       } else {
-        // Clear range + combos for this player; cards take over
+        // 'cards' — clear range + combos for this player
         const nextRanges = { ...prev.hole_cards_range };
         delete nextRanges[configKey];
         const nextCombos = { ...(prev.hole_cards_combos ?? {}) };
@@ -363,6 +369,14 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
       return nextConfig;
     });
     if (newMode === 'cards') {
+      setPlayerPresets((prev) => { const n = { ...prev }; delete n[configKey]; return n; });
+      setPlayerMatrixGroups((prev) => { const n = { ...prev }; delete n[configKey]; return n; });
+    } else if (newMode === 'range') {
+      // Initialize matrix groups for the RangePicker
+      setPlayerMatrixGroups((prev) => {
+        if (prev[configKey]) return prev; // already has state, preserve it
+        return { ...prev, [configKey]: new Set() };
+      });
       setPlayerPresets((prev) => { const n = { ...prev }; delete n[configKey]; return n; });
     }
   }, [emitConfig]);
@@ -434,6 +448,30 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
     });
   }, [playerPresets, emitConfig]);
 
+  // ── Matrix cell toggle (per player) ──────────────────────────────────────────
+
+  const handleMatrixToggle = useCallback((configKey, handGroup) => {
+    setPlayerMatrixGroups((prev) => {
+      const current = prev[configKey] ?? new Set();
+      const next = new Set(current);
+      if (next.has(handGroup)) {
+        next.delete(handGroup);
+      } else {
+        next.add(handGroup);
+      }
+      const combos = selectedHandGroupsToComboArray(next);
+      setConfig((prevConfig) => {
+        const nextConfig = {
+          ...prevConfig,
+          hole_cards_combos: { ...(prevConfig.hole_cards_combos ?? {}), [configKey]: combos },
+        };
+        emitConfig(nextConfig);
+        return nextConfig;
+      });
+      return { ...prev, [configKey]: next };
+    });
+  }, [emitConfig]);
+
   // ── Clear config ──────────────────────────────────────────────────────────────
 
   const handleClear = useCallback(() => {
@@ -448,6 +486,7 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
     setConfig(resetConfig);
     setPlayerInputMode({});
     setPlayerPresets({});
+    setPlayerMatrixGroups({});
     emitConfig(resetConfig);
   }, [config.mode, emitConfig]);
 
@@ -520,20 +559,11 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
 
                       <PlayerModeToggle
                         mode={inputMode}
-                        rangeOpen={rangeOpen[configKey] ?? true}
-                        onChange={(m) => {
-                          if (m === 'range' && inputMode === 'range') {
-                            // Already in range mode — toggle collapse
-                            setRangeOpen(prev => ({ ...prev, [configKey]: !(prev[configKey] ?? true) }));
-                          } else {
-                            handlePlayerModeToggle(configKey, m);
-                            if (m === 'range') setRangeOpen(prev => ({ ...prev, [configKey]: true }));
-                          }
-                        }}
+                        onChange={(m) => handlePlayerModeToggle(configKey, m)}
                       />
                     </div>
 
-                    {/* Bottom row: card slots OR range input */}
+                    {/* Bottom row: card slots OR range picker */}
                     {inputMode === 'cards' ? (
                       <div className="flex gap-1.5 justify-end">
                         <ConfigCardSlot
@@ -547,75 +577,52 @@ export default function HandConfigPanel({ gameState = {}, emit = {} }) {
                           onClick={() => handlePlayerSlotClick(configKey, 1)}
                         />
                       </div>
-                    ) : (rangeOpen[configKey] ?? true) ? (
-                      // RANGE PICKER: expanded full chip grid
-                      <div className="flex flex-col gap-1.5 mt-0.5">
-                        {PRESET_GROUPS.map(({ label: groupLabel, tags }) => (
-                          <div key={groupLabel}>
-                            <div style={{ fontSize: '8px', color: '#444', letterSpacing: '0.08em', marginBottom: '3px' }}>
-                              {groupLabel}
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {tags.map(tagId => {
-                                const isActive = (playerPresets[configKey] ?? []).includes(tagId);
-                                return (
-                                  <button
-                                    key={tagId}
-                                    onClick={() => handlePresetToggle(configKey, tagId)}
-                                    className="rounded px-2 py-0.5 transition-all duration-150"
-                                    style={{
-                                      background: isActive ? 'rgba(212,175,55,0.18)' : 'rgba(255,255,255,0.03)',
-                                      border: `1px solid ${isActive ? '#d4af37' : '#30363d'}`,
-                                      color: isActive ? '#d4af37' : '#6e7681',
-                                      cursor: 'pointer', fontSize: '10px',
-                                    }}
-                                  >
-                                    {PRESET_META[tagId].label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                        {/* Combo count / status */}
+                    ) : (
+                      // RANGE PICKER: opens RangePicker popup
+                      <div className="mt-1">
                         {(() => {
-                          const active = playerPresets[configKey] ?? [];
-                          if (!active.length) return (
-                            <div style={{ fontSize: '9px', color: '#444', marginTop: '1px' }}>Select tags above</div>
-                          );
-                          const combos = computePresetCombos(active);
-                          return combos.length > 0 ? (
-                            <div style={{ fontSize: '9px', color: '#3fb950', marginTop: '1px' }}>
-                              ✓ {combos.length} combo{combos.length !== 1 ? 's' : ''}
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: '9px', color: '#f85149', marginTop: '1px' }}>
-                              ✗ No combos — incompatible selection
-                            </div>
+                          const groups = playerMatrixGroups[configKey];
+                          const count = groups?.size ? selectedHandGroupsToComboArray(groups).length : 0;
+                          return (
+                            <>
+                              <button
+                                onClick={() => setMatrixPickerOpen(prev => ({ ...prev, [configKey]: true }))}
+                                style={{
+                                  width: '100%', padding: '5px 10px', borderRadius: 4, cursor: 'pointer',
+                                  background: count > 0 ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
+                                  border: `1px solid ${count > 0 ? 'rgba(34,197,94,0.35)' : '#30363d'}`,
+                                  color: count > 0 ? '#3fb950' : '#6e7681',
+                                  fontSize: '10px', fontWeight: 600, textAlign: 'center',
+                                }}
+                              >
+                                {count > 0 ? `✓ ${count} combo${count !== 1 ? 's' : ''} selected` : 'Pick Range…'}
+                              </button>
+                              {matrixPickerOpen[configKey] && (
+                                <div
+                                  className="fixed inset-0 z-50 flex items-center justify-center"
+                                  style={{ background: 'rgba(0,0,0,0.72)' }}
+                                  onClick={(e) => { if (e.target === e.currentTarget) setMatrixPickerOpen(prev => ({ ...prev, [configKey]: false })); }}
+                                >
+                                  <RangePicker
+                                    seatLabel={player.name || `Seat ${player.seat}`}
+                                    initialRange={[...(groups ?? new Set())].join(',')}
+                                    onApply={(rangeStr) => {
+                                      const newGroups = new Set(rangeStr ? rangeStr.split(',').map(s => s.trim()).filter(Boolean) : []);
+                                      const combos = selectedHandGroupsToComboArray(newGroups);
+                                      setPlayerMatrixGroups(prev => ({ ...prev, [configKey]: newGroups }));
+                                      setMatrixPickerOpen(prev => ({ ...prev, [configKey]: false }));
+                                      // Notify server: emit updated config with new combos
+                                      const nextCombos = { ...(config.hole_cards_combos ?? {}), [configKey]: combos };
+                                      emitConfig({ ...config, hole_cards_combos: nextCombos });
+                                      setConfig(prev => ({ ...prev, hole_cards_combos: { ...(prev.hole_cards_combos ?? {}), [configKey]: combos } }));
+                                    }}
+                                    onCancel={() => setMatrixPickerOpen(prev => ({ ...prev, [configKey]: false }))}
+                                  />
+                                </div>
+                              )}
+                            </>
                           );
                         })()}
-                      </div>
-                    ) : (
-                      // RANGE PICKER: collapsed — show active picks as compact chips
-                      <div className="flex flex-wrap gap-1 mt-0.5">
-                        {(playerPresets[configKey] ?? []).length === 0 ? (
-                          <div style={{ fontSize: '9px', color: '#444' }}>No range selected</div>
-                        ) : (
-                          (playerPresets[configKey] ?? []).map(tagId => (
-                            <span
-                              key={tagId}
-                              className="rounded px-2 py-0.5"
-                              style={{
-                                background: 'rgba(212,175,55,0.18)',
-                                border: '1px solid #d4af37',
-                                color: '#d4af37',
-                                fontSize: '10px',
-                              }}
-                            >
-                              {PRESET_META[tagId]?.label ?? tagId}
-                            </span>
-                          ))
-                        )}
                       </div>
                     )}
                   </div>

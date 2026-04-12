@@ -187,43 +187,7 @@ describe('PokerTable — player seats', () => {
   })
 })
 
-// ── Test 4: REPLAY badge ──────────────────────────────────────────────────
-
-describe('PokerTable — REPLAY badge', () => {
-  it('shows REPLAY badge when phase is replay and not branched', async () => {
-    await renderTable(makeGameState({
-      phase: 'replay',
-      replay_mode: { active: true, branched: false, cursor: 1, actions: [] },
-      players: [makePlayer()],
-    }))
-    expect(screen.getByText('REPLAY')).toBeTruthy()
-  })
-
-  it('does NOT show REPLAY badge during normal preflop play', async () => {
-    await renderTable(makeGameState({ phase: 'preflop', players: [makePlayer()] }))
-    expect(screen.queryByText('REPLAY')).toBeNull()
-  })
-})
-
-// ── Test 5: BRANCHED badge ────────────────────────────────────────────────
-
-describe('PokerTable — BRANCHED badge', () => {
-  it('shows BRANCHED badge when replay is branched', async () => {
-    await renderTable(makeGameState({
-      phase: 'preflop', // branched mode returns to waiting/preflop
-      replay_mode: { active: true, branched: true, cursor: 2, actions: [] },
-      players: [makePlayer()],
-    }))
-    expect(screen.getByText('BRANCHED')).toBeTruthy()
-  })
-
-  it('does NOT show BRANCHED badge in normal play', async () => {
-    await renderTable(makeGameState({ phase: 'preflop', players: [makePlayer()] }))
-    expect(screen.queryByText('BRANCHED')).toBeNull()
-  })
-})
-
-// ── Test 6: Coach disconnected overlay ───────────────────────────────────
+// ── Test 4: Coach disconnected overlay ───────────────────────────────────
 
 describe('PokerTable — coach disconnected overlay', () => {
   it('renders coach disconnected overlay when coachDisconnected is true', async () => {

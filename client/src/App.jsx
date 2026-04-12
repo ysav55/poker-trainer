@@ -1,340 +1,171 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+  useNavigate,
+} from 'react-router-dom';
+
+import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
+import { LobbyProvider } from './contexts/LobbyContext.jsx';
+// LobbyProvider is used inside RequireAuth (not at top level) to avoid
+// unauthenticated /api/tables polling on login/register/forgot-password.
+
+// Layout
+import AppLayout from './components/AppLayout.jsx';
+
+// Pages
+import LoginPage from './pages/LoginPage.jsx';
+import RegisterPage from './pages/RegisterPage.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
+import LeaderboardPage from './pages/LeaderboardPage.jsx';
+import AnalysisPage from './pages/AnalysisPage.jsx';
+import HandHistoryPage from './pages/HandHistoryPage.jsx';
+import LobbyPage from './pages/LobbyPage.jsx';
+import BotLobbyPage from './pages/BotLobbyPage.jsx';
+import TablePage from './pages/TablePage.jsx';
+import MultiTablePage from './pages/MultiTablePage.jsx';
+import ReviewTablePage from './pages/ReviewTablePage.jsx';
+
+// Admin pages
+import UserManagement from './pages/admin/UserManagement.jsx';
+import HandBuilder from './pages/admin/HandBuilder.jsx';
+import TournamentSetup from './pages/admin/TournamentSetup.jsx';
+import PlayerCRM from './pages/admin/PlayerCRM.jsx';
+import RefereeDashboard from './pages/admin/RefereeDashboard.jsx';
+import CoachAlertsPage from './pages/admin/CoachAlertsPage.jsx';
+import StakingPage from './pages/admin/StakingPage.jsx';
+import TournamentBalancer from './pages/admin/TournamentBalancer.jsx';
+import StakingPlayerPage from './pages/StakingPlayerPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
+
+// Tournament pages
+import TournamentLobby from './pages/TournamentLobby.jsx';
+import TournamentStandings from './pages/TournamentStandings.jsx';
+import TournamentListPage    from './pages/TournamentListPage.jsx';
+import TournamentDetailPage  from './pages/TournamentDetailPage.jsx';
+import TournamentControlPage from './pages/TournamentControlPage.jsx';
+
+// Existing single-table view components (still used in TablePage integration)
 import { useSocket } from './hooks/useSocket';
 import PokerTable from './components/PokerTable';
 import CoachSidebar from './components/CoachSidebar';
 import CardPicker from './components/CardPicker';
 import StatsPanel from './components/StatsPanel';
 import ConnectionDot from './components/ConnectionDot';
-import JoinScreen from './components/JoinScreen';
 import TopBar from './components/TopBar';
 import NotificationToast from './components/NotificationToast';
 import ErrorToast from './components/ErrorToast';
 import TagHandPill from './components/TagHandPill';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// ── Root App component ────────────────────────────────────────────────────────
+// ── Route guards ──────────────────────────────────────────────────────────────
 
-export default function App() {
-  const {
-    gameState,
-    myId,
-    isCoach,
-    isSpectator,
-    coachDisconnected,
-    actionTimer,
-    connected,
-    errors,
-    notifications,
-    sessionStats,
-    playlists,
-    activeHandId,
-    handTagsSaved,
-    myPlayer,
-    joinRoom,
-    leaveRoom,
-    startGame,
-    placeBet,
-    manualDealCard,
-    undoAction,
-    rollbackStreet,
-    togglePause,
-    setMode,
-    forceNextStreet,
-    awardPot,
-    resetHand,
-    adjustStack,
-    openConfigPhase,
-    updateHandConfig,
-    startConfiguredHand,
-    loadHandScenario,
-    createPlaylist,
-    getPlaylists,
-    addToPlaylist,
-    removeFromPlaylist,
-    deletePlaylist,
-    activatePlaylist,
-    deactivatePlaylist,
-    updateHandTags,
-    setPlayerInHand,
-    loadReplay,
-    replayStepFwd,
-    replayStepBack,
-    replayJumpTo,
-    replayBranch,
-    replayUnbranch,
-    replayExit,
-    bbView,
-    toggleBBView,
-    setBlindLevels,
-  } = useSocket();
+/**
+ * Redirects unauthenticated users to /login.
+ * Renders children / nested routes when authenticated.
+ */
+function RequireAuth() {
+  const { user, loading } = useAuth();
 
-  // ── Local state ────────────────────────────────────────────────────────────
-  const [cardPickerTarget, setCardPickerTarget] = useState(null);
-  const [dismissedErrorIds, setDismissedErrorIds] = useState(new Set());
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [currentHandTags, setCurrentHandTags] = useState([]);
-  const tagDebounceRef = useRef(null);
-
-  const handleToggleSidebar = useCallback(() => {
-    setSidebarOpen((v) => !v);
-  }, []);
-
-  // ── Tag Hand: reset on new hand ───────────────────────────────────────────
-  useEffect(() => {
-    if (gameState?.phase === 'waiting') setCurrentHandTags([]);
-  }, [gameState?.phase]);
-
-  // ── Emit bundle ───────────────────────────────────────────────────────────
-  const emit = useMemo(() => ({
-    startGame,
-    placeBet,
-    manualDealCard,
-    undoAction,
-    rollbackStreet,
-    togglePause,
-    setMode,
-    forceNextStreet,
-    awardPot,
-    resetHand,
-    adjustStack,
-    openConfigPhase,
-    updateHandConfig,
-    startConfiguredHand,
-    loadHandScenario,
-    createPlaylist,
-    getPlaylists,
-    addToPlaylist,
-    removeFromPlaylist,
-    deletePlaylist,
-    activatePlaylist,
-    deactivatePlaylist,
-    updateHandTags,
-    setPlayerInHand,
-    loadReplay,
-    replayStepFwd,
-    replayStepBack,
-    replayJumpTo,
-    replayBranch,
-    replayUnbranch,
-    replayExit,
-  }), [
-    startGame,
-    placeBet,
-    manualDealCard,
-    undoAction,
-    rollbackStreet,
-    togglePause,
-    setMode,
-    forceNextStreet,
-    awardPot,
-    resetHand,
-    adjustStack,
-    openConfigPhase,
-    updateHandConfig,
-    startConfiguredHand,
-    loadHandScenario,
-    createPlaylist,
-    getPlaylists,
-    addToPlaylist,
-    removeFromPlaylist,
-    deletePlaylist,
-    activatePlaylist,
-    deactivatePlaylist,
-    updateHandTags,
-    setPlayerInHand,
-    loadReplay,
-    replayStepFwd,
-    replayStepBack,
-    replayJumpTo,
-    replayBranch,
-    replayUnbranch,
-    replayExit,
-  ]);
-
-  // ── Tag Hand: debounced save ──────────────────────────────────────────────
-  useEffect(() => {
-    if (!activeHandId || !updateHandTags) return;
-    clearTimeout(tagDebounceRef.current);
-    tagDebounceRef.current = setTimeout(() => {
-      updateHandTags(activeHandId, currentHandTags);
-    }, 500);
-    return () => clearTimeout(tagDebounceRef.current);
-  }, [currentHandTags, activeHandId]);
-
-  // ── CardPicker handlers ───────────────────────────────────────────────────
-  const handleOpenCardPicker = useCallback((target) => {
-    setCardPickerTarget(target);
-  }, []);
-
-  const handleCardPickerSelect = useCallback(
-    (card) => {
-      if (!cardPickerTarget) return;
-      const { type, playerId, position } = cardPickerTarget;
-      manualDealCard(type, playerId, position, card);
-      setCardPickerTarget(null);
-    },
-    [cardPickerTarget, manualDealCard]
-  );
-
-  const handleCardPickerClose = useCallback(() => {
-    setCardPickerTarget(null);
-  }, []);
-
-  // ── Error dismissal ───────────────────────────────────────────────────────
-  const handleDismissError = useCallback((errId) => {
-    setDismissedErrorIds((prev) => new Set([...prev, errId]));
-  }, []);
-
-  // ── Determine if we are in the table view ─────────────────────────────────
-  // We consider "joined" when myId is set (socket assigned us an id and gameState exists)
-  const hasJoined = Boolean(myId && gameState);
-
-  // Visible errors (not dismissed) — filter by id
-  const visibleErrors = (errors ?? []).filter((e) => !dismissedErrorIds.has(e.id));
-
-  // Player count (excluding coaches)
-  const playerCount = (gameState?.players ?? []).filter((p) => !p.is_coach).length;
-
-  // ── Render ─────────────────────────────────────────────────────────────────
-
-  if (!hasJoined) {
+  if (loading) {
     return (
-      <JoinScreen
-        joinRoom={joinRoom}
-        connected={connected}
-      />
+      <div className="min-h-screen bg-[#060a0f] flex items-center justify-center">
+        <span className="text-gray-500 text-sm">Loading…</span>
+      </div>
     );
   }
 
+  if (!user) return <Navigate to="/login" replace />;
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#060a0f' }}>
+    <LobbyProvider>
+      <Outlet />
+    </LobbyProvider>
+  );
+}
 
-      {/* ── Main column ─────────────────────────────────────────────────── */}
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+/**
+ * Redirects to /lobby if the user lacks the required permission.
+ * Pass the `permission` prop (e.g. "admin:access").
+ */
+function RequirePermission({ permission }) {
+  const { hasPermission } = useAuth();
 
-        {/* Top bar */}
-        <TopBar
-          gameState={gameState}
-          isCoach={isCoach}
-          connected={connected}
-          playerCount={playerCount}
-          onLeave={leaveRoom}
-          bbView={bbView}
-          onToggleBBView={toggleBBView}
-        />
+  if (!hasPermission(permission)) return <Navigate to="/lobby" replace />;
 
-        {/* Tag Hand Pill — coach-only, floating below TopBar */}
-        {isCoach && !isSpectator && (
-          <TagHandPill
-            currentHandTags={currentHandTags}
-            setCurrentHandTags={setCurrentHandTags}
-            handTagsSaved={handTagsSaved}
-            gameState={gameState}
-            sidebarOpen={sidebarOpen}
-          />
-        )}
+  return <Outlet />;
+}
 
-        {/* Error toasts — fixed top center */}
-        {visibleErrors.length > 0 && (
-          <div className="fixed top-[52px] left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none">
-            {visibleErrors.map((err, i) => (
-              <div key={err.id} className="pointer-events-auto">
-                <ErrorToast
-                  message={err.message}
-                  onDismiss={() => handleDismissError(err.id)}
-                />
-              </div>
-            ))}
-          </div>
-        )}
+// ── Router tree ───────────────────────────────────────────────────────────────
 
-        {/* Poker table — fills remaining vertical space */}
-        <ErrorBoundary name="PokerTable">
-          <PokerTable
-            gameState={gameState}
-            myId={myId}
-            isCoach={isCoach}
-            coachDisconnected={coachDisconnected}
-            actionTimer={actionTimer}
-            emit={emit}
-            onOpenCardPicker={handleOpenCardPicker}
-            bbView={bbView}
-            bigBlind={gameState?.big_blind ?? 10}
-          />
-        </ErrorBoundary>
-      </div>
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public */}
+      <Route path="/login"           element={<LoginPage />} />
+      <Route path="/register"        element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
-      {/* ── Coach sidebar (right) ────────────────────────────────────────── */}
-      {isCoach && !isSpectator && (
-        <ErrorBoundary name="CoachSidebar">
-          <CoachSidebar
-            gameState={gameState}
-            emit={emit}
-            myId={myId}
-            onOpenCardPicker={handleOpenCardPicker}
-            sessionStats={sessionStats}
-            playlists={playlists}
-            isOpen={sidebarOpen}
-            onToggle={handleToggleSidebar}
-            activeHandId={activeHandId}
-            handTagsSaved={handTagsSaved}
-            setBlindLevels={setBlindLevels}
-          />
-        </ErrorBoundary>
-      )}
+      {/* Authenticated */}
+      <Route element={<RequireAuth />}>
 
-      {/* ── Stats panel ──────────────────────────────────────────────────── */}
-      <StatsPanel
-        isOpen={statsOpen}
-        onClose={() => setStatsOpen(false)}
-        isCoach={isCoach}
-      />
+        {/* Full-screen pages — no global layout */}
+        <Route path="/table/:tableId"  element={<TablePage />} />
+        <Route path="/multi"           element={<MultiTablePage />} />
+        <Route path="/review"          element={<ReviewTablePage />} />
+        <Route path="/tournament/:tableId/lobby"         element={<TournamentLobby />} />
+        <Route path="/tournament/:tableId/standings"     element={<TournamentStandings />} />
+        <Route path="/tournament-group/:groupId/lobby"   element={<TournamentLobby />} />
 
-      {/* ── CardPicker modal ─────────────────────────────────────────────── */}
-      {cardPickerTarget && (() => {
-        // Compute which cards are already in play
-        const usedCards = new Set();
-        (gameState?.players ?? []).forEach(p =>
-          (p.hole_cards ?? []).forEach(c => { if (c && c !== 'HIDDEN') usedCards.add(c); })
-        );
-        (gameState?.board ?? []).forEach(c => { if (c) usedCards.add(c); });
+        {/* Lobby-style pages — wrapped in AppLayout (TopBar + SideNav) */}
+        <Route element={<AppLayout />}>
+          <Route path="/settings"    element={<SettingsPage />} />
+          <Route path="/lobby"       element={<LobbyPage />} />
 
-        // Remove the card currently in the target slot so it can be replaced
-        if (cardPickerTarget.type === 'player') {
-          const p = (gameState?.players ?? []).find(pl => pl.id === cardPickerTarget.playerId);
-          const existing = p?.hole_cards?.[cardPickerTarget.position];
-          if (existing && existing !== 'HIDDEN') usedCards.delete(existing);
-        } else {
-          const existing = (gameState?.board ?? [])[cardPickerTarget.position];
-          if (existing) usedCards.delete(existing);
-        }
+          {/* Tournaments */}
+          <Route path="/tournaments"                   element={<TournamentListPage />} />
+          <Route path="/tournaments/:groupId"          element={<TournamentDetailPage />} />
+          <Route path="/tournaments/:groupId/control"  element={<TournamentControlPage />} />
+          <Route path="/bot-lobby"   element={<BotLobbyPage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
+          <Route path="/analysis"    element={<AnalysisPage />} />
+          <Route path="/history"     element={<HandHistoryPage />} />
 
-        // Build a human-readable title
-        const BOARD_LABELS = ['Flop 1', 'Flop 2', 'Flop 3', 'Turn', 'River'];
-        let title = 'Select a card';
-        if (cardPickerTarget.type === 'board') {
-          title = `Board — ${BOARD_LABELS[cardPickerTarget.position] ?? `Slot ${cardPickerTarget.position}`}`;
-        } else {
-          const p = (gameState?.players ?? []).find(pl => pl.id === cardPickerTarget.playerId);
-          title = `${p?.name ?? 'Player'} — Card ${cardPickerTarget.position + 1}`;
-        }
+          {/* Player staking view */}
+          <Route path="/staking" element={<StakingPlayerPage />} />
 
-        return (
-          <div
-            className="fixed inset-0 z-[100] flex items-center justify-center"
-            style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
-            onClick={(e) => { if (e.target === e.currentTarget) handleCardPickerClose(); }}
-          >
-            <CardPicker
-              usedCards={usedCards}
-              title={title}
-              onSelect={handleCardPickerSelect}
-              onClose={handleCardPickerClose}
-            />
-          </div>
-        );
-      })()}
-    </div>
+          {/* Admin — require admin:access */}
+          <Route element={<RequirePermission permission="admin:access" />}>
+            <Route path="/admin/users"        element={<UserManagement />} />
+            <Route path="/admin/hands"        element={<HandBuilder />} />
+            <Route path="/admin/crm"          element={<PlayerCRM />} />
+            <Route path="/admin/tournaments"  element={<TournamentSetup />} />
+            <Route path="/admin/referee"      element={<RefereeDashboard />} />
+            <Route path="/admin/alerts"       element={<CoachAlertsPage />} />
+            <Route path="/admin/stable"       element={<Navigate to="/admin/crm" replace />} />
+            <Route path="/admin/staking"      element={<StakingPage />} />
+            <Route path="/admin/tournaments/group/:groupId/balancer" element={<TournamentBalancer />} />
+          </Route>
+        </Route>
+      </Route>
+
+      {/* Default: redirect to lobby (will bounce to /login if not authed) */}
+      <Route path="*" element={<Navigate to="/lobby" replace />} />
+    </Routes>
+  );
+}
+
+// ── Root App component ────────────────────────────────────────────────────────
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
