@@ -136,8 +136,8 @@ const PLAYLIST_COLORS = [
 
 - Playlist node: color dot + 3px left border in playlist color
 - Scenario items: 2px left border in a lighter/desaturated variant of the playlist color (20% opacity of the playlist color)
-- Coach-created playlists are assigned colors from the palette by `index % PLAYLIST_COLORS.length`
-- Pre-seeded playlists are assigned colors by their position in the seed list (index 0 = orange, index 1 = blue, etc.)
+- Pre-seeded playlists use the 8 hand-picked colors above
+- Coach-created playlists generate unique colors via golden-angle hue distribution: `hue = (existingCount * 137.508) % 360`, with fixed `saturation: 70%`, `lightness: 55%`. This guarantees each new playlist gets a maximally-distant hue from all previous ones, producing infinite non-repeating colors
 
 ### 3.5 Page Header
 
