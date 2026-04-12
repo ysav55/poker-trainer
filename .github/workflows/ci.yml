@@ -75,8 +75,9 @@ jobs:
     name: Deploy → Staging
     needs: [test-server, test-client, lint]
     runs-on: ubuntu-latest
-    # Any branch except master — so PRs and feature branches go to staging
-    if: github.ref != 'refs/heads/master'
+    # Only the active integration branch deploys to staging — avoids
+    # collisions when multiple feature branches push concurrently.
+    if: github.ref == 'refs/heads/feat/ui-redesign-v1' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
 
