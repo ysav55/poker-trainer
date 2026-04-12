@@ -324,6 +324,7 @@ export default function ScenarioBuilder({
   onDuplicate,
   onClose,
   folders = [],
+  primaryPlaylistId = undefined,
   // Legacy props accepted but ignored (old HandBuilder passes these)
   // eslint-disable-next-line no-unused-vars
   playlists, initialScenario, inline, socket,
@@ -514,6 +515,9 @@ export default function ScenarioBuilder({
       texture_turn:  boardMode === 'texture' ? textureTurn : null,
       texture_river: boardMode === 'texture' ? textureRiver : null,
       blind_mode:   blindMode,
+      ...(primaryPlaylistId !== undefined && isNew
+        ? { primary_playlist_id: primaryPlaylistId }
+        : {}),
     };
 
     try {
