@@ -10,9 +10,9 @@
  * Coverage:
  *   GET  /health
  *   GET  /api/hands                       (requires auth)
- *   GET  /api/hands/:handId               (requires auth, 404 path)
+ *   GET  /api/hands/:handId               (requires auth, not-found path)
  *   GET  /api/players                     (requires auth)
- *   GET  /api/players/:stableId/stats     (requires auth, 404 path)
+ *   GET  /api/players/:stableId/stats     (requires auth, zero-state path)
  *   GET  /api/players/:stableId/hands     (requires auth)
  *   GET  /api/players/:stableId/hover-stats (no auth required)
  *   GET  /api/sessions/current            (requires auth)
@@ -273,10 +273,12 @@ describe('GET /api/players/:stableId/stats', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 for a player that does not exist', async () => {
+  it('returns 200 with zero-state for a player that has no stats', async () => {
     const res = await request(app).get('/api/players/ghost-uuid/stats').set('Authorization', AUTH_HEADER);
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBeDefined();
+    expect(res.status).toBe(200);
+    expect(res.body.hands_played).toBe(0);
+    expect(res.body.net_chips).toBe(0);
+    expect(res.body.rank).toBeNull();
   });
 });
 

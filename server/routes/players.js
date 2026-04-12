@@ -46,7 +46,22 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
       const rawMode = req.query.mode;
       const mode = ['bot', 'human', 'overall'].includes(rawMode) ? rawMode : 'overall';
       const stats = await HandLogger.getPlayerStatsByMode(req.params.stableId, mode);
-      if (!stats) return res.status(404).json({ error: 'Player not found' });
+      if (!stats) {
+        return res.json({
+          hands_played: 0,
+          hands_won: 0,
+          net_chips: 0,
+          vpip: 0,
+          pfr: 0,
+          wtsd: 0,
+          wsd: 0,
+          rank: null,
+          total_players: null,
+          trial_days_left: null,
+          hands_left: null,
+          trial_status: req.user?.trialStatus ?? null,
+        });
+      }
       res.json(stats);
     } catch (err) {
       res.status(500).json({ error: 'internal_error' });
