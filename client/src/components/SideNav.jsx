@@ -1,5 +1,5 @@
 import React from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, NavLink } from 'react-router-dom';
 
 /**
  * Role matrix — 5 canonical roles:
@@ -113,7 +113,6 @@ const NAV_ITEMS = [
  */
 export default function SideNav({ role, badges = {} }) {
   const location = useLocation();
-  const navigate = useNavigate();
 
   const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
 
@@ -136,10 +135,10 @@ export default function SideNav({ role, badges = {} }) {
         const badge = item.badgeKey ? badges[item.badgeKey] : null;
 
         return (
-          <button
+          <NavLink
             key={item.path + (item.hash ?? '')}
-            onClick={() => navigate(item.path + (item.hash ?? ''))}
-            className="relative flex flex-col items-center justify-center w-full py-2.5 gap-0.5 transition-colors"
+            to={item.path + (item.hash ?? '')}
+            className="relative flex flex-col items-center justify-center w-full py-2.5 gap-0.5 transition-colors no-underline"
             style={{
               borderLeft: active ? '3px solid #d4af37' : '3px solid transparent',
               background: active ? 'rgba(212,175,55,0.07)' : 'transparent',
@@ -170,7 +169,7 @@ export default function SideNav({ role, badges = {} }) {
                 {badge > 9 ? '9+' : badge}
               </span>
             )}
-          </button>
+          </NavLink>
         );
       })}
     </nav>
