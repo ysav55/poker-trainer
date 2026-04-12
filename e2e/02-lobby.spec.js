@@ -82,10 +82,10 @@ test.describe('Lobby — Student View', () => {
     await page.goto('/lobby');
 
     // CRM, Scenarios, Analysis, Alerts, Users, Settings are coach/admin only
-    const crmButton = page.locator('nav button[title="CRM"]');
+    const crmButton = page.locator('nav a[title="CRM"]');
     await expect(crmButton).not.toBeVisible();
 
-    const usersButton = page.locator('nav button[title="Users"]');
+    const usersButton = page.locator('nav a[title="Users"]');
     await expect(usersButton).not.toBeVisible();
   });
 

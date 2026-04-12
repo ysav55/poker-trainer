@@ -9,14 +9,14 @@ test.describe('Session Management', () => {
 
   test('session survives page reload', async ({ coachPage: page }) => {
     await page.goto('/lobby');
-    await expect(page.locator('nav button[title="Lobby"]')).toBeVisible();
+    await expect(page.locator('nav a[title="Lobby"]')).toBeVisible();
 
     // Reload the page
     await page.reload();
 
     // Should still be on lobby (not redirected to login)
     await page.waitForURL('**/lobby', { timeout: 10_000 });
-    await expect(page.locator('nav button[title="Lobby"]')).toBeVisible();
+    await expect(page.locator('nav a[title="Lobby"]')).toBeVisible();
   });
 
   // ─── US-68: Clearing session redirects to login ───────────────────────────────

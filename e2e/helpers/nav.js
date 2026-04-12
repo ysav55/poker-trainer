@@ -3,24 +3,24 @@ const { expect } = require('@playwright/test');
 
 /**
  * Navigate to a page using the sidebar nav.
- * Uses the button title attribute which matches the label.
+ * Uses the anchor title attribute which matches the label (NavLink renders as <a>).
  */
 async function clickSideNav(page, label) {
-  await page.locator(`nav button[title="${label}"]`).click();
+  await page.locator(`nav a[title="${label}"]`).click();
 }
 
 /**
  * Assert that a sidebar nav item is visible.
  */
 async function expectNavItem(page, label) {
-  await expect(page.locator(`nav button[title="${label}"]`)).toBeVisible();
+  await expect(page.locator(`nav a[title="${label}"]`)).toBeVisible();
 }
 
 /**
  * Assert that a sidebar nav item is NOT visible (role-gated).
  */
 async function expectNoNavItem(page, label) {
-  await expect(page.locator(`nav button[title="${label}"]`)).not.toBeVisible();
+  await expect(page.locator(`nav a[title="${label}"]`)).not.toBeVisible();
 }
 
 /**

@@ -97,7 +97,7 @@ test.describe('Multi-Table View', () => {
   test('sidebar nav to multi works', async ({ coachPage: page }) => {
     await page.goto('/lobby');
 
-    const multiBtn = page.locator('nav button[title="Multi"]');
+    const multiBtn = page.locator('nav a[title="Multi"]');
     const visible = await multiBtn.isVisible({ timeout: 3_000 }).catch(() => false);
     if (visible) {
       await multiBtn.click();
