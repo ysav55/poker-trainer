@@ -79,7 +79,7 @@ describe('UserManagement', () => {
   it('renders the USER MANAGEMENT title', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('USER MANAGEMENT')).toBeTruthy();
+      expect(screen.getByText('User Management')).toBeTruthy();
     });
   });
 
@@ -137,7 +137,7 @@ describe('UserManagement', () => {
     renderPage();
     await waitFor(() => {
       // Page should still render even with null user
-      expect(screen.getByText('USER MANAGEMENT')).toBeTruthy();
+      expect(screen.getByText('User Management')).toBeTruthy();
     });
   });
 });
