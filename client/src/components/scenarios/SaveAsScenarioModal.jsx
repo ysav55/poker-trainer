@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { X } from 'lucide-react';
 import { colors } from '../../lib/colors.js';
 import { generatePlaylistColor } from './PLAYLIST_COLORS.js';
@@ -7,6 +7,16 @@ import { apiFetch as defaultApiFetch } from '../../lib/api.js';
 
 // Board slot ordering: 3 flop slots + turn + river.
 const BOARD_SLOTS = ['flop1', 'flop2', 'flop3', 'turn', 'river'];
+
+// Human label for a board slot id (e.g. 'flop1' → 'Flop 1', 'turn' → 'Turn').
+function slotLabel(slot) {
+  if (slot === 'turn') return 'Turn';
+  if (slot === 'river') return 'River';
+  if (slot === 'flop1') return 'Flop 1';
+  if (slot === 'flop2') return 'Flop 2';
+  if (slot === 'flop3') return 'Flop 3';
+  return String(slot ?? '');
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,18 +81,51 @@ export function autoName({ hole, board, handId }) {
   return `Hand #${String(handId || '').slice(0, 6)}`;
 }
 
+// Crude stem: drop a trailing 's' so "pot"/"pots" compare equal. Only strips
+// if the stemmed form is still ≥ 2 chars so "a"/"as" don't collapse to "a".
+function stem(tok) {
+  if (tok.length > 2 && tok.endsWith('s')) return tok.slice(0, -1);
+  return tok;
+}
+
+// Tokenize a string: split on non-alphanumeric AND on digit↔letter transitions,
+// lowercase, drop empties. This lets tags like "3BET_POT" tokenize to
+// ["3","bet","pot"] so they align with hyphenated playlist names like "3-Bet Pots".
+function tokenize(str) {
+  return String(str ?? '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .flatMap((part) => part.match(/[a-z]+|[0-9]+/g) ?? [])
+    .filter(Boolean);
+}
+
 // Match existing hand tags against playlist names to pick a default playlist.
-function guessPlaylistId(playlists, tags) {
+// Returns the first playlist whose tokenized name is a superset of some tag's
+// tokens (where that tag has at least one non-trivial token of length >= 2).
+// Tokens are compared after a light stem that ignores a trailing "s", so
+// "pot" and "pots" match. Returns null when no tag matches — caller decides
+// the fallback.
+export function guessPlaylistId(playlists, tags) {
   if (!Array.isArray(playlists) || playlists.length === 0) return null;
-  if (!Array.isArray(tags) || tags.length === 0) return playlists[0]?.playlist_id ?? null;
-  const lowerTags = tags.map((t) => String(t).toLowerCase());
+  if (!Array.isArray(tags) || tags.length === 0) return null;
+
+  const tagTokenSets = tags
+    .map((t) => tokenize(t))
+    .filter((toks) => toks.length > 0 && toks.some((tok) => tok.length >= 2))
+    .map((toks) => toks.map(stem));
+
+  if (tagTokenSets.length === 0) return null;
+
   for (const pl of playlists) {
-    const name = String(pl.name || '').toLowerCase();
-    if (lowerTags.some((tag) => name.includes(tag.replace(/_/g, ' ')) || name.includes(tag))) {
-      return pl.playlist_id;
+    const nameTokens = new Set(tokenize(pl.name).map(stem));
+    if (nameTokens.size === 0) continue;
+    for (const tagTokens of tagTokenSets) {
+      if (tagTokens.every((tok) => nameTokens.has(tok))) {
+        return pl.playlist_id;
+      }
     }
   }
-  return playlists[0]?.playlist_id ?? null;
+  return null;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -129,6 +172,17 @@ export default function SaveAsScenarioModal({
   const [playlistId, setPlaylistId]       = useState(null);
   const [loadingPls, setLoadingPls]       = useState(true);
 
+  // Keep the latest tag snapshot accessible to the fetch effect without
+  // causing it to re-run (and clobber the user's manual playlist choice)
+  // when the parent re-renders with an updated `hand` during live review.
+  const tagsRef = useRef(tags);
+  useEffect(() => { tagsRef.current = tags; }, [tags]);
+
+  // Track whether we've already applied a default so subsequent resolutions
+  // (re-mount pathology or strict-mode double-invoke) don't overwrite a
+  // user-selected playlist.
+  const defaultAppliedRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
     apiFetch('/api/playlists')
@@ -136,7 +190,12 @@ export default function SaveAsScenarioModal({
         if (cancelled) return;
         const list = Array.isArray(res) ? res : (res?.playlists ?? []);
         setPlaylists(list);
-        setPlaylistId(guessPlaylistId(list, tags));
+        if (!defaultAppliedRef.current) {
+          const guessed = guessPlaylistId(list, tagsRef.current);
+          const fallback = list[0]?.playlist_id ?? null;
+          setPlaylistId(guessed ?? fallback);
+          defaultAppliedRef.current = true;
+        }
       })
       .catch(() => {
         if (!cancelled) setPlaylists([]);
@@ -145,7 +204,7 @@ export default function SaveAsScenarioModal({
         if (!cancelled) setLoadingPls(false);
       });
     return () => { cancelled = true; };
-  }, [apiFetch, tags]);
+  }, [apiFetch]);
 
   const colorMap = useMemo(() => {
     const m = {};
@@ -194,10 +253,11 @@ export default function SaveAsScenarioModal({
         body: JSON.stringify(patchBody),
       });
       // 3. Link the scenario to the selected playlist (explicit playlist_items row).
+      //    Use scenario.id from the initial POST — PATCH response isn't guaranteed to echo id.
       if (playlistId) {
         await apiFetch(`/api/playlists/${encodeURIComponent(playlistId)}/items`, {
           method: 'POST',
-          body: JSON.stringify({ scenario_id: updated.id }),
+          body: JSON.stringify({ scenario_id: scenario.id }),
         });
       }
       onSaved?.(updated);
@@ -274,12 +334,12 @@ export default function SaveAsScenarioModal({
           <div>
             <Label>Board</Label>
             <div data-testid="modal-board" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {BOARD_SLOTS.map((slot, i) => (
+              {BOARD_SLOTS.map((slot) => (
                 <BoardSlot
                   key={slot}
                   slot={slot}
                   card={board[slot]}
-                  label={i < 3 ? `Flop ${i + 1}` : i === 3 ? 'Turn' : 'River'}
+                  label={slotLabel(slot)}
                   onClick={() => setPickerSlot(slot)}
                   onClear={() => setBoard((p) => ({ ...p, [slot]: null }))}
                 />
@@ -425,7 +485,7 @@ export default function SaveAsScenarioModal({
           usedCards={usedCards}
           onSelect={handleSlotPick}
           onClose={() => setPickerSlot(null)}
-          title={`Pick card for ${pickerSlot}`}
+          title={`Pick card for ${slotLabel(pickerSlot)}`}
         />
       )}
     </div>

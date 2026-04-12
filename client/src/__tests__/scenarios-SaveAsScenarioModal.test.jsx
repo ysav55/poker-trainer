@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
-import SaveAsScenarioModal, { autoName } from '../components/scenarios/SaveAsScenarioModal.jsx';
+import SaveAsScenarioModal, { autoName, guessPlaylistId } from '../components/scenarios/SaveAsScenarioModal.jsx';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -124,17 +124,60 @@ describe('SaveAsScenarioModal', () => {
     expect(screen.getByTestId('playlist-picker-pl-1').textContent).toMatch(/SELECTED/);
   });
 
-  it('pre-selects playlist whose name matches a hand tag', async () => {
+  it('pre-selects playlist whose name tokens match a hand tag', async () => {
+    // HAND.tags includes 'C_BET' → playlist 'C-Bet Lines' (tokens {c, bet} ⊂ {c, bet, lines}) should match.
     await act(async () => {
       render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
     });
-    // HAND.tags includes 'C_BET' → 'C-Bet Lines' playlist name contains 'c-bet'? Close enough: the heuristic
-    // uses `toLowerCase().includes('c_bet'.replace('_',' '))` = 'c bet'. Not a match; first playlist will be used.
-    // Assert that SOME playlist is auto-selected (not null).
-    await waitFor(() => {
-      const selected = screen.getAllByText('SELECTED');
-      expect(selected.length).toBe(1);
+    await waitFor(() => screen.getByTestId('playlist-picker-pl-2'));
+    // pl-2 is 'C-Bet Lines' and should be pre-selected.
+    expect(screen.getByTestId('playlist-picker-pl-2').textContent).toMatch(/SELECTED/);
+    // Only one playlist is selected.
+    expect(screen.getAllByText('SELECTED').length).toBe(1);
+  });
+
+  it('falls back to the first playlist when no tag matches any playlist name', async () => {
+    // Tag 'WALK' has no matching playlist → fallback to first.
+    await act(async () => {
+      render(
+        <SaveAsScenarioModal
+          hand={{ ...HAND, tags: ['WALK'] }}
+          onClose={onClose}
+          onSaved={onSaved}
+          apiFetch={apiFetch}
+        />
+      );
     });
+    await waitFor(() => screen.getByTestId('playlist-picker-pl-1'));
+    expect(screen.getByTestId('playlist-picker-pl-1').textContent).toMatch(/SELECTED/);
+  });
+
+  it('does not reset user playlist choice when the hand prop updates (live review)', async () => {
+    const { rerender } = render(
+      <SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />
+    );
+    // Wait for playlists to load.
+    await waitFor(() => screen.getByTestId('playlist-picker-pl-1'));
+
+    // User manually selects pl-3 ('Wet Flop Spots').
+    fireEvent.click(screen.getByTestId('playlist-picker-pl-3'));
+    expect(screen.getByTestId('playlist-picker-pl-3').textContent).toMatch(/SELECTED/);
+
+    // Simulate a live-review update: same hand_id, but `tags` array changes (new ref).
+    await act(async () => {
+      rerender(
+        <SaveAsScenarioModal
+          hand={{ ...HAND, tags: ['3BET_POT', 'C_BET', 'DONK_BET'] }}
+          onClose={onClose}
+          onSaved={onSaved}
+          apiFetch={apiFetch}
+        />
+      );
+    });
+
+    // User's selection is preserved — pl-3 still selected, not reset to the tag-match default pl-2.
+    expect(screen.getByTestId('playlist-picker-pl-3').textContent).toMatch(/SELECTED/);
+    expect(screen.getAllByText('SELECTED').length).toBe(1);
   });
 
   it('name field is editable', async () => {
@@ -237,5 +280,44 @@ describe('SaveAsScenarioModal', () => {
     });
     fireEvent.click(screen.getByTestId('modal-close-btn'));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('guessPlaylistId()', () => {
+  const PLAYLISTS_FIXTURE = [
+    { playlist_id: 'pl-1', name: 'Dry Flop Spots' },
+    { playlist_id: 'pl-2', name: 'C-Bet Lines' },
+    { playlist_id: 'pl-3', name: '3-Bet Pots' },
+    { playlist_id: 'pl-4', name: 'Wet Flop Spots' },
+  ];
+
+  it('matches underscore tag against hyphenated playlist name', () => {
+    expect(guessPlaylistId(PLAYLISTS_FIXTURE, ['C_BET'])).toBe('pl-2');
+  });
+
+  it('matches DRY_FLOP against "Dry Flop Spots"', () => {
+    expect(guessPlaylistId(PLAYLISTS_FIXTURE, ['DRY_FLOP'])).toBe('pl-1');
+  });
+
+  it('matches 3BET_POT against "3-Bet Pots"', () => {
+    expect(guessPlaylistId(PLAYLISTS_FIXTURE, ['3BET_POT'])).toBe('pl-3');
+  });
+
+  it('returns null when no tag matches any playlist', () => {
+    expect(guessPlaylistId(PLAYLISTS_FIXTURE, ['WALK'])).toBeNull();
+  });
+
+  it('ignores tags whose only tokens are single characters', () => {
+    expect(guessPlaylistId(PLAYLISTS_FIXTURE, ['a', '1'])).toBeNull();
+  });
+
+  it('returns null for empty inputs', () => {
+    expect(guessPlaylistId([], ['C_BET'])).toBeNull();
+    expect(guessPlaylistId(PLAYLISTS_FIXTURE, [])).toBeNull();
+  });
+
+  it('returns the first matching tag (not every candidate)', () => {
+    // DRY_FLOP matches pl-1; later C_BET would match pl-2 — expect pl-1 because it comes first in tag order.
+    expect(guessPlaylistId(PLAYLISTS_FIXTURE, ['DRY_FLOP', 'C_BET'])).toBe('pl-1');
   });
 });
