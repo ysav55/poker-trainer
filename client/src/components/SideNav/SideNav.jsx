@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import {
   Home, Table2, Trophy, Clock, Medal,
   Users, FolderOpen, Target,
-  Settings, PanelLeftClose, PanelLeftOpen,
+  Settings, PanelLeftClose, PanelLeftOpen, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 import { colors } from '../../lib/colors.js';
@@ -29,7 +29,7 @@ const COACHING_ITEMS = [
 ];
 
 export default function SideNav({ chipBalance, badges = {}, schoolName, studentsOnline, activeTables }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
   const { expanded, toggle } = useSidebarState();
   const role = user?.role;
@@ -111,6 +111,15 @@ export default function SideNav({ chipBalance, badges = {}, schoolName, students
           expanded={expanded}
           active={isActive('/settings')}
         />
+        <button
+          onClick={logout}
+          className="flex items-center gap-3 px-3 py-2 transition-colors"
+          style={{ color: colors.textMuted, background: 'none', border: 'none', cursor: 'pointer' }}
+          aria-label="Log out"
+        >
+          <LogOut size={20} />
+          {expanded && <span className="text-xs">Log out</span>}
+        </button>
         <button
           onClick={toggle}
           className="flex items-center gap-3 px-3 py-2 transition-colors"

@@ -13,6 +13,11 @@ const router = express.Router();
 const canTag      = requirePermission('hand:tag');       // create/edit scenarios & playlists
 const canManage   = requirePermission('table:manage');   // drill session control
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuidOrNullish(v) {
+  return v === undefined || v === null || (typeof v === 'string' && UUID_RE.test(v));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SCENARIO FOLDERS  /api/scenarios/folders
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,6 +105,7 @@ router.post('/scenarios', canTag, async (req, res) => {
     board_mode = 'none', board_flop, board_turn, board_river,
     board_texture, texture_turn, texture_river,
     blind_mode = false, is_shareable = false,
+    primary_playlist_id = null,
   } = req.body || {};
 
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -111,6 +117,9 @@ router.post('/scenarios', canTag, async (req, res) => {
   if (!['fixed', 'range'].includes(card_mode)) {
     return res.status(400).json({ error: 'card_mode must be "fixed" or "range"' });
   }
+  if (!isValidUuidOrNullish(primary_playlist_id)) {
+    return res.status(400).json({ error: 'primary_playlist_id must be a valid UUID' });
+  }
 
   try {
     const scenario = await repo.createScenario({
@@ -121,6 +130,7 @@ router.post('/scenarios', canTag, async (req, res) => {
       boardRiver: board_river, boardTexture: board_texture,
       textureTurn: texture_turn, textureRiver: texture_river,
       blindMode: blind_mode, isShareable: is_shareable,
+      primaryPlaylistId: primary_playlist_id,
     });
     res.status(201).json(scenario);
   } catch (err) {
@@ -143,12 +153,18 @@ router.patch('/scenarios/:id', canTag, async (req, res) => {
       board_river: boardRiver, board_texture: boardTexture,
       texture_turn: textureTurn, texture_river: textureRiver,
       blind_mode: blindMode, is_shareable: isShareable,
+      primary_playlist_id: primaryPlaylistId,
     } = req.body || {};
+
+    if (!isValidUuidOrNullish(primaryPlaylistId)) {
+      return res.status(400).json({ error: 'primary_playlist_id must be a valid UUID' });
+    }
 
     const updated = await repo.updateScenario(req.params.id, {
       name, folderId, description, tags, playerCount, btnSeat, cardMode,
       seatConfigs, stackConfigs, boardMode, boardFlop, boardTurn, boardRiver,
       boardTexture, textureTurn, textureRiver, blindMode, isShareable,
+      primaryPlaylistId,
     });
     res.json(updated);
   } catch (err) {

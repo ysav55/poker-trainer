@@ -96,6 +96,7 @@ const SCENARIO_COLS = [
   'board_mode', 'board_flop', 'board_turn', 'board_river',
   'board_texture', 'texture_turn', 'texture_river',
   'blind_mode', 'source_hand_id', 'is_shareable', 'play_count',
+  'primary_playlist_id',
   'created_at', 'updated_at',
 ].join(', ');
 
@@ -136,6 +137,7 @@ async function createScenario({
   boardMode = 'none', boardFlop = null, boardTurn = null, boardRiver = null,
   boardTexture = null, textureTurn = null, textureRiver = null,
   blindMode = false, sourceHandId = null, isShareable = false,
+  primaryPlaylistId = null,
 }) {
   const data = await q(
     supabase.from('scenarios').insert({
@@ -159,6 +161,7 @@ async function createScenario({
       blind_mode:    blindMode,
       source_hand_id: sourceHandId,
       is_shareable:  isShareable,
+      primary_playlist_id: primaryPlaylistId,
     })
     .select(SCENARIO_COLS)
     .single()
@@ -202,6 +205,7 @@ async function updateScenario(id, changes) {
       blindMode:     changes.blindMode     ?? current.blind_mode,
       sourceHandId:  current.source_hand_id,
       isShareable:   changes.isShareable   ?? current.is_shareable,
+      primaryPlaylistId: changes.primaryPlaylistId ?? current.primary_playlist_id,
     });
     // Patch version + parent_id after insert (createScenario defaults version=1)
     const versioned = await q(
@@ -232,6 +236,7 @@ async function updateScenario(id, changes) {
     boardRiver:   'board_river',   boardTexture:  'board_texture',
     textureTurn:  'texture_turn',  textureRiver:  'texture_river',
     blindMode:    'blind_mode',    isShareable:   'is_shareable',
+    primaryPlaylistId: 'primary_playlist_id',
   };
   for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
     if (changes[jsKey] !== undefined) patch[dbCol] = changes[jsKey];
@@ -267,6 +272,7 @@ async function duplicateScenario(id, coachId) {
     textureRiver: src.texture_river,
     blindMode:    src.blind_mode,
     isShareable:  src.is_shareable,
+    primaryPlaylistId: src.primary_playlist_id,
   });
 }
 
