@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { apiFetch } from '../../lib/api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
-import { GOLD, SectionHeader, Field, Input, Card } from './shared.jsx';
+import { SectionHeader, Field, Input, Card } from './shared.jsx';
+import { colors } from '../../lib/colors.js';
 
 // ─── DangerZoneTab ───────────────────────────────────────────────────────────
 
@@ -76,7 +77,7 @@ export default function DangerZoneTab() {
   if (done) {
     return (
       <Card>
-        <p className="text-sm font-semibold" style={{ color: '#238636' }}>{done}</p>
+        <p className="text-sm font-semibold" style={{ color: colors.success }}>{done}</p>
       </Card>
     );
   }
@@ -84,7 +85,7 @@ export default function DangerZoneTab() {
   return (
     <div className="flex flex-col gap-4">
       <SectionHeader title="Danger Zone" />
-      <p className="text-sm mb-1" style={{ color: '#6e7681' }}>
+      <p className="text-sm mb-1" style={{ color: colors.textMuted }}>
         These actions are irreversible. Enter your password to unlock them.
       </p>
 
@@ -100,13 +101,13 @@ export default function DangerZoneTab() {
             />
           </Field>
           {verifyErr && (
-            <p className="text-xs mb-2" style={{ color: '#ef4444' }}>{verifyErr}</p>
+            <p className="text-xs mb-2" style={{ color: colors.error }}>{verifyErr}</p>
           )}
           <button
             onClick={handleUnlock}
             disabled={verifying || !password}
             className="px-5 py-2 rounded text-sm font-bold"
-            style={{ background: '#6e7681', color: '#0d1117', opacity: (verifying || !password) ? 0.6 : 1 }}
+            style={{ background: colors.textMuted, color: colors.bgSurface, opacity: (verifying || !password) ? 0.6 : 1 }}
           >
             {verifying ? 'Verifying…' : 'Unlock'}
           </button>
@@ -117,7 +118,7 @@ export default function DangerZoneTab() {
       {unlocked && (
         <>
           {actionErr && (
-            <p className="text-sm" style={{ color: '#ef4444' }}>{actionErr}</p>
+            <p className="text-sm" style={{ color: colors.error }}>{actionErr}</p>
           )}
 
           {/* Reset table defaults — coach/admin/superadmin only */}
@@ -125,8 +126,8 @@ export default function DangerZoneTab() {
             <Card>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm font-semibold mb-1" style={{ color: '#e5e7eb' }}>Reset Table Defaults</p>
-                  <p className="text-xs" style={{ color: '#6e7681' }}>
+                  <p className="text-sm font-semibold mb-1" style={{ color: colors.textPrimary }}>Reset Table Defaults</p>
+                  <p className="text-xs" style={{ color: colors.textMuted }}>
                     Removes all your saved table defaults. Table settings will revert to the platform defaults.
                   </p>
                 </div>
@@ -134,7 +135,7 @@ export default function DangerZoneTab() {
                   onClick={handleResetDefaults}
                   disabled={busy}
                   className="px-4 py-1.5 rounded text-sm font-bold whitespace-nowrap"
-                  style={{ background: '#b45309', color: '#fff', opacity: busy ? 0.6 : 1 }}
+                  style={{ background: colors.warningStrong, color: colors.white, opacity: busy ? 0.6 : 1 }}
                 >
                   {busy ? 'Resetting…' : 'Reset'}
                 </button>
@@ -146,8 +147,8 @@ export default function DangerZoneTab() {
           <Card>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-semibold mb-1" style={{ color: '#ef4444' }}>Deactivate Account</p>
-                <p className="text-xs" style={{ color: '#6e7681' }}>
+                <p className="text-sm font-semibold mb-1" style={{ color: colors.error }}>Deactivate Account</p>
+                <p className="text-xs" style={{ color: colors.textMuted }}>
                   Permanently deactivates your account. You will be logged out and will no longer be able to sign in.
                   This cannot be undone without contacting an admin.
                 </p>
@@ -156,7 +157,7 @@ export default function DangerZoneTab() {
                 onClick={handleDeactivate}
                 disabled={busy}
                 className="px-4 py-1.5 rounded text-sm font-bold whitespace-nowrap"
-                style={{ background: '#da3633', color: '#fff', opacity: busy ? 0.6 : 1 }}
+                style={{ background: colors.error, color: colors.white, opacity: busy ? 0.6 : 1 }}
               >
                 {busy ? 'Deactivating…' : 'Deactivate'}
               </button>

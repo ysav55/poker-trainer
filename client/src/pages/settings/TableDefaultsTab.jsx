@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
-import { GOLD, SectionHeader, Field, Input, Select, Toggle, SaveButton, Card } from './shared.jsx';
+import { SectionHeader, Field, Input, Select, Toggle, SaveButton, Card } from './shared.jsx';
+import { colors } from '../../lib/colors.js';
 
 // ─── Table Defaults helpers ───────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ function CascadeLabel({ field, scopeMap, dirty, isAdmin }) {
   const isOverridden  = isDirty || scopeMap[field] === 'school' || (isAdmin && scopeMap[field] === 'org');
   if (!scopeMap[field] && !isDirty) return null;
   return (
-    <span className="text-xs ml-2" style={{ color: isOverridden ? '#ffa657' : '#6e7681' }}>
+    <span className="text-xs ml-2" style={{ color: isOverridden ? colors.warning : colors.textMuted }}>
       {isOverridden ? '(overridden)' : isAdmin ? '(app default)' : '(platform default)'}
     </span>
   );
@@ -158,14 +159,14 @@ export default function TableDefaultsTab() {
 
   const lp = { scopeMap, dirty, isAdmin };
 
-  if (loading) return <Card><p className="text-sm" style={{ color: '#6e7681' }}>Loading…</p></Card>;
+  if (loading) return <Card><p className="text-sm" style={{ color: colors.textMuted }}>Loading…</p></Card>;
 
   const inputCls = 'rounded px-3 py-1.5 text-sm outline-none';
-  const inputStyle = { background: '#0d1117', border: '1px solid #30363d', color: '#e5e7eb' };
+  const inputStyle = { background: colors.bgSurface, border: `1px solid ${colors.borderStrong}`, color: colors.textPrimary };
 
   return (
     <Card>
-      <p className="text-sm mb-4" style={{ color: '#6e7681' }}>
+      <p className="text-sm mb-4" style={{ color: colors.textMuted }}>
         New tables in your school will use these settings. Each table can override at creation.
       </p>
 
@@ -250,23 +251,23 @@ export default function TableDefaultsTab() {
         <Input type="number" value={form.studentDisconnectMins} onChange={v => set('studentDisconnectMins', Number(v))} />
       </Field>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* Quick Pick Presets */}
       <SectionHeader title="Quick Pick Presets" />
       {presets.length > 0 && (
-        <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid #30363d' }}>
+        <div className="rounded-lg overflow-hidden mb-3" style={{ border: `1px solid ${colors.borderStrong}` }}>
           {presets.map((p, i) => (
             <div
               key={p.id}
               className="flex items-center gap-3 px-4 py-2.5 text-sm"
-              style={{ borderBottom: i < presets.length - 1 ? '1px solid #21262d' : 'none' }}
+              style={{ borderBottom: i < presets.length - 1 ? `1px solid ${colors.borderDefault}` : 'none' }}
             >
-              <span className="flex-1 font-semibold" style={{ color: '#f0ece3' }}>{p.name}</span>
+              <span className="flex-1 font-semibold" style={{ color: colors.textPrimary }}>{p.name}</span>
               <button
                 onClick={() => handleDeletePreset(p.id)}
                 className="text-xs"
-                style={{ color: '#f85149' }}
+                style={{ color: colors.error }}
               >
                 ✕
               </button>
@@ -286,20 +287,20 @@ export default function TableDefaultsTab() {
           onClick={handleSavePreset}
           disabled={savingPreset || !newPresetName.trim()}
           className="px-3 py-1.5 rounded text-sm font-semibold"
-          style={{ background: GOLD, color: '#0d1117', opacity: savingPreset ? 0.6 : 1 }}
+          style={{ background: colors.gold, color: colors.bgSurface, opacity: savingPreset ? 0.6 : 1 }}
         >
           Save current as preset
         </button>
       </div>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={handleSave}
           disabled={saving || dirty.size === 0}
           className="px-5 py-2 rounded text-sm font-bold"
-          style={{ background: GOLD, color: '#0d1117', opacity: saving || dirty.size === 0 ? 0.6 : 1 }}
+          style={{ background: colors.gold, color: colors.bgSurface, opacity: saving || dirty.size === 0 ? 0.6 : 1 }}
         >
           {saving ? 'Saving…' : 'Save Defaults'}
         </button>
@@ -307,12 +308,12 @@ export default function TableDefaultsTab() {
           onClick={handleReset}
           disabled={resetting}
           className="px-5 py-2 rounded text-sm font-semibold"
-          style={{ background: '#21262d', color: '#e5e7eb', border: '1px solid #30363d', opacity: resetting ? 0.6 : 1 }}
+          style={{ background: colors.borderDefault, color: colors.textPrimary, border: `1px solid ${colors.borderStrong}`, opacity: resetting ? 0.6 : 1 }}
         >
           {resetting ? 'Resetting…' : 'Reset to platform defaults'}
         </button>
         {msg && (
-          <span className="text-xs" style={{ color: msg.includes('fail') ? '#f85149' : '#3fb950' }}>
+          <span className="text-xs" style={{ color: msg.includes('fail') ? colors.error : colors.success }}>
             {msg}
           </span>
         )}

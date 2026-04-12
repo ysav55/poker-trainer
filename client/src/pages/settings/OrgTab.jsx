@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
-import { GOLD, SectionHeader, Field, Input, Select, Toggle, SaveButton, Card } from './shared.jsx';
+import { colors } from '../../lib/colors.js';
+import { SectionHeader, Field, Input, Select, Toggle, SaveButton, Card } from './shared.jsx';
 
 // ─── Tab: Org Settings ────────────────────────────────────────────────────────
 
 const inputCls = 'rounded px-3 py-1.5 text-sm outline-none';
-const inputStyle = { background: '#0d1117', border: '1px solid #30363d', color: '#e5e7eb' };
+const inputStyle = { background: colors.bgSurface, border: `1px solid ${colors.borderStrong}`, color: colors.textPrimary };
 
 function GroupPolicySection() {
   const [policy, setPolicy]       = useState({ enabled: true, max_groups: '', max_players_per_group: '' });
@@ -88,12 +89,12 @@ function GroupPolicySection() {
     setSchoolPolicies(prev => ({ ...prev, [schoolId]: { ...prev[schoolId], [key]: value } }));
   }
 
-  if (!loaded) return <p className="text-xs" style={{ color: '#6e7681' }}>Loading…</p>;
+  if (!loaded) return <p className="text-xs" style={{ color: colors.textMuted }}>Loading…</p>;
 
   return (
     <>
       <SectionHeader title="Group Policy" />
-      <p className="text-xs mb-3" style={{ color: '#6e7681' }}>
+      <p className="text-xs mb-3" style={{ color: colors.textMuted }}>
         Platform defaults. Individual schools can override these limits.
       </p>
 
@@ -120,19 +121,19 @@ function GroupPolicySection() {
       </div>
       <div className="flex items-center gap-3 mb-4">
         <SaveButton onClick={saveOrgPolicy} label={saving ? 'Saving…' : 'Save Defaults'} />
-        {saveMsg && <span className="text-xs" style={{ color: saveMsg === 'Saved.' ? '#3fb950' : '#f85149' }}>{saveMsg}</span>}
+        {saveMsg && <span className="text-xs" style={{ color: saveMsg === 'Saved.' ? colors.success : colors.error }}>{saveMsg}</span>}
       </div>
 
       {/* Per-school overrides */}
       {schools.length > 0 && (
         <>
-          <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: '#6e7681' }}>School Overrides</p>
-          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #30363d' }}>
+          <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: colors.textMuted }}>School Overrides</p>
+          <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${colors.borderStrong}` }}>
             {schools.map((s, i) => {
               const isOpen = expandedSchool === s.id;
               const sp     = schoolPolicies[s.id];
               return (
-                <div key={s.id} style={{ borderBottom: i < schools.length - 1 ? '1px solid #21262d' : 'none' }}>
+                <div key={s.id} style={{ borderBottom: i < schools.length - 1 ? `1px solid ${colors.borderDefault}` : 'none' }}>
                   <button
                     className="w-full flex items-center gap-3 px-4 py-3 text-left"
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
@@ -141,19 +142,19 @@ function GroupPolicySection() {
                       else setExpandedSchool(null);
                     }}
                   >
-                    <span className="flex-1 text-sm font-semibold" style={{ color: '#f0ece3' }}>{s.name}</span>
+                    <span className="flex-1 text-sm font-semibold" style={{ color: colors.textPrimary }}>{s.name}</span>
                     {sp && (
-                      <span className="text-xs" style={{ color: sp.enabled !== false ? '#3fb950' : '#6e7681' }}>
+                      <span className="text-xs" style={{ color: sp.enabled !== false ? colors.success : colors.textMuted }}>
                         {sp.enabled !== false ? 'ON' : 'OFF'}
                         {sp.max_groups !== '' ? ` · max ${sp.max_groups} groups` : ''}
                         {sp.max_players_per_group !== '' ? ` · ${sp.max_players_per_group}/group` : ''}
                       </span>
                     )}
-                    <span style={{ color: '#6e7681', fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
+                    <span style={{ color: colors.textMuted, fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
                   </button>
 
                   {isOpen && sp && (
-                    <div className="px-4 pb-4 flex flex-col gap-3" style={{ background: '#0d1117' }}>
+                    <div className="px-4 pb-4 flex flex-col gap-3" style={{ background: colors.bgSurface }}>
                       <Field label="Groups enabled">
                         <Toggle value={sp.enabled !== false} onChange={v => setSchoolPolicyField(s.id, 'enabled', v)} />
                       </Field>
@@ -301,17 +302,17 @@ export default function OrgTab() {
     finally { setLbSaving(false); }
   }
 
-  if (loading) return <Card><p className="text-sm" style={{ color: '#6e7681' }}>Loading…</p></Card>;
+  if (loading) return <Card><p className="text-sm" style={{ color: colors.textMuted }}>Loading…</p></Card>;
 
   return (
     <Card>
-      <p className="text-sm mb-4" style={{ color: '#6e7681' }}>
+      <p className="text-sm mb-4" style={{ color: colors.textMuted }}>
         These apply platform-wide unless overridden at the school or table level.
       </p>
 
       {/* ── Blind Structures ── */}
       <SectionHeader title="Default Blind Structures" />
-      <div className="rounded-lg overflow-hidden mb-2" style={{ border: '1px solid #30363d' }}>
+      <div className="rounded-lg overflow-hidden mb-2" style={{ border: `1px solid ${colors.borderStrong}` }}>
         {structures.map((s, i) => {
           const isEditing = editingStruct?.id === s.id;
           const ed = editingStruct ?? s;
@@ -319,7 +320,7 @@ export default function OrgTab() {
             <div
               key={s.id}
               className="flex items-center gap-3 px-4 py-2.5"
-              style={{ borderBottom: i < structures.length - 1 ? '1px solid #21262d' : 'none' }}
+              style={{ borderBottom: i < structures.length - 1 ? `1px solid ${colors.borderDefault}` : 'none' }}
             >
               {isEditing ? (
                 <>
@@ -327,15 +328,15 @@ export default function OrgTab() {
                   <input value={ed.sb}    onChange={e => setEditingStruct(x => ({ ...x, sb: e.target.value }))}    className={inputCls} style={{ ...inputStyle, width: 60 }} placeholder="SB" type="number" />
                   <input value={ed.bb}    onChange={e => setEditingStruct(x => ({ ...x, bb: e.target.value }))}    className={inputCls} style={{ ...inputStyle, width: 60 }} placeholder="BB" type="number" />
                   <input value={ed.ante}  onChange={e => setEditingStruct(x => ({ ...x, ante: e.target.value }))}  className={inputCls} style={{ ...inputStyle, width: 60 }} placeholder="Ante" type="number" />
-                  <button onClick={() => handleSaveStruct(editingStruct)} className="text-xs font-semibold" style={{ color: GOLD }}>Save</button>
-                  <button onClick={() => setEditingStruct(null)} className="text-xs" style={{ color: '#6e7681' }}>Cancel</button>
+                  <button onClick={() => handleSaveStruct(editingStruct)} className="text-xs font-semibold" style={{ color: colors.gold }}>Save</button>
+                  <button onClick={() => setEditingStruct(null)} className="text-xs" style={{ color: colors.textMuted }}>Cancel</button>
                 </>
               ) : (
                 <>
-                  <span className="w-20 font-semibold text-sm" style={{ color: '#f0ece3' }}>{s.label}</span>
-                  <span className="text-sm flex-1" style={{ color: '#6e7681' }}>{s.sb}/{s.bb}{s.ante > 0 ? ` · ante ${s.ante}` : ''}</span>
-                  <button onClick={() => setEditingStruct({ ...s })} className="text-xs" style={{ color: GOLD }}>Edit</button>
-                  <button onClick={() => handleDeleteStruct(s.id)} className="text-xs" style={{ color: '#f85149' }}>✕</button>
+                  <span className="w-20 font-semibold text-sm" style={{ color: colors.textPrimary }}>{s.label}</span>
+                  <span className="text-sm flex-1" style={{ color: colors.textMuted }}>{s.sb}/{s.bb}{s.ante > 0 ? ` · ante ${s.ante}` : ''}</span>
+                  <button onClick={() => setEditingStruct({ ...s })} className="text-xs" style={{ color: colors.gold }}>Edit</button>
+                  <button onClick={() => handleDeleteStruct(s.id)} className="text-xs" style={{ color: colors.error }}>✕</button>
                 </>
               )}
             </div>
@@ -343,20 +344,20 @@ export default function OrgTab() {
         })}
       </div>
       {!addingStruct ? (
-        <button onClick={() => setAddingStruct(true)} className="text-sm font-semibold mb-3" style={{ color: GOLD }}>+ Add Structure</button>
+        <button onClick={() => setAddingStruct(true)} className="text-sm font-semibold mb-3" style={{ color: colors.gold }}>+ Add Structure</button>
       ) : (
         <form onSubmit={handleAddStruct} className="flex flex-wrap gap-2 mb-3 items-end">
           <input value={newStruct.label} onChange={e => setNewStruct(x => ({ ...x, label: e.target.value }))} className={inputCls} style={{ ...inputStyle, width: 100 }} placeholder="Label" />
           <input value={newStruct.sb}    onChange={e => setNewStruct(x => ({ ...x, sb: e.target.value }))}    className={inputCls} style={{ ...inputStyle, width: 70 }} placeholder="SB" type="number" />
           <input value={newStruct.bb}    onChange={e => setNewStruct(x => ({ ...x, bb: e.target.value }))}    className={inputCls} style={{ ...inputStyle, width: 70 }} placeholder="BB" type="number" />
           <input value={newStruct.ante}  onChange={e => setNewStruct(x => ({ ...x, ante: e.target.value }))}  className={inputCls} style={{ ...inputStyle, width: 70 }} placeholder="Ante" type="number" />
-          <button type="submit" className="px-3 py-1.5 rounded text-sm font-semibold" style={{ background: GOLD, color: '#0d1117' }}>Add</button>
-          <button type="button" onClick={() => setAddingStruct(false)} className="text-sm" style={{ color: '#6e7681' }}>Cancel</button>
+          <button type="submit" className="px-3 py-1.5 rounded text-sm font-semibold" style={{ background: colors.gold, color: colors.bgSurface }}>Add</button>
+          <button type="button" onClick={() => setAddingStruct(false)} className="text-sm" style={{ color: colors.textMuted }}>Cancel</button>
         </form>
       )}
-      {structMsg && <p className="text-xs mb-2" style={{ color: '#f85149' }}>{structMsg}</p>}
+      {structMsg && <p className="text-xs mb-2" style={{ color: colors.error }}>{structMsg}</p>}
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Platform Limits ── */}
       <SectionHeader title="Platform Limits" />
@@ -375,13 +376,13 @@ export default function OrgTab() {
         </Field>
       </div>
       <div className="flex items-center gap-3 mt-3 mb-4">
-        <button onClick={handleSaveLimits} disabled={limitsSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: GOLD, color: '#0d1117', opacity: limitsSaving ? 0.6 : 1 }}>
+        <button onClick={handleSaveLimits} disabled={limitsSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: colors.gold, color: colors.bgSurface, opacity: limitsSaving ? 0.6 : 1 }}>
           {limitsSaving ? 'Saving…' : 'Save Limits'}
         </button>
-        {limitsMsg && <span className="text-xs" style={{ color: '#3fb950' }}>{limitsMsg}</span>}
+        {limitsMsg && <span className="text-xs" style={{ color: colors.success }}>{limitsMsg}</span>}
       </div>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Autospawn ── */}
       <SectionHeader title="Open Table Auto-Spawn" />
@@ -401,13 +402,13 @@ export default function OrgTab() {
         </>
       )}
       <div className="flex items-center gap-3 mt-3 mb-4">
-        <button onClick={handleSaveSpawn} disabled={spawnSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: GOLD, color: '#0d1117', opacity: spawnSaving ? 0.6 : 1 }}>
+        <button onClick={handleSaveSpawn} disabled={spawnSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: colors.gold, color: colors.bgSurface, opacity: spawnSaving ? 0.6 : 1 }}>
           {spawnSaving ? 'Saving…' : 'Save Autospawn'}
         </button>
-        {spawnMsg && <span className="text-xs" style={{ color: '#3fb950' }}>{spawnMsg}</span>}
+        {spawnMsg && <span className="text-xs" style={{ color: colors.success }}>{spawnMsg}</span>}
       </div>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Leaderboard ── */}
       <SectionHeader title="Leaderboard Defaults" />
@@ -427,13 +428,13 @@ export default function OrgTab() {
         </Select>
       </Field>
       <div className="flex items-center gap-3 mt-3">
-        <button onClick={handleSaveLeaderboard} disabled={lbSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: GOLD, color: '#0d1117', opacity: lbSaving ? 0.6 : 1 }}>
+        <button onClick={handleSaveLeaderboard} disabled={lbSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: colors.gold, color: colors.bgSurface, opacity: lbSaving ? 0.6 : 1 }}>
           {lbSaving ? 'Saving…' : 'Save Leaderboard'}
         </button>
-        {lbMsg && <span className="text-xs" style={{ color: '#3fb950' }}>{lbMsg}</span>}
+        {lbMsg && <span className="text-xs" style={{ color: colors.success }}>{lbMsg}</span>}
       </div>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Group Policy (already wired) ── */}
       <GroupPolicySection />

@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
-import { GOLD, SectionHeader, Field, Input, Select, Toggle, SaveButton, Card } from './shared.jsx';
+import { SectionHeader, Field, Input, Select, Card } from './shared.jsx';
+import { colors, groupColors as GROUP_COLORS } from '../../lib/colors.js';
 
 // ─── Tab: School ──────────────────────────────────────────────────────────────
 
-// Color swatches for the group color picker
-const GROUP_COLORS = [
-  '#58a6ff', '#d4af37', '#3fb950', '#f85149', '#a371f7',
-  '#fd8c73', '#ffa657', '#79c0ff', '#7ee787', '#ff7b72',
-];
-
 const inputCls = 'rounded px-3 py-1.5 text-sm outline-none';
-const inputStyle = { background: '#0d1117', border: '1px solid #30363d', color: '#e5e7eb' };
+const inputStyle = { background: colors.bgSurface, border: `1px solid ${colors.borderStrong}`, color: colors.textPrimary };
 
 function GroupsSection({ schoolId, policy }) {
   const [groups, setGroups]       = useState([]);
@@ -20,7 +15,7 @@ function GroupsSection({ schoolId, policy }) {
   const [editName, setEditName]   = useState('');
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState('');
-  const [newColor, setNewColor]   = useState('#58a6ff');
+  const [newColor, setNewColor]   = useState(GROUP_COLORS[0]);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState('');
 
@@ -57,7 +52,7 @@ function GroupsSection({ schoolId, policy }) {
         body: JSON.stringify({ name: newName.trim(), color: newColor }),
       });
       setGroups(prev => [...prev, { ...g, member_count: 0 }]);
-      setNewName(''); setNewColor('#58a6ff'); setCreating(false);
+      setNewName(''); setNewColor(GROUP_COLORS[0]); setCreating(false);
     } catch (err) {
       setError(err.message || 'Failed to create group');
     } finally { setSaving(false); }
@@ -148,7 +143,7 @@ function GroupsSection({ schoolId, policy }) {
       <SectionHeader title="Groups / Cohorts" />
 
       {policy && (
-        <p className="text-xs mb-3" style={{ color: '#6e7681' }}>
+        <p className="text-xs mb-3" style={{ color: colors.textMuted }}>
           {policy.max_groups != null ? `Up to ${policy.max_groups} groups` : 'Unlimited groups'}
           {policy.max_players_per_group != null ? ` · ${policy.max_players_per_group} players each` : ''}
           {!policy.enabled ? ' · Groups disabled by admin' : ''}
@@ -156,15 +151,15 @@ function GroupsSection({ schoolId, policy }) {
       )}
 
       {loading ? (
-        <p className="text-xs mb-3" style={{ color: '#6e7681' }}>Loading…</p>
+        <p className="text-xs mb-3" style={{ color: colors.textMuted }}>Loading…</p>
       ) : (
         <>
           {groups.length > 0 && (
-            <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid #30363d', maxHeight: 400, overflowY: 'auto' }}>
+            <div className="rounded-lg overflow-hidden mb-3" style={{ border: `1px solid ${colors.borderStrong}`, maxHeight: 400, overflowY: 'auto' }}>
               {groups.map((g, i) => (
                 <div
                   key={g.id}
-                  style={{ borderBottom: i < groups.length - 1 ? '1px solid #21262d' : 'none' }}
+                  style={{ borderBottom: i < groups.length - 1 ? `1px solid ${colors.borderDefault}` : 'none' }}
                 >
                   {/* ── Group row ── */}
                   <div
@@ -197,12 +192,12 @@ function GroupsSection({ schoolId, policy }) {
                         onKeyDown={e => { if (e.key === 'Enter') handleRename(g.id); if (e.key === 'Escape') setEditingId(null); }}
                         onClick={e => e.stopPropagation()}
                         className="flex-1 rounded px-2 py-0.5 text-sm outline-none"
-                        style={{ background: '#0d1117', border: '1px solid #d4af37', color: '#f0ece3' }}
+                        style={{ background: colors.bgSurface, border: `1px solid ${colors.gold}`, color: colors.textPrimary }}
                       />
                     ) : (
                       <span
                         className="flex-1 text-sm font-semibold truncate"
-                        style={{ color: '#f0ece3' }}
+                        style={{ color: colors.textPrimary }}
                         onDoubleClick={e => { e.stopPropagation(); setEditingId(g.id); setEditName(g.name); }}
                         title="Double-click to rename; click to expand"
                       >
@@ -210,14 +205,14 @@ function GroupsSection({ schoolId, policy }) {
                       </span>
                     )}
 
-                    <span className="text-xs flex-shrink-0" style={{ color: '#6e7681' }}>
+                    <span className="text-xs flex-shrink-0" style={{ color: colors.textMuted }}>
                       {g.member_count ?? 0} student{(g.member_count ?? 0) !== 1 ? 's' : ''}
                     </span>
 
                     <button
                       onClick={e => { e.stopPropagation(); setEditingId(g.id); setEditName(g.name); }}
                       className="text-xs px-2 py-0.5 rounded flex-shrink-0"
-                      style={{ color: '#8b949e', background: 'transparent', border: '1px solid #30363d', cursor: 'pointer' }}
+                      style={{ color: colors.textSecondary, background: 'transparent', border: `1px solid ${colors.borderStrong}`, cursor: 'pointer' }}
                       title="Rename"
                     >
                       Rename
@@ -225,14 +220,14 @@ function GroupsSection({ schoolId, policy }) {
                     <button
                       onClick={e => { e.stopPropagation(); handleDelete(g.id); }}
                       className="text-xs flex-shrink-0"
-                      style={{ color: '#f85149', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                      style={{ color: colors.error, background: 'transparent', border: 'none', cursor: 'pointer' }}
                       title="Delete group"
                     >
                       ✕
                     </button>
 
                     {/* Expand chevron */}
-                    <span className="text-xs flex-shrink-0" style={{ color: '#6e7681' }}>
+                    <span className="text-xs flex-shrink-0" style={{ color: colors.textMuted }}>
                       {expandedId === g.id ? '▲' : '▼'}
                     </span>
                   </div>
@@ -242,8 +237,8 @@ function GroupsSection({ schoolId, policy }) {
                     <div
                       data-testid={`group-members-panel-${g.id}`}
                       style={{
-                        background: '#0d1117',
-                        border: '1px solid #21262d',
+                        background: colors.bgSurface,
+                        border: `1px solid ${colors.borderDefault}`,
                         borderRadius: 4,
                         padding: 8,
                         marginTop: 4,
@@ -254,7 +249,7 @@ function GroupsSection({ schoolId, policy }) {
                     >
                       {/* Member list */}
                       {(groupMembers[g.id] ?? []).length === 0 && (
-                        <p className="text-xs mb-2" style={{ color: '#6e7681' }}>No members yet.</p>
+                        <p className="text-xs mb-2" style={{ color: colors.textMuted }}>No members yet.</p>
                       )}
                       {(groupMembers[g.id] ?? []).map(m => (
                         <div
@@ -262,11 +257,11 @@ function GroupsSection({ schoolId, policy }) {
                           data-testid={`member-row-${m.id}`}
                           className="flex items-center gap-2 mb-1"
                         >
-                          <span className="flex-1 text-xs" style={{ color: '#e5e7eb' }}>{m.display_name}</span>
+                          <span className="flex-1 text-xs" style={{ color: colors.textPrimary }}>{m.display_name}</span>
                           <button
                             data-testid={`remove-member-${m.id}`}
                             onClick={() => handleRemoveMember(g.id, m.id)}
-                            style={{ color: '#f85149', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, padding: '0 2px' }}
+                            style={{ color: colors.error, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, padding: '0 2px' }}
                             title={`Remove ${m.display_name}`}
                           >
                             ×
@@ -285,7 +280,7 @@ function GroupsSection({ schoolId, policy }) {
                               value={addingMember[g.id] ?? ''}
                               onChange={e => setAddingMember(prev => ({ ...prev, [g.id]: e.target.value }))}
                               className="rounded px-2 py-1 text-xs outline-none flex-1"
-                              style={{ background: '#0d1117', border: '1px solid #30363d', color: '#e5e7eb' }}
+                              style={{ background: colors.bgSurface, border: `1px solid ${colors.borderStrong}`, color: colors.textPrimary }}
                             >
                               <option value="">Select student…</option>
                               {available.map(s => (
@@ -298,8 +293,8 @@ function GroupsSection({ schoolId, policy }) {
                               disabled={!addingMember[g.id]}
                               className="text-xs px-2 py-1 rounded font-semibold flex-shrink-0"
                               style={{
-                                background: GOLD,
-                                color: '#0d1117',
+                                background: colors.gold,
+                                color: colors.bgSurface,
                                 opacity: !addingMember[g.id] ? 0.4 : 1,
                                 cursor: !addingMember[g.id] ? 'not-allowed' : 'pointer',
                                 border: 'none',
@@ -318,12 +313,12 @@ function GroupsSection({ schoolId, policy }) {
           )}
 
           {groups.length === 0 && !creating && (
-            <p className="text-xs mb-3" style={{ color: '#6e7681' }}>No groups yet.</p>
+            <p className="text-xs mb-3" style={{ color: colors.textMuted }}>No groups yet.</p>
           )}
 
           {/* Create form */}
           {creating ? (
-            <form onSubmit={handleCreate} className="flex flex-col gap-2 mb-3 p-3 rounded-lg" style={{ background: '#0d1117', border: '1px solid #30363d' }}>
+            <form onSubmit={handleCreate} className="flex flex-col gap-2 mb-3 p-3 rounded-lg" style={{ background: colors.bgSurface, border: `1px solid ${colors.borderStrong}` }}>
               <div className="flex gap-2 items-center">
                 <Input
                   value={newName}
@@ -339,20 +334,20 @@ function GroupsSection({ schoolId, policy }) {
                       type="button"
                       onClick={() => setNewColor(c)}
                       style={{
-                        width: 18, height: 18, borderRadius: '50%', background: c, border: `2px solid ${newColor === c ? '#fff' : 'transparent'}`,
+                        width: 18, height: 18, borderRadius: '50%', background: c, border: `2px solid ${newColor === c ? colors.white : 'transparent'}`,
                         cursor: 'pointer', padding: 0, flexShrink: 0,
                       }}
                     />
                   ))}
                 </div>
               </div>
-              {error && <p className="text-xs" style={{ color: '#f85149' }}>{error}</p>}
+              {error && <p className="text-xs" style={{ color: colors.error }}>{error}</p>}
               <div className="flex gap-2">
                 <button
                   type="submit"
                   disabled={saving || !newName.trim()}
                   className="px-4 py-1.5 rounded text-sm font-bold"
-                  style={{ background: GOLD, color: '#0d1117', cursor: saving || !newName.trim() ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}
+                  style={{ background: colors.gold, color: colors.bgSurface, cursor: saving || !newName.trim() ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}
                 >
                   {saving ? 'Creating…' : 'Create'}
                 </button>
@@ -360,7 +355,7 @@ function GroupsSection({ schoolId, policy }) {
                   type="button"
                   onClick={() => { setCreating(false); setNewName(''); setError(''); }}
                   className="px-3 py-1.5 rounded text-sm"
-                  style={{ color: '#6e7681', background: 'transparent', border: '1px solid #30363d', cursor: 'pointer' }}
+                  style={{ color: colors.textMuted, background: 'transparent', border: `1px solid ${colors.borderStrong}`, cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
@@ -371,7 +366,7 @@ function GroupsSection({ schoolId, policy }) {
               <button
                 onClick={() => setCreating(true)}
                 className="text-sm font-semibold"
-                style={{ color: GOLD }}
+                style={{ color: colors.gold }}
               >
                 + Create Group
               </button>
@@ -379,7 +374,7 @@ function GroupsSection({ schoolId, policy }) {
           )}
 
           {atLimit && (
-            <p className="text-xs mt-1" style={{ color: '#6e7681' }}>
+            <p className="text-xs mt-1" style={{ color: colors.textMuted }}>
               Group limit reached ({policy.max_groups}). Contact your admin to increase it.
             </p>
           )}
@@ -501,7 +496,7 @@ export default function SchoolTab() {
     finally { setLbSaving(false); }
   }
 
-  if (loading) return <Card><p className="text-sm" style={{ color: '#6e7681' }}>Loading…</p></Card>;
+  if (loading) return <Card><p className="text-sm" style={{ color: colors.textMuted }}>Loading…</p></Card>;
 
   return (
     <Card>
@@ -516,30 +511,30 @@ export default function SchoolTab() {
           onChange={e => setIdentity(x => ({ ...x, description: e.target.value }))}
           rows={3}
           className="rounded px-3 py-2 text-sm outline-none resize-none w-full"
-          style={{ background: '#0d1117', border: '1px solid #30363d', color: '#e5e7eb' }}
+          style={{ background: colors.bgSurface, border: `1px solid ${colors.borderStrong}`, color: colors.textPrimary }}
           placeholder="Describe your school…"
         />
       </Field>
       <div className="flex items-center gap-3 mt-3 mb-4">
-        <button onClick={handleSaveIdentity} disabled={identitySaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: GOLD, color: '#0d1117', opacity: identitySaving ? 0.6 : 1 }}>
+        <button onClick={handleSaveIdentity} disabled={identitySaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: colors.gold, color: colors.bgSurface, opacity: identitySaving ? 0.6 : 1 }}>
           {identitySaving ? 'Saving…' : 'Save'}
         </button>
-        {identityMsg && <span className="text-xs" style={{ color: identityMsg === 'Saved.' ? '#3fb950' : '#f85149' }}>{identityMsg}</span>}
+        {identityMsg && <span className="text-xs" style={{ color: identityMsg === 'Saved.' ? colors.success : colors.error }}>{identityMsg}</span>}
       </div>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Platforms ── */}
       <SectionHeader title="Platforms" />
-      <p className="text-xs mb-2" style={{ color: '#6e7681' }}>These appear in the platform dropdown when logging staking sessions.</p>
-      <div className="rounded-lg overflow-hidden mb-2" style={{ border: '1px solid #30363d' }}>
+      <p className="text-xs mb-2" style={{ color: colors.textMuted }}>These appear in the platform dropdown when logging staking sessions.</p>
+      <div className="rounded-lg overflow-hidden mb-2" style={{ border: `1px solid ${colors.borderStrong}` }}>
         {platforms.map((p, i) => (
-          <div key={p} className="flex items-center px-4 py-2.5" style={{ borderBottom: i < platforms.length - 1 ? '1px solid #21262d' : 'none' }}>
-            <span className="flex-1 text-sm" style={{ color: '#e5e7eb' }}>{p}</span>
-            <button onClick={() => removePlatform(p)} className="text-xs" style={{ color: '#f85149' }} disabled={platformsSaving}>✕</button>
+          <div key={p} className="flex items-center px-4 py-2.5" style={{ borderBottom: i < platforms.length - 1 ? `1px solid ${colors.borderDefault}` : 'none' }}>
+            <span className="flex-1 text-sm" style={{ color: colors.textPrimary }}>{p}</span>
+            <button onClick={() => removePlatform(p)} className="text-xs" style={{ color: colors.error }} disabled={platformsSaving}>✕</button>
           </div>
         ))}
-        {platforms.length === 0 && <p className="text-xs px-4 py-3" style={{ color: '#6e7681' }}>No platforms added yet.</p>}
+        {platforms.length === 0 && <p className="text-xs px-4 py-3" style={{ color: colors.textMuted }}>No platforms added yet.</p>}
       </div>
       <div className="flex gap-2 mb-4">
         <input
@@ -550,16 +545,16 @@ export default function SchoolTab() {
           className={inputCls}
           style={{ ...inputStyle, flex: 1 }}
         />
-        <button onClick={addPlatform} disabled={!newPlatform.trim() || platformsSaving} className="px-3 py-1.5 rounded text-sm font-semibold" style={{ background: GOLD, color: '#0d1117', opacity: !newPlatform.trim() ? 0.4 : 1 }}>
+        <button onClick={addPlatform} disabled={!newPlatform.trim() || platformsSaving} className="px-3 py-1.5 rounded text-sm font-semibold" style={{ background: colors.gold, color: colors.bgSurface, opacity: !newPlatform.trim() ? 0.4 : 1 }}>
           + Add
         </button>
       </div>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Staking Defaults ── */}
       <SectionHeader title="Staking Defaults" />
-      <p className="text-xs mb-3" style={{ color: '#6e7681' }}>Pre-fill values when creating new staking contracts. Can be overridden per contract.</p>
+      <p className="text-xs mb-3" style={{ color: colors.textMuted }}>Pre-fill values when creating new staking contracts. Can be overridden per contract.</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Default coach split (%)">
           <Input type="number" value={staking.coach_split_pct} onChange={v => setStaking(s => ({ ...s, coach_split_pct: Number(v) }))} />
@@ -582,13 +577,13 @@ export default function SchoolTab() {
         </Field>
       </div>
       <div className="flex items-center gap-3 mt-3 mb-4">
-        <button onClick={handleSaveStaking} disabled={stakingSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: GOLD, color: '#0d1117', opacity: stakingSaving ? 0.6 : 1 }}>
+        <button onClick={handleSaveStaking} disabled={stakingSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: colors.gold, color: colors.bgSurface, opacity: stakingSaving ? 0.6 : 1 }}>
           {stakingSaving ? 'Saving…' : 'Save'}
         </button>
-        {stakingMsg && <span className="text-xs" style={{ color: stakingMsg === 'Saved.' ? '#3fb950' : '#f85149' }}>{stakingMsg}</span>}
+        {stakingMsg && <span className="text-xs" style={{ color: stakingMsg === 'Saved.' ? colors.success : colors.error }}>{stakingMsg}</span>}
       </div>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Leaderboard ── */}
       <SectionHeader title="Leaderboard" />
@@ -608,13 +603,13 @@ export default function SchoolTab() {
         </Select>
       </Field>
       <div className="flex items-center gap-3 mt-3">
-        <button onClick={handleSaveLeaderboard} disabled={lbSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: GOLD, color: '#0d1117', opacity: lbSaving ? 0.6 : 1 }}>
+        <button onClick={handleSaveLeaderboard} disabled={lbSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: colors.gold, color: colors.bgSurface, opacity: lbSaving ? 0.6 : 1 }}>
           {lbSaving ? 'Saving…' : 'Save'}
         </button>
-        {lbMsg && <span className="text-xs" style={{ color: lbMsg === 'Saved.' ? '#3fb950' : '#f85149' }}>{lbMsg}</span>}
+        {lbMsg && <span className="text-xs" style={{ color: lbMsg === 'Saved.' ? colors.success : colors.error }}>{lbMsg}</span>}
       </div>
 
-      <div className="my-4" style={{ borderTop: '1px solid #21262d' }} />
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Groups (already wired) ── */}
       <GroupsSection schoolId={groupsData?.schoolId ?? schoolId} policy={groupsData?.policy} />

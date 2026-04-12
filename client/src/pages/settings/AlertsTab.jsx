@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
-import { GOLD, SectionHeader, Field, Input, Toggle, Card } from './shared.jsx';
+import { SectionHeader, Field, Input, Toggle, Card } from './shared.jsx';
+import { colors } from '../../lib/colors.js';
 
 // ─── AlertsTab ────────────────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ function AlertRow({ row, saving, saved, onChange, onSave }) {
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-1">
-            <span className="text-sm font-bold" style={{ color: '#e5e7eb' }}>
+            <span className="text-sm font-bold" style={{ color: colors.textPrimary }}>
               {ALERT_LABELS[row.alert_type] ?? row.alert_type}
             </span>
             <Toggle
@@ -97,7 +98,7 @@ function AlertRow({ row, saving, saved, onChange, onSave }) {
               no="Off"
             />
           </div>
-          <p className="text-xs mb-3" style={{ color: '#6e7681' }}>
+          <p className="text-xs mb-3" style={{ color: colors.textMuted }}>
             {ALERT_DESCRIPTIONS[row.alert_type]}
           </p>
           <AlertThresholdFields
@@ -110,8 +111,8 @@ function AlertRow({ row, saving, saved, onChange, onSave }) {
           disabled={saving}
           className="mt-1 px-4 py-1.5 rounded text-sm font-bold whitespace-nowrap"
           style={saved
-            ? { background: '#238636', color: '#fff' }
-            : { background: GOLD, color: '#0d1117', opacity: saving ? 0.6 : 1 }}
+            ? { background: colors.success, color: colors.white }
+            : { background: colors.gold, color: colors.bgSurface, opacity: saving ? 0.6 : 1 }}
         >
           {saved ? 'Saved ✓' : saving ? 'Saving…' : 'Save'}
         </button>
@@ -154,17 +155,17 @@ export default function AlertsTab() {
     }
   }
 
-  if (error) return <p className="text-sm" style={{ color: '#ef4444' }}>{error}</p>;
+  if (error) return <p className="text-sm" style={{ color: colors.error }}>{error}</p>;
 
   return (
     <div className="flex flex-col gap-3">
       <SectionHeader title="Alert Configuration" />
-      <p className="text-sm mb-1" style={{ color: '#6e7681' }}>
+      <p className="text-sm mb-1" style={{ color: colors.textMuted }}>
         Control which alerts are generated for your students and configure their thresholds.
       </p>
 
       {config.length === 0 && (
-        <p className="text-sm" style={{ color: '#6e7681' }}>Loading…</p>
+        <p className="text-sm" style={{ color: colors.textMuted }}>Loading…</p>
       )}
 
       {config.map(row => (

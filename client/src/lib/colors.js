@@ -12,7 +12,14 @@ export const colors = {
   success: '#3fb950',
   error: '#f85149',
   warning: '#d29922',
+  warningStrong: '#b45309',
   info: '#58a6ff',
   borderDefault: '#21262d',
   borderStrong: '#30363d',
+  white: '#ffffff',
 };
+
+export const groupColors = [
+  '#58a6ff', '#d4af37', '#3fb950', '#f85149', '#a371f7',
+  '#fd8c73', '#ffa657', '#79c0ff', '#7ee787', '#ff7b72',
+];

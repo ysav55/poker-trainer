@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
-import { GOLD, SectionHeader, Field, Input, Card } from './shared.jsx';
+import { colors } from '../../lib/colors.js';
+import { SectionHeader, Field, Input, Card } from './shared.jsx';
 
 // ─── Tab: Platform ────────────────────────────────────────────────────────────
 
@@ -82,9 +83,9 @@ export default function PlatformTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs font-semibold" style={{ color: '#f85149' }}>Super Admin only.</p>
+      <p className="text-xs font-semibold" style={{ color: colors.error }}>Super Admin only.</p>
 
-      {loadErr && <p className="text-sm" style={{ color: '#ef4444' }}>{loadErr}</p>}
+      {loadErr && <p className="text-sm" style={{ color: colors.error }}>{loadErr}</p>}
 
       {/* System health */}
       <Card>
@@ -92,19 +93,19 @@ export default function PlatformTab() {
         {health ? (
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-sm">
-              <span style={{ color: health.db === 'ok' ? '#3fb950' : '#f85149' }}>
+              <span style={{ color: health.db === 'ok' ? colors.success : colors.error }}>
                 {health.db === 'ok' ? '●' : '●'}
               </span>
-              <span style={{ color: '#e5e7eb' }}>
-                Database: <span style={{ color: health.db === 'ok' ? '#3fb950' : '#f85149' }}>{health.db}</span>
+              <span style={{ color: colors.textPrimary }}>
+                Database: <span style={{ color: health.db === 'ok' ? colors.success : colors.error }}>{health.db}</span>
               </span>
             </div>
-            <div className="text-sm" style={{ color: '#e5e7eb' }}>
-              Active tables: <span style={{ color: GOLD }}>{health.tables ?? 0}</span>
+            <div className="text-sm" style={{ color: colors.textPrimary }}>
+              Active tables: <span style={{ color: colors.gold }}>{health.tables ?? 0}</span>
             </div>
           </div>
         ) : (
-          <p className="text-sm" style={{ color: '#6e7681' }}>{loadingList ? 'Loading…' : 'Health unavailable.'}</p>
+          <p className="text-sm" style={{ color: colors.textMuted }}>{loadingList ? 'Loading…' : 'Health unavailable.'}</p>
         )}
       </Card>
 
@@ -112,13 +113,13 @@ export default function PlatformTab() {
       <Card>
         <SectionHeader title="School Agreements" />
         {loadingList ? (
-          <p className="text-sm" style={{ color: '#6e7681' }}>Loading…</p>
+          <p className="text-sm" style={{ color: colors.textMuted }}>Loading…</p>
         ) : (
           <>
-            <div className="rounded-lg overflow-hidden mb-3" style={{ border: '1px solid #30363d' }}>
+            <div className="rounded-lg overflow-hidden mb-3" style={{ border: `1px solid ${colors.borderStrong}` }}>
               <div
                 className="grid text-xs font-bold uppercase tracking-widest px-4 py-2"
-                style={{ gridTemplateColumns: '1fr 6rem 6rem 5rem', borderBottom: '1px solid #30363d', color: '#6e7681' }}
+                style={{ gridTemplateColumns: '1fr 6rem 6rem 5rem', borderBottom: `1px solid ${colors.borderStrong}`, color: colors.textMuted }}
               >
                 <span>School</span>
                 <span className="text-right">Students</span>
@@ -126,33 +127,33 @@ export default function PlatformTab() {
                 <span className="text-right">Status</span>
               </div>
               {schools.length === 0 && (
-                <p className="px-4 py-3 text-sm" style={{ color: '#6e7681' }}>No schools found.</p>
+                <p className="px-4 py-3 text-sm" style={{ color: colors.textMuted }}>No schools found.</p>
               )}
               {schools.map(s => (
                 <div
                   key={s.id}
                   className="grid items-center px-4 py-3"
-                  style={{ gridTemplateColumns: '1fr 6rem 6rem 5rem', borderTop: '1px solid #21262d' }}
+                  style={{ gridTemplateColumns: '1fr 6rem 6rem 5rem', borderTop: `1px solid ${colors.borderDefault}` }}
                 >
                   <div>
-                    <div className="text-sm font-semibold" style={{ color: '#f0ece3' }}>{s.name}</div>
+                    <div className="text-sm font-semibold" style={{ color: colors.textPrimary }}>{s.name}</div>
                     <button
                       className="text-xs mt-0.5"
-                      style={{ color: GOLD }}
+                      style={{ color: colors.gold }}
                       onClick={() => openEdit(s)}
                     >
                       Edit
                     </button>
                   </div>
-                  <span className="text-sm text-right" style={{ color: '#e5e7eb' }}>
+                  <span className="text-sm text-right" style={{ color: colors.textPrimary }}>
                     {s.students ?? 0}{s.max_students ? `/${s.max_students}` : ''}
                   </span>
-                  <span className="text-sm text-right" style={{ color: '#e5e7eb' }}>
+                  <span className="text-sm text-right" style={{ color: colors.textPrimary }}>
                     {s.coaches ?? 0}{s.max_coaches ? `/${s.max_coaches}` : ''}
                   </span>
                   <span
                     className="text-xs font-semibold text-right"
-                    style={{ color: s.status === 'active' ? '#3fb950' : '#6e7681' }}
+                    style={{ color: s.status === 'active' ? colors.success : colors.textMuted }}
                   >
                     {s.status}
                   </span>
@@ -162,10 +163,10 @@ export default function PlatformTab() {
 
             {/* Edit panel */}
             {editingSchool && (
-              <div className="mt-2 rounded-lg p-4" style={{ border: '1px solid #30363d', background: '#0d1117' }}>
+              <div className="mt-2 rounded-lg p-4" style={{ border: `1px solid ${colors.borderStrong}`, background: colors.bgSurface }}>
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-bold" style={{ color: '#f0ece3' }}>{editingSchool.name}</span>
-                  <button className="text-xs" style={{ color: '#6e7681' }} onClick={() => setEditingSchool(null)}>✕ Close</button>
+                  <span className="text-sm font-bold" style={{ color: colors.textPrimary }}>{editingSchool.name}</span>
+                  <button className="text-xs" style={{ color: colors.textMuted }} onClick={() => setEditingSchool(null)}>✕ Close</button>
                 </div>
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <Field label="Max students">
@@ -175,7 +176,7 @@ export default function PlatformTab() {
                     <Input value={maxCoaches} onChange={setMaxCoaches} type="number" min="0" placeholder="No limit" />
                   </Field>
                 </div>
-                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#6e7681' }}>Feature Toggles</span>
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: colors.textMuted }}>Feature Toggles</span>
                 <div className="mt-2 flex flex-col gap-2 mb-4">
                   {PLATFORM_FEATURES.map(f => (
                     <label key={f.key} className="flex items-center gap-2 cursor-pointer">
@@ -183,20 +184,20 @@ export default function PlatformTab() {
                         type="checkbox"
                         checked={schoolFeats[f.key] !== false}
                         onChange={() => setSchoolFeats(prev => ({ ...prev, [f.key]: !(prev[f.key] !== false) }))}
-                        style={{ accentColor: GOLD }}
+                        style={{ accentColor: colors.gold }}
                       />
-                      <span className="text-sm" style={{ color: '#e5e7eb' }}>{f.label}</span>
+                      <span className="text-sm" style={{ color: colors.textPrimary }}>{f.label}</span>
                     </label>
                   ))}
                 </div>
                 {saveMsg && (
-                  <p className="text-xs mb-2" style={{ color: saveMsg === 'Saved.' ? '#3fb950' : '#ef4444' }}>{saveMsg}</p>
+                  <p className="text-xs mb-2" style={{ color: saveMsg === 'Saved.' ? colors.success : colors.error }}>{saveMsg}</p>
                 )}
                 <button
                   onClick={saveAgreement}
                   disabled={saving}
                   className="px-5 py-2 rounded text-sm font-bold"
-                  style={{ background: GOLD, color: '#0d1117', opacity: saving ? 0.6 : 1 }}
+                  style={{ background: colors.gold, color: colors.bgSurface, opacity: saving ? 0.6 : 1 }}
                 >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
