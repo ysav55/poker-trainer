@@ -1,47 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch } from '../../lib/api';
 import ScenarioBuilder from '../../components/ScenarioBuilder';
 import PlaylistTree from '../../components/scenarios/PlaylistTree.jsx';
+import EmptyBuilder from '../../components/scenarios/EmptyBuilder.jsx';
+import ScenarioToolbar from '../../components/scenarios/ScenarioToolbar.jsx';
+import HandBuilderHeader from '../../components/scenarios/HandBuilderHeader.jsx';
+import { generatePlaylistColor } from '../../components/scenarios/PLAYLIST_COLORS.js';
+import { seedDefaultPlaylists } from '../../lib/seedPlaylists.js';
 import { colors } from '../../lib/colors.js';
-
-function EmptyBuilder({ onNewScenario }) {
-  return (
-    <div
-      className="flex flex-col items-center justify-center h-full"
-      style={{ color: colors.textMuted }}
-    >
-      <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3, color: colors.gold }}>♠</div>
-      <div style={{ fontSize: 13, marginBottom: 6 }}>
-        Select a scenario to edit, or build a new one.
-      </div>
-      <button
-        onClick={onNewScenario}
-        style={{
-          marginTop: 12,
-          padding: '7px 18px',
-          borderRadius: 4,
-          background: colors.gold,
-          color: '#000',
-          border: 'none',
-          fontSize: 11,
-          fontWeight: 700,
-          cursor: 'pointer',
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-        }}
-      >
-        + New Scenario
-      </button>
-    </div>
-  );
-}
 
 export default function HandBuilder() {
   const [scenarios, setScenarios]   = useState([]);
   const [playlists, setPlaylists]   = useState([]);
   const [search, setSearch]         = useState('');
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
-  const [selectedScenario, setSelectedScenario] = useState(null); // object or 'new'
+  const [selectedScenario, setSelectedScenario] = useState(null);
+  const seededRef = useRef(false);
 
   const fetchScenarios = useCallback(async () => {
     try {
@@ -59,10 +33,18 @@ export default function HandBuilder() {
   const fetchPlaylists = useCallback(async () => {
     try {
       const data = await apiFetch('/api/playlists');
-      setPlaylists(
-        Array.isArray(data) ? data :
-        Array.isArray(data?.playlists) ? data.playlists : []
-      );
+      const list = Array.isArray(data) ? data : Array.isArray(data?.playlists) ? data.playlists : [];
+      if (!seededRef.current && list.length === 0) {
+        seededRef.current = true;
+        const { seeded } = await seedDefaultPlaylists({ existing: list });
+        if (seeded) {
+          const reload = await apiFetch('/api/playlists');
+          const reloaded = Array.isArray(reload) ? reload : Array.isArray(reload?.playlists) ? reload.playlists : [];
+          setPlaylists(reloaded);
+          return;
+        }
+      }
+      setPlaylists(list);
     } catch {
       setPlaylists([]);
     }
@@ -73,24 +55,21 @@ export default function HandBuilder() {
     fetchPlaylists();
   }, [fetchScenarios, fetchPlaylists]);
 
-  function handleSelectPlaylist(pl) {
-    setSelectedPlaylist(pl);
-    setSelectedScenario(null);
-  }
+  const colorMap = useMemo(() => {
+    const map = {};
+    playlists.forEach((pl, i) => { map[pl.playlist_id] = generatePlaylistColor(i); });
+    return map;
+  }, [playlists]);
 
-  function handleSelectScenario(sc) {
-    setSelectedScenario(sc);
-    // Preserve selectedPlaylist so "New Scenario in {playlist}" stays contextual.
-  }
+  const scenarioPlaylist = useMemo(() => {
+    if (!selectedScenario || selectedScenario === 'new') return null;
+    return playlists.find(p => p.playlist_id === selectedScenario.primary_playlist_id) || null;
+  }, [selectedScenario, playlists]);
 
-  function handleNewScenario() {
-    setSelectedScenario('new');
-  }
-
-  function handleScenarioSaved(saved) {
-    if (saved) setSelectedScenario(saved);
-    fetchScenarios();
-  }
+  function handleSelectPlaylist(pl) { setSelectedPlaylist(pl); setSelectedScenario(null); }
+  function handleSelectScenario(sc) { setSelectedScenario(sc); }
+  function handleNewScenario()      { setSelectedScenario('new'); }
+  function handleScenarioSaved(saved) { if (saved) setSelectedScenario(saved); fetchScenarios(); }
 
   async function handleDeleteScenario(id) {
     await apiFetch(`/api/scenarios/${id}`, { method: 'DELETE' });
@@ -104,91 +83,115 @@ export default function HandBuilder() {
     setSelectedScenario(copy);
   }
 
-  const newButtonLabel = selectedPlaylist
-    ? `+ New in ${selectedPlaylist.name}`
-    : '+ New Scenario';
+  async function handleNewPlaylist() {
+    const name = (window.prompt('Playlist name?') || '').trim();
+    if (!name) return;
+    const pl = await apiFetch('/api/playlists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    await fetchPlaylists();
+    if (pl?.playlist_id) setSelectedPlaylist(pl);
+  }
+
+  async function handleCrossList(playlist, scenario) {
+    if (!playlist?.playlist_id || !scenario?.id) return;
+    try {
+      await apiFetch(`/api/playlists/${playlist.playlist_id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario_id: scenario.id }),
+      });
+    } catch { /* surface later via toast */ }
+  }
+
+  const newBtnLabel = selectedPlaylist ? `+ New in ${selectedPlaylist.name}` : '+ New Scenario';
 
   return (
     <div
       style={{
         display: 'flex',
+        flexDirection: 'column',
         height: '100%',
         overflow: 'hidden',
         color: colors.textPrimary,
         background: colors.bgPrimary,
       }}
     >
-      <h1 className="sr-only">Scenarios</h1>
+      <HandBuilderHeader
+        playlistCount={playlists.length}
+        scenarioCount={scenarios.length}
+        selectedScenario={selectedScenario}
+        playlists={playlists}
+        colorMap={colorMap}
+        onAlsoAddTo={handleCrossList}
+        onNewPlaylist={handleNewPlaylist}
+      />
 
-      {/* Left: playlist tree */}
-      <div
-        style={{
-          width: 300,
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          borderRight: `1px solid ${colors.borderDefault}`,
-          background: colors.bgSurface,
-          overflow: 'hidden',
-        }}
-      >
-        <PlaylistTree
-          playlists={playlists}
-          scenarios={scenarios}
-          search={search}
-          onSearchChange={setSearch}
-          selectedPlaylistId={selectedPlaylist?.playlist_id ?? null}
-          selectedScenarioId={selectedScenario && selectedScenario !== 'new' ? selectedScenario.id : null}
-          onSelectPlaylist={handleSelectPlaylist}
-          onSelectScenario={handleSelectScenario}
-        />
-
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <div
           style={{
-            padding: '10px 12px',
-            borderTop: `1px solid ${colors.borderDefault}`,
+            width: 300,
             flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            borderRight: `1px solid ${colors.borderDefault}`,
+            background: colors.bgSurface,
+            overflow: 'hidden',
           }}
         >
-          <button
-            data-testid="sidebar-new-btn"
-            onClick={handleNewScenario}
-            style={{
-              width: '100%',
-              padding: '7px',
-              borderRadius: 4,
-              background: colors.gold,
-              color: '#000',
-              border: 'none',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              transition: 'background 0.1s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = colors.goldHover; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = colors.gold; }}
-          >
-            {newButtonLabel}
-          </button>
-        </div>
-      </div>
-
-      {/* Right: ScenarioBuilder */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {selectedScenario ? (
-          <ScenarioBuilder
-            scenario={selectedScenario === 'new' ? null : selectedScenario}
-            primaryPlaylistId={selectedScenario === 'new' ? selectedPlaylist?.playlist_id ?? null : undefined}
-            onSaved={handleScenarioSaved}
-            onDelete={handleDeleteScenario}
-            onDuplicate={handleDuplicateScenario}
-            onClose={handleScenarioSaved}
+          <PlaylistTree
+            playlists={playlists}
+            scenarios={scenarios}
+            search={search}
+            onSearchChange={setSearch}
+            selectedPlaylistId={selectedPlaylist?.playlist_id ?? null}
+            selectedScenarioId={selectedScenario && selectedScenario !== 'new' ? selectedScenario.id : null}
+            onSelectPlaylist={handleSelectPlaylist}
+            onSelectScenario={handleSelectScenario}
           />
-        ) : (
-          <EmptyBuilder onNewScenario={handleNewScenario} />
-        )}
+
+          <div style={{ padding: '10px 12px', borderTop: `1px solid ${colors.borderDefault}`, flexShrink: 0 }}>
+            <button
+              data-testid="sidebar-new-btn"
+              onClick={handleNewScenario}
+              style={{
+                width: '100%', padding: '7px', borderRadius: 4, background: colors.gold,
+                color: '#000', border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                letterSpacing: '0.08em', textTransform: 'uppercase', transition: 'background 0.1s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = colors.goldHover; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = colors.gold; }}
+            >
+              {newBtnLabel}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <ScenarioToolbar
+            scenario={selectedScenario}
+            playlist={scenarioPlaylist}
+            playlistColor={scenarioPlaylist ? colorMap[scenarioPlaylist.playlist_id] : null}
+            onDuplicate={handleDuplicateScenario}
+            onDelete={handleDeleteScenario}
+          />
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            {selectedScenario ? (
+              <ScenarioBuilder
+                scenario={selectedScenario === 'new' ? null : selectedScenario}
+                primaryPlaylistId={selectedScenario === 'new' ? selectedPlaylist?.playlist_id ?? null : undefined}
+                onSaved={handleScenarioSaved}
+                onDelete={handleDeleteScenario}
+                onDuplicate={handleDuplicateScenario}
+                onClose={handleScenarioSaved}
+              />
+            ) : (
+              <EmptyBuilder onNewScenario={handleNewScenario} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
