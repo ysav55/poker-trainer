@@ -10,6 +10,8 @@ import {
 
 import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
 import { LobbyProvider } from './contexts/LobbyContext.jsx';
+// LobbyProvider is used inside RequireAuth (not at top level) to avoid
+// unauthenticated /api/tables polling on login/register/forgot-password.
 
 // Layout
 import AppLayout from './components/AppLayout.jsx';
@@ -78,7 +80,11 @@ function RequireAuth() {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  return <Outlet />;
+  return (
+    <LobbyProvider>
+      <Outlet />
+    </LobbyProvider>
+  );
 }
 
 /**
@@ -158,9 +164,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <LobbyProvider>
-          <AppRoutes />
-        </LobbyProvider>
+        <AppRoutes />
       </AuthProvider>
     </BrowserRouter>
   );
