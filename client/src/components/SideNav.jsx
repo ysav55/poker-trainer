@@ -1,5 +1,6 @@
 import React from 'react';
 import { useLocation, NavLink } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext.jsx';
 
 /**
  * Role matrix — 5 canonical roles:
@@ -64,6 +65,7 @@ const NAV_ITEMS = [
     label: 'Tournaments',
     path: '/tournaments',
     roles: ['coach', ...STUDENT_ROLES, 'admin', 'superadmin'],
+    permission: 'tournament:manage',
   },
   {
     icon: '🏆',
@@ -76,12 +78,14 @@ const NAV_ITEMS = [
     label: 'Staking',
     path: '/admin/staking',
     roles: ['coach', 'admin', 'superadmin'],
+    permission: 'staking:view',
   },
   {
     icon: '💰',
     label: 'Staking',
     path: '/staking',
     roles: ['coached_student', 'solo_student', 'trial'],
+    permission: 'staking:view',
   },
   {
     icon: '📢',
@@ -113,8 +117,11 @@ const NAV_ITEMS = [
  */
 export default function SideNav({ role, badges = {} }) {
   const location = useLocation();
+  const { hasPermission } = useAuth();
 
-  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
+  const visibleItems = NAV_ITEMS.filter((item) =>
+    item.roles.includes(role) && (!item.permission || hasPermission(item.permission))
+  );
 
   const isActive = (item) => {
     if (item.hash) return location.pathname + location.hash === item.path + item.hash;
