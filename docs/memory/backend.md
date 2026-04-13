@@ -140,6 +140,8 @@ Two new events added to `server/socket/handlers/replay.js` (coach-only):
 | `NarratorService` | Claude Haiku narration; returns `null` gracefully when `ANTHROPIC_API_KEY` absent |
 | `ProgressReportService` | 8-section report, 0–100 grade, weekly/monthly/custom |
 | `featureGate.js` | School-scoped feature enable/disable (1-min in-memory cache) |
+| `PlaylistExecutionService` | Drill-session lifecycle (start/pause/resume/advance), hero mode + auto-advance, resumable on prior pause |
+| `ScenarioDealer` (`game/`) | Arms scenarios at `open_config_phase`, hero-anchored seat rotation via `mapScenarioToTable`, restores stacks at hand-complete |
 
 **Feature gates:** `replay`, `analysis`, `chip_bank`, `playlists`, `tournaments`, `crm`, `leaderboard`, `scenarios`, `groups`
 

@@ -91,6 +91,7 @@ Key routes:
   - All sidebar sections live in `client/src/components/sidebar/`
   - In-table replay is still disconnected for the sidebar `onLoadReplay` path (TablePage does not pass replay emit props). **However, the "Go to Review" group-transition flow (Feature 6b) is the preferred replay entry point and is now wired.**
   - "Build Scenario" button in HANDS tab now opens an **inline modal** (`ScenarioBuilder` rendered over the table) instead of navigating to `/admin/hands`. (`onOpenScenarioBuilder` wired in TablePage — Feature 5 fixed 2026-04-06)
+  - PLAYLISTS tab renders `ScenarioLaunchPanel` (idle / running / resume states) when `drill` prop is provided by TablePage's `useDrillSession` hook; falls back to legacy `PlaylistsSection` otherwise. (Phase 6.5 — 2026-04-13)
 
 ### Tournament (Phase 2 additions)
 - `TournamentTopBar` — level, blinds, countdown, field size, avg stack (all players)
