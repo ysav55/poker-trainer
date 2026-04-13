@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { usePreferences } from '../hooks/usePreferences.js';
 import PokerTable from '../components/PokerTable.jsx';
 import CoachSidebar from '../components/CoachSidebar.jsx';
+import { useDrillSession } from '../hooks/useDrillSession';
 import TournamentInfoPanel from '../components/TournamentInfoPanel.jsx';
 import TournamentTopBar from '../components/TournamentTopBar.jsx';
 import TournamentSidebar from '../components/TournamentSidebar.jsx';
@@ -109,6 +110,7 @@ export default function TablePage() {
 
 function FullTableView() {
   const { gameState: hookState, socket, tableId, playlist, replay } = useTable();
+  const drill = useDrillSession({ socket: socket?.socket, tableId });
   const { user } = useAuth();
   const { bbView } = usePreferences();
 
@@ -417,6 +419,7 @@ function FullTableView() {
             isOpen={sidebarOpen}
             onToggle={() => setSidebarOpen((o) => !o)}
             playlists={playlist?.playlists ?? []}
+            drill={drill}
             myId={myId}
             setBlindLevels={emit.setBlindLevels}
             onOpenScenarioBuilder={() => setShowScenarioBuilder(true)}

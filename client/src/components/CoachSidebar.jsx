@@ -6,6 +6,7 @@ import UndoControlsSection from './sidebar/UndoControlsSection';
 import AdjustStacksSection from './sidebar/AdjustStacksSection';
 import PlayersSection from './sidebar/PlayersSection';
 import PlaylistsSection from './sidebar/PlaylistsSection';
+import ScenarioLaunchPanel from './sidebar/ScenarioLaunchPanel';
 import HandLibrarySection from './sidebar/HandLibrarySection';
 import HistorySection from './sidebar/HistorySection';
 import ReplayControlsSection from './sidebar/ReplayControlsSection';
@@ -47,6 +48,7 @@ export default function CoachSidebar({
   onToggle,
   sessionStats = null,
   playlists = [],
+  drill = null,
   actionTimer = null,
   activeHandId = null,
   handTagsSaved = null,
@@ -472,12 +474,20 @@ export default function CoachSidebar({
 
           {/* ── PLAYLISTS tab ─────────────────────────────────────────────── */}
           {activeTab === 'PLAYLISTS' && (
-            <PlaylistsSection
-              playlists={playlists}
-              gameState={gameState}
-              myId={myId}
-              emit={emit}
-            />
+            drill ? (
+              <ScenarioLaunchPanel
+                playlists={playlists}
+                activePlayers={(gameState?.players || []).filter(p => !p.is_coach && p.seat >= 0)}
+                drill={drill}
+              />
+            ) : (
+              <PlaylistsSection
+                playlists={playlists}
+                gameState={gameState}
+                myId={myId}
+                emit={emit}
+              />
+            )
           )}
 
           {/* Bottom spacer */}
