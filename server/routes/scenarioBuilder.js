@@ -331,29 +331,37 @@ router.post('/playlists/:id/items/reorder', canTag, async (req, res) => {
 
 // POST /api/tables/:tableId/drill  — start a drill session
 router.post('/tables/:tableId/drill', canManage, async (req, res) => {
-  const { playlist_id, opted_in_players = [], opted_out_players = [] } = req.body || {};
+  const {
+    playlist_id,
+    opted_in_players = [], opted_out_players = [],
+    hero_mode = 'sticky', hero_player_id = null, auto_advance = false,
+    force_restart = false,
+  } = req.body || {};
   if (!playlist_id) return res.status(400).json({ error: 'playlist_id is required' });
 
-  // Guard: block if socket playlist drill is already active at this table
-  const gm = SharedState.tables.get(req.params.tableId);
-  if (gm?.state.playlist_mode?.active) {
-    return res.status(409).json({
-      error: 'conflict',
-      message: 'A socket playlist drill is active at this table. Deactivate it first.',
-    });
-  }
-
   try {
-    const session = await PlaylistExecutionService.start({
-      tableId:          req.params.tableId,
-      playlistId:       playlist_id,
-      coachId:          req.user.stableId,
-      optedInPlayers:   opted_in_players,
-      optedOutPlayers:  opted_out_players,
+    const out = await PlaylistExecutionService.start({
+      tableId:         req.params.tableId,
+      playlistId:      playlist_id,
+      coachId:         req.user.id ?? req.user.stableId,
+      optedInPlayers:  opted_in_players,
+      optedOutPlayers: opted_out_players,
+      heroMode:        hero_mode,
+      heroPlayerId:    hero_player_id,
+      autoAdvance:     auto_advance,
+      forceRestart:    force_restart,
     });
-    res.status(201).json(session);
+    if (out.resumable) {
+      return res.status(409).json({
+        resumable: true,
+        prior_session_id: out.priorSessionId,
+        prior_position:   out.priorPosition,
+        prior_total:      out.priorTotal,
+      });
+    }
+    res.json(out);
   } catch (err) {
-    res.status(500).json({ error: 'internal_error', message: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
