@@ -4,14 +4,22 @@ module.exports = function registerHandConfig(socket, ctx) {
   const { tables, broadcastState, sendError, sendSyncError,
           requireCoach, HandLogger, loadScenarioIntoConfig } = ctx;
 
-  socket.on('open_config_phase', () => {
+  socket.on('open_config_phase', async () => {
     if (requireCoach(socket, 'open the config phase')) return;
-    const gm = tables.get(socket.data.tableId);
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     if (gm.state.phase === 'replay') return sendSyncError(socket, 'Cannot open config phase during replay — exit replay first');
     const ocResult = gm.openConfigPhase();
     if (ocResult.error) return sendSyncError(socket, ocResult.error);
-    broadcastState(socket.data.tableId, { type: 'config_phase', message: 'Coach opened hand configuration' });
+    broadcastState(tableId, { type: 'config_phase', message: 'Coach opened hand configuration' });
+
+    const SharedState = require('../../state/SharedState');
+    const controller  = SharedState.getController(tableId);
+    if (controller?.dealer) {
+      await controller.dealer.armIfActive(tableId, gm);
+      broadcastState(tableId);
+    }
   });
 
   socket.on('update_hand_config', ({ config } = {}) => {

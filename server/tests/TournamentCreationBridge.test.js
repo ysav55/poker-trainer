@@ -40,7 +40,9 @@ const mockCreateConfig          = jest.fn().mockResolvedValue('mock-config-id');
 const mockCreateLinkedTournament = jest.fn().mockResolvedValue('mock-tournament-id');
 
 jest.mock('../db/repositories/TableRepository.js', () => ({
-  TableRepository: { createTable: (...a) => mockCreateTable(...a) },
+  TableRepository:         { createTable: (...a) => mockCreateTable(...a) },
+  InvitedPlayersRepository: { addInvite: jest.fn(), removeInvite: jest.fn(), listInvited: jest.fn(), isInvited: jest.fn() },
+  TablePresetsRepository:   { save: jest.fn(), list: jest.fn(), get: jest.fn(), update: jest.fn(), delete: jest.fn(), clone: jest.fn() },
 }));
 
 jest.mock('../db/repositories/TournamentRepository.js', () => ({
