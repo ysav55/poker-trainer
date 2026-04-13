@@ -15,6 +15,20 @@ const HAND = {
   tags: ['3BET_POT', 'C_BET'],
 };
 
+const SIX_MAX_HAND = {
+  hand_id: 'h-6max',
+  board: ['Kh', '7s', '2d'],
+  players: [
+    { seat: 0, player_id: 'p-hero', hole_cards: ['Ac', 'Kd'] },
+    { seat: 1, player_id: 'p-2',    hole_cards: ['Qs', 'Js'] },
+    { seat: 2, player_id: 'p-3',    hole_cards: ['5h', '5c'] },
+    { seat: 3, player_id: 'p-4',    hole_cards: null },
+    { seat: 4, player_id: 'p-5',    hole_cards: null },
+    { seat: 5, player_id: 'p-6',    hole_cards: null },
+  ],
+  tags: [],
+};
+
 const PLAYLISTS = [
   { playlist_id: 'pl-1', name: 'Dry Flop Spots' },
   { playlist_id: 'pl-2', name: 'C-Bet Lines' },
@@ -30,7 +44,7 @@ function mockApi(overrides = {}) {
       return overrides.fromHand ?? { id: 'sc-new', name: 'seeded' };
     }
     if (path.startsWith('/api/scenarios/') && opts?.method === 'PATCH') {
-      return overrides.patch ?? { id: 'sc-new', name: 'AKo on K72r' };
+      return overrides.patch ?? { id: 'sc-new', name: 'AKo vs QJs on K72r' };
     }
     if (path.includes('/items') && opts?.method === 'POST') {
       return overrides.addItem ?? { id: 'item-1', scenario_id: 'sc-new' };
@@ -39,38 +53,125 @@ function mockApi(overrides = {}) {
   });
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────────
+// ── autoName tests ───────────────────────────────────────────────────────────
 
 describe('autoName()', () => {
-  it('uses hole shorthand + board ranks + texture for full flop', () => {
+  const HEADS_UP = [
+    { seat: 0, cards: ['Ac', 'Kd'] },
+    { seat: 1, cards: ['Qs', 'Js'] },
+  ];
+
+  it('heads-up: "hero vs villain on flop+texture"', () => {
     expect(autoName({
-      hole: ['Ac', 'Kd'],
+      seats: HEADS_UP,
+      heroSeat: 0,
       board: { flop1: 'Kh', flop2: '7s', flop3: '2d' },
       handId: 'h-abc',
-    })).toBe('AKo on K72r');
+    })).toBe('AKo vs QJs on K72r');
   });
-  it('suited when both hole cards share suit', () => {
+
+  it('heads-up with suited hero + monotone flop', () => {
     expect(autoName({
-      hole: ['As', 'Qs'],
+      seats: [
+        { seat: 0, cards: ['As', 'Qs'] },
+        { seat: 1, cards: ['Tc', '9c'] },
+      ],
+      heroSeat: 0,
       board: { flop1: 'Kh', flop2: '7h', flop3: '2h' },
       handId: 'h-xyz',
-    })).toBe('AQs on K72m');
+    })).toBe('AQs vs T9s on K72m');
   });
-  it('pair hole cards produce no suited/offsuit suffix', () => {
+
+  it('heads-up with pair hero (no s/o suffix)', () => {
     expect(autoName({
-      hole: ['Ah', 'As'],
+      seats: [
+        { seat: 0, cards: ['Ah', 'As'] },
+        { seat: 1, cards: ['Qs', 'Js'] },
+      ],
+      heroSeat: 0,
       board: { flop1: 'Kh', flop2: '7s', flop3: '2d' },
       handId: 'h-abc',
-    })).toBe('AA on K72r');
+    })).toBe('AA vs QJs on K72r');
   });
+
+  it('heads-up with hero cards cleared → "Random vs villain"', () => {
+    expect(autoName({
+      seats: [
+        { seat: 0, cards: [null, null] },
+        { seat: 1, cards: ['Qs', 'Js'] },
+      ],
+      heroSeat: 0,
+      board: { flop1: 'Kh', flop2: '7s', flop3: '2d' },
+      handId: 'h-abc',
+    })).toBe('Random vs QJs on K72r');
+  });
+
+  it('heads-up with villain cleared → "hero vs ??"', () => {
+    expect(autoName({
+      seats: [
+        { seat: 0, cards: ['Ac', 'Kd'] },
+        { seat: 1, cards: [null, null] },
+      ],
+      heroSeat: 0,
+      board: { flop1: 'Kh', flop2: '7s', flop3: '2d' },
+      handId: 'h-abc',
+    })).toBe('AKo vs ?? on K72r');
+  });
+
+  it('6-max: "AKo (6-max) on K72r"', () => {
+    const seats = [
+      { seat: 0, cards: ['Ac', 'Kd'] },
+      { seat: 1, cards: ['Qs', 'Js'] },
+      { seat: 2, cards: ['5h', '5c'] },
+      { seat: 3, cards: [null, null] },
+      { seat: 4, cards: [null, null] },
+      { seat: 5, cards: [null, null] },
+    ];
+    expect(autoName({
+      seats,
+      heroSeat: 0,
+      board: { flop1: 'Kh', flop2: '7s', flop3: '2d' },
+      handId: 'h-6max',
+    })).toBe('AKo (6-max) on K72r');
+  });
+
+  it('6-max with hero cleared → "Random (6-max)"', () => {
+    const seats = [
+      { seat: 0, cards: [null, null] },
+      { seat: 1, cards: ['Qs', 'Js'] },
+      { seat: 2, cards: ['5h', '5c'] },
+      { seat: 3, cards: [null, null] },
+      { seat: 4, cards: [null, null] },
+      { seat: 5, cards: [null, null] },
+    ];
+    expect(autoName({
+      seats,
+      heroSeat: 0,
+      board: { flop1: 'Kh', flop2: '7s', flop3: '2d' },
+      handId: 'h-6max',
+    })).toBe('Random (6-max) on K72r');
+  });
+
   it('falls back to hand id without complete flop', () => {
     expect(autoName({
-      hole: ['Ac', 'Kd'],
+      seats: HEADS_UP,
+      heroSeat: 0,
       board: { flop1: null, flop2: null, flop3: null },
       handId: 'h-abcdef123',
-    })).toBe('AKo — Hand #h-abcd');
+    })).toBe('AKo vs QJs');
+  });
+
+  it('no seats → "Hand #…" fallback', () => {
+    expect(autoName({
+      seats: [],
+      heroSeat: null,
+      board: { flop1: 'Kh', flop2: '7s', flop3: '2d' },
+      handId: 'h-abcdef123',
+    })).toBe('Hand #h-abcd');
   });
 });
+
+// ── Component tests ──────────────────────────────────────────────────────────
 
 describe('SaveAsScenarioModal', () => {
   let apiFetch;
@@ -83,36 +184,139 @@ describe('SaveAsScenarioModal', () => {
     onSaved  = vi.fn();
   });
 
-  it('renders with pre-filled hole cards, board, auto-name, and playlist picker', async () => {
+  it('renders per-seat slots, hero radios, board, and playlist picker', async () => {
     await act(async () => {
       render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
     });
 
-    // Modal visible
     expect(screen.getByTestId('save-as-scenario-modal')).toBeTruthy();
 
-    // Hole cards (read-only) — rendered as two cards
-    const holeRow = screen.getByTestId('modal-hole-cards');
-    expect(holeRow.textContent).toMatch(/A/);
-    expect(holeRow.textContent).toMatch(/K/);
+    // Per-seat rows with two card slots each
+    expect(screen.getByTestId('seat-row-0')).toBeTruthy();
+    expect(screen.getByTestId('seat-row-1')).toBeTruthy();
+    expect(screen.getByTestId('seat-0-card-0')).toBeTruthy();
+    expect(screen.getByTestId('seat-0-card-1')).toBeTruthy();
+    expect(screen.getByTestId('seat-1-card-0')).toBeTruthy();
+    expect(screen.getByTestId('seat-1-card-1')).toBeTruthy();
 
-    // Board slots present
+    // Hero radios — seat 0 selected by default (first filled)
+    expect(screen.getByTestId('hero-radio-seat-0').checked).toBe(true);
+    expect(screen.getByTestId('hero-radio-seat-1').checked).toBe(false);
+
+    // Board slots
     expect(screen.getByTestId('board-slot-flop1')).toBeTruthy();
     expect(screen.getByTestId('board-slot-flop2')).toBeTruthy();
     expect(screen.getByTestId('board-slot-flop3')).toBeTruthy();
     expect(screen.getByTestId('board-slot-turn')).toBeTruthy();
     expect(screen.getByTestId('board-slot-river')).toBeTruthy();
 
-    // Auto-generated name
+    // Auto-generated name uses hero + villain hands
     const nameInput = screen.getByTestId('modal-name-input');
-    expect(nameInput.value).toBe('AKo on K72r');
+    expect(nameInput.value).toBe('AKo vs QJs on K72r');
 
     // Playlists load
     await waitFor(() => {
       expect(screen.getByTestId('playlist-picker-pl-1')).toBeTruthy();
     });
-    expect(screen.getByTestId('playlist-picker-pl-2')).toBeTruthy();
-    expect(screen.getByTestId('playlist-picker-pl-3')).toBeTruthy();
+  });
+
+  it('6-handed hand auto-names with "(6-max)" suffix', async () => {
+    apiFetch = mockApi({ playlists: { playlists: [{ playlist_id: 'pl-1', name: 'General' }] } });
+    await act(async () => {
+      render(<SaveAsScenarioModal hand={SIX_MAX_HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
+    });
+    expect(screen.getByTestId('modal-name-input').value).toBe('AKo (6-max) on K72r');
+    // All 6 seat rows rendered
+    for (let i = 0; i < 6; i++) {
+      expect(screen.getByTestId(`seat-row-${i}`)).toBeTruthy();
+    }
+  });
+
+  it('heroPlayerId prop selects the matching seat as default hero', async () => {
+    await act(async () => {
+      render(
+        <SaveAsScenarioModal
+          hand={HAND}
+          heroPlayerId="p-vil"
+          onClose={onClose}
+          onSaved={onSaved}
+          apiFetch={apiFetch}
+        />
+      );
+    });
+    expect(screen.getByTestId('hero-radio-seat-1').checked).toBe(true);
+    expect(screen.getByTestId('hero-radio-seat-0').checked).toBe(false);
+    // Name flips: seat 1 (QJs) becomes hero
+    expect(screen.getByTestId('modal-name-input').value).toBe('QJs vs AKo on K72r');
+  });
+
+  it('clicking a seat card opens the CardPicker', async () => {
+    await act(async () => {
+      render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
+    });
+    fireEvent.click(screen.getByTestId('seat-0-card-0'));
+    await waitFor(() => expect(screen.getByText(/Pick card for Hero/i)).toBeTruthy());
+  });
+
+  it('clearing a seat card leaves slot empty and reflects in save payload', async () => {
+    await act(async () => {
+      render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
+    });
+    await waitFor(() => screen.getByTestId('playlist-picker-pl-1'));
+
+    // Clear hero's second card
+    fireEvent.click(screen.getByTestId('seat-0-card-1-clear'));
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('modal-save-btn'));
+    });
+
+    const patchCall = apiFetch.mock.calls.find(
+      ([p, o]) => p === '/api/scenarios/sc-new' && o?.method === 'PATCH'
+    );
+    const patchBody = JSON.parse(patchCall[1].body);
+    // Hero seat 0 should have only one card left; cleared card filtered out
+    const heroConfig = patchBody.seat_configs.find((s) => s.seat === 0);
+    expect(heroConfig.cards).toEqual(['Ac']);
+  });
+
+  it('changing hero radio updates auto-name and PATCH hero_seat', async () => {
+    await act(async () => {
+      render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
+    });
+    await waitFor(() => screen.getByTestId('playlist-picker-pl-1'));
+
+    // User switches hero to seat 1
+    fireEvent.click(screen.getByTestId('hero-radio-seat-1'));
+    expect(screen.getByTestId('hero-radio-seat-1').checked).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('modal-save-btn'));
+    });
+
+    const patchCall = apiFetch.mock.calls.find(
+      ([p, o]) => p === '/api/scenarios/sc-new' && o?.method === 'PATCH'
+    );
+    const patchBody = JSON.parse(patchCall[1].body);
+    expect(patchBody.hero_seat).toBe(1);
+  });
+
+  it('passes hero_player_id on from-hand POST', async () => {
+    await act(async () => {
+      render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
+    });
+    await waitFor(() => screen.getByTestId('playlist-picker-pl-1'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('modal-save-btn'));
+    });
+    const fromHandCall = apiFetch.mock.calls.find(
+      ([p, o]) => p === '/api/scenarios/from-hand' && o?.method === 'POST'
+    );
+    expect(JSON.parse(fromHandCall[1].body)).toMatchObject({
+      hand_id: 'h-abc123',
+      include_board: true,
+      hero_player_id: 'p-hero',
+    });
   });
 
   it('auto-selects first playlist when no tag match', async () => {
@@ -125,19 +329,15 @@ describe('SaveAsScenarioModal', () => {
   });
 
   it('pre-selects playlist whose name tokens match a hand tag', async () => {
-    // HAND.tags includes 'C_BET' → playlist 'C-Bet Lines' (tokens {c, bet} ⊂ {c, bet, lines}) should match.
     await act(async () => {
       render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
     });
     await waitFor(() => screen.getByTestId('playlist-picker-pl-2'));
-    // pl-2 is 'C-Bet Lines' and should be pre-selected.
     expect(screen.getByTestId('playlist-picker-pl-2').textContent).toMatch(/SELECTED/);
-    // Only one playlist is selected.
     expect(screen.getAllByText('SELECTED').length).toBe(1);
   });
 
-  it('falls back to the first playlist when no tag matches any playlist name', async () => {
-    // Tag 'WALK' has no matching playlist → fallback to first.
+  it('falls back to first playlist when no tag matches any playlist name', async () => {
     await act(async () => {
       render(
         <SaveAsScenarioModal
@@ -152,18 +352,15 @@ describe('SaveAsScenarioModal', () => {
     expect(screen.getByTestId('playlist-picker-pl-1').textContent).toMatch(/SELECTED/);
   });
 
-  it('does not reset user playlist choice when the hand prop updates (live review)', async () => {
+  it('does not reset user playlist choice on hand re-render (live review)', async () => {
     const { rerender } = render(
       <SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />
     );
-    // Wait for playlists to load.
     await waitFor(() => screen.getByTestId('playlist-picker-pl-1'));
 
-    // User manually selects pl-3 ('Wet Flop Spots').
     fireEvent.click(screen.getByTestId('playlist-picker-pl-3'));
     expect(screen.getByTestId('playlist-picker-pl-3').textContent).toMatch(/SELECTED/);
 
-    // Simulate a live-review update: same hand_id, but `tags` array changes (new ref).
     await act(async () => {
       rerender(
         <SaveAsScenarioModal
@@ -175,7 +372,6 @@ describe('SaveAsScenarioModal', () => {
       );
     });
 
-    // User's selection is preserved — pl-3 still selected, not reset to the tag-match default pl-2.
     expect(screen.getByTestId('playlist-picker-pl-3').textContent).toMatch(/SELECTED/);
     expect(screen.getAllByText('SELECTED').length).toBe(1);
   });
@@ -193,51 +389,48 @@ describe('SaveAsScenarioModal', () => {
     await act(async () => {
       render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
     });
-    // Turn slot is empty; click to open picker
     fireEvent.click(screen.getByTestId('board-slot-turn'));
-    // CardPicker title shows the slot we're editing
     await waitFor(() => expect(screen.getByText(/Pick card for turn/i)).toBeTruthy());
   });
 
-  it('Save flow: creates scenario, PATCHes edits, and links to playlist', async () => {
+  it('Save flow: POST from-hand → PATCH (name, board, seat_configs, hero_seat) → POST items', async () => {
     await act(async () => {
       render(<SaveAsScenarioModal hand={HAND} onClose={onClose} onSaved={onSaved} apiFetch={apiFetch} />);
     });
     await waitFor(() => screen.getByTestId('playlist-picker-pl-1'));
 
-    // Pick playlist pl-2 explicitly
     fireEvent.click(screen.getByTestId('playlist-picker-pl-2'));
 
-    // Fire Save
     await act(async () => {
       fireEvent.click(screen.getByTestId('modal-save-btn'));
     });
 
-    // Verify POST /api/scenarios/from-hand
     const fromHandCall = apiFetch.mock.calls.find(
       ([p, o]) => p === '/api/scenarios/from-hand' && o?.method === 'POST'
     );
     expect(fromHandCall).toBeTruthy();
     expect(JSON.parse(fromHandCall[1].body)).toMatchObject({ hand_id: 'h-abc123', include_board: true });
 
-    // Verify PATCH /api/scenarios/:id includes name + board + primary_playlist_id
     const patchCall = apiFetch.mock.calls.find(
       ([p, o]) => p === '/api/scenarios/sc-new' && o?.method === 'PATCH'
     );
     expect(patchCall).toBeTruthy();
     const patchBody = JSON.parse(patchCall[1].body);
-    expect(patchBody.name).toBe('AKo on K72r');
+    expect(patchBody.name).toBe('AKo vs QJs on K72r');
     expect(patchBody.board_flop).toBe('Kh7s2d');
     expect(patchBody.primary_playlist_id).toBe('pl-2');
+    expect(patchBody.hero_seat).toBe(0);
+    expect(patchBody.seat_configs).toEqual([
+      { seat: 0, cards: ['Ac', 'Kd'] },
+      { seat: 1, cards: ['Qs', 'Js'] },
+    ]);
 
-    // Verify POST /api/playlists/pl-2/items with scenario_id
     const linkCall = apiFetch.mock.calls.find(
       ([p, o]) => p === '/api/playlists/pl-2/items' && o?.method === 'POST'
     );
     expect(linkCall).toBeTruthy();
     expect(JSON.parse(linkCall[1].body)).toMatchObject({ scenario_id: 'sc-new' });
 
-    // Close + onSaved called
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -269,7 +462,6 @@ describe('SaveAsScenarioModal', () => {
     fireEvent.click(screen.getByTestId('modal-cancel-btn'));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onSaved).not.toHaveBeenCalled();
-    // Only the playlists load call should have fired — nothing else.
     const nonGetCalls = apiFetch.mock.calls.filter(([, o]) => o?.method && o.method !== undefined);
     expect(nonGetCalls).toHaveLength(0);
   });
@@ -317,7 +509,6 @@ describe('guessPlaylistId()', () => {
   });
 
   it('returns the first matching tag (not every candidate)', () => {
-    // DRY_FLOP matches pl-1; later C_BET would match pl-2 — expect pl-1 because it comes first in tag order.
     expect(guessPlaylistId(PLAYLISTS_FIXTURE, ['DRY_FLOP', 'C_BET'])).toBe('pl-1');
   });
 });

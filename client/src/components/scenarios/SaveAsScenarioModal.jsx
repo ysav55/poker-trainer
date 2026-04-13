@@ -53,6 +53,7 @@ function flopTexture(flop) {
 }
 
 // Reduce two hole cards to rank+suited/offsuit string (e.g. "AKo", "AA", "QJs").
+// Returns '' if either card is missing.
 function holeToShort(hole) {
   if (!Array.isArray(hole) || hole.length < 2 || !hole[0] || !hole[1]) return '';
   const r1 = hole[0][0];
@@ -61,23 +62,41 @@ function holeToShort(hole) {
   const s2 = hole[1][1];
   if (r1 === r2) return `${r1}${r2}`;
   const suited = s1 === s2 ? 's' : 'o';
-  // Standard order: high rank first. Rough rank order.
+  // Standard order: high rank first.
   const order = '23456789TJQKA';
   const hi = order.indexOf(r1) >= order.indexOf(r2) ? r1 : r2;
   const lo = hi === r1 ? r2 : r1;
   return `${hi}${lo}${suited}`;
 }
 
-// Auto-generated name: "AKo on K72r". Falls back to "Hand #abc123".
-export function autoName({ hole, board, handId }) {
-  const h = holeToShort(hole);
+// Auto-generated scenario name.
+// Heads-up:      "AKo vs QJs on K72r" (or "AKo vs ??…" / "Random vs QJs…")
+// 3+ seats:      "AKo (6-max) on K72r" (or "Random (6-max) on K72r")
+// No flop:       " on K72r" suffix omitted
+// Empty/unknown: "Hand #abc123"
+export function autoName({ seats = [], heroSeat = null, board, handId }) {
+  const hero   = seats.find((s) => s.seat === heroSeat) || null;
+  const others = seats.filter((s) => s.seat !== heroSeat);
+  const heroShort = holeToShort(hero?.cards);
+  const seatCount = seats.length;
+
   const flop = [board?.flop1, board?.flop2, board?.flop3].filter(Boolean);
-  if (h && flop.length === 3) {
-    const ranks = flop.map((c) => c[0]).join('');
-    const tex = flopTexture(flop);
-    return `${h} on ${ranks}${tex}`;
+  const flopPart = flop.length === 3
+    ? ` on ${flop.map((c) => c[0]).join('')}${flopTexture(flop)}`
+    : '';
+
+  if (seatCount === 2) {
+    const vilShort = holeToShort(others[0]?.cards);
+    if (heroShort && vilShort) return `${heroShort} vs ${vilShort}${flopPart}`;
+    if (heroShort)             return `${heroShort} vs ??${flopPart}`;
+    if (vilShort)              return `Random vs ${vilShort}${flopPart}`;
   }
-  if (h) return `${h} — Hand #${String(handId || '').slice(0, 6)}`;
+  if (seatCount >= 3) {
+    if (heroShort) return `${heroShort} (${seatCount}-max)${flopPart}`;
+    return `Random (${seatCount}-max)${flopPart}`;
+  }
+  if (heroShort && flopPart) return `${heroShort}${flopPart}`;
+  if (heroShort) return `${heroShort} — Hand #${String(handId || '').slice(0, 6)}`;
   return `Hand #${String(handId || '').slice(0, 6)}`;
 }
 
@@ -100,11 +119,6 @@ function tokenize(str) {
 }
 
 // Match existing hand tags against playlist names to pick a default playlist.
-// Returns the first playlist whose tokenized name is a superset of some tag's
-// tokens (where that tag has at least one non-trivial token of length >= 2).
-// Tokens are compared after a light stem that ignores a trailing "s", so
-// "pot" and "pots" match. Returns null when no tag matches — caller decides
-// the fallback.
 export function guessPlaylistId(playlists, tags) {
   if (!Array.isArray(playlists) || playlists.length === 0) return null;
   if (!Array.isArray(tags) || tags.length === 0) return null;
@@ -128,28 +142,48 @@ export function guessPlaylistId(playlists, tags) {
   return null;
 }
 
+// Build initial per-seat state from hand.players.
+function seatsFromHand(hand) {
+  if (!hand?.players || !Array.isArray(hand.players)) return [];
+  return hand.players
+    .filter((p) => p.seat !== undefined && p.seat !== null)
+    .slice()
+    .sort((a, b) => a.seat - b.seat)
+    .map((p) => ({
+      player_id: p.player_id ?? null,
+      seat:      p.seat,
+      cards: [
+        Array.isArray(p.hole_cards) ? (p.hole_cards[0] || null) : null,
+        Array.isArray(p.hole_cards) ? (p.hole_cards[1] || null) : null,
+      ],
+    }));
+}
+
+// Default hero seat: explicit heroPlayerId match, else first seat with a
+// filled pair, else first seat, else null.
+function defaultHeroSeat(seats, heroPlayerId) {
+  if (seats.length === 0) return null;
+  if (heroPlayerId) {
+    const match = seats.find((s) => s.player_id === heroPlayerId);
+    if (match) return match.seat;
+  }
+  const filled = seats.find((s) => s.cards[0] && s.cards[1]);
+  return (filled ?? seats[0]).seat;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SaveAsScenarioModal({
-  hand,            // { hand_id, board: [...], players: [{hole_cards, player_id}], hand_tags?, tags? }
-  heroPlayerId,    // optional — which seat's hole cards to use; defaults to first non-empty
+  hand,            // { hand_id, board: [...], players: [{seat, hole_cards, player_id}], hand_tags?, tags? }
+  heroPlayerId,    // optional — default hero; falls through to first filled seat
   onClose,
-  onSaved,         // called with saved scenario after success
+  onSaved,
   apiFetch = defaultApiFetch,
 }) {
-  // ── Extract hole cards (read-only) ─────────────────────────────────────────
-  const hole = useMemo(() => {
-    if (!hand?.players) return [];
-    const filled = hand.players.filter(
-      (p) => Array.isArray(p.hole_cards) && p.hole_cards.length === 2 && p.hole_cards[0] && p.hole_cards[1]
-    );
-    if (filled.length === 0) return [];
-    if (heroPlayerId) {
-      const match = filled.find((p) => p.player_id === heroPlayerId);
-      if (match) return match.hole_cards;
-    }
-    return filled[0].hole_cards;
-  }, [hand, heroPlayerId]);
+  // ── Seats (editable) ───────────────────────────────────────────────────────
+  const initialSeats = useMemo(() => seatsFromHand(hand), [hand]);
+  const [seats, setSeats] = useState(initialSeats);
+  const [heroSeat, setHeroSeat] = useState(() => defaultHeroSeat(initialSeats, heroPlayerId));
 
   // ── Board (editable) ───────────────────────────────────────────────────────
   const [board, setBoard] = useState(() => boardFromArray(hand?.board));
@@ -164,23 +198,22 @@ export default function SaveAsScenarioModal({
 
   // ── Name ───────────────────────────────────────────────────────────────────
   const [name, setName] = useState(() =>
-    autoName({ hole, board: boardFromArray(hand?.board), handId: hand?.hand_id })
+    autoName({
+      seats: initialSeats,
+      heroSeat: defaultHeroSeat(initialSeats, heroPlayerId),
+      board: boardFromArray(hand?.board),
+      handId: hand?.hand_id,
+    })
   );
 
   // ── Playlists ──────────────────────────────────────────────────────────────
-  const [playlists, setPlaylists]         = useState([]);
-  const [playlistId, setPlaylistId]       = useState(null);
-  const [loadingPls, setLoadingPls]       = useState(true);
+  const [playlists, setPlaylists]   = useState([]);
+  const [playlistId, setPlaylistId] = useState(null);
+  const [loadingPls, setLoadingPls] = useState(true);
 
-  // Keep the latest tag snapshot accessible to the fetch effect without
-  // causing it to re-run (and clobber the user's manual playlist choice)
-  // when the parent re-renders with an updated `hand` during live review.
   const tagsRef = useRef(tags);
   useEffect(() => { tagsRef.current = tags; }, [tags]);
 
-  // Track whether we've already applied a default so subsequent resolutions
-  // (re-mount pathology or strict-mode double-invoke) don't overwrite a
-  // user-selected playlist.
   const defaultAppliedRef = useRef(false);
 
   useEffect(() => {
@@ -212,21 +245,57 @@ export default function SaveAsScenarioModal({
     return m;
   }, [playlists]);
 
-  // ── Card picker for board edits ────────────────────────────────────────────
-  const [pickerSlot, setPickerSlot] = useState(null);
+  // ── Unified card picker for board OR seat slots ────────────────────────────
+  // pickerTarget: null | { kind: 'board', slot } | { kind: 'seat', seat, index }
+  const [pickerTarget, setPickerTarget] = useState(null);
 
   const usedCards = useMemo(() => {
     const used = new Set();
-    if (Array.isArray(hole)) hole.forEach((c) => c && used.add(c));
-    BOARD_SLOTS.forEach((s) => {
-      if (s !== pickerSlot && board[s]) used.add(board[s]);
+    seats.forEach((s) => {
+      s.cards.forEach((c, i) => {
+        if (!c) return;
+        if (pickerTarget?.kind === 'seat' && pickerTarget.seat === s.seat && pickerTarget.index === i) return;
+        used.add(c);
+      });
+    });
+    BOARD_SLOTS.forEach((slot) => {
+      if (!board[slot]) return;
+      if (pickerTarget?.kind === 'board' && pickerTarget.slot === slot) return;
+      used.add(board[slot]);
     });
     return used;
-  }, [hole, board, pickerSlot]);
+  }, [seats, board, pickerTarget]);
 
-  const handleSlotPick = useCallback((card) => {
-    setBoard((prev) => ({ ...prev, [pickerSlot]: card }));
-  }, [pickerSlot]);
+  const handlePick = useCallback((card) => {
+    if (!pickerTarget) return;
+    if (pickerTarget.kind === 'board') {
+      setBoard((prev) => ({ ...prev, [pickerTarget.slot]: card }));
+    } else if (pickerTarget.kind === 'seat') {
+      setSeats((prev) => prev.map((s) =>
+        s.seat !== pickerTarget.seat ? s : {
+          ...s,
+          cards: s.cards.map((c, i) => (i === pickerTarget.index ? card : c)),
+        }
+      ));
+    }
+  }, [pickerTarget]);
+
+  const updateSeatCard = useCallback((seatIdx, cardIdx, card) => {
+    setSeats((prev) => prev.map((s) =>
+      s.seat !== seatIdx ? s : {
+        ...s,
+        cards: s.cards.map((c, i) => (i === cardIdx ? card : c)),
+      }
+    ));
+  }, []);
+
+  const pickerTitle = useMemo(() => {
+    if (!pickerTarget) return '';
+    if (pickerTarget.kind === 'board') return `Pick card for ${slotLabel(pickerTarget.slot)}`;
+    const isHero = pickerTarget.seat === heroSeat;
+    const who = isHero ? 'Hero' : `Seat ${pickerTarget.seat}`;
+    return `Pick card for ${who} (card ${pickerTarget.index + 1})`;
+  }, [pickerTarget, heroSeat]);
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const [saving, setSaving] = useState(false);
@@ -237,23 +306,35 @@ export default function SaveAsScenarioModal({
     setSaving(true);
     setSaveError(null);
     try {
-      // 1. Create scenario from the hand (server handles seat_configs extraction).
+      // 1. Create scenario (server builds seat_configs from hand_players).
       const scenario = await apiFetch('/api/scenarios/from-hand', {
         method: 'POST',
-        body: JSON.stringify({ hand_id: hand.hand_id, include_board: true }),
+        body: JSON.stringify({
+          hand_id: hand.hand_id,
+          include_board: true,
+          hero_player_id: seats.find((s) => s.seat === heroSeat)?.player_id ?? null,
+        }),
       });
-      // 2. PATCH to apply name / board / playlist edits.
+
+      // 2. PATCH with coach edits: name, board, seat_configs (with any card
+      //    changes / clears), hero_seat, primary playlist.
+      const seatConfigs = seats.map((s) => ({
+        seat:  s.seat,
+        cards: s.cards.filter(Boolean),
+      }));
       const patchBody = {
         name: name.trim() || scenario.name,
         ...boardToPatch(board),
+        seat_configs: seatConfigs,
+        hero_seat: heroSeat,
         primary_playlist_id: playlistId ?? null,
       };
       const updated = await apiFetch(`/api/scenarios/${encodeURIComponent(scenario.id)}`, {
         method: 'PATCH',
         body: JSON.stringify(patchBody),
       });
-      // 3. Link the scenario to the selected playlist (explicit playlist_items row).
-      //    Use scenario.id from the initial POST — PATCH response isn't guaranteed to echo id.
+
+      // 3. Link to playlist.
       if (playlistId) {
         await apiFetch(`/api/playlists/${encodeURIComponent(playlistId)}/items`, {
           method: 'POST',
@@ -267,10 +348,11 @@ export default function SaveAsScenarioModal({
     } finally {
       setSaving(false);
     }
-  }, [apiFetch, hand, name, board, playlistId, onClose, onSaved]);
+  }, [apiFetch, hand, name, board, seats, heroSeat, playlistId, onClose, onSaved]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   const selectedPlaylist = playlists.find((pl) => pl.playlist_id === playlistId);
+  const showSeats = seats.length > 0;
 
   return (
     <div
@@ -286,7 +368,8 @@ export default function SaveAsScenarioModal({
     >
       <div
         style={{
-          width: '100%', maxWidth: 520,
+          width: '100%', maxWidth: 560,
+          maxHeight: '92vh',
           background: colors.bgSurface,
           border: `1px solid ${colors.borderStrong}`,
           borderRadius: 8,
@@ -298,6 +381,7 @@ export default function SaveAsScenarioModal({
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '14px 18px', borderBottom: `1px solid ${colors.borderDefault}`,
+          flexShrink: 0,
         }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary, letterSpacing: '0.02em' }}>
             Save as Scenario
@@ -317,18 +401,66 @@ export default function SaveAsScenarioModal({
         </div>
 
         {/* Body */}
-        <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Hole cards (read-only) */}
-          <div>
-            <Label>Hole Cards</Label>
-            <div data-testid="modal-hole-cards" style={{ display: 'flex', gap: 6 }}>
-              {hole.length === 2 ? (
-                hole.map((c, i) => <CardChip key={`${c}-${i}`} card={c} />)
-              ) : (
-                <span style={{ fontSize: 12, color: colors.textMuted }}>No hole cards available</span>
-              )}
+        <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
+          {/* Seats (editable hole cards + hero radio) */}
+          {showSeats && (
+            <div data-testid="modal-seats">
+              <Label>Seats · pick hero</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {seats.map((seat) => {
+                  const isHero = seat.seat === heroSeat;
+                  return (
+                    <div
+                      key={seat.seat}
+                      data-testid={`seat-row-${seat.seat}`}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '6px 8px', borderRadius: 4,
+                        background: isHero ? colors.goldSubtle : 'transparent',
+                        border: `1px solid ${isHero ? colors.goldBorder : colors.borderDefault}`,
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="hero-seat"
+                        data-testid={`hero-radio-seat-${seat.seat}`}
+                        checked={isHero}
+                        onChange={() => setHeroSeat(seat.seat)}
+                        aria-label={`Hero is seat ${seat.seat}`}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+                        color: isHero ? colors.gold : colors.textMuted,
+                        minWidth: 52,
+                      }}>
+                        {isHero ? 'HERO' : `SEAT ${seat.seat}`}
+                      </span>
+                      <SeatSlot
+                        seat={seat.seat}
+                        index={0}
+                        card={seat.cards[0]}
+                        onClick={() => setPickerTarget({ kind: 'seat', seat: seat.seat, index: 0 })}
+                        onClear={() => updateSeatCard(seat.seat, 0, null)}
+                      />
+                      <SeatSlot
+                        seat={seat.seat}
+                        index={1}
+                        card={seat.cards[1]}
+                        onClick={() => setPickerTarget({ kind: 'seat', seat: seat.seat, index: 1 })}
+                        onClear={() => updateSeatCard(seat.seat, 1, null)}
+                      />
+                      {!seat.cards[0] && !seat.cards[1] && (
+                        <span style={{ fontSize: 10, color: colors.textMuted, fontStyle: 'italic' }}>
+                          random
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Board (editable) */}
           <div>
@@ -340,7 +472,7 @@ export default function SaveAsScenarioModal({
                   slot={slot}
                   card={board[slot]}
                   label={slotLabel(slot)}
-                  onClick={() => setPickerSlot(slot)}
+                  onClick={() => setPickerTarget({ kind: 'board', slot })}
                   onClear={() => setBoard((p) => ({ ...p, [slot]: null }))}
                 />
               ))}
@@ -441,7 +573,7 @@ export default function SaveAsScenarioModal({
         <div style={{
           display: 'flex', justifyContent: 'flex-end', gap: 8,
           padding: '12px 18px', borderTop: `1px solid ${colors.borderDefault}`,
-          background: colors.bgSurface,
+          background: colors.bgSurface, flexShrink: 0,
         }}>
           <button
             data-testid="modal-cancel-btn"
@@ -480,12 +612,12 @@ export default function SaveAsScenarioModal({
       </div>
 
       {/* Card picker overlay */}
-      {pickerSlot && (
+      {pickerTarget && (
         <CardPicker
           usedCards={usedCards}
-          onSelect={handleSlotPick}
-          onClose={() => setPickerSlot(null)}
-          title={`Pick card for ${slotLabel(pickerSlot)}`}
+          onSelect={handlePick}
+          onClose={() => setPickerTarget(null)}
+          title={pickerTitle}
         />
       )}
     </div>
@@ -506,24 +638,6 @@ function Label({ children, htmlFor }) {
     >
       {children}
     </label>
-  );
-}
-
-function CardChip({ card }) {
-  const red = card && (card[1] === 'h' || card[1] === 'd');
-  return (
-    <div
-      style={{
-        width: 42, height: 54, borderRadius: 4,
-        background: colors.bgSurfaceRaised,
-        border: `1px solid ${colors.borderStrong}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 15, fontWeight: 700,
-        color: red ? colors.error : colors.textPrimary,
-      }}
-    >
-      {formatCardLabel(card)}
-    </div>
   );
 }
 
@@ -562,6 +676,48 @@ function BoardSlot({ slot, card, label, onClick, onClear }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function SeatSlot({ seat, index, card, onClick, onClear }) {
+  const red = card && (card[1] === 'h' || card[1] === 'd');
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex' }}>
+      <button
+        data-testid={`seat-${seat}-card-${index}`}
+        onClick={onClick}
+        aria-label={card ? `Change seat ${seat} card ${index + 1}` : `Pick seat ${seat} card ${index + 1}`}
+        style={{
+          width: 38, height: 48, borderRadius: 4,
+          background: card ? colors.bgSurfaceRaised : colors.bgSurface,
+          border: `1px dashed ${card ? colors.borderStrong : colors.borderDefault}`,
+          color: card ? (red ? colors.error : colors.textPrimary) : colors.textMuted,
+          fontSize: card ? 13 : 10, fontWeight: 700,
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        {card ? formatCardLabel(card) : '+'}
+      </button>
+      {card && (
+        <button
+          data-testid={`seat-${seat}-card-${index}-clear`}
+          onClick={(e) => { e.stopPropagation(); onClear(); }}
+          aria-label={`Clear seat ${seat} card ${index + 1}`}
+          style={{
+            position: 'absolute', top: -6, right: -6,
+            width: 16, height: 16, borderRadius: '50%',
+            background: colors.bgSurface,
+            border: `1px solid ${colors.borderStrong}`,
+            color: colors.textMuted, cursor: 'pointer',
+            padding: 0, lineHeight: 1, fontSize: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }
