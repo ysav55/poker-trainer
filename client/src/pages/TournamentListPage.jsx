@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Plus, ArrowRight } from 'lucide-react';
 import { apiFetch } from '../lib/api.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { WizardModal } from './admin/TournamentSetup.jsx';
-
-const GOLD = '#d4af37';
+import StatusBadge from '../components/tournament/StatusBadge.jsx';
+import { colors } from '../lib/colors.js';
 
 const TABS = ['Upcoming', 'Active', 'Completed'];
 const TAB_STATUSES = {
@@ -13,49 +14,29 @@ const TAB_STATUSES = {
   Completed: 'finished',
 };
 
-const STATUS_COLORS = {
-  pending:  '#93c5fd',
-  running:  '#3fb950',
-  paused:   '#e3b341',
-  finished: '#6e7681',
-};
-
-function StatusBadge({ status }) {
-  const color = STATUS_COLORS[status] ?? '#6e7681';
-  return (
-    <span style={{
-      fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-      padding: '2px 7px', borderRadius: 3,
-      background: `${color}18`, border: `1px solid ${color}55`, color,
-    }}>
-      {status}
-    </span>
-  );
-}
-
 function TournamentCard({ group, onClick }) {
   const scheduledAt = group.scheduled_at ? new Date(group.scheduled_at) : null;
   return (
     <div
       onClick={onClick}
       style={{
-        background: '#161b22', border: '1px solid #30363d', borderRadius: 8,
+        background: colors.bgSurfaceRaised, border: `1px solid ${colors.borderStrong}`, borderRadius: 8,
         padding: '14px 16px', cursor: 'pointer', transition: 'all 0.12s',
       }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(212,175,55,0.4)'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = '#30363d'; }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = colors.goldBorder; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = colors.borderStrong; }}
     >
       <div className="flex items-start justify-between gap-3 mb-2">
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#f0ece3' }}>{group.name}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary }}>{group.name}</div>
         <StatusBadge status={group.status} />
       </div>
-      <div className="flex flex-wrap items-center gap-4 mb-1" style={{ fontSize: 11, color: '#6e7681' }}>
+      <div className="flex flex-wrap items-center gap-4 mb-1" style={{ fontSize: 11, color: colors.textMuted }}>
         {group.buy_in > 0 && (
-          <span>Buy-in: <strong style={{ color: GOLD }}>{group.buy_in.toLocaleString()} chips</strong></span>
+          <span>Buy-in: <strong style={{ color: colors.gold }}>{group.buy_in.toLocaleString()} chips</strong></span>
         )}
-        {group.buy_in === 0 && <span style={{ color: '#3fb950' }}>Free</span>}
+        {group.buy_in === 0 && <span style={{ color: colors.success }}>Free</span>}
         {scheduledAt && (
-          <span>Starts: <strong style={{ color: '#c9d1d9' }}>{scheduledAt.toLocaleString()}</strong></span>
+          <span>Starts: <strong style={{ color: colors.textSecondary }}>{scheduledAt.toLocaleString()}</strong></span>
         )}
         <span style={{ textTransform: 'capitalize' }}>{group.privacy ?? 'public'}</span>
       </div>
@@ -64,13 +45,13 @@ function TournamentCard({ group, onClick }) {
         style={{
           marginTop: 8, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
           padding: '4px 12px', borderRadius: 4, cursor: 'pointer',
-          background: 'none', border: `1px solid ${GOLD}55`, color: GOLD,
-          textTransform: 'uppercase',
+          background: 'none', border: `1px solid ${colors.goldBorder}`, color: colors.gold,
+          textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 4,
         }}
-        onMouseEnter={e => { e.currentTarget.style.borderColor = GOLD; }}
-        onMouseLeave={e => { e.currentTarget.style.borderColor = `${GOLD}55`; }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = colors.gold; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = colors.goldBorder; }}
       >
-        View
+        View <ArrowRight size={12} />
       </button>
     </div>
   );
@@ -81,6 +62,7 @@ export default function TournamentListPage() {
   const navigate = useNavigate();
   const [tab, setTab]         = useState('Upcoming');
   const [groups, setGroups]   = useState([]);
+  const [counts, setCounts]   = useState({ Upcoming: null, Active: null, Completed: null });
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
   const canCreate = hasPermission('tournament:manage') || user?.role === 'coach' || user?.role === 'admin' || user?.role === 'superadmin';
@@ -90,12 +72,34 @@ export default function TournamentListPage() {
     try {
       const status = TAB_STATUSES[tabName];
       const data = await apiFetch(`/api/tournament-groups?status=${status}`);
-      setGroups(data.groups ?? []);
+      const next = data.groups ?? [];
+      setGroups(next);
+      setCounts(c => ({ ...c, [tabName]: next.length }));
     } catch (_) {
       setGroups([]);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Parallel fetch counts for all tabs on mount so badges populate immediately.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      TABS.map(t =>
+        apiFetch(`/api/tournament-groups?status=${TAB_STATUSES[t]}`)
+          .then(d => [t, (d.groups ?? []).length])
+          .catch(() => [t, 0]),
+      ),
+    ).then(pairs => {
+      if (cancelled) return;
+      setCounts(prev => {
+        const next = { ...prev };
+        for (const [t, n] of pairs) next[t] = n;
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => { loadGroups(tab); }, [tab, loadGroups]);
@@ -105,8 +109,8 @@ export default function TournamentListPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#f0ece3', letterSpacing: '-0.03em' }}>Tournaments</h1>
-          <p style={{ fontSize: 12, color: '#6e7681', marginTop: 2 }}>Register, play, and track poker tournaments</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: colors.textPrimary, letterSpacing: '-0.03em' }}>Tournaments</h1>
+          <p style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Register, play, and track poker tournaments</p>
         </div>
         {canCreate && (
           <button
@@ -114,45 +118,63 @@ export default function TournamentListPage() {
             style={{
               fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
               padding: '8px 16px', borderRadius: 6, cursor: 'pointer',
-              background: GOLD, color: '#0d1117', border: 'none',
+              background: colors.gold, color: colors.bgSurface, border: 'none',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
             }}
           >
-            + Create Tournament
+            <Plus size={14} /> Create Tournament
           </button>
         )}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6" style={{ borderBottom: '1px solid #21262d', paddingBottom: 0 }}>
-        {TABS.map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              fontSize: 12, fontWeight: tab === t ? 700 : 500, padding: '8px 16px',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: tab === t ? GOLD : '#6e7681',
-              borderBottom: tab === t ? `2px solid ${GOLD}` : '2px solid transparent',
-              marginBottom: -1,
-            }}
-          >
-            {t}
-          </button>
-        ))}
+      <div className="flex gap-1 mb-6" style={{ borderBottom: `1px solid ${colors.borderDefault}`, paddingBottom: 0 }}>
+        {TABS.map(t => {
+          const active = tab === t;
+          const n = counts[t];
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{
+                fontSize: 12, fontWeight: active ? 700 : 500, padding: '8px 16px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: active ? colors.gold : colors.textMuted,
+                borderBottom: active ? `2px solid ${colors.gold}` : '2px solid transparent',
+                marginBottom: -1,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {t}
+              {n != null && (
+                <span
+                  data-testid={`tab-count-${t.toLowerCase()}`}
+                  style={{
+                    fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999,
+                    background: active ? colors.goldTint : colors.mutedTint,
+                    color: active ? colors.gold : colors.textMuted,
+                  }}
+                >
+                  {n}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Content */}
       {loading ? (
-        <div style={{ color: '#6e7681', fontSize: 13, textAlign: 'center', padding: 40 }}>Loading…</div>
+        <div style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center', padding: 40 }}>Loading…</div>
       ) : groups.length === 0 ? (
-        <div style={{ color: '#6e7681', fontSize: 13, textAlign: 'center', padding: 40 }}>
+        <div style={{ color: colors.textMuted, fontSize: 13, textAlign: 'center', padding: 40 }}>
           No {tab.toLowerCase()} tournaments.
           {canCreate && tab === 'Upcoming' && (
             <span
-              style={{ color: GOLD, cursor: 'pointer', marginLeft: 6 }}
+              style={{ color: colors.gold, cursor: 'pointer', marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}
               onClick={() => setShowWizard(true)}
             >
-              Create one →
+              Create one <ArrowRight size={12} />
             </span>
           )}
         </div>
