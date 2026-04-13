@@ -536,20 +536,22 @@ async function reorderPlaylistItems(playlistId, items) {
 // DRILL SESSIONS
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function createDrillSession({ tableId, playlistId, coachId, itemsTotal, optedInPlayers = [], optedOutPlayers = [] }) {
-  const data = await q(
-    supabase.from('drill_sessions').insert({
-      table_id:          tableId,
-      playlist_id:       playlistId,
-      coach_id:          coachId,
-      items_total:       itemsTotal,
-      opted_in_players:  optedInPlayers,
-      opted_out_players: optedOutPlayers,
-    })
-    .select('id, table_id, playlist_id, coach_id, status, current_position, items_dealt, items_total, opted_in_players, opted_out_players, started_at')
-    .single()
-  );
-  return data;
+async function createDrillSession({
+  tableId, playlistId, coachId,
+  itemsTotal, optedInPlayers = [], optedOutPlayers = [],
+  heroMode = 'sticky', heroPlayerId = null, autoAdvance = false,
+}) {
+  return q(supabase.from('drill_sessions').insert({
+    table_id:           tableId,
+    playlist_id:        playlistId,
+    coach_id:           coachId,
+    items_total:        itemsTotal,
+    opted_in_players:   optedInPlayers,
+    opted_out_players:  optedOutPlayers,
+    hero_mode:          heroMode,
+    hero_player_id:     heroPlayerId,
+    auto_advance:       autoAdvance,
+  }).select('*').single());
 }
 
 async function getActiveDrillSession(tableId) {
@@ -562,6 +564,20 @@ async function getActiveDrillSession(tableId) {
       .limit(1)
   );
   return data?.[0] ?? null;
+}
+
+async function getPausedDrillSession(tableId, playlistId) {
+  const row = await q(
+    supabase.from('drill_sessions')
+      .select('*')
+      .eq('table_id', tableId)
+      .eq('playlist_id', playlistId)
+      .eq('status', 'paused')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  );
+  return row ?? null;
 }
 
 async function getDrillSession(sessionId) {
@@ -585,6 +601,9 @@ async function updateDrillSession(sessionId, changes) {
     optedOutPlayers:  'opted_out_players',
     pausedAt:         'paused_at',
     completedAt:      'completed_at',
+    heroMode:         'hero_mode',
+    heroPlayerId:     'hero_player_id',
+    autoAdvance:      'auto_advance',
   };
   for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
     if (changes[jsKey] !== undefined) patch[dbCol] = changes[jsKey];
@@ -614,5 +633,5 @@ module.exports = {
   // Playlist items
   getPlaylistItems, addPlaylistItem, removePlaylistItem, reorderPlaylistItems,
   // Drill sessions
-  createDrillSession, getActiveDrillSession, getDrillSession, updateDrillSession,
+  createDrillSession, getActiveDrillSession, getPausedDrillSession, getDrillSession, updateDrillSession,
 };

@@ -28,47 +28,54 @@ const HandLogger = require('../db/HandLoggerSupabase');
  * @param {string[]} opts.optedOutPlayers - player UUIDs sitting out
  * @param {number}  [opts.seatedCount]    - current seated (opted-in) count for filtering
  */
-async function start({ tableId, playlistId, coachId, optedInPlayers = [], optedOutPlayers = [], seatedCount }) {
-  // Cancel any existing session
-  const existing = await repo.getActiveDrillSession(tableId);
-  if (existing) {
-    await repo.updateDrillSession(existing.id, { status: 'cancelled' });
+async function start({
+  tableId, playlistId, coachId,
+  optedInPlayers = [], optedOutPlayers = [], seatedCount,
+  heroMode = 'sticky', heroPlayerId = null, autoAdvance = false,
+  forceRestart = false,
+}) {
+  const paused = await repo.getPausedDrillSession(tableId, playlistId);
+  if (paused && !forceRestart) {
+    return { resumable: true, priorSessionId: paused.id, priorPosition: paused.current_position, priorTotal: paused.items_total };
+  }
+  if (paused && forceRestart) {
+    await repo.updateDrillSession(paused.id, { status: 'cancelled' });
+  }
+  const existingActive = await repo.getActiveDrillSession(tableId);
+  if (existingActive) {
+    await repo.updateDrillSession(existingActive.id, { status: 'cancelled' });
   }
 
-  // Fetch all items for this playlist
   const allItems = await repo.getPlaylistItems(playlistId);
   if (allItems.length === 0) throw new Error('Playlist is empty');
 
-  // Fetch playlist metadata (for ordering)
   const playlists = await HandLogger.getPlaylists();
   const playlist = playlists.find(p => p.playlist_id === playlistId);
   const ordering = playlist?.ordering ?? 'sequential';
 
-  // Filter by player_count if seatedCount provided
   const effectiveCount = seatedCount ?? optedInPlayers.length;
   const eligible = effectiveCount > 0
-    ? allItems.filter(item => (item.scenario?.player_count ?? 0) <= effectiveCount)
+    ? allItems.filter(item => (item.scenario?.player_count ?? 0) === effectiveCount)
     : allItems;
-
   if (eligible.length === 0) {
-    throw new Error(`No scenarios in this playlist match the current player count (${effectiveCount})`);
+    const session = await repo.createDrillSession({
+      tableId, playlistId, coachId,
+      itemsTotal: allItems.length,
+      optedInPlayers, optedOutPlayers,
+      heroMode, heroPlayerId, autoAdvance,
+    });
+    return { session, currentScenario: null, items: [], fitCount: 0 };
   }
 
-  // Shuffle if ordering === 'random'
   const orderedItems = ordering === 'random' ? shuffled(eligible) : eligible;
-
   const session = await repo.createDrillSession({
-    tableId,
-    playlistId,
-    coachId,
-    itemsTotal:       orderedItems.length,
-    optedInPlayers,
-    optedOutPlayers,
+    tableId, playlistId, coachId,
+    itemsTotal: orderedItems.length,
+    optedInPlayers, optedOutPlayers,
+    heroMode, heroPlayerId, autoAdvance,
   });
 
-  // Return session + first scenario
-  const firstScenario = orderedItems[0]?.scenario ?? null;
-  return { session, currentScenario: firstScenario, items: orderedItems };
+  return { session, currentScenario: orderedItems[0]?.scenario ?? null, items: orderedItems, fitCount: eligible.length };
 }
 
 // ─── Get status ───────────────────────────────────────────────────────────────
@@ -222,6 +229,23 @@ async function getNextScenario(tableId, seatedOptedInCount) {
   return nextEligible?.scenario ?? eligible[0]?.scenario ?? null;
 }
 
+// ─── Hero player / mode updates ───────────────────────────────────────────────
+
+async function updateHeroPlayer(tableId, heroPlayerId) {
+  const session = await repo.getActiveDrillSession(tableId);
+  if (!session) throw new Error('No active drill session at this table');
+  return repo.updateDrillSession(session.id, { heroPlayerId });
+}
+
+async function updateMode(tableId, { heroMode, autoAdvance } = {}) {
+  const session = await repo.getActiveDrillSession(tableId);
+  if (!session) throw new Error('No active drill session at this table');
+  const patch = {};
+  if (heroMode !== undefined) patch.heroMode = heroMode;
+  if (autoAdvance !== undefined) patch.autoAdvance = autoAdvance;
+  return repo.updateDrillSession(session.id, patch);
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function shuffled(arr) {
@@ -233,4 +257,7 @@ function shuffled(arr) {
   return a;
 }
 
-module.exports = { start, getStatus, advance, pause, resume, pick, setParticipation, cancel, getNextScenario };
+module.exports = {
+  start, getStatus, advance, pause, resume, pick, setParticipation, cancel,
+  getNextScenario, updateHeroPlayer, updateMode,
+};
