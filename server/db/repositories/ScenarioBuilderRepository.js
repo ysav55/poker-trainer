@@ -96,7 +96,7 @@ const SCENARIO_COLS = [
   'board_mode', 'board_flop', 'board_turn', 'board_river',
   'board_texture', 'texture_turn', 'texture_river',
   'blind_mode', 'source_hand_id', 'is_shareable', 'play_count',
-  'primary_playlist_id',
+  'primary_playlist_id', 'hero_seat',
   'created_at', 'updated_at',
 ].join(', ');
 
@@ -137,7 +137,7 @@ async function createScenario({
   boardMode = 'none', boardFlop = null, boardTurn = null, boardRiver = null,
   boardTexture = null, textureTurn = null, textureRiver = null,
   blindMode = false, sourceHandId = null, isShareable = false,
-  primaryPlaylistId = null,
+  primaryPlaylistId = null, heroSeat = null,
 }) {
   const data = await q(
     supabase.from('scenarios').insert({
@@ -162,6 +162,7 @@ async function createScenario({
       source_hand_id: sourceHandId,
       is_shareable:  isShareable,
       primary_playlist_id: primaryPlaylistId,
+      hero_seat:     heroSeat,
     })
     .select(SCENARIO_COLS)
     .single()
@@ -206,6 +207,7 @@ async function updateScenario(id, changes) {
       sourceHandId:  current.source_hand_id,
       isShareable:   changes.isShareable   ?? current.is_shareable,
       primaryPlaylistId: changes.primaryPlaylistId ?? current.primary_playlist_id,
+      heroSeat:      changes.heroSeat      ?? current.hero_seat,
     });
     // Patch version + parent_id after insert (createScenario defaults version=1)
     const versioned = await q(
@@ -237,6 +239,7 @@ async function updateScenario(id, changes) {
     textureTurn:  'texture_turn',  textureRiver:  'texture_river',
     blindMode:    'blind_mode',    isShareable:   'is_shareable',
     primaryPlaylistId: 'primary_playlist_id',
+    heroSeat:     'hero_seat',
   };
   for (const [jsKey, dbCol] of Object.entries(fieldMap)) {
     if (changes[jsKey] !== undefined) patch[dbCol] = changes[jsKey];
@@ -273,6 +276,7 @@ async function duplicateScenario(id, coachId) {
     blindMode:    src.blind_mode,
     isShareable:  src.is_shareable,
     primaryPlaylistId: src.primary_playlist_id,
+    heroSeat:     src.hero_seat,
   });
 }
 
@@ -313,7 +317,7 @@ async function incrementPlayCount(id) {
  * Create a scenario pre-filled from a completed hand record.
  * Returns the new scenario (caller should redirect to builder for review).
  */
-async function createScenarioFromHand(handId, coachId, { includeBoard = true } = {}) {
+async function createScenarioFromHand(handId, coachId, { includeBoard = true, heroPlayerId = null } = {}) {
   // Fetch hand + players
   const hand = await q(
     supabase.from('hands')
@@ -337,6 +341,20 @@ async function createScenarioFromHand(handId, coachId, { includeBoard = true } =
     seat:  p.seat,
     cards: Array.isArray(p.hole_cards) ? p.hole_cards : [],
   }));
+
+  // Default hero seat: explicit heroPlayerId if it matches, else first seat
+  // with filled hole cards, else first seat, else null.
+  let heroSeat = null;
+  if (heroPlayerId) {
+    const match = playerRows.find(p => p.player_id === heroPlayerId);
+    if (match) heroSeat = match.seat;
+  }
+  if (heroSeat == null) {
+    const filled = playerRows.find(
+      p => Array.isArray(p.hole_cards) && p.hole_cards.length === 2 && p.hole_cards[0] && p.hole_cards[1]
+    );
+    heroSeat = filled?.seat ?? playerRows[0]?.seat ?? null;
+  }
   const bigBlind = hand.big_blind || 50;
   const stackConfigs = playerRows.map(p => ({
     seat:     p.seat,
@@ -371,6 +389,7 @@ async function createScenarioFromHand(handId, coachId, { includeBoard = true } =
     boardTurn:     boardMode === 'specific' ? boardTurn   : null,
     boardRiver:    boardMode === 'specific' ? boardRiver  : null,
     sourceHandId:  handId,
+    heroSeat,
   });
 }
 

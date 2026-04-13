@@ -105,7 +105,7 @@ router.post('/scenarios', canTag, async (req, res) => {
     board_mode = 'none', board_flop, board_turn, board_river,
     board_texture, texture_turn, texture_river,
     blind_mode = false, is_shareable = false,
-    primary_playlist_id = null,
+    primary_playlist_id = null, hero_seat = null,
   } = req.body || {};
 
   if (!name || typeof name !== 'string' || !name.trim()) {
@@ -120,6 +120,11 @@ router.post('/scenarios', canTag, async (req, res) => {
   if (!isValidUuidOrNullish(primary_playlist_id)) {
     return res.status(400).json({ error: 'primary_playlist_id must be a valid UUID' });
   }
+  if (hero_seat !== null && hero_seat !== undefined) {
+    if (!Number.isInteger(hero_seat) || hero_seat < 0 || hero_seat > 9) {
+      return res.status(400).json({ error: 'hero_seat must be an integer 0-9' });
+    }
+  }
 
   try {
     const scenario = await repo.createScenario({
@@ -130,7 +135,7 @@ router.post('/scenarios', canTag, async (req, res) => {
       boardRiver: board_river, boardTexture: board_texture,
       textureTurn: texture_turn, textureRiver: texture_river,
       blindMode: blind_mode, isShareable: is_shareable,
-      primaryPlaylistId: primary_playlist_id,
+      primaryPlaylistId: primary_playlist_id, heroSeat: hero_seat,
     });
     res.status(201).json(scenario);
   } catch (err) {
@@ -154,17 +159,23 @@ router.patch('/scenarios/:id', canTag, async (req, res) => {
       texture_turn: textureTurn, texture_river: textureRiver,
       blind_mode: blindMode, is_shareable: isShareable,
       primary_playlist_id: primaryPlaylistId,
+      hero_seat: heroSeat,
     } = req.body || {};
 
     if (!isValidUuidOrNullish(primaryPlaylistId)) {
       return res.status(400).json({ error: 'primary_playlist_id must be a valid UUID' });
+    }
+    if (heroSeat !== null && heroSeat !== undefined) {
+      if (!Number.isInteger(heroSeat) || heroSeat < 0 || heroSeat > 9) {
+        return res.status(400).json({ error: 'hero_seat must be an integer 0-9' });
+      }
     }
 
     const updated = await repo.updateScenario(req.params.id, {
       name, folderId, description, tags, playerCount, btnSeat, cardMode,
       seatConfigs, stackConfigs, boardMode, boardFlop, boardTurn, boardRiver,
       boardTexture, textureTurn, textureRiver, blindMode, isShareable,
-      primaryPlaylistId,
+      primaryPlaylistId, heroSeat,
     });
     res.json(updated);
   } catch (err) {
@@ -187,10 +198,13 @@ router.post('/scenarios/:id/duplicate', canTag, async (req, res) => {
 
 // POST /api/scenarios/from-hand  — create scenario from completed hand
 router.post('/scenarios/from-hand', canTag, async (req, res) => {
-  const { hand_id, include_board = true } = req.body || {};
+  const { hand_id, include_board = true, hero_player_id = null } = req.body || {};
   if (!hand_id) return res.status(400).json({ error: 'hand_id is required' });
   try {
-    const scenario = await repo.createScenarioFromHand(hand_id, req.user.stableId, { includeBoard: include_board });
+    const scenario = await repo.createScenarioFromHand(hand_id, req.user.stableId, {
+      includeBoard: include_board,
+      heroPlayerId: hero_player_id,
+    });
     res.status(201).json(scenario);
   } catch (err) {
     res.status(500).json({ error: 'internal_error', message: err.message });
