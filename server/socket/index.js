@@ -25,6 +25,7 @@ const registerMisc             = require('./handlers/misc');
 const registerScenarioBuilder  = require('./handlers/scenarioBuilder');
 const registerTournament       = require('./handlers/tournament');
 const registerBotTable         = require('./handlers/botTable');
+const registerDrillSession     = require('./handlers/drillSession');
 
 /**
  * registerSocketHandlers — wires all socket event handlers onto the io instance.
@@ -101,6 +102,7 @@ function registerSocketHandlers(io) {
     registerScenarioBuilder(socket, ctx);
     registerTournament(socket, ctx);
     registerBotTable(socket, ctx);
+    registerDrillSession(socket, ctx);
   });
 }
 
