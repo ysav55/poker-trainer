@@ -14,15 +14,18 @@ describe('seedDefaultPlaylists', () => {
     created.forEach((pl, i) => expect(pl.name).toBe(DEFAULT_PLAYLISTS[i]));
   });
 
-  it('does NOT seed when existing has any playlist', async () => {
-    const fetch = vi.fn();
+  it('DOES seed when existing playlists do not include seed names', async () => {
+    const fetch = vi.fn().mockImplementation(async (_path, opts) => ({
+      playlist_id: 'id-' + JSON.parse(opts.body).name,
+      name: JSON.parse(opts.body).name,
+    }));
     const { seeded, created } = await seedDefaultPlaylists({
       existing: [{ playlist_id: 'x', name: 'My Playlist' }],
       fetch,
     });
-    expect(seeded).toBe(false);
-    expect(created).toHaveLength(0);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(seeded).toBe(true);
+    expect(created).toHaveLength(8);
+    expect(fetch).toHaveBeenCalledTimes(8);
   });
 
   it('does NOT seed when existing is missing/null', async () => {

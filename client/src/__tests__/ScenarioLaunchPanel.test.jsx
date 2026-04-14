@@ -62,7 +62,7 @@ describe('ScenarioLaunchPanel resume state', () => {
 });
 
 describe('ScenarioLaunchPanel running state', () => {
-  it('renders pause + advance + swap when a session is active', () => {
+  it('renders pause + advance + exit when a session is active', () => {
     const props = {
       ...baseProps,
       drill: { ...baseProps.drill, session: { id: 'ds1', status: 'active', current_position: 2, items_total: 10, hero_mode: 'sticky', auto_advance: false } },
@@ -70,6 +70,6 @@ describe('ScenarioLaunchPanel running state', () => {
     render(<ScenarioLaunchPanel {...props} />);
     expect(screen.getByRole('button', { name: /Pause/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Advance/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Swap/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Exit Drill/i })).toBeInTheDocument();
   });
 });
