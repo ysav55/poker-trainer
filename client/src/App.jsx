@@ -30,6 +30,7 @@ import MultiTablePage from './pages/MultiTablePage.jsx';
 import ReviewTablePage from './pages/ReviewTablePage.jsx';
 import StudentsRosterPage from './pages/StudentsRosterPage.jsx';
 import StudentDashboardPage from './pages/StudentDashboardPage.jsx';
+import GroupsPage from './pages/GroupsPage.jsx';
 
 // Admin pages
 import UserManagement from './pages/admin/UserManagement.jsx';
@@ -143,6 +144,7 @@ function AppRoutes() {
           {/* CRM / Students — coach+ access (not admin-only) */}
           <Route path="/students" element={<StudentsRosterPage />} />
           <Route path="/students/:playerId" element={<StudentDashboardPage />} />
+          <Route path="/groups" element={<GroupsPage />} />
 
           {/* Admin — require admin:access */}
           <Route element={<RequirePermission permission="admin:access" />}>

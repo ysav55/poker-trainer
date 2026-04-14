@@ -105,6 +105,7 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="sr-only">Student Dashboard</h1>
       {/* Header with breadcrumb */}
       <PlayerHeader playerName={player?.display_name} groupName={player?.group_name} />
 
