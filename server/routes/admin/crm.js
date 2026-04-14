@@ -31,6 +31,7 @@ const canManage = requirePermission('user:manage');
 // GET /api/admin/players
 // Lists all players with basic leaderboard stats. Requires crm:view.
 router.get('/players', canView, async (req, res) => {
+  console.log('[CRM /players] HANDLER CALLED - permissions check passed');
   try {
     const { status, limit, offset } = req.query;
     const players = await PlayerRepo.listPlayers({
