@@ -53,7 +53,14 @@ function requirePermission(...keys) {
     const uid = req.user?.stableId ?? req.user?.id;
     if (!uid) return res.status(401).json({ error: 'Unauthorized' });
     const perms = await getPlayerPermissions(uid, req.user?.role);
-    if (keys.every(k => perms.has(k))) return next();
+    const requiredKeys = Array.from(keys);
+    const haveKeys = Array.from(perms);
+    console.log(`[requirePermission] uid=${uid.slice(0,8)}... required=${requiredKeys} have=${haveKeys} role=${req.user?.role}`);
+    if (keys.every(k => perms.has(k))) {
+      console.log(`[requirePermission] ✓ PASS`);
+      return next();
+    }
+    console.log(`[requirePermission] ✗ FAIL - missing: ${requiredKeys.filter(k => !perms.has(k)).join(',')}`);
     return res.status(403).json({ error: 'Insufficient permissions' });
   };
 }
