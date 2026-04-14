@@ -342,7 +342,7 @@ async function ensureSimPlayers(adminToken) {
     }
 
     // Spread logins to stay under authLimiter (20 req / 15 min)
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise(r => setTimeout(r, 1000));
   }
 
   return simPlayers;
@@ -362,12 +362,14 @@ async function main() {
   const adminCreds = await login(ADMIN_NAME, ADMIN_PASSWORD);
   console.log(`[startup] Admin: ${adminCreds.name} (${adminCreds.stableId.slice(0, 8)})\n`);
 
+  await new Promise(r => setTimeout(r, 1000)); // Rate limiter
+
   console.log('[startup] Setting up SimPlayer1..8...');
   const simPlayers = await ensureSimPlayers(adminCreds.token);
   if (simPlayers.length < 2) throw new Error(`Need ≥2 SimPlayers, got ${simPlayers.length}`);
   console.log(`[startup] ${simPlayers.length} SimPlayers ready\n`);
 
-  await new Promise(r => setTimeout(r, 400));
+  await new Promise(r => setTimeout(r, 2000)); // Rate limiter — already did 8 logins
   console.log('[startup] Logging in Idopeer...');
   const idoCreds = await login(IDOPEER_NAME, IDOPEER_PASSWORD);
   console.log(`[startup] Idopeer ready (${idoCreds.stableId.slice(0, 8)})\n`);
