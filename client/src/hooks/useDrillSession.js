@@ -8,6 +8,9 @@ export function useDrillSession({ socket, tableId }) {
   const [session, setSession]     = useState(null);
   const [fitCount, setFitCount]   = useState(null);
   const [resumable, setResumable] = useState(null);
+  const [paused, setPaused]       = useState(false);
+  const [autoAdvance, setAutoAdvance] = useState(false);
+  const [order, setOrder]         = useState('sequential');
   const [log, setLog]             = useState([]);
   const [error, setError]         = useState(null);
 
@@ -66,19 +69,42 @@ export function useDrillSession({ socket, tableId }) {
     setSession(out.session);
     setFitCount(out.fitCount ?? null);
     setResumable(null);
+    setPaused(false);
+    if (out.session) {
+      setAutoAdvance(out.session.auto_advance ?? false);
+      setOrder(out.session.order ?? 'sequential');
+    }
     return out;
   }, [tableId]);
 
-  const pause   = useCallback(() => apiFetch(`/api/tables/${tableId}/drill/pause`,   { method: 'PATCH' }), [tableId]);
-  const resume  = useCallback(() => socket.emit('scenario:request_resume', { tableId, mode: 'resume' }),   [socket, tableId]);
-  const restart = useCallback(() => socket.emit('scenario:request_resume', { tableId, mode: 'restart' }),  [socket, tableId]);
+  const pause   = useCallback(async () => {
+    await apiFetch(`/api/tables/${tableId}/drill/pause`, { method: 'PATCH' });
+    setPaused(true);
+  }, [tableId]);
+
+  const resume  = useCallback(() => {
+    setPaused(false);
+    socket.emit('scenario:request_resume', { tableId, mode: 'resume' });
+  }, [socket, tableId]);
+
+  const restart = useCallback(() => {
+    setPaused(false);
+    socket.emit('scenario:request_resume', { tableId, mode: 'restart' });
+  }, [socket, tableId]);
+
   const advance = useCallback(() => apiFetch(`/api/tables/${tableId}/drill/advance`, { method: 'PATCH' }), [tableId]);
-  const cancel  = useCallback(() => apiFetch(`/api/tables/${tableId}/drill/cancel`,  { method: 'PATCH' }), [tableId]);
+  const cancel  = useCallback(async () => {
+    await apiFetch(`/api/tables/${tableId}/drill`, { method: 'DELETE' });
+    setSession(null);
+    setPaused(false);
+    setAutoAdvance(false);
+    setOrder('sequential');
+  }, [tableId]);
   const setHero = useCallback((playerId) => socket.emit('scenario:set_hero', { tableId, playerId }),       [socket, tableId]);
   const setMode = useCallback((patch)    => socket.emit('scenario:set_mode', { tableId, ...patch }),       [socket, tableId]);
 
   return {
-    session, fitCount, resumable, log, error,
+    session, fitCount, resumable, paused, autoAdvance, order, log, error,
     launch, pause, resume, restart, advance, cancel, setHero, setMode,
   };
 }

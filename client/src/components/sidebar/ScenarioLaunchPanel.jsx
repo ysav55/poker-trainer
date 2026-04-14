@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Pause, ChevronRight, RefreshCw, CircleAlert } from 'lucide-react';
+import { Play, Pause, ChevronRight, XCircle, CircleAlert } from 'lucide-react';
 import { colors } from '../../lib/colors';
 
 export default function ScenarioLaunchPanel({ playlists = [], activePlayers = [], drill }) {
@@ -18,28 +18,95 @@ export default function ScenarioLaunchPanel({ playlists = [], activePlayers = []
         <div style={{ color: colors.textMuted, fontSize: 13, marginBottom: 12 }}>
           Paused at position {priorPosition} / {priorTotal}.
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={drill.resume}  style={btnGold}>Resume from {priorPosition}</button>
           <button onClick={drill.restart} style={btnGhost}>Restart</button>
+          <button onClick={drill.cancel}  style={btnDanger}>Discard & Exit</button>
         </div>
       </div>
     );
   }
 
-  if (drill.session) {
-    const s = drill.session;
+  if (drill.session || drill.paused) {
+    const s = drill.session || {};
+    const isPaused = drill.paused;
+
     return (
       <div style={{ padding: 12, background: colors.bgSurface, border: `1px solid ${colors.borderDefault}`, borderRadius: 6 }}>
-        <div style={{ color: colors.textPrimary, fontWeight: 600, marginBottom: 4 }}>Scenario Active</div>
+        <div style={{ color: colors.textPrimary, fontWeight: 600, marginBottom: 4 }}>
+          {isPaused ? 'Paused' : 'Scenario Active'}
+        </div>
         <div style={{ color: colors.textMuted, fontSize: 13, marginBottom: 8 }}>
-          {s.current_position} / {s.items_total} · {s.hero_mode} · auto: {s.auto_advance ? 'on' : 'off'}
+          {s.current_position ?? 0} / {s.items_total ?? 0} · {s.hero_mode} · auto: {s.auto_advance ? 'on' : 'off'}
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={drill.pause}   style={btnGhost}><Pause size={14} /> Pause</button>
-          <button onClick={drill.advance} style={btnGhost}><ChevronRight size={14} /> Advance</button>
-          <button onClick={drill.cancel}  style={btnGhost}><RefreshCw size={14} /> Swap</button>
+
+        {/* Scenario queue — if items available */}
+        {Array.isArray(s.items) && (
+          <div style={{ maxHeight: 120, overflowY: 'auto', marginBottom: 10, paddingRight: 4 }}>
+            <div style={{ fontSize: 11, color: colors.textMuted, marginBottom: 4 }}>Queue:</div>
+            {s.items.map((item, i) => {
+              const isDone = i < (s.current_position ?? 0);
+              const isCurrent = i === (s.current_position ?? 0);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    fontSize: 12,
+                    padding: '2px 4px',
+                    color: isDone ? colors.textMuted : isCurrent ? colors.gold : colors.textSecondary,
+                    textDecoration: isDone ? 'line-through' : 'none',
+                    backgroundColor: isCurrent ? colors.goldSubtle : 'transparent',
+                    marginBottom: 2,
+                  }}
+                >
+                  {i+1}. {item.name || `Scenario ${item.id}`}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {!isPaused && (
+            <>
+              <button onClick={drill.pause} style={btnGhost}><Pause size={14} /> Pause</button>
+              <button onClick={drill.advance} style={btnGhost}><ChevronRight size={14} /> Advance</button>
+            </>
+          )}
+          {isPaused && (
+            <>
+              <button onClick={drill.resume} style={btnGold}><Play size={14} /> Resume</button>
+            </>
+          )}
+          <button onClick={drill.cancel} style={btnDanger}><XCircle size={14} /> Exit Drill</button>
         </div>
-        <ul style={{ marginTop: 12, fontSize: 12, color: colors.textMuted, listStyle: 'none', padding: 0 }}>
+
+        {/* Live toggles — auto-advance and order */}
+        <div style={{ borderTop: `1px solid ${colors.borderDefault}`, paddingTop: 8, fontSize: 12 }}>
+          <label style={{ display: 'block', marginBottom: 6, color: colors.textMuted }}>
+            <input
+              type="checkbox"
+              checked={drill.autoAdvance}
+              onChange={(e) => drill.setMode({ auto_advance: e.target.checked })}
+            /> Auto-advance
+          </label>
+          <div style={{ color: colors.textMuted, marginBottom: 4 }}>Order:</div>
+          {['sequential', 'random'].map(o => (
+            <label key={o} style={{ marginRight: 8, color: colors.textMuted }}>
+              <input
+                type="radio"
+                name="liveorder"
+                value={o}
+                checked={drill.order === o}
+                onChange={() => drill.setMode({ order: o })}
+              /> {o}
+            </label>
+          ))}
+        </div>
+
+        {/* Log */}
+        <ul style={{ marginTop: 10, fontSize: 11, color: colors.textMuted, listStyle: 'none', padding: 0 }}>
           {drill.log.slice(0, 3).map((e, i) => (
             <li key={i}>{e.kind}: {e.scenarioId ?? e.reason ?? ''}</li>
           ))}
@@ -112,3 +179,4 @@ const lbl = { display: 'block', fontSize: 12, color: colors.textMuted, marginTop
 const inp = { width: '100%', padding: '4px 6px', background: colors.bgSurfaceRaised, color: colors.textPrimary, border: `1px solid ${colors.borderDefault}`, borderRadius: 4, marginTop: 4 };
 const btnGold  = { padding: '6px 10px', background: colors.gold, color: '#000', border: 'none', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 13, fontWeight: 600 };
 const btnGhost = { padding: '6px 10px', background: 'transparent', color: colors.textPrimary, border: `1px solid ${colors.borderDefault}`, borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 13 };
+const btnDanger = { padding: '6px 10px', background: 'transparent', color: colors.error, border: `1px solid ${colors.error}`, borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 13 };

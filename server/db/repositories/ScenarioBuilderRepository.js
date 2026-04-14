@@ -329,7 +329,7 @@ async function createScenarioFromHand(handId, coachId, { includeBoard = true, he
 
   const players = await q(
     supabase.from('hand_players')
-      .select('seat, hole_cards, stack_at_start, player_id')
+      .select('seat, hole_cards, stack_start, player_id')
       .eq('hand_id', handId)
       .order('seat', { ascending: true })
   );
@@ -358,7 +358,7 @@ async function createScenarioFromHand(handId, coachId, { includeBoard = true, he
   const bigBlind = hand.big_blind || 50;
   const stackConfigs = playerRows.map(p => ({
     seat:     p.seat,
-    stack_bb: bigBlind > 0 ? Math.round((p.stack_at_start || 0) / bigBlind) : 100,
+    stack_bb: bigBlind > 0 ? Math.round((p.stack_start || 0) / bigBlind) : 100,
   }));
 
   // Board

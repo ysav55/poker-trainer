@@ -5,14 +5,16 @@ export const DEFAULT_PLAYLISTS = [
   'Wet Flop Spots',
   'Paired Boards',
   'Monotone Boards',
-  '3-Bet Pots',
-  'Squeeze Pots',
-  'Single-Raised Pots',
-  'Limped Pots',
+  'Overpair Boards',
+  'Flush Draw Boards',
+  'Connected Boards',
+  'Two-Pair Spots',
 ];
 
 export async function seedDefaultPlaylists({ existing, fetch = apiFetch } = {}) {
-  if (!Array.isArray(existing) || existing.length > 0) return { seeded: false, created: [] };
+  if (!Array.isArray(existing)) return { seeded: false, created: [] };
+  const alreadySeeded = DEFAULT_PLAYLISTS.every(name => existing.some(p => p.name === name));
+  if (alreadySeeded) return { seeded: false, created: [] };
   const created = [];
   for (const name of DEFAULT_PLAYLISTS) {
     try {

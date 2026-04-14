@@ -6,7 +6,7 @@ import EmptyBuilder from '../../components/scenarios/EmptyBuilder.jsx';
 import ScenarioToolbar from '../../components/scenarios/ScenarioToolbar.jsx';
 import HandBuilderHeader from '../../components/scenarios/HandBuilderHeader.jsx';
 import { generatePlaylistColor } from '../../components/scenarios/PLAYLIST_COLORS.js';
-import { seedDefaultPlaylists } from '../../lib/seedPlaylists.js';
+import { seedDefaultPlaylists, DEFAULT_PLAYLISTS } from '../../lib/seedPlaylists.js';
 import { colors } from '../../lib/colors.js';
 
 export default function HandBuilder() {
@@ -34,7 +34,8 @@ export default function HandBuilder() {
     try {
       const data = await apiFetch('/api/playlists');
       const list = Array.isArray(data) ? data : Array.isArray(data?.playlists) ? data.playlists : [];
-      if (!seededRef.current && list.length === 0) {
+      const hasMissingSeeds = DEFAULT_PLAYLISTS.some(name => !list.find(p => p.name === name));
+      if (!seededRef.current && hasMissingSeeds) {
         seededRef.current = true;
         const { seeded } = await seedDefaultPlaylists({ existing: list });
         if (seeded) {

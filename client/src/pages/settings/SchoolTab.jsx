@@ -386,6 +386,7 @@ function GroupsSection({ schoolId, policy }) {
 
 export default function SchoolTab() {
   const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null); // 'no_school' or other error message
   const [groupsData, setGroupsData] = useState(null); // { schoolId, policy, groups }
   const [schoolId, setSchoolId]     = useState(null);
 
@@ -410,19 +411,25 @@ export default function SchoolTab() {
   const [lbMsg, setLbMsg]               = useState('');
 
   useEffect(() => {
-    Promise.all([
-      apiFetch('/api/settings/school'),
-      apiFetch('/api/admin/groups/my-school'),
-    ])
-      .then(([school, groups]) => {
+    apiFetch('/api/settings/school')
+      .then(school => {
         setIdentity(school.identity ?? { name: '', description: '' });
         setSchoolId(school.identity?.id ?? null);
         setPlatforms(school.platforms ?? []);
         setStaking(school.staking_defaults ?? staking);
         setLeaderboard(school.leaderboard ?? leaderboard);
-        setGroupsData(groups);
+        return apiFetch('/api/admin/groups/my-school')
+          .then(groups => setGroupsData(groups))
+          .catch(() => {}); // groups optional
       })
-      .catch(() => {})
+      .catch(err => {
+        // Check if it's the "no school assigned" error
+        if (err.message?.includes('no_school')) {
+          setError('no_school');
+        } else {
+          setError(err.message || 'Failed to load school settings');
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -497,6 +504,30 @@ export default function SchoolTab() {
   }
 
   if (loading) return <Card><p className="text-sm" style={{ color: colors.textMuted }}>Loading…</p></Card>;
+
+  if (error === 'no_school') {
+    return (
+      <Card>
+        <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+          <p style={{ color: colors.textPrimary, fontWeight: 600, marginBottom: 8 }}>No school assigned</p>
+          <p style={{ color: colors.textMuted, fontSize: 13, marginBottom: 16 }}>
+            This account is not assigned to a school. Contact your administrator to set up a school.
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <div style={{ textAlign: 'center', padding: '24px 16px' }}>
+          <p style={{ color: colors.error, fontWeight: 600 }}>Error loading school settings</p>
+          <p style={{ color: colors.textMuted, fontSize: 13, marginTop: 8 }}>{error}</p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card>
