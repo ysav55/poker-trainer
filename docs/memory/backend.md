@@ -1,6 +1,6 @@
 # Backend — Express/Node Architecture, Socket Events & API Patterns
 
-> Source of Truth. Last updated: 2026-04-06 (Phase 2 bug fixes + features).
+> Source of Truth. Last updated: 2026-04-16 (School Settings endpoints + SchoolSettingsService).
 
 ---
 
@@ -31,10 +31,14 @@
 | `requireAuth` | `server/auth/requireAuth.js` | Any authenticated endpoint |
 | `requireRole(role)` | `server/auth/requireRole.js` | Role-based gating (e.g., `requireRole('coach')`) |
 | `requirePermission(key)` | `server/auth/requirePermission.js` | System-level permission keys (16 keys from DB chain) |
+| `requireSchoolMembership` | `server/auth/requireSchoolMembership.js` | School-scoped access (verifies user.school_id matches resource) |
 | `requireTournamentAccess()` | — | Tournament-scoped access (checks `tournament_referees` table) |
 | `requireFeature(gate)` | `server/services/featureGate.js` | School-scoped feature flags |
 | `socketAuthMiddleware` | `server/auth/socketAuthMiddleware.js` | `io.use()` — sets `socket.data.*` |
 | `requireCoach(socket, action)` | `server/auth/socketGuards.js` | Socket-level coach guard |
+
+**requireSchoolMembership**
+Verifies that `req.user.school_id` matches the requested school (via route param or query). Admins can read any school; non-admins must match their assigned school. Returns 403 if mismatch, 400 if schoolId missing.
 
 ---
 
@@ -56,6 +60,7 @@
 /api/tables            → routes/tables.js
 /api/blind-presets     → routes/blindPresets.js
 /api/payout-presets    → routes/payoutPresets.js
+/api/settings/school   → routes/school-settings.js [coach customization — identity, table/staking defaults, leaderboard, platforms, appearance, auto-pause]
 /api/settings          → routes/settings.js
 /api/staking           → routes/staking.js
 /api/scenarios         → routes/scenarioBuilder.js
@@ -139,11 +144,35 @@ Two new events added to `server/socket/handlers/replay.js` (coach-only):
 | `SessionPrepService` | 7-section pre-session brief; 1-hour cache in `session_prep_briefs` |
 | `NarratorService` | Claude Haiku narration; returns `null` gracefully when `ANTHROPIC_API_KEY` absent |
 | `ProgressReportService` | 8-section report, 0–100 grade, weekly/monthly/custom |
+| `SchoolSettingsService` | Coach-level customization: identity, table defaults, staking defaults, leaderboard, platforms, appearance, auto-pause (see below) |
 | `featureGate.js` | School-scoped feature enable/disable (1-min in-memory cache) |
 | `PlaylistExecutionService` | Drill-session lifecycle (start/pause/resume/advance), hero mode + auto-advance, resumable on prior pause |
 | `ScenarioDealer` (`game/`) | Arms scenarios at `open_config_phase`, hero-anchored seat rotation via `mapScenarioToTable`, restores stacks at hand-complete |
 
 **Feature gates:** `replay`, `analysis`, `chip_bank`, `playlists`, `tournaments`, `crm`, `leaderboard`, `scenarios`, `groups`
+
+### SchoolSettingsService
+**File:** `server/services/SchoolSettingsService.js`
+
+Manages school-wide customizations for coaches. All settings stored in the `settings` table (migration 014) with `scope='school'`, `scope_id=school_id`.
+
+**Public methods:**
+- `getIdentity(schoolId)` — returns `{ name, description }`
+- `setIdentity(schoolId, payload, updatedBy)` — updates school name (1–100 chars) + description (≤500 chars)
+- `getTableDefaults(schoolId)` — returns `{ min_sb, max_sb, min_bb, max_bb, min_starting_stack, max_starting_stack }`
+- `setTableDefaults(schoolId, payload, updatedBy)` — validates min < max for each pair
+- `getStakingDefaults(schoolId)` — returns `{ coach_split_pct (0–100), makeup_policy, bankroll_cap, contract_duration_months (1–36) }`
+- `setStakingDefaults(schoolId, payload, updatedBy)` — makeup_policy: 'carries'|'resets_monthly'|'resets_on_settle'
+- `getLeaderboardConfig(schoolId)` — returns `{ primary_metric, secondary_metric, update_frequency }`
+- `setLeaderboardConfig(schoolId, payload, updatedBy)` — metrics: 'net_chips'|'bb_per_100'|'win_rate'|'hands_played'; frequency: 'after_session'|'hourly'|'daily'
+- `getPlatforms(schoolId)` — returns `{ platforms: [...] }` (array of ≤20 names, ≤50 chars each)
+- `setPlatforms(schoolId, payload, updatedBy)` — updates platform list for staking logging
+- `getAppearance(schoolId)` — returns `{ felt_color (#RRGGBB), primary_color (#RRGGBB), logo_url (nullable) }`
+- `setAppearance(schoolId, payload, updatedBy)` — validates hex colors
+- `getAutoPauseTimeout(schoolId)` — returns `{ idle_minutes (5–120) }`
+- `setAutoPauseTimeout(schoolId, payload, updatedBy)` — table idle timeout
+
+**Validation:** All setters throw descriptive errors (`name is required`, `min_sb must be < max_sb`, etc.).
 
 ---
 
@@ -240,3 +269,46 @@ This grants full coach socket powers to a designated table controller regardless
 - `PlayerRoster.authenticate()` falls back to CSV if no DB record exists
 - Login uses `.eq()` on `display_name` (COLLATE case_insensitive — `ilike` throws on nondeterministic collations)
 - Full DB cutover requires admin to re-provision users via `/admin/users` (ISS-99)
+
+---
+
+## School Settings Endpoints (Coach-Level Customization)
+
+**Routes file:** `server/routes/school-settings.js` (7 endpoints)
+
+**Middleware:** All routes require `requireAuth` + `requireSchoolMembership` (extracts schoolId from route or query). Write routes (PUT) additionally require `requireRole('coach')`.
+
+**Service:** `SchoolSettingsService` validates all inputs and manages CRUD operations.
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/settings/school` | Fetch all school settings (identity, table defaults, staking defaults, leaderboard config, platforms, appearance, auto-pause timeout) |
+| PUT | `/api/settings/school/identity` | Update school name (1–100 chars) + description (≤500 chars) |
+| PUT | `/api/settings/school/table-defaults` | Update min/max blinds (`min_sb < max_sb`, `min_bb < max_bb`) and starting stacks |
+| PUT | `/api/settings/school/staking-defaults` | Update coach split pct (0–100), makeup policy (carries/resets_monthly/resets_on_settle), bankroll cap, contract duration (1–36 months) |
+| PUT | `/api/settings/school/leaderboard` | Update primary/secondary metrics (net_chips/bb_per_100/win_rate/hands_played) and update frequency (after_session/hourly/daily) |
+| PUT | `/api/settings/school/platforms` | Update platform list (array of ≤20 names, ≤50 chars each) for staking session logging |
+| PUT | `/api/settings/school/appearance` | Update felt color + primary color (hex #RRGGBB format) and optional logo URL |
+| PUT | `/api/settings/school/auto-pause-timeout` | Update table auto-pause idle timeout (5–120 minutes) |
+
+**Success responses:** 200 with updated settings object. **Error responses:** 400 (validation error with field + message), 401 (not authenticated), 403 (user doesn't belong to school or insufficient role), 500 (database error).
+
+**Example GET response:**
+```json
+{
+  "schoolId": "uuid",
+  "identity": { "name": "Poker School", "description": "..." },
+  "tableDefaults": { "min_sb": 5, "max_sb": 50, "min_bb": 10, "max_bb": 100, "min_starting_stack": 1000, "max_starting_stack": 50000 },
+  "stakingDefaults": { "coach_split_pct": 50, "makeup_policy": "carries", "bankroll_cap": 25000, "contract_duration_months": 6 },
+  "leaderboardConfig": { "primary_metric": "net_chips", "secondary_metric": "win_rate", "update_frequency": "after_session" },
+  "platforms": { "platforms": ["PokerStars", "GGPoker"] },
+  "appearance": { "felt_color": "#1e5235", "primary_color": "#d4af37", "logo_url": null },
+  "autoPauseTimeout": { "idle_minutes": 15 }
+}
+```
+
+**Admin access:** Admins can READ any school settings (via `requireSchoolMembership` middleware allowance) but CANNOT write (PUT routes blocked by `requireRole('coach')`). To manage school features or capacity limits, admins use `/api/admin/schools/:id/features` instead.
+
+**Storage:** All settings persisted to `settings` table (migration 014) with `scope='school'`, `scope_id=school_id`, `key=<category>:<type>`.
+
+**Frontend:** `client/src/pages/settings/SchoolTab.jsx` wires all endpoints with loading/error states and success messages (icons via lucide-react).
