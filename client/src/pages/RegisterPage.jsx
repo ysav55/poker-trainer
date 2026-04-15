@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { colors } from '../lib/colors.js';
 
 const INPUT_STYLE = {
   background: 'rgba(255,255,255,0.04)',
@@ -48,6 +49,157 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
+/**
+ * SchoolAutocomplete component with dropdown suggestions
+ */
+function SchoolAutocomplete({
+  schoolName,
+  onSchoolNameChange,
+  selectedSchool,
+  onSchoolSelect,
+  onSchoolClear,
+  disabled,
+}) {
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const debounceTimer = useRef(null);
+
+  // Debounced search
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+    if (!schoolName || schoolName.trim().length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    debounceTimer.current = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/schools/search?q=${encodeURIComponent(schoolName.trim())}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setSuggestions(data.schools || []);
+          setShowSuggestions(true);
+        } else {
+          setSuggestions([]);
+        }
+      } catch (err) {
+        console.error('School search error:', err);
+        setSuggestions([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    };
+  }, [schoolName]);
+
+  const handleSelectSchool = (school) => {
+    onSchoolSelect(school);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  const handleClear = () => {
+    onSchoolClear();
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  if (selectedSchool) {
+    // Show as a tag with clear button
+    return (
+      <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white flex-1"
+          style={{ background: colors.bgSurfaceRaised, border: `1px solid ${colors.goldBorder}` }}
+        >
+          <span>{selectedSchool.display_name}</span>
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={disabled}
+            className="ml-auto text-gray-400 hover:text-gray-200 disabled:opacity-50"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full">
+      <input
+        type="text"
+        value={schoolName}
+        onChange={(e) => onSchoolNameChange(e.target.value)}
+        placeholder="Type school name (2+ characters)"
+        disabled={disabled}
+        className="w-full rounded-lg px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 outline-none transition-all duration-150 disabled:opacity-50"
+        style={INPUT_STYLE}
+        onFocus={(e) => {
+          e.target.style.borderColor = 'rgba(212,175,55,0.45)';
+          e.target.style.boxShadow = '0 0 0 3px rgba(212,175,55,0.08)';
+        }}
+        onBlur={(e) => {
+          e.target.style.borderColor = 'rgba(255,255,255,0.1)';
+          e.target.style.boxShadow = 'none';
+          setTimeout(() => setShowSuggestions(false), 200);
+        }}
+      />
+
+      {showSuggestions && suggestions.length > 0 && (
+        <div
+          className="absolute top-full mt-1 w-full rounded-lg shadow-lg z-50"
+          style={{
+            background: colors.bgSurfaceRaised,
+            border: `1px solid ${colors.borderStrong}`,
+          }}
+        >
+          <ul className="py-1">
+            {suggestions.map((school) => (
+              <li key={school.id}>
+                <button
+                  type="button"
+                  onClick={() => handleSelectSchool(school)}
+                  className="w-full text-left px-3 py-2 text-sm text-gray-100 hover:text-white transition-colors"
+                  style={{
+                    background: 'transparent',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = colors.bgSurfaceHover;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'transparent';
+                  }}
+                >
+                  {school.display_name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {searchLoading && (
+        <div
+          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"
+        >
+          Searching...
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RegisterPage() {
   const { register, registerCoach } = useAuth();
   const navigate = useNavigate();
@@ -62,17 +214,45 @@ export default function RegisterPage() {
   // Coach-only field
   const [email, setEmail] = useState('');
 
+  // School enrollment fields
+  const [schoolName, setSchoolName] = useState('');
+  const [selectedSchool, setSelectedSchool] = useState(null);
+  const [schoolPassword, setSchoolPassword] = useState('');
+
   // State
   const [error, setError]     = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
 
   const reset = () => {
-    setName(''); setPassword(''); setConfirm(''); setEmail('');
-    setError(''); setSuccess('');
+    setName('');
+    setPassword('');
+    setConfirm('');
+    setEmail('');
+    setSchoolName('');
+    setSelectedSchool(null);
+    setSchoolPassword('');
+    setError('');
+    setSuccess('');
   };
 
-  const handleTabSwitch = (t) => { setTab(t); reset(); };
+  const handleTabSwitch = (t) => {
+    setTab(t);
+    reset();
+  };
+
+  const handleSelectSchool = (school) => {
+    setSelectedSchool(school);
+    setSchoolName(school.display_name);
+    setError('');
+  };
+
+  const handleClearSchool = () => {
+    setSelectedSchool(null);
+    setSchoolName('');
+    setSchoolPassword('');
+    setError('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -83,6 +263,13 @@ export default function RegisterPage() {
     if (!password)      { setError('Password is required.'); return; }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
     if (password !== confirm) { setError('Passwords do not match.'); return; }
+
+    // Validate school password if school is selected
+    if (selectedSchool && !schoolPassword.trim()) {
+      setError('School enrollment password is required.');
+      return;
+    }
+
     if (tab === 'coach') {
       if (!email.trim()) { setError('Email address is required for coach registration.'); return; }
       if (!email.includes('@')) { setError('Please enter a valid email address.'); return; }
@@ -94,7 +281,18 @@ export default function RegisterPage() {
         await registerCoach(name.trim(), password, email.trim().toLowerCase());
         setSuccess('Request submitted! An admin will review your coach application.');
       } else {
-        await register({ name: name.trim(), password });
+        const body = {
+          name: name.trim(),
+          password,
+        };
+
+        // Add school enrollment if school selected
+        if (selectedSchool) {
+          body.schoolName = selectedSchool.display_name;
+          body.schoolPassword = schoolPassword.trim();
+        }
+
+        await register(body);
         setSuccess('Account created! Redirecting to login…');
         setTimeout(() => navigate('/login'), 1800);
       }
@@ -183,6 +381,38 @@ export default function RegisterPage() {
               disabled={loading}
             />
           </div>
+
+          {/* School enrollment (student only) */}
+          {tab === 'student' && (
+            <div className="flex flex-col gap-1.5">
+              <label className="label-sm">School (Optional)</label>
+              <SchoolAutocomplete
+                schoolName={schoolName}
+                onSchoolNameChange={setSchoolName}
+                selectedSchool={selectedSchool}
+                onSchoolSelect={handleSelectSchool}
+                onSchoolClear={handleClearSchool}
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500">
+                Search and select a school to enroll as a coached student. Leave blank for self-play.
+              </p>
+            </div>
+          )}
+
+          {/* School password (student only, appears when school selected) */}
+          {tab === 'student' && selectedSchool && (
+            <div className="flex flex-col gap-1.5">
+              <label className="label-sm">School Enrollment Password</label>
+              <AuthInput
+                type="password"
+                value={schoolPassword}
+                onChange={(e) => { setSchoolPassword(e.target.value); setError(''); }}
+                placeholder="Enrollment password provided by your school"
+                disabled={loading}
+              />
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <label className="label-sm">Password</label>
