@@ -8,6 +8,7 @@ import QuickLinks from '../components/dashboard/QuickLinks.jsx';
 import QuickStats from '../components/dashboard/QuickStats.jsx';
 import AlertFeed from '../components/dashboard/AlertFeed.jsx';
 import ActiveTables from '../components/dashboard/ActiveTables.jsx';
+import CoachNotesSection from '../components/dashboard/CoachNotesSection.jsx';
 
 // ─── Main DashboardPage ───────────────────────────────────────────────────────
 
@@ -98,6 +99,8 @@ export default function DashboardPage() {
       />
 
       {(isCoach || isAdmin) && <AlertFeed alerts={alerts} />}
+
+      {!isCoach && !isAdmin && <CoachNotesSection />}
 
       <ActiveTables
         tables={activeTables}

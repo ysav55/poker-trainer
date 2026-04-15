@@ -179,7 +179,7 @@ export default function StudentDashboardPage() {
 
         {/* Row 5: Notes | Reports */}
         <div>
-          <NotesSection notes={notes} playerId={playerId} />
+          <NotesSection notes={notes} playerId={playerId} onNotesUpdated={loadData} />
         </div>
         <div>
           <ReportsSection reports={reports} playerId={playerId} />
