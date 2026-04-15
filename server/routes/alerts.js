@@ -28,8 +28,9 @@ const VALID_ALERT_TYPES = new Set([
 module.exports = function registerAlertRoutes(app, { requireAuth, requireRole }) {
 
   // ── GET /api/coach/alerts ────────────────────────────────────────────────────
-  // Returns active alerts for this coach, optionally filtered by status.
+  // Returns active alerts for this coach, optionally filtered by status and/or player_id.
   // Generates fresh alerts on demand if ?generate=true is passed.
+  // Query params: ?status=active|dismissed|acted_on, ?player_id=uuid, ?limit=50
   app.get(
     '/api/coach/alerts',
     requireAuth,
@@ -37,6 +38,7 @@ module.exports = function registerAlertRoutes(app, { requireAuth, requireRole })
     async (req, res) => {
       const coachId = req.user.id ?? req.user.stableId;
       const status  = req.query.status ?? 'active';
+      const playerId = req.query.player_id || null;
       const limit   = Math.min(parseInt(req.query.limit) || 50, 200);
 
       try {
@@ -46,13 +48,17 @@ module.exports = function registerAlertRoutes(app, { requireAuth, requireRole })
           return res.json({ alerts, narrative, generated: true });
         }
 
-        const { data, error } = await supabase
+        let query = supabase
           .from('alert_instances')
           .select('id, player_id, alert_type, severity, data, status, created_at')
           .eq('coach_id', coachId)
           .eq('status', status)
           .order('severity', { ascending: false })
           .limit(limit);
+
+        if (playerId) query = query.eq('player_id', playerId);
+
+        const { data, error } = await query;
 
         if (error) throw error;
         return res.json({ alerts: data ?? [] });
