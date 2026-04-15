@@ -3,7 +3,7 @@
 const supabase = require('../supabase');
 
 const TableRepository = {
-  async createTable({ id, name, mode = 'coached_cash', config = {}, createdBy, scheduledFor = null, privacy = 'open', controllerId = null }) {
+  async createTable({ id, name, mode = 'coached_cash', config = {}, createdBy, scheduledFor = null, privacy = 'open', controllerId = null, school_id = null }) {
     // upsert so join_room can call this idempotently
     const { error } = await supabase.from('tables').upsert({
       id, name, mode, config,
@@ -12,6 +12,7 @@ const TableRepository = {
       status:        scheduledFor ? 'scheduled' : 'waiting',
       privacy,
       controller_id: controllerId,
+      school_id:     school_id
     }, { onConflict: 'id', ignoreDuplicates: true });
     if (error) throw error;
   },

@@ -3,6 +3,8 @@
 const { TableRepository, InvitedPlayersRepository, TablePresetsRepository } = require('../db/repositories/TableRepository.js');
 const { requirePermission, getPlayerPermissions } = require('../auth/requirePermission.js');
 const TableVisibilityService = require('../services/TableVisibilityService.js');
+const supabase = require('../db/supabase.js');
+const log = require('../logs/logger.js');
 
 // Attempt to load getTableSummaries defensively — it may not exist yet
 let getTableSummaries;
@@ -79,13 +81,54 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
     }
   });
 
-  // POST /api/tables — create a table
+  // POST /api/tables — create table with school_id and privacy configuration
   app.post('/api/tables', requireAuth, canCreateTable, async (req, res) => {
     try {
-      const { name, mode, config = {}, scheduledFor = null, privacy = 'open' } = req.body || {};
-      if (!name) return res.status(400).json({ error: 'name is required' });
+      const { name, mode, config = {}, scheduledFor = null, privacy = 'school', privateConfig = {} } = req.body || {};
+
+      if (!name) return res.status(400).json({ error: 'name_required', message: 'Table name is required' });
+
+      // Validate privacy
       const validPrivacy = ['open', 'school', 'private'];
-      if (!validPrivacy.includes(privacy)) return res.status(400).json({ error: 'privacy must be open, school, or private' });
+      if (!validPrivacy.includes(privacy)) {
+        return res.status(400).json({ error: 'invalid_privacy', message: 'Privacy must be open, school, or private' });
+      }
+
+      // Check admin status for 'open' privacy
+      const perms = await getPlayerPermissions(req.user.id);
+      const isAdmin = perms.has('admin:access');
+      if (privacy === 'open' && !isAdmin) {
+        return res.status(400).json({ error: 'forbidden_privacy', message: 'Only admins can create open tables' });
+      }
+
+      // Get school_id from user
+      const { data: player, error: playerError } = await supabase
+        .from('player_profiles')
+        .select('school_id')
+        .eq('id', req.user.id)
+        .single();
+
+      if (playerError) throw playerError;
+
+      let schoolId = null;
+      if (isAdmin && privacy === 'open') {
+        schoolId = null; // Open tables have no school
+      } else {
+        schoolId = player.school_id; // Coach: assigned to their school
+      }
+
+      // Validate private table config
+      if (privacy === 'private') {
+        const whitelistedPlayers = privateConfig.whitelistedPlayers || [];
+        if (whitelistedPlayers.length === 0) {
+          return res.status(400).json({
+            error: 'invalid_private_config',
+            message: 'Private tables require at least one whitelisted player'
+          });
+        }
+      }
+
+      // Create table
       const id = 'table-' + Date.now();
       await TableRepository.createTable({
         id,
@@ -96,10 +139,29 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
         scheduledFor,
         privacy,
         controllerId: req.user.id,
+        school_id: schoolId
       });
+
+      // Add whitelisted players if private
+      if (privacy === 'private') {
+        const whitelistedPlayers = privateConfig.whitelistedPlayers || [];
+        const groupId = privateConfig.groupId;
+
+        // Add individual players
+        for (const playerId of whitelistedPlayers) {
+          await TableVisibilityService.addToWhitelist(id, playerId, req.user.id);
+        }
+
+        // Auto-add group members if groupId provided
+        if (groupId) {
+          await TableVisibilityService.addGroupToWhitelist(id, groupId, req.user.id);
+        }
+      }
+
       const table = await TableRepository.getTable(id);
       res.status(201).json(table);
     } catch (err) {
+      log.error('tables', 'create_table_error', `Failed to create table: ${err.message}`, { err });
       res.status(500).json({ error: 'internal_error' });
     }
   });
