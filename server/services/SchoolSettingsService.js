@@ -25,11 +25,16 @@ class SchoolSettingsService {
 
   /**
    * Set school identity. Validates name (required, 1–100 chars) and description (≤500 chars).
+   * Trims name before storing.
    */
   async setIdentity(schoolId, payload, updatedBy) {
     this._validateIdentity(payload);
-    await this._setSetting(schoolId, 'identity:profile', payload, updatedBy);
-    return payload;
+    const trimmedPayload = {
+      ...payload,
+      name: payload.name.trim(),
+    };
+    await this._setSetting(schoolId, 'identity:profile', trimmedPayload, updatedBy);
+    return trimmedPayload;
   }
 
   /**
@@ -39,6 +44,9 @@ class SchoolSettingsService {
     if (!name) throw new Error('name is required');
     if (typeof name !== 'string' || name.trim() === '') throw new Error('name cannot be empty');
     if (name.length > 100) throw new Error('name must be 1–100 chars');
+    if (description !== undefined && description !== null && typeof description !== 'string') {
+      throw new Error('description must be a string');
+    }
     if (description && typeof description === 'string' && description.length > 500) {
       throw new Error('description must be 0–500 chars');
     }
@@ -71,13 +79,30 @@ class SchoolSettingsService {
   }
 
   /**
-   * Validates table defaults: min_sb < max_sb, min_bb < max_bb, min_starting_stack < max_starting_stack, min_bb > min_sb.
+   * Validates table defaults: all fields are integers; min_sb > 0, max_sb > 0, min_bb > min_sb, max_bb > 0;
+   * min_sb < max_sb, min_bb < max_bb; min_starting_stack >= 100, max_starting_stack >= 100, min_starting_stack < max_starting_stack.
    */
   _validateTableDefaults({ min_sb, max_sb, min_bb, max_bb, min_starting_stack, max_starting_stack }) {
+    // Integer checks
+    if (!Number.isInteger(min_sb)) throw new Error('min_sb must be an integer');
+    if (!Number.isInteger(max_sb)) throw new Error('max_sb must be an integer');
+    if (!Number.isInteger(min_bb)) throw new Error('min_bb must be an integer');
+    if (!Number.isInteger(max_bb)) throw new Error('max_bb must be an integer');
+    if (!Number.isInteger(min_starting_stack)) throw new Error('min_starting_stack must be an integer');
+    if (!Number.isInteger(max_starting_stack)) throw new Error('max_starting_stack must be an integer');
+
+    // Absolute bounds (check first for better error messages on values that violate bounds)
+    if (min_sb <= 0) throw new Error('min_sb must be > 0');
+    if (max_sb <= 0) throw new Error('max_sb must be > 0');
+    if (min_bb <= min_sb) throw new Error('min_bb must be > min_sb');
+    if (max_bb <= 0) throw new Error('max_bb must be > 0');
+    if (min_starting_stack < 100) throw new Error('min_starting_stack must be >= 100');
+    if (max_starting_stack < 100) throw new Error('max_starting_stack must be >= 100');
+
+    // Relative ordering
     if (min_sb >= max_sb) throw new Error('min_sb must be < max_sb');
     if (min_bb >= max_bb) throw new Error('min_bb must be < max_bb');
     if (min_starting_stack >= max_starting_stack) throw new Error('min_starting_stack must be < max_starting_stack');
-    if (min_bb <= min_sb) throw new Error('min_bb must be > min_sb');
   }
 
   // ─── Staking Defaults ──────────────────────────────────────────────────────
@@ -105,10 +130,15 @@ class SchoolSettingsService {
   }
 
   /**
-   * Validates staking defaults: coach_split_pct 0–100, makeup_policy one of ['carries', 'resets_monthly', 'resets_on_settle'],
+   * Validates staking defaults: all numeric fields are integers; coach_split_pct 0–100, makeup_policy enum,
    * bankroll_cap ≥100, contract_duration_months 1–36.
    */
   _validateStakingDefaults({ coach_split_pct, makeup_policy, bankroll_cap, contract_duration_months }) {
+    // Integer checks
+    if (!Number.isInteger(coach_split_pct)) throw new Error('coach_split_pct must be an integer');
+    if (!Number.isInteger(bankroll_cap)) throw new Error('bankroll_cap must be an integer');
+    if (!Number.isInteger(contract_duration_months)) throw new Error('contract_duration_months must be an integer');
+
     if (coach_split_pct < 0 || coach_split_pct > 100) throw new Error('coach_split_pct must be 0–100');
     const validPolicies = ['carries', 'resets_monthly', 'resets_on_settle'];
     if (!validPolicies.includes(makeup_policy)) {
@@ -251,9 +281,10 @@ class SchoolSettingsService {
   }
 
   /**
-   * Validates auto-pause timeout: idle_minutes 5–120.
+   * Validates auto-pause timeout: idle_minutes is an integer and 5–120.
    */
   _validateAutoPauseTimeout({ idle_minutes }) {
+    if (!Number.isInteger(idle_minutes)) throw new Error('idle_minutes must be an integer');
     if (idle_minutes < 5 || idle_minutes > 120) {
       throw new Error('idle_minutes must be 5–120');
     }
@@ -280,6 +311,7 @@ class SchoolSettingsService {
 
   /**
    * Upsert a single setting into the settings table.
+   * Note: updatedBy parameter is accepted but not stored (settings table has no updated_by column).
    */
   async _setSetting(schoolId, key, value, updatedBy) {
     const { error } = await this.supabase
