@@ -2,11 +2,15 @@
 
 const express = require('express');
 const { requirePermission } = require('../../auth/requirePermission.js');
+const { requireAuth } = require('../../auth/requireAuth.js');
+const { requireRole } = require('../../auth/requireRole.js');
+const requireSchoolMembership = require('../../auth/requireSchoolMembership.js');
 const {
   invalidatePlayerSchoolCache,
   invalidateSchoolFeatureCache,
 } = require('../../auth/featureGate.js');
 const SchoolRepository = require('../../db/repositories/SchoolRepository.js');
+const log = require('../../logs/logger.js');
 
 const router = express.Router();
 const canManageSchools = requirePermission('school:manage');
@@ -228,6 +232,84 @@ router.put('/schools/:id/features', async (req, res) => {
       return res.status(400).json({ error: 'invalid_feature_key', message: err.message });
     }
     res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// ── POST /api/admin/schools/:schoolId/passwords ──────────────────────────────
+router.post('/:schoolId/passwords', requireAuth, requireRole('coach'), requireSchoolMembership('schoolId'), async (req, res) => {
+  const { schoolId } = req.params;
+  const { plainPassword, source, maxUses, expiresAt, groupId } = req.body || {};
+
+  if (!plainPassword || plainPassword.length < 4) {
+    return res.status(400).json({ error: 'invalid_password_format', message: 'Password must be at least 4 characters' });
+  }
+  if (maxUses !== undefined && maxUses <= 0) {
+    return res.status(400).json({ error: 'invalid_max_uses', message: 'Max uses must be greater than 0' });
+  }
+  if (expiresAt && new Date(expiresAt) <= new Date()) {
+    return res.status(400).json({ error: 'invalid_expires_at', message: 'Expiry date must be in the future' });
+  }
+
+  try {
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+    const password = await SchoolPasswordService.createPassword(
+      schoolId,
+      plainPassword,
+      { source, maxUses: maxUses || 999999, expiresAt, groupId },
+      req.user.id
+    );
+    return res.status(201).json(password);
+  } catch (err) {
+    log.error('admin', 'password_create_error', `Failed to create password: ${err.message}`, { err });
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// ── GET /api/admin/schools/:schoolId/passwords ───────────────────────────────
+router.get('/:schoolId/passwords', requireAuth, requireRole('coach'), requireSchoolMembership('schoolId'), async (req, res) => {
+  const { schoolId } = req.params;
+
+  try {
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+    const passwords = await SchoolPasswordService.listPasswords(schoolId);
+    return res.json({ passwords });
+  } catch (err) {
+    log.error('admin', 'password_list_error', `Failed to list passwords: ${err.message}`, { err });
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// ── PATCH /api/admin/schools/:schoolId/passwords/:passwordId ──────────────────
+router.patch('/:schoolId/passwords/:passwordId', requireAuth, requireRole('coach'), requireSchoolMembership('schoolId'), async (req, res) => {
+  const { schoolId, passwordId } = req.params;
+  const { active } = req.body || {};
+
+  if (typeof active !== 'boolean') {
+    return res.status(400).json({ error: 'invalid_active', message: 'active must be a boolean' });
+  }
+
+  try {
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+    let password;
+    if (active === false) {
+      password = await SchoolPasswordService.disablePassword(schoolId, passwordId);
+    } else {
+      // Re-enable: update active=true
+      const supabase = require('../../db/supabase');
+      const { data, error } = await supabase
+        .from('school_passwords')
+        .update({ active: true })
+        .eq('id', passwordId)
+        .eq('school_id', schoolId)
+        .select('id, school_id, source, max_uses, uses_count, expires_at, active, group_id, created_by, created_at')
+        .single();
+      if (error) throw error;
+      password = data;
+    }
+    return res.json(password);
+  } catch (err) {
+    log.error('admin', 'password_update_error', `Failed to update password: ${err.message}`, { err });
+    return res.status(500).json({ error: 'internal_error' });
   }
 });
 
