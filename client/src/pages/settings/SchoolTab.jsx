@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
 import { SectionHeader, Field, Input, Select, Card } from './shared.jsx';
 import { colors, groupColors as GROUP_COLORS } from '../../lib/colors.js';
-import { Building2, Palette, Sliders, DollarSign, TrendingUp, Globe, Users, Clock, Plus, Trash2 } from 'lucide-react';
+import { Building2, Palette, Sliders, DollarSign, TrendingUp, Globe, Users, Clock, Plus, Trash2, Key } from 'lucide-react';
 
 // ─── Tab: School ──────────────────────────────────────────────────────────────
 
@@ -441,14 +441,40 @@ export default function SchoolTab() {
   const [lbSaving, setLbSaving]         = useState(false);
   const [lbMsg, setLbMsg]               = useState('');
 
+  // Passwords
+  const [passwords, setPasswords]         = useState([]);
+  const [passwordsLoading, setPasswordsLoading] = useState(true);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordFormData, setPasswordFormData] = useState({
+    plainPassword: '',
+    source: '',
+    maxUses: 1,
+    expiresAt: '',
+    groupId: '',
+  });
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+
   useEffect(() => {
     apiFetch('/api/settings/school')
       .then(school => {
         setIdentity(school.identity ?? { name: '', description: '' });
-        setSchoolId(school.identity?.id ?? null);
+        const sid = school.identity?.id ?? null;
+        setSchoolId(sid);
         setPlatforms(school.platforms ?? []);
         setStaking(school.staking_defaults ?? staking);
         setLeaderboard(school.leaderboard ?? leaderboard);
+
+        // Load passwords if schoolId is available
+        if (sid) {
+          apiFetch(`/api/admin/schools/${sid}/passwords`)
+            .then(data => setPasswords(data?.passwords ?? []))
+            .catch(() => {})
+            .finally(() => setPasswordsLoading(false));
+        } else {
+          setPasswordsLoading(false);
+        }
+
         return apiFetch('/api/admin/groups/my-school')
           .then(groups => setGroupsData(groups))
           .catch(() => {}); // groups optional
@@ -532,6 +558,63 @@ export default function SchoolTab() {
       setLbMsg('Saved.');
     } catch (err) { setLbMsg(err.message || 'Save failed.'); }
     finally { setLbSaving(false); }
+  }
+
+  // ── Passwords ────────────────────────────────────────────────────────────────
+
+  async function handleCreatePassword() {
+    if (!passwordFormData.plainPassword.trim()) {
+      setPasswordError('Password is required.');
+      return;
+    }
+    setPasswordSaving(true);
+    setPasswordError('');
+    try {
+      const payload = {
+        plainPassword: passwordFormData.plainPassword.trim(),
+        source: passwordFormData.source.trim() || null,
+        maxUses: passwordFormData.maxUses ? Number(passwordFormData.maxUses) : null,
+        expiresAt: passwordFormData.expiresAt || null,
+        groupId: passwordFormData.groupId || null,
+      };
+      const newPassword = await apiFetch(`/api/admin/schools/${schoolId}/passwords`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      setPasswords(prev => [...prev, newPassword]);
+      setPasswordFormData({ plainPassword: '', source: '', maxUses: 1, expiresAt: '', groupId: '' });
+      setShowPasswordModal(false);
+    } catch (err) {
+      setPasswordError(err.message || 'Failed to create password.');
+    } finally {
+      setPasswordSaving(false);
+    }
+  }
+
+  async function handleDisablePassword(passwordId) {
+    try {
+      await apiFetch(`/api/admin/schools/${schoolId}/passwords/${passwordId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ disabled: true }),
+      });
+      setPasswords(prev => prev.map(p => p.id === passwordId ? { ...p, disabled: true } : p));
+    } catch (err) {
+      // Silently ignore disable errors for now
+    }
+  }
+
+  function calculateDaysUntilExpiry(expiresAt) {
+    if (!expiresAt) return null;
+    const expiryDate = new Date(expiresAt);
+    const today = new Date();
+    const diffTime = expiryDate - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  }
+
+  function isPasswordExpired(expiresAt) {
+    const daysLeft = calculateDaysUntilExpiry(expiresAt);
+    return daysLeft !== null && daysLeft < 0;
   }
 
   if (loading) return <Card><p className="text-sm" style={{ color: colors.textMuted }}>Loading…</p></Card>;
@@ -670,6 +753,241 @@ export default function SchoolTab() {
         </button>
         {lbMsg && <span className="text-xs" style={{ color: lbMsg === 'Saved.' ? colors.success : colors.error }}>{lbMsg}</span>}
       </div>
+
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
+
+      {/* ── School Passwords ── */}
+      <SectionHeader title="School Passwords" icon={Key} />
+      <p className="text-xs mb-3" style={{ color: colors.textMuted }}>
+        Create registration passwords for students. Each password can be limited by usage and expiration date.
+      </p>
+
+      {passwordsLoading ? (
+        <p className="text-xs mb-3" style={{ color: colors.textMuted }}>Loading…</p>
+      ) : (
+        <>
+          {passwords.length > 0 ? (
+            <div className="rounded-lg overflow-hidden mb-3" style={{ border: `1px solid ${colors.borderStrong}` }}>
+              <div className="bg-opacity-50 px-3 py-2.5 flex items-center gap-4 text-xs" style={{ background: colors.bgSurface, borderBottom: `1px solid ${colors.borderDefault}`, color: colors.textMuted, fontWeight: 600 }}>
+                <span style={{ flex: '1 1 15%' }}>Source</span>
+                <span style={{ flex: '1 1 15%' }}>Uses</span>
+                <span style={{ flex: '1 1 15%' }}>Expires In</span>
+                <span style={{ flex: '1 1 12%' }}>Status</span>
+                <span style={{ flex: '0 0 20%' }}>Actions</span>
+              </div>
+              {passwords.map((pw, i) => {
+                const daysLeft = calculateDaysUntilExpiry(pw.expires_at);
+                const isExpired = isPasswordExpired(pw.expires_at);
+                const isDisabled = pw.disabled;
+                return (
+                  <div
+                    key={pw.id}
+                    className="flex items-center gap-4 px-3 py-2.5 text-sm"
+                    style={{
+                      borderBottom: i < passwords.length - 1 ? `1px solid ${colors.borderDefault}` : 'none',
+                      opacity: isDisabled ? 0.6 : 1,
+                    }}
+                  >
+                    <span style={{ flex: '1 1 15%', color: colors.textPrimary }}>{pw.source || '—'}</span>
+                    <span style={{ flex: '1 1 15%', color: colors.textSecondary, fontSize: 12 }}>
+                      {pw.uses_count ?? 0}/{pw.max_uses ?? '∞'}
+                    </span>
+                    <span style={{ flex: '1 1 15%', color: colors.textSecondary, fontSize: 12 }}>
+                      {daysLeft === null ? '—' : daysLeft < 0 ? 'Expired' : `${daysLeft}d`}
+                    </span>
+                    <span
+                      style={{
+                        flex: '1 1 12%',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: '2px 8px',
+                        borderRadius: 4,
+                        background: isExpired || isDisabled ? colors.errorTint : colors.successTint,
+                        color: isExpired || isDisabled ? colors.error : colors.success,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {isDisabled ? 'Disabled' : isExpired ? 'Expired' : 'Active'}
+                    </span>
+                    <div style={{ flex: '0 0 20%', display: 'flex', gap: 8 }}>
+                      {!isExpired && !isDisabled && (
+                        <button
+                          onClick={() => handleDisablePassword(pw.id)}
+                          className="text-xs px-2 py-1 rounded"
+                          style={{
+                            color: colors.textSecondary,
+                            background: colors.bgSurface,
+                            border: `1px solid ${colors.borderStrong}`,
+                            cursor: 'pointer',
+                          }}
+                          title="Disable this password"
+                        >
+                          Disable
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs mb-3 p-2 rounded" style={{ color: colors.textMuted, background: colors.bgSurface }}>
+              No passwords created yet.
+            </p>
+          )}
+
+          <button
+            onClick={() => setShowPasswordModal(true)}
+            className="text-sm font-semibold"
+            style={{ color: colors.gold, marginBottom: 16 }}
+          >
+            + Create Password
+          </button>
+
+          {/* Password Modal */}
+          {showPasswordModal && (
+            <>
+              {/* Backdrop */}
+              <div
+                onClick={() => setShowPasswordModal(false)}
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'rgba(0,0,0,0.5)',
+                  zIndex: 999,
+                  cursor: 'pointer',
+                }}
+              />
+              {/* Modal */}
+              <div
+                style={{
+                  position: 'fixed',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: colors.bgSurfaceRaised,
+                  border: `1px solid ${colors.borderStrong}`,
+                  borderRadius: 8,
+                  padding: 24,
+                  maxWidth: 400,
+                  width: '90%',
+                  maxHeight: '90vh',
+                  overflowY: 'auto',
+                  zIndex: 1000,
+                  boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <h3 style={{ color: colors.textPrimary, fontWeight: 600, fontSize: 16, marginBottom: 16 }}>
+                  Create School Password
+                </h3>
+
+                <div className="flex flex-col gap-3 mb-4">
+                  <Field label="Password" hint="Required">
+                    <Input
+                      type="text"
+                      value={passwordFormData.plainPassword}
+                      onChange={v => setPasswordFormData(prev => ({ ...prev, plainPassword: v }))}
+                      placeholder="Enter password"
+                      autoFocus
+                    />
+                  </Field>
+
+                  <Field label="Source" hint="e.g., spring_cohort (optional)">
+                    <Input
+                      type="text"
+                      value={passwordFormData.source}
+                      onChange={v => setPasswordFormData(prev => ({ ...prev, source: v }))}
+                      placeholder="Source name"
+                    />
+                  </Field>
+
+                  <Field label="Max Uses" hint="Leave blank for unlimited">
+                    <Input
+                      type="number"
+                      value={passwordFormData.maxUses}
+                      onChange={v => setPasswordFormData(prev => ({ ...prev, maxUses: v ? Number(v) : '' }))}
+                      placeholder="Max uses"
+                      min="1"
+                    />
+                  </Field>
+
+                  <Field label="Expires At" hint="Leave blank for no expiration (optional)">
+                    <input
+                      type="datetime-local"
+                      value={passwordFormData.expiresAt}
+                      onChange={e => setPasswordFormData(prev => ({ ...prev, expiresAt: e.target.value }))}
+                      className="rounded px-3 py-1.5 text-sm outline-none"
+                      style={{ background: colors.bgSurface, border: `1px solid ${colors.borderStrong}`, color: colors.textPrimary }}
+                    />
+                  </Field>
+
+                  <Field label="Auto-add to Group" hint="Optional">
+                    <select
+                      value={passwordFormData.groupId}
+                      onChange={e => setPasswordFormData(prev => ({ ...prev, groupId: e.target.value }))}
+                      className="rounded px-3 py-1.5 text-sm outline-none"
+                      style={{ background: colors.bgSurface, border: `1px solid ${colors.borderStrong}`, color: colors.textPrimary }}
+                    >
+                      <option value="">No group</option>
+                      {groupsData?.groups?.map(g => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+
+                {passwordError && (
+                  <p
+                    className="text-xs mb-3 p-2 rounded"
+                    style={{ color: colors.error, background: colors.errorTint, border: `1px solid ${colors.errorBorder}` }}
+                  >
+                    {passwordError}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCreatePassword}
+                    disabled={passwordSaving}
+                    className="px-4 py-2 rounded text-sm font-bold flex-1"
+                    style={{
+                      background: colors.gold,
+                      color: colors.bgSurface,
+                      opacity: passwordSaving ? 0.6 : 1,
+                      cursor: passwordSaving ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {passwordSaving ? 'Creating…' : 'Create'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPasswordModal(false);
+                      setPasswordFormData({ plainPassword: '', source: '', maxUses: 1, expiresAt: '', groupId: '' });
+                      setPasswordError('');
+                    }}
+                    className="px-4 py-2 rounded text-sm"
+                    style={{
+                      color: colors.textMuted,
+                      background: 'transparent',
+                      border: `1px solid ${colors.borderStrong}`,
+                      cursor: 'pointer',
+                      flex: 1,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
 
       <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
