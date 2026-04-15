@@ -19,12 +19,14 @@ function GroupsSection({ schoolId, policy }) {
   const [newColor, setNewColor]   = useState(GROUP_COLORS[0]);
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState('');
+  const [groupsError, setGroupsError] = useState('');  // errors from member operations
 
   // Member panel state
   const [expandedId, setExpandedId]   = useState(null);
   const [groupMembers, setGroupMembers] = useState({});   // { [groupId]: Member[] }
   const [allStudents, setAllStudents] = useState([]);     // all coached_students in school
   const [addingMember, setAddingMember] = useState({});  // { [groupId]: playerId being added }
+  const [memberOperationInFlight, setMemberOperationInFlight] = useState(false);  // race condition guard
 
   useEffect(() => {
     if (!schoolId) { setLoading(false); return; }
@@ -67,7 +69,10 @@ function GroupsSection({ schoolId, policy }) {
         body: JSON.stringify({ name: editName.trim() }),
       });
       setGroups(prev => prev.map(x => x.id === id ? { ...x, name: g.name } : x));
-    } catch { /* silently keep old name */ }
+    } catch (err) {
+      setGroupsError(err.message || 'Failed to rename group');
+      setTimeout(() => setGroupsError(''), 3000);
+    }
     setEditingId(null);
   }
 
@@ -78,7 +83,10 @@ function GroupsSection({ schoolId, policy }) {
         body: JSON.stringify({ color }),
       });
       setGroups(prev => prev.map(x => x.id === id ? { ...x, color } : x));
-    } catch { /* silently ignore */ }
+    } catch (err) {
+      setGroupsError(err.message || 'Failed to change group color');
+      setTimeout(() => setGroupsError(''), 3000);
+    }
   }
 
   async function handleDelete(id) {
@@ -88,7 +96,10 @@ function GroupsSection({ schoolId, policy }) {
       await apiFetch(`/api/admin/groups/${id}`, { method: 'DELETE' });
       setGroups(prev => prev.filter(x => x.id !== id));
       if (expandedId === id) setExpandedId(null);
-    } catch { /* silently ignore */ }
+    } catch (err) {
+      setGroupsError(err.message || 'Failed to delete group');
+      setTimeout(() => setGroupsError(''), 3000);
+    }
   }
 
   // ── Member panel handlers ────────────────────────────────────────────────────
@@ -103,6 +114,7 @@ function GroupsSection({ schoolId, policy }) {
   }
 
   async function handleRemoveMember(groupId, playerId) {
+    setMemberOperationInFlight(true);
     try {
       await apiFetch(`/api/admin/groups/${groupId}/members/${playerId}`, { method: 'DELETE' });
       setGroupMembers(prev => ({
@@ -113,12 +125,18 @@ function GroupsSection({ schoolId, policy }) {
         ? { ...g, member_count: Math.max(0, (g.member_count ?? 1) - 1) }
         : g
       ));
-    } catch { /* silently ignore */ }
+    } catch (err) {
+      setGroupsError(err.message || 'Failed to remove member');
+      setTimeout(() => setGroupsError(''), 3000);
+    } finally {
+      setMemberOperationInFlight(false);
+    }
   }
 
   async function handleAddMember(groupId) {
     const playerId = addingMember[groupId];
     if (!playerId) return;
+    setMemberOperationInFlight(true);
     try {
       await apiFetch(`/api/admin/groups/${groupId}/members`, {
         method: 'POST',
@@ -136,7 +154,12 @@ function GroupsSection({ schoolId, policy }) {
         ));
       }
       setAddingMember(prev => ({ ...prev, [groupId]: '' }));
-    } catch { /* silently ignore */ }
+    } catch (err) {
+      setGroupsError(err.message || 'Failed to add member');
+      setTimeout(() => setGroupsError(''), 3000);
+    } finally {
+      setMemberOperationInFlight(false);
+    }
   }
 
   return (
@@ -148,6 +171,12 @@ function GroupsSection({ schoolId, policy }) {
           {policy.max_groups != null ? `Up to ${policy.max_groups} groups` : 'Unlimited groups'}
           {policy.max_players_per_group != null ? ` · ${policy.max_players_per_group} players each` : ''}
           {!policy.enabled ? ' · Groups disabled by admin' : ''}
+        </p>
+      )}
+
+      {groupsError && (
+        <p className="text-xs mb-3 p-2 rounded" style={{ color: colors.error, background: colors.errorTint, border: `1px solid ${colors.errorBorder}` }}>
+          {groupsError}
         </p>
       )}
 
@@ -262,7 +291,8 @@ function GroupsSection({ schoolId, policy }) {
                           <button
                             data-testid={`remove-member-${m.id}`}
                             onClick={() => handleRemoveMember(g.id, m.id)}
-                            style={{ color: colors.error, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, padding: '0 2px' }}
+                            disabled={memberOperationInFlight}
+                            style={{ color: colors.error, background: 'none', border: 'none', cursor: memberOperationInFlight ? 'not-allowed' : 'pointer', fontSize: 11, padding: '0 2px', opacity: memberOperationInFlight ? 0.5 : 1 }}
                             title={`Remove ${m.display_name}`}
                           >
                             ×
@@ -291,13 +321,13 @@ function GroupsSection({ schoolId, policy }) {
                             <button
                               data-testid={`add-member-btn-${g.id}`}
                               onClick={() => handleAddMember(g.id)}
-                              disabled={!addingMember[g.id]}
+                              disabled={!addingMember[g.id] || memberOperationInFlight}
                               className="text-xs px-2 py-1 rounded font-semibold flex-shrink-0"
                               style={{
                                 background: colors.gold,
                                 color: colors.bgSurface,
-                                opacity: !addingMember[g.id] ? 0.4 : 1,
-                                cursor: !addingMember[g.id] ? 'not-allowed' : 'pointer',
+                                opacity: !addingMember[g.id] || memberOperationInFlight ? 0.4 : 1,
+                                cursor: !addingMember[g.id] || memberOperationInFlight ? 'not-allowed' : 'pointer',
                                 border: 'none',
                               }}
                             >
