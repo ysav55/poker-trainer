@@ -37,11 +37,13 @@ const mockSupabase = {
   update: jest.fn(),
   eq:     jest.fn(),
   single: jest.fn().mockResolvedValue({ data: null, error: null }),
+  insert: jest.fn().mockResolvedValue({ data: null, error: null }),
 };
 mockSupabase.from.mockReturnValue(mockSupabase);
 mockSupabase.select.mockReturnValue(mockSupabase);
 mockSupabase.update.mockReturnValue(mockSupabase);
 mockSupabase.eq.mockReturnValue(mockSupabase);
+mockSupabase.insert.mockReturnValue(mockSupabase);
 
 jest.mock('../../db/supabase.js', () => mockSupabase);
 
@@ -64,6 +66,12 @@ jest.mock('../../auth/requirePermission.js', () => ({
 jest.mock('../../db/repositories/SchoolRepository', () => ({
   findById:       jest.fn(),
   canAddStudent:  jest.fn(),
+  searchByName:   jest.fn(),
+}));
+
+jest.mock('../../services/SchoolPasswordService', () => ({
+  validatePassword: jest.fn(),
+  recordUsage:      jest.fn(),
 }));
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
@@ -112,7 +120,9 @@ beforeEach(() => {
   mockSupabase.select.mockReturnValue(mockSupabase);
   mockSupabase.update.mockReturnValue(mockSupabase);
   mockSupabase.eq.mockReturnValue(mockSupabase);
+  mockSupabase.insert.mockReturnValue(mockSupabase);
   mockSupabase.single.mockResolvedValue({ data: null, error: null });
+  mockSupabase.insert.mockResolvedValue({ data: null, error: null });
 
   // Set safe default return values for all repository mocks.
   findByDisplayName.mockResolvedValue(null);
@@ -479,5 +489,516 @@ describe('POST /api/auth/register — school capacity', () => {
     expect(res.status).toBe(201);
     expect(SchoolRepo.findById).not.toHaveBeenCalled();
     expect(SchoolRepo.canAddStudent).not.toHaveBeenCalled();
+  });
+});
+
+// ─── POST /api/auth/register with school password ───────────────────────────────
+
+describe('POST /api/auth/register with school password', () => {
+  beforeEach(() => {
+    // Reset additional mocks for school password tests
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([]);
+    SchoolRepo.findById.mockResolvedValue(null);
+    SchoolRepo.canAddStudent.mockResolvedValue(true);
+    SchoolPasswordService.validatePassword.mockResolvedValue({ valid: false });
+    SchoolPasswordService.recordUsage.mockResolvedValue(undefined);
+  });
+
+  test('register without school becomes solo_student', async () => {
+    createPlayer.mockResolvedValue('alice-solo-uuid');
+    getPrimaryRole.mockResolvedValue('solo_student');
+    mockSupabase.single.mockResolvedValue({ data: { id: 'role-solo-uuid' }, error: null });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'alice_solo',
+        password: 'secure123',
+        email: 'alice@example.com'
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.role).toBe('solo_student');
+    expect(res.body.token).toBeDefined();
+    expect(res.body.stableId).toBe('alice-solo-uuid');
+  });
+
+  test('register with valid school password becomes coached_student', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active',
+        max_students: 100,
+        students: 5
+      }
+    ]);
+
+    SchoolRepo.canAddStudent.mockResolvedValue(true);
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: true,
+      passwordId: 'password-123',
+      groupId: null
+    });
+    SchoolPasswordService.recordUsage.mockResolvedValue(true);
+
+    createPlayer.mockResolvedValue('bob-coached-uuid');
+    getPrimaryRole.mockResolvedValue('coached_student');
+    mockSupabase.single.mockResolvedValue({ data: { id: 'role-coached-uuid' }, error: null });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'bob_coached',
+        password: 'secure123',
+        email: 'bob@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'valid_password'
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.role).toBe('coached_student');
+    expect(res.body.stableId).toBe('bob-coached-uuid');
+    expect(res.body.token).toBeDefined();
+  });
+
+  test('require school password when school name provided', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'carol',
+        password: 'secure123',
+        email: 'carol@example.com',
+        schoolName: 'Some School'
+        // Missing schoolPassword
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('school_params_mismatch');
+  });
+
+  test('reject invalid school name', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    SchoolRepo.searchByName.mockResolvedValue([]);
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'dave',
+        password: 'secure123',
+        email: 'dave@example.com',
+        schoolName: 'Nonexistent School',
+        schoolPassword: 'anything'
+      });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe('school_not_found');
+  });
+
+  test('reject expired school password', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: false,
+      error: 'password_expired'
+    });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'eve_expired',
+        password: 'secure123',
+        email: 'eve@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'expired_password'
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('school_password_expired');
+  });
+
+  test('reject maxed-out school password', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: false,
+      error: 'password_maxed'
+    });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'frank_maxed',
+        password: 'secure123',
+        email: 'frank@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'maxed_password'
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('school_password_maxed');
+  });
+
+  test('reject school password without school name', async () => {
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'grace',
+        password: 'secure123',
+        email: 'grace@example.com',
+        schoolPassword: 'some_password'
+        // Missing schoolName
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('school_params_mismatch');
+  });
+
+  test('auto-adds student to group if password specifies groupId', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolRepo.canAddStudent.mockResolvedValue(true);
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: true,
+      passwordId: 'password-123',
+      groupId: 'group-abc'
+    });
+    SchoolPasswordService.recordUsage.mockResolvedValue(true);
+
+    createPlayer.mockResolvedValue('henry-group-uuid');
+    getPrimaryRole.mockResolvedValue('coached_student');
+    mockSupabase.single.mockResolvedValue({ data: { id: 'role-coached-uuid' }, error: null });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'henry_group',
+        password: 'secure123',
+        email: 'henry@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'group_password'
+      });
+
+    expect(res.status).toBe(201);
+    // Verify group insertion was called
+    expect(mockSupabase.from).toHaveBeenCalledWith('player_groups');
+  });
+
+  test('records password usage in school_password_uses', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolRepo.canAddStudent.mockResolvedValue(true);
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: true,
+      passwordId: 'password-456',
+      groupId: null
+    });
+    SchoolPasswordService.recordUsage.mockResolvedValue(true);
+
+    createPlayer.mockResolvedValue('iris-usage-uuid');
+    getPrimaryRole.mockResolvedValue('coached_student');
+    mockSupabase.single.mockResolvedValue({ data: { id: 'role-coached-uuid' }, error: null });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'iris_usage',
+        password: 'secure123',
+        email: 'iris@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'tracked_password'
+      });
+
+    expect(res.status).toBe(201);
+    expect(SchoolPasswordService.recordUsage).toHaveBeenCalledWith('password-456', 'iris-usage-uuid');
+  });
+
+  test('assigns school_id to player profile after registration via password', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id-assign',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolRepo.canAddStudent.mockResolvedValue(true);
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: true,
+      passwordId: 'password-789',
+      groupId: null
+    });
+    SchoolPasswordService.recordUsage.mockResolvedValue(true);
+
+    createPlayer.mockResolvedValue('jack-school-uuid');
+    getPrimaryRole.mockResolvedValue('coached_student');
+    mockSupabase.single.mockResolvedValue({ data: { id: 'role-coached-uuid' }, error: null });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'jack_school',
+        password: 'secure123',
+        email: 'jack@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'assigned_password'
+      });
+
+    expect(res.status).toBe(201);
+    // Verify school_id was updated in player_profiles
+    expect(mockSupabase.from).toHaveBeenCalledWith('player_profiles');
+  });
+
+  test('rejects inactive school during password enrollment', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'inactive-school-id',
+        name: 'Inactive School',
+        status: 'archived'
+      }
+    ]);
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'kim_inactive',
+        password: 'secure123',
+        email: 'kim@example.com',
+        schoolName: 'Inactive School',
+        schoolPassword: 'any_password'
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('school_inactive');
+  });
+
+  test('rejects registration when school is at capacity during password enrollment', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'full-school-id',
+        name: 'Full School',
+        status: 'active',
+        max_students: 10,
+        students: 10
+      }
+    ]);
+
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: true,
+      passwordId: 'password-full',
+      groupId: null
+    });
+
+    SchoolRepo.canAddStudent.mockResolvedValue(false);
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'leo_full',
+        password: 'secure123',
+        email: 'leo@example.com',
+        schoolName: 'Full School',
+        schoolPassword: 'valid_password'
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('school_at_capacity');
+  });
+
+  test('hashes password and never stores plaintext in school password flow', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolRepo.canAddStudent.mockResolvedValue(true);
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: true,
+      passwordId: 'password-hash-test',
+      groupId: null
+    });
+    SchoolPasswordService.recordUsage.mockResolvedValue(true);
+
+    createPlayer.mockResolvedValue('macy-hash-uuid');
+    getPrimaryRole.mockResolvedValue('coached_student');
+    mockSupabase.single.mockResolvedValue({ data: { id: 'role-coached-uuid' }, error: null });
+
+    await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'macy_hash',
+        password: 'plaintext_password',
+        email: 'macy@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'school_password'
+      });
+
+    expect(bcrypt.hash).toHaveBeenCalledWith('plaintext_password', 12);
+    const createArg = createPlayer.mock.calls[0][0];
+    expect(createArg.passwordHash).toBe('hashed:plaintext_password');
+    expect(createArg.passwordHash).not.toBe('plaintext_password');
+  });
+
+  test('response does not contain password or hash in school password flow', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolRepo.canAddStudent.mockResolvedValue(true);
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: true,
+      passwordId: 'password-nosecret',
+      groupId: null
+    });
+    SchoolPasswordService.recordUsage.mockResolvedValue(true);
+
+    createPlayer.mockResolvedValue('nancy-nosecret-uuid');
+    getPrimaryRole.mockResolvedValue('coached_student');
+    mockSupabase.single.mockResolvedValue({ data: { id: 'role-coached-uuid' }, error: null });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'nancy_nosecret',
+        password: 'mysecret_password',
+        email: 'nancy@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'school_secret'
+      });
+
+    expect(JSON.stringify(res.body)).not.toContain('mysecret_password');
+    expect(JSON.stringify(res.body)).not.toContain('school_secret');
+    expect(JSON.stringify(res.body)).not.toContain('hashed:');
+  });
+
+  test('sets trialStatus to active for new school-enrolled students', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolRepo.canAddStudent.mockResolvedValue(true);
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: true,
+      passwordId: 'password-trial',
+      groupId: null
+    });
+    SchoolPasswordService.recordUsage.mockResolvedValue(true);
+
+    createPlayer.mockResolvedValue('oscar-trial-uuid');
+    getPrimaryRole.mockResolvedValue('coached_student');
+    mockSupabase.single.mockResolvedValue({ data: { id: 'role-coached-uuid' }, error: null });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'oscar_trial',
+        password: 'secure123',
+        email: 'oscar@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'valid_password'
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.trialStatus).toBe('active');
+  });
+
+  test('handles internal error from school password validation gracefully', async () => {
+    const SchoolRepo = require('../../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+
+    SchoolRepo.searchByName.mockResolvedValue([
+      {
+        id: 'test-school-id',
+        name: 'Test School',
+        status: 'active'
+      }
+    ]);
+
+    SchoolPasswordService.validatePassword.mockResolvedValue({
+      valid: false,
+      error: 'internal_error'
+    });
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'pete_error',
+        password: 'secure123',
+        email: 'pete@example.com',
+        schoolName: 'Test School',
+        schoolPassword: 'any_password'
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('internal_error');
   });
 });
