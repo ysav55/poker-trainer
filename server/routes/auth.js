@@ -23,11 +23,31 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
 
   // ── POST /api/auth/register ──────────────────────────────────────────────────
   // Student self-registration. Creates a trial account (7-day / 20-hand window).
-  // coachId (optional) determines coached_student vs solo_student role.
-  // schoolId (optional) assigns the new player to a school; capacity is enforced.
+  //
+  // Request body:
+  //   name, password, email (required/optional per validation)
+  //   coachId (optional) — legacy path
+  //   schoolId (optional) — legacy path
+  //   schoolName (optional) — new: school name for lookup
+  //   schoolPassword (optional) — new: school enrollment password
+  //
+  // Validation rules:
+  //   - schoolName and schoolPassword must both be provided or both absent
+  //   - If both provided, ignore coachId; role is coached_student
+  //   - If neither provided, role is coached_student (if coachId) or solo_student
+  //
+  // Flow:
+  //   1. Search school by name using SchoolRepository.searchByName()
+  //   2. Validate password using SchoolPasswordService.validatePassword()
+  //   3. Check school capacity
+  //   4. Create player, assign coached_student role
+  //   5. Auto-add to group if password specifies groupId
+  //   6. Record password usage
+  //   7. Assign school_id on player_profiles
   app.post('/api/auth/register', authLimiter, async (req, res) => {
-    const { name, password, email, coachId, schoolId } = req.body || {};
+    const { name, password, email, coachId, schoolId, schoolName, schoolPassword } = req.body || {};
 
+    // ─── Input validation ─────────────────────────────────────────────────────────
     if (!name || typeof name !== 'string' || name.trim().length < 2)
       return res.status(400).json({ error: 'invalid_name', message: 'Name must be at least 2 characters.' });
     if (!password || typeof password !== 'string' || password.length < 8)
@@ -35,23 +55,71 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
     if (email && (typeof email !== 'string' || !email.includes('@')))
       return res.status(400).json({ error: 'invalid_email', message: 'Email is not valid.' });
 
+    // Validate schoolName and schoolPassword consistency
+    const hasSchoolName = schoolName && typeof schoolName === 'string' && schoolName.trim().length > 0;
+    const hasSchoolPassword = schoolPassword && typeof schoolPassword === 'string' && schoolPassword.trim().length > 0;
+
+    if (hasSchoolName !== hasSchoolPassword) {
+      return res.status(400).json({
+        error: 'school_params_mismatch',
+        message: 'Both schoolName and schoolPassword must be provided together, or neither.'
+      });
+    }
+
     const { findByDisplayName, createPlayer, getPrimaryRole, assignRole } = require('../db/repositories/PlayerRepository');
+    const { searchByName, canAddStudent, findById: findSchool } = require('../db/repositories/SchoolRepository');
+    const SchoolPasswordService = require('../services/SchoolPasswordService');
     const supabase = require('../db/supabase.js');
 
     try {
       const existing = await findByDisplayName(name.trim());
       if (existing) return res.status(409).json({ error: 'name_taken', message: 'That name is already registered.' });
 
-      // School capacity check (if schoolId provided)
-      if (schoolId) {
-        const { canAddStudent, findById: findSchool } = require('../db/repositories/SchoolRepository');
+      // ─── Determine school path ────────────────────────────────────────────────────
+      let effectiveSchoolId = schoolId;
+      let effectiveGroupId = null;
+
+      if (hasSchoolName && hasSchoolPassword) {
+        // New school enrollment path: search by name, validate password
+        const schoolMatches = await searchByName(schoolName.trim(), 1);
+        if (schoolMatches.length === 0) {
+          return res.status(404).json({ error: 'school_not_found', message: `School "${schoolName}" not found.` });
+        }
+
+        const school = schoolMatches[0];
+        if (school.status !== 'active') {
+          return res.status(409).json({ error: 'school_inactive', message: 'This school is not active.' });
+        }
+
+        // Validate school password
+        const pwValidation = await SchoolPasswordService.validatePassword(school.id, schoolPassword.trim());
+        if (!pwValidation.valid) {
+          const errorMap = {
+            'invalid_password': { code: 'invalid_school_password', msg: 'School enrollment password is incorrect.' },
+            'password_expired': { code: 'school_password_expired', msg: 'This enrollment password has expired.' },
+            'password_maxed': { code: 'school_password_maxed', msg: 'This enrollment password has reached its limit.' },
+            'internal_error': { code: 'internal_error', msg: 'Failed to validate enrollment password.' }
+          };
+          const errDef = errorMap[pwValidation.error] || errorMap['internal_error'];
+          return res.status(400).json({ error: errDef.code, message: errDef.msg });
+        }
+
+        effectiveSchoolId = school.id;
+        effectiveGroupId = pwValidation.groupId;
+      } else if (schoolId) {
+        // Legacy schoolId path: just verify it exists and has capacity
         const school = await findSchool(schoolId);
         if (!school) return res.status(404).json({ error: 'school_not_found', message: 'School not found.' });
         if (school.status !== 'active') return res.status(409).json({ error: 'school_inactive', message: 'School is not active.' });
-        const ok = await canAddStudent(schoolId);
+      }
+
+      // ─── School capacity check ────────────────────────────────────────────────────
+      if (effectiveSchoolId) {
+        const ok = await canAddStudent(effectiveSchoolId);
         if (!ok) return res.status(409).json({ error: 'school_at_capacity', message: 'This school has reached its student limit.' });
       }
 
+      // ─── Create player ────────────────────────────────────────────────────────────
       const passwordHash   = await bcrypt.hash(password, BCRYPT_ROUNDS);
       const trialExpiresAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
@@ -68,20 +136,44 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
         trial_hands_remaining: TRIAL_HANDS,
       }).eq('id', newId);
 
-      // Assign role: coached_student (has coach) or solo_student (no coach)
-      const roleName = coachId ? 'coached_student' : 'solo_student';
+      // ─── Assign role ──────────────────────────────────────────────────────────────
+      // If registering via school enrollment password, always use coached_student.
+      // Otherwise, use coached_student if coachId provided, else solo_student.
+      const roleName = (hasSchoolName && hasSchoolPassword) || coachId ? 'coached_student' : 'solo_student';
       const { data: roleRow } = await supabase.from('roles').select('id').eq('name', roleName).single();
       if (roleRow?.id) await assignRole(newId, roleRow.id, null);
 
-      // Assign to school if provided
-      if (schoolId) {
-        await supabase.from('player_profiles').update({ school_id: schoolId }).eq('id', newId);
+      // ─── Assign school ────────────────────────────────────────────────────────────
+      if (effectiveSchoolId) {
+        await supabase.from('player_profiles').update({ school_id: effectiveSchoolId }).eq('id', newId);
+      }
+
+      // ─── Auto-add to group if password specified groupId ─────────────────────────
+      if (effectiveGroupId) {
+        await supabase.from('player_groups').insert({
+          player_id: newId,
+          group_id: effectiveGroupId
+        });
+      }
+
+      // ─── Record password usage ────────────────────────────────────────────────────
+      if (hasSchoolName && hasSchoolPassword) {
+        const pwValidation = await SchoolPasswordService.validatePassword(effectiveSchoolId, schoolPassword.trim());
+        if (pwValidation.valid && pwValidation.passwordId) {
+          await SchoolPasswordService.recordUsage(pwValidation.passwordId, newId);
+        }
       }
 
       const role  = await getPrimaryRole(newId);
       // New registrations always start with an active trial
       const token = JwtService.sign({ stableId: newId, name: name.trim(), role: role ?? roleName, trialStatus: 'active' });
-      log.info('auth', 'register_ok', `New student registered: ${name.trim()}`, { playerId: newId, role: roleName, coachId });
+      log.info('auth', 'register_ok', `New student registered: ${name.trim()}`, {
+        playerId: newId,
+        role: roleName,
+        coachId,
+        schoolId: effectiveSchoolId,
+        enrolledViaPassword: hasSchoolName && hasSchoolPassword
+      });
       return res.status(201).json({ stableId: newId, name: name.trim(), role: role ?? roleName, trialStatus: 'active', token });
     } catch (err) {
       log.error('auth', 'register_error', `Registration error: ${err.message}`, { err });
