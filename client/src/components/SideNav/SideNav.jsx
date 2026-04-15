@@ -2,7 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Home, Table2, Trophy, Clock, Medal,
-  Users, FolderOpen, Target,
+  Users, FolderOpen, Target, DollarSign,
   Settings, PanelLeftClose, PanelLeftOpen, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -23,9 +23,10 @@ const HOME_ITEMS = [
 ];
 
 const COACHING_ITEMS = [
-  { icon: Users,      label: 'Students',  path: '/students',    badgeKey: 'students' },
-  { icon: FolderOpen, label: 'Groups',    path: '/groups' },
-  { icon: Target,     label: 'Scenarios', path: '/admin/hands' },
+  { icon: Users,       label: 'Students',  path: '/students',       badgeKey: 'students' },
+  { icon: FolderOpen,  label: 'Groups',    path: '/groups' },
+  { icon: DollarSign,  label: 'Staking',   path: '/admin/staking' },
+  { icon: Target,      label: 'Scenarios', path: '/admin/hands' },
 ];
 
 export default function SideNav({ chipBalance, badges = {}, schoolName, studentsOnline, activeTables }) {

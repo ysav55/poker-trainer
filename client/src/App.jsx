@@ -145,6 +145,7 @@ function AppRoutes() {
           <Route path="/students" element={<StudentsRosterPage />} />
           <Route path="/students/:playerId" element={<StudentDashboardPage />} />
           <Route path="/groups" element={<GroupsPage />} />
+          <Route path="/admin/staking" element={<StakingPage />} />
 
           {/* Admin — require admin:access */}
           <Route element={<RequirePermission permission="admin:access" />}>
@@ -155,7 +156,6 @@ function AppRoutes() {
             <Route path="/admin/referee"      element={<RefereeDashboard />} />
             <Route path="/admin/alerts"       element={<CoachAlertsPage />} />
             <Route path="/admin/stable"       element={<Navigate to="/students" replace />} />
-            <Route path="/admin/staking"      element={<StakingPage />} />
             <Route path="/admin/tournaments/group/:groupId/balancer" element={<TournamentBalancer />} />
           </Route>
         </Route>
