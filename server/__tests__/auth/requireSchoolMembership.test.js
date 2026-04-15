@@ -1,4 +1,4 @@
-const { requireSchoolMembership } = require('../../auth/requireSchoolMembership');
+const requireSchoolMembership = require('../../auth/requireSchoolMembership');
 
 describe('requireSchoolMembership', () => {
   let req, res, next;
@@ -47,5 +47,52 @@ describe('requireSchoolMembership', () => {
     req.params.school_id = 'school-1';
     middleware(req, res, next);
     expect(res.status).toHaveBeenCalledWith(401);
+  });
+
+  test('missing schoolId returns 400', () => {
+    const middleware = requireSchoolMembership('school_id');
+    // No schoolId in params or query
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'bad_request', message: 'schoolId parameter is required' });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('undefined schoolId returns 400', () => {
+    const middleware = requireSchoolMembership('school_id');
+    req.params.school_id = undefined;
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  test('null schoolId returns 400', () => {
+    const middleware = requireSchoolMembership('school_id');
+    req.params.school_id = null;
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  test('empty string schoolId returns 400', () => {
+    const middleware = requireSchoolMembership('school_id');
+    req.params.school_id = '';
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  test('superadmin accessing any school passes', () => {
+    req.user.role = 'superadmin';
+    const middleware = requireSchoolMembership('school_id');
+    req.params.school_id = 'school-999';
+    middleware(req, res, next);
+    expect(next).toHaveBeenCalled();
+  });
+
+  test('401 response includes message field', () => {
+    const middleware = requireSchoolMembership('school_id');
+    delete req.user;
+    req.params.school_id = 'school-1';
+    middleware(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: 'unauthorized', message: 'Authentication required' });
   });
 });

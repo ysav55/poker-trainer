@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
 import { SectionHeader, Field, Input, Select, Card } from './shared.jsx';
 import { colors, groupColors as GROUP_COLORS } from '../../lib/colors.js';
+import { Building2, Palette, Sliders, DollarSign, TrendingUp, Globe, Users, Clock, Plus, Trash2 } from 'lucide-react';
 
 // ─── Tab: School ──────────────────────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ function GroupsSection({ schoolId, policy }) {
 
   return (
     <>
-      <SectionHeader title="Groups / Cohorts" />
+      <SectionHeader title="Groups / Cohorts" icon={Users} />
 
       {policy && (
         <p className="text-xs mb-3" style={{ color: colors.textMuted }}>
@@ -532,7 +533,7 @@ export default function SchoolTab() {
   return (
     <Card>
       {/* ── Identity ── */}
-      <SectionHeader title="Identity" />
+      <SectionHeader title="Identity" icon={Building2} />
       <Field label="School name">
         <Input value={identity.name} onChange={v => setIdentity(x => ({ ...x, name: v }))} placeholder="School name" />
       </Field>
@@ -556,7 +557,7 @@ export default function SchoolTab() {
       <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Platforms ── */}
-      <SectionHeader title="Platforms" />
+      <SectionHeader title="Platforms" icon={Globe} />
       <p className="text-xs mb-2" style={{ color: colors.textMuted }}>These appear in the platform dropdown when logging staking sessions.</p>
       <div className="rounded-lg overflow-hidden mb-2" style={{ border: `1px solid ${colors.borderStrong}` }}>
         {platforms.map((p, i) => (
@@ -584,7 +585,7 @@ export default function SchoolTab() {
       <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Staking Defaults ── */}
-      <SectionHeader title="Staking Defaults" />
+      <SectionHeader title="Staking Defaults" icon={DollarSign} />
       <p className="text-xs mb-3" style={{ color: colors.textMuted }}>Pre-fill values when creating new staking contracts. Can be overridden per contract.</p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Default coach split (%)">
@@ -617,7 +618,7 @@ export default function SchoolTab() {
       <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Leaderboard ── */}
-      <SectionHeader title="Leaderboard" />
+      <SectionHeader title="Leaderboard" icon={TrendingUp} />
       <Field label="Primary metric">
         <Select value={leaderboard.primary_metric} onChange={v => setLeaderboard(l => ({ ...l, primary_metric: v }))}>
           {['net_chips', 'bb_per_100', 'win_rate', 'hands_played'].map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}

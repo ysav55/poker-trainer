@@ -3,9 +3,10 @@ import { colors } from '../../lib/colors.js';
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
-export function SectionHeader({ title }) {
+export function SectionHeader({ title, icon: Icon }) {
   return (
-    <div className="mb-3 mt-5 first:mt-0">
+    <div className="mb-3 mt-5 first:mt-0 flex items-center gap-2">
+      {Icon && <Icon size={14} style={{ color: colors.textMuted }} />}
       <span className="text-xs font-bold tracking-widest uppercase" style={{ color: colors.textMuted }}>
         {title}
       </span>
