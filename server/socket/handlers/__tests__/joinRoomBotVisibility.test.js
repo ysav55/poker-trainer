@@ -268,7 +268,7 @@ test('coached_cash table join is not affected by bot visibility check', async ()
 
 // ─── Admin/superadmin coach privileges in non-coached modes (C-9) ─────────────
 
-test('admin retains isCoach=true when joining an uncoached_cash table', async () => {
+test('admin loses isCoach when joining an uncoached_cash table (new behaviour)', async () => {
   mockTableRepo.getTable.mockResolvedValue({
     id: 'open-table', mode: 'uncoached_cash', privacy: 'open', created_by: 'someone',
   });
@@ -280,10 +280,10 @@ test('admin retains isCoach=true when joining an uncoached_cash table', async ()
   expect(err).toBeUndefined();
   const joined = socket._emitted.find(e => e.event === 'room_joined');
   expect(joined).toBeDefined();
-  expect(joined.payload.isCoach).toBe(true);
+  expect(joined.payload.isCoach).toBe(false);
 });
 
-test('superadmin retains isCoach=true when joining an uncoached_cash table', async () => {
+test('superadmin loses isCoach when joining an uncoached_cash table (new behaviour)', async () => {
   mockTableRepo.getTable.mockResolvedValue({
     id: 'open-table', mode: 'uncoached_cash', privacy: 'open', created_by: 'someone',
   });
@@ -294,7 +294,7 @@ test('superadmin retains isCoach=true when joining an uncoached_cash table', asy
   expect(err).toBeUndefined();
   const joined = socket._emitted.find(e => e.event === 'room_joined');
   expect(joined).toBeDefined();
-  expect(joined.payload.isCoach).toBe(true);
+  expect(joined.payload.isCoach).toBe(false);
 });
 
 test('regular coach loses isCoach in uncoached_cash mode (existing behaviour preserved)', async () => {
@@ -309,7 +309,7 @@ test('regular coach loses isCoach in uncoached_cash mode (existing behaviour pre
   expect(joined.payload.isCoach).toBe(false);
 });
 
-test('admin retains isCoach=true when joining a tournament mode table', async () => {
+test('admin loses isCoach when joining a tournament mode table (new behaviour)', async () => {
   mockTableRepo.getTable.mockResolvedValue({
     id: 'tourney-table', mode: 'tournament', privacy: 'open', created_by: 'someone',
   });
@@ -320,5 +320,5 @@ test('admin retains isCoach=true when joining a tournament mode table', async ()
   expect(err).toBeUndefined();
   const joined = socket._emitted.find(e => e.event === 'room_joined');
   expect(joined).toBeDefined();
-  expect(joined.payload.isCoach).toBe(true);
+  expect(joined.payload.isCoach).toBe(false);
 });

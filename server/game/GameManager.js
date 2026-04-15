@@ -442,7 +442,7 @@ class GameManager {
     const players = this._gamePlayers();
     if (players.length < 2) return { error: 'Need at least 2 seated players to start' };
 
-    const broke = players.filter(p => !p.is_coach && p.stack <= 0);
+    const broke = players.filter(p => p.stack <= 0);
     if (broke.length > 0) {
       const names = broke.map(p => p.name).join(', ');
       return { error: `Cannot start: ${names} ${broke.length === 1 ? 'has' : 'have'} 0 chips. Use Adjust Stacks to top up.` };
@@ -520,7 +520,8 @@ class GameManager {
     this.state.last_aggressor = null;
 
     // Assign positions
-    const dealerIdx = this.state.dealer_seat % players.length;
+    let dealerIdx = players.findIndex(p => p.seat === this.state.dealer_seat);
+    if (dealerIdx === -1) dealerIdx = 0; // fallback for first hand or if dealer_seat not in players
     const sbIdx = (dealerIdx + 1) % players.length;
     const bbIdx = (dealerIdx + 2) % players.length;
 
@@ -942,7 +943,7 @@ class GameManager {
     this._saveSnapshot('action');
     // Rotate dealer button by player object (not seat index) so removals don't cause jumps.
     const eligible = this.state.players
-      .filter(p => !p.is_coach && !p.disconnected && p.seat >= 0)
+      .filter(p => !p.disconnected && p.seat >= 0)
       .sort((a, b) => a.seat - b.seat);
     if (eligible.length > 0) {
       const dealerIdx = eligible.findIndex(p => p.seat === this.state.dealer_seat);

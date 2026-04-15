@@ -84,13 +84,8 @@ module.exports = function registerJoinRoom(socket, ctx) {
     }
 
     // In non-coached modes all non-spectators are regular players — no coach role.
-    // Exception: admin and superadmin retain coach privileges in all modes so they
-    // can observe, control, and manage any table type without being forced to a player seat.
     if (mode !== 'coached_cash') {
-      const ADMIN_ROLES = new Set(['admin', 'superadmin']);
-      if (!ADMIN_ROLES.has(socket.data.role)) {
-        isCoach = false;
-      }
+      isCoach = false;
     }
 
     // Delegation: if this table has a designated controller and the joining user

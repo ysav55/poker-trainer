@@ -35,6 +35,12 @@ module.exports = function registerGameLifecycle(socket, ctx) {
       const dealSnapshot = gm.state.players
         .filter(p => !p.is_shadow && !p.is_observer && p.hole_cards?.length > 0)
         .map(p => ({ id: stableIdMap.get(p.id) || p.id, hole_cards: [...p.hole_cards] }));
+
+      // Set activeHands synchronously BEFORE async DB write so reset_hand always finds the entry
+      activeHands.set(tableId, { handId, sessionId: gm.sessionId });
+      socket.emit('hand_started', { handId });
+
+      // DB write is fire-and-forget; failure does not affect hand flow
       HandLogger.startHand({
         handId,
         sessionId: gm.sessionId,
@@ -48,8 +54,6 @@ module.exports = function registerGameLifecycle(socket, ctx) {
         sessionType: 'live',
         tableMode,
       }).then(() => {
-        activeHands.set(tableId, { handId, sessionId: gm.sessionId });
-        socket.emit('hand_started', { handId });
         HandLogger.recordDeal(handId, dealSnapshot)
           .catch(err => log.error('db', 'record_deal_failed', '[HandLogger] recordDeal', { err, tableId }));
       }).catch(err => log.error('db', 'start_hand_failed', '[HandLogger] startHand', { err, tableId, sessionId: gm.sessionId }));

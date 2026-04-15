@@ -27,8 +27,8 @@ const ADMIN_NAME       = 'Admin_yonatan';
 const ADMIN_PASSWORD   = '123456789';
 const SIM_PASSWORD     = '12345678';
 const HANDS_PER_COUNT  = parseInt(process.env.HANDS_PER_COUNT || '30', 10);
-const HAND_TIMEOUT_MS  = 60_000;
-const PAUSE_MS         = 500; // between hands in coached mode
+const HAND_TIMEOUT_MS  = 40_000;
+const PAUSE_MS         = 400; // between hands in coached mode
 
 // ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
@@ -236,11 +236,16 @@ async function runCoachedScenario(idoCreds, simPlayers) {
 
       // If hand failed (timeout or error), try to top up broke players and retry once
       if (!result) {
+        // Phase is stuck non-'waiting'. reset_hand is the only path back to 'waiting'.
+        // After a timeout, the server may be mid-hand or in showdown.
+        coachSocket.emit('reset_hand');
+        await new Promise(r => setTimeout(r, 1500)); // allow server to process reset + broadcast
+
         console.log(`  [RETRY] Topping up player stacks...`);
         for (const socketId of Object.keys(playerSocketsBySockId)) {
           coachSocket.emit('adjust_stack', { playerId: socketId, amount: 500 });
         }
-        await new Promise(r => setTimeout(r, 1000)); // Wait for stack adjustment to settle
+        await new Promise(r => setTimeout(r, 500)); // wait for stack adjustment to settle
         result = await runOneHand({ listenerSocket: coachSocket, playerSocketsBySockId, coachSocket, label });
         if (!result) {
           console.error(`  Hand ${i}/${HANDS_PER_COUNT} failed twice — skipping`);
