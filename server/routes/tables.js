@@ -2,6 +2,7 @@
 
 const { TableRepository, InvitedPlayersRepository, TablePresetsRepository } = require('../db/repositories/TableRepository.js');
 const { requirePermission, getPlayerPermissions } = require('../auth/requirePermission.js');
+const TableVisibilityService = require('../services/TableVisibilityService.js');
 
 // Attempt to load getTableSummaries defensively — it may not exist yet
 let getTableSummaries;
@@ -46,6 +47,8 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
   // GET /api/tables — list non-completed tables merged with live SharedState.
   // Decision (Phase 2): bot_cash tables are excluded here — they are managed
   // on GET /api/bot-tables (BotLobbyPage) to keep the main lobby clean.
+  // Filters tables by visibility: open (always visible), school (same school only),
+  // private (whitelisted players only).
   app.get('/api/tables', requireAuth, async (req, res) => {
     try {
       const [dbTables, liveSummaries] = await Promise.all([
@@ -53,13 +56,24 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
         liveTableSummaries(),
       ]);
       const liveMap = new Map((liveSummaries || []).map(s => [s.id, s]));
-      const tables = dbTables
-        .filter(t => t.mode !== 'bot_cash')
-        .map(t => ({
-          ...t,
-          live: liveMap.get(t.id) ?? null,
-        }));
-      res.json({ tables });
+
+      // Filter tables: exclude bot_cash, then apply visibility filtering
+      const visibleTables = [];
+      for (const table of dbTables) {
+        // Skip bot_cash tables
+        if (table.mode === 'bot_cash') continue;
+
+        // Check if player can see this table based on privacy level
+        const canSee = await TableVisibilityService.canPlayerSeeTable(req.user.id, table);
+        if (!canSee) continue;
+
+        visibleTables.push({
+          ...table,
+          live: liveMap.get(table.id) ?? null,
+        });
+      }
+
+      res.json({ tables: visibleTables });
     } catch (err) {
       res.status(500).json({ error: 'internal_error' });
     }
