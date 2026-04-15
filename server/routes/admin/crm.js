@@ -78,7 +78,7 @@ router.get('/players/:id/notes', canView, async (req, res) => {
 // POST /api/admin/players/:id/notes
 router.post('/players/:id/notes', canEdit, async (req, res) => {
   try {
-    const { content, noteType = 'general' } = req.body || {};
+    const { content, noteType = 'general', sharedWithStudent = false } = req.body || {};
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'content is required' });
     }
@@ -90,7 +90,8 @@ router.post('/players/:id/notes', canEdit, async (req, res) => {
       req.params.id,
       req.user.id,
       content.trim(),
-      noteType
+      noteType,
+      Boolean(sharedWithStudent)
     );
     res.status(201).json({ id });
   } catch (err) {
@@ -213,7 +214,7 @@ router.get('/players/:id/game-sessions', canView, async (req, res) => {
 // PUT /api/admin/players/:id/notes/:noteId
 router.put('/players/:id/notes/:noteId', canEdit, async (req, res) => {
   try {
-    const { content, noteType } = req.body || {};
+    const { content, noteType, sharedWithStudent } = req.body || {};
     if (content !== undefined && !String(content).trim()) {
       return res.status(400).json({ error: 'content cannot be empty' });
     }
@@ -224,7 +225,11 @@ router.put('/players/:id/notes/:noteId', canEdit, async (req, res) => {
     await CRMRepo.updateNote(
       req.params.noteId,
       req.params.id,
-      { content: content !== undefined ? String(content).trim() : undefined, noteType }
+      {
+        content: content !== undefined ? String(content).trim() : undefined,
+        noteType,
+        sharedWithStudent: sharedWithStudent !== undefined ? Boolean(sharedWithStudent) : undefined,
+      }
     );
     res.json({ success: true });
   } catch (err) {

@@ -18,11 +18,14 @@ const { q } = require('../utils');
  *   - latest session_player_stats row
  *   - all current player_tags
  *   - upcoming coaching_sessions (status = 'scheduled', ASC)
+ *   - assigned groups (via player_groups)
+ *   - recent performance snapshots (12 max, newest first)
+ *   - recent coach notes (5 max, newest first)
  *
  * Returns null if the player does not exist.
  */
 async function getPlayerCRMSummary(playerId) {
-  const [profileResult, statsResult, tagsResult, sessionsResult] = await Promise.all([
+  const [profileResult, statsResult, tagsResult, sessionsResult, groupsResult, snapshotsResult, notesResult] = await Promise.all([
     supabase
       .from('player_profiles')
       .select('id, display_name, email, status, avatar_url, created_at')
@@ -50,16 +53,46 @@ async function getPlayerCRMSummary(playerId) {
       .eq('status', 'scheduled')
       .order('scheduled_at', { ascending: true })
       .limit(5),
+
+    supabase
+      .from('player_groups')
+      .select('groups(id, name, color, school_id, created_at)')
+      .eq('player_id', playerId),
+
+    supabase
+      .from('player_performance_snapshots')
+      .select('id, period_start, period_end, hands_played, net_chips, vpip_pct, pfr_pct, wtsd_pct, wsd_pct, three_bet_pct, avg_decision_time_ms, most_common_mistakes, created_at')
+      .eq('player_id', playerId)
+      .order('period_start', { ascending: false })
+      .limit(12),
+
+    supabase
+      .from('player_notes')
+      .select('id, content, note_type, created_at, coach_id, shared_with_student, player_profiles!coach_id(display_name)')
+      .eq('player_id', playerId)
+      .order('created_at', { ascending: false })
+      .limit(5),
   ]);
 
   if (profileResult.error) throw new Error(profileResult.error.message);
   if (!profileResult.data) return null;
 
   return {
-    profile:           profileResult.data,
-    latestSessionStats: statsResult.data ?? null,
-    tags:              (tagsResult.data ?? []).map(r => r.tag),
-    upcomingSessions:  sessionsResult.data ?? [],
+    player:           profileResult.data,
+    summary:          statsResult.data ?? null,
+    tags:             (tagsResult.data ?? []).map(r => r.tag),
+    upcomingSessions: sessionsResult.data ?? [],
+    groups:           (groupsResult.data ?? []).map(r => r.groups).filter(Boolean),
+    snapshots:        snapshotsResult.data ?? [],
+    notes:            (notesResult.data ?? []).map(r => ({
+      id:                 r.id,
+      content:            r.content,
+      note_type:          r.note_type,
+      created_at:         r.created_at,
+      coach_id:           r.coach_id,
+      shared_with_student: r.shared_with_student ?? false,
+      coach_name:         r.player_profiles?.display_name ?? null,
+    })),
   };
 }
 
@@ -67,13 +100,18 @@ async function getPlayerCRMSummary(playerId) {
 
 /**
  * Create a coach note for a player.
+ * @param {string} playerId
+ * @param {string} coachId
+ * @param {string} content
+ * @param {string} noteType  'general' | 'session_review' | 'goal' | 'weakness'
+ * @param {boolean} sharedWithStudent  whether to show this note to the student
  * @returns {string} UUID of the new note.
  */
-async function createNote(playerId, coachId, content, noteType = 'general') {
+async function createNote(playerId, coachId, content, noteType = 'general', sharedWithStudent = false) {
   const data = await q(
     supabase
       .from('player_notes')
-      .insert({ player_id: playerId, coach_id: coachId, content, note_type: noteType })
+      .insert({ player_id: playerId, coach_id: coachId, content, note_type: noteType, shared_with_student: sharedWithStudent })
       .select('id')
       .single()
   );
@@ -84,24 +122,25 @@ async function createNote(playerId, coachId, content, noteType = 'general') {
  * Retrieve notes for a player, newest first.
  * @param {string} playerId
  * @param {{ limit?: number, offset?: number }} opts
- * @returns {Array} note rows with coach display_name joined
+ * @returns {Array} note rows with coach display_name joined and shared_with_student flag
  */
 async function getNotes(playerId, { limit = 20, offset = 0 } = {}) {
   const data = await q(
     supabase
       .from('player_notes')
-      .select('id, content, note_type, created_at, coach_id, player_profiles!coach_id(display_name)')
+      .select('id, content, note_type, created_at, coach_id, shared_with_student, player_profiles!coach_id(display_name)')
       .eq('player_id', playerId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
   );
   return (data || []).map(r => ({
-    id:         r.id,
-    content:    r.content,
-    note_type:  r.note_type,
-    created_at: r.created_at,
-    coach_id:   r.coach_id,
-    coach_name: r.player_profiles?.display_name ?? null,
+    id:                 r.id,
+    content:            r.content,
+    note_type:          r.note_type,
+    created_at:         r.created_at,
+    coach_id:           r.coach_id,
+    shared_with_student: r.shared_with_student ?? false,
+    coach_name:         r.player_profiles?.display_name ?? null,
   }));
 }
 
@@ -292,12 +331,13 @@ async function getPlayerGameSessions(playerId, { limit = 20, offset = 0 } = {}) 
  *
  * @param {string} noteId
  * @param {string} playerId  Safety scoping: note must belong to this player
- * @param {{ content?: string, noteType?: string }} opts
+ * @param {{ content?: string, noteType?: string, sharedWithStudent?: boolean }} opts
  */
-async function updateNote(noteId, playerId, { content, noteType } = {}) {
+async function updateNote(noteId, playerId, { content, noteType, sharedWithStudent } = {}) {
   const patch = {};
-  if (content  !== undefined) patch.content   = content;
-  if (noteType !== undefined) patch.note_type = noteType;
+  if (content              !== undefined) patch.content            = content;
+  if (noteType             !== undefined) patch.note_type          = noteType;
+  if (sharedWithStudent    !== undefined) patch.shared_with_student = sharedWithStudent;
   if (Object.keys(patch).length === 0) return;
 
   const { error } = await supabase
@@ -308,6 +348,33 @@ async function updateNote(noteId, playerId, { content, noteType } = {}) {
   if (error) throw new Error(error.message);
 }
 
+// ─── Student-facing notes (shared only) ───────────────────────────────────────
+
+/**
+ * Get notes shared with a student (player).
+ * @param {string} playerId  The student's own player_id
+ * @param {{ limit?: number, offset?: number }} opts
+ * @returns {Array} shared note rows with coach identity
+ */
+async function getSharedNotes(playerId, { limit = 20, offset = 0 } = {}) {
+  const data = await q(
+    supabase
+      .from('player_notes')
+      .select('id, content, note_type, created_at, coach_id, player_profiles!coach_id(display_name)')
+      .eq('player_id', playerId)
+      .eq('shared_with_student', true)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+  );
+  return (data || []).map(r => ({
+    id:         r.id,
+    content:    r.content,
+    note_type:  r.note_type,
+    created_at: r.created_at,
+    coach_name: r.player_profiles?.display_name ?? null,
+  }));
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -315,6 +382,7 @@ module.exports = {
   createNote,
   getNotes,
   updateNote,
+  getSharedNotes,
   setPlayerTags,
   getPlayerTags,
   createCoachingSession,

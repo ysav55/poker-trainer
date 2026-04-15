@@ -1,6 +1,7 @@
 'use strict';
 
 const supabase = require('../db/supabase');
+const CRMRepo = require('../db/repositories/CRMRepository.js');
 
 module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger }) {
 
@@ -92,6 +93,21 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
       const hands = await HandLogger.getPlayerHands(req.params.stableId, { limit, offset, mode });
       res.json({ hands, limit, offset });
     } catch (err) {
+      res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
+  // GET /api/me/notes — student reads their own shared coach notes
+  app.get('/api/me/notes', requireAuth, async (req, res) => {
+    try {
+      const { limit, offset } = req.query;
+      const notes = await CRMRepo.getSharedNotes(req.user.id || req.user.stableId, {
+        limit:  limit  ? parseInt(limit,  10) : 20,
+        offset: offset ? parseInt(offset, 10) : 0,
+      });
+      res.json({ notes });
+    } catch (err) {
+      console.error('[players] GET /me/notes error:', err.message ?? err);
       res.status(500).json({ error: 'internal_error' });
     }
   });

@@ -47,8 +47,31 @@ export default function StudentDashboardPage() {
     try {
       setLoading(true)
       setError(null)
-      const result = await apiFetch(`/api/admin/players/${playerId}/crm`)
-      setData(result)
+      const crmData = await apiFetch(`/api/admin/players/${playerId}/crm`)
+
+      // Parallel fetches for endpoints not included in CRM
+      const [stakingRes, reportsRes, handsRes, prepBriefRes, scenariosRes, alertsRes] = await Promise.allSettled([
+        apiFetch(`/api/coach/students/${playerId}/staking`),
+        apiFetch(`/api/coach/students/${playerId}/reports`),
+        apiFetch(`/api/hands/history?playerId=${playerId}&limit=10`),
+        apiFetch(`/api/coach/students/${playerId}/prep-brief`),
+        apiFetch(`/api/coach/students/${playerId}/scenario-history`),
+        apiFetch(`/api/coach/alerts?player_id=${playerId}`),
+      ])
+
+      // Derive mistakes from first snapshot's most_common_mistakes
+      const mistakes = crmData.snapshots?.[0]?.most_common_mistakes ?? null
+
+      setData({
+        ...crmData,
+        mistakes,
+        staking: stakingRes.status === 'fulfilled' ? stakingRes.value?.contract : null,
+        reports: reportsRes.status === 'fulfilled' ? reportsRes.value?.reports : null,
+        hands: handsRes.status === 'fulfilled' ? handsRes.value?.hands : null,
+        prepBrief: prepBriefRes.status === 'fulfilled' ? prepBriefRes.value : null,
+        scenarios: scenariosRes.status === 'fulfilled' ? scenariosRes.value?.history : null,
+        alerts: alertsRes.status === 'fulfilled' ? (alertsRes.value?.alerts ?? []).filter(a => a.player_id === playerId) : null,
+      })
     } catch (err) {
       console.error('Failed to load student data:', err)
       setError(err.message)
@@ -101,7 +124,20 @@ export default function StudentDashboardPage() {
     return <div className="p-6">Student not found</div>
   }
 
-  const { player, summary, alerts, notes, hands, groups, scenarios, staking } = data
+  const {
+    player,
+    summary,
+    alerts,
+    notes,
+    hands,
+    groups,
+    scenarios,
+    staking,
+    snapshots,
+    mistakes,
+    reports,
+    prepBrief,
+  } = data
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -119,7 +155,7 @@ export default function StudentDashboardPage() {
 
         {/* Row 2: Performance | Alerts */}
         <div>
-          <PerformanceSection snapshots={data.snapshots} playerId={playerId} />
+          <PerformanceSection snapshots={snapshots} playerId={playerId} />
         </div>
         <div>
           <AlertsSection alerts={alerts} playerId={playerId} />
@@ -127,7 +163,7 @@ export default function StudentDashboardPage() {
 
         {/* Row 3: Mistakes | Groups */}
         <div>
-          <MistakesSection mistakes={data.mistakes} playerId={playerId} />
+          <MistakesSection mistakes={mistakes} playerId={playerId} />
         </div>
         <div>
           <GroupsSection groups={groups} playerId={playerId} />
@@ -146,12 +182,12 @@ export default function StudentDashboardPage() {
           <NotesSection notes={notes} playerId={playerId} />
         </div>
         <div>
-          <ReportsSection reports={data.reports} playerId={playerId} />
+          <ReportsSection reports={reports} playerId={playerId} />
         </div>
 
         {/* Row 6: Prep Brief | Scenarios */}
         <div>
-          <PrepBriefSection prepBrief={data.prepBrief} playerId={playerId} />
+          <PrepBriefSection prepBrief={prepBrief} playerId={playerId} />
         </div>
         <div>
           <ScenariosSection scenarios={scenarios} playerId={playerId} />
