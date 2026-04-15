@@ -303,11 +303,30 @@ async function setOrgGroupPolicy({ enabled, max_groups, max_players_per_group },
   if (error) throw new Error(error.message);
 }
 
+// ─── Search ──────────────────────────────────────────────────────────────────
+
+async function searchByName(query, limit = 10) {
+  try {
+    const { data, error } = await supabase
+      .from('schools')
+      .select('id, name, status')
+      .ilike('name', `%${query}%`)
+      .eq('status', 'active')
+      .limit(limit);
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    throw new Error(`Failed to search schools: ${err.message}`);
+  }
+}
+
 module.exports = {
   findAll, findById, create, update, archive,
   getMembers, getMemberCounts, assignPlayer, removePlayer,
   canAddCoach, canAddStudent,
   getFeatures, setFeature, bulkSetFeatures,
   getGroupPolicy, setGroupPolicy, getOrgGroupPolicy, setOrgGroupPolicy,
+  searchByName,
   VALID_FEATURES,
 };

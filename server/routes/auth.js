@@ -230,6 +230,25 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
     }
   });
 
+  // ── GET /api/schools/search ─────────────────────────────────────────────────
+  // Search schools by name for registration autocomplete. Public endpoint (no auth).
+  app.get('/api/schools/search', async (req, res) => {
+    const { q } = req.query || {};
+
+    if (!q || typeof q !== 'string' || q.trim().length === 0) {
+      return res.status(400).json({ error: 'invalid_query', message: 'Query parameter q is required and must be non-empty' });
+    }
+
+    try {
+      const { searchByName } = require('../db/repositories/SchoolRepository');
+      const schools = await searchByName(q.trim(), 10);
+      return res.json({ schools });
+    } catch (err) {
+      log.error('auth', 'school_search_error', `School search failed: ${err.message}`, { err });
+      return res.status(500).json({ error: 'internal_error', message: 'Search failed' });
+    }
+  });
+
   // ── GET /api/auth/permissions ────────────────────────────────────────────────
   app.get('/api/auth/permissions', requireAuth, async (req, res) => {
     try {
