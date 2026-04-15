@@ -21,9 +21,10 @@ Coaches invite students to join their school via self-service registration using
 - New table: `school_password_uses` (audit trail, dedup checking)
 - Backend validation service: `SchoolPasswordService`
 - Admin CRUD endpoints under `/api/admin/schools/:id/passwords`
-- Registration integration: `POST /api/auth/register` enhanced to accept optional `schoolPassword`
-- **Architecture:** Remove `coachId` from registration (now redundant with school-based grouping); password-registered students assigned `solo_student` role
-- Frontend: `RegisterPage.jsx` adds password field
+- Registration integration: `POST /api/auth/register` enhanced to accept optional `schoolName` + `schoolPassword`
+- **New endpoint:** `GET /api/schools/search?q=name` (school name autocomplete for registration)
+- **Architecture:** Registration now uses school name (user-facing); password-registered students assigned `coached_student` role; non-password registrations stay `solo_student`
+- Frontend: `RegisterPage.jsx` adds school name autocomplete + conditional password field
 - Frontend: `SchoolTab.jsx` gets "Passwords" section for password management
 - **Critical:** Expiry policies (date-based, max-uses, manual toggle, whichever comes first)
 
@@ -290,41 +291,66 @@ async recordUsage(passwordId, playerId) {
 
 **File:** `server/routes/auth.js`
 
-**Request (NEW parameter):**
+**Request (NEW parameters):**
 ```json
 {
   "name": "alice",
   "password": "secret123",
   "email": "alice@example.com",
-  "schoolPassword": "spring2026 (optional, NEW)"
+  "schoolName": "My Poker School (optional, NEW)",
+  "schoolPassword": "spring2026 (required if schoolName provided, NEW)"
 }
 ```
 
-**Note:** `coachId` has been removed from registration. With school-based grouping, role assignment is simplified: password-registered students are `solo_student` by default. Coaches can manage coaching relationships separately (out of scope for Phase 2).
+**Note:** Registration now uses school *name* instead of school ID (user-facing, professional). If `schoolName` provided, `schoolPassword` is required. Students without a school name register as `solo_student` with no school. Students with valid schoolName + schoolPassword register as `coached_student` with school assignment.
+
+---
+
+#### `GET /api/schools/search?q=<name>` (NEW)
+**Search for schools by name (for registration autocomplete)**
+
+**Auth:** No auth required (public registration flow)
+
+**Query Params:**
+- `q` (string, required) — school name substring to search
+
+**Response (200):**
+```json
+{
+  "schools": [
+    { "id": "uuid", "name": "My Poker School", "status": "active" },
+    { "id": "uuid", "name": "Austin Poker Academy", "status": "active" }
+  ]
+}
+```
+
+**Errors:**
+- 400: Missing `q` param
+- 500: Database error
+
+---
 
 **Backend Logic:**
 1. Validate name, password, email (existing validation)
 2. Check if name already taken (existing)
-3. **NEW:** If `schoolPassword` provided:
-   a. Extract school_id from password validation context (determined by schoolPassword uniqueness — or require schoolId param? See note below)
-   b. Call `SchoolPasswordService.validatePassword(schoolId, schoolPassword)`
-   c. If invalid → return 400 with specific error (expired, maxed, disabled, invalid)
-   d. If valid → extract groupId from password record
-4. School capacity check (existing logic, updated to use schoolId from password if provided)
+3. **NEW:** If `schoolName` provided:
+   a. Look up school by name in schools table
+   b. If not found → return 400 "School not found"
+   c. Extract school_id from school record
+   d. Validate that `schoolPassword` was also provided → if missing, return 400 "School password required"
+   e. Call `SchoolPasswordService.validatePassword(school_id, schoolPassword)`
+   f. If invalid → return 400 with specific error (expired, maxed, disabled, invalid)
+   g. If valid → extract groupId from password record
+4. School capacity check (if schoolPassword valid, check if school can add student)
 5. Hash user password with bcrypt (existing)
 6. Create player (existing)
-7. **NEW:** If valid password:
-   a. Assign player to school_id from password
+7. **NEW:** If valid schoolPassword:
+   a. Assign player to school_id
    b. If password.groupId not null → auto-add player to group via GroupRepository
    c. Call `SchoolPasswordService.recordUsage(passwordId, playerId)`
    d. Increment password.uses_count
-8. Assign role: `solo_student` (password-registered students start as solo)
+8. Assign role: `coached_student` if schoolPassword valid; `solo_student` otherwise
 9. Return JWT + player info
-
-**Note:** School passwords are unique per school, but not globally unique (two schools can have the same password "123456"). So we need a way to determine which school the password belongs to. Options:
-- Require both `schoolId` and `schoolPassword` params (explicit)
-- Search all schools for matching password (implicit, slower)
-- Recommend: Add optional `schoolId` param; if omitted, search all schools (user-friendly but slower)
 
 ---
 
@@ -332,12 +358,27 @@ async recordUsage(passwordId, playerId) {
 
 ### Updates: `client/src/pages/RegisterPage.jsx`
 
-Add optional password input field:
-- Label: "School Password (optional)"
-- Hint: "Ask your coach for a school password to join their coaching group"
-- Validation: Shown only if user explicitly types
-- On submit: Include `schoolPassword` in POST body if provided
-- Error handling: Display specific error from server (password expired, maxed, disabled, invalid)
+**New registration flow:**
+1. Name, password, email fields (existing)
+2. **NEW:** School name field (optional, free text input)
+   - Label: "School (optional)"
+   - Hint: "Enter your school name to join a coaching group"
+   - Autocomplete: Fetch school names from DB as user types (debounced)
+   - On selection: Highlight selected school, unlock password field below
+3. **NEW:** School password field (conditional, appears after school selected)
+   - Label: "School Password"
+   - Hint: "Ask your coach for the school password"
+   - Required if school name is filled; error if missing on submit
+   - Validation: Shown only if school is selected
+
+**Frontend logic:**
+- School name input: debounced API call to `GET /api/schools/search?q=name` (returns matching schools)
+- If school selected: password field becomes required + visible
+- If school unselected: password field hidden + optional
+- On submit:
+  - If schoolName filled: both schoolName + schoolPassword required
+  - If schoolName empty: schoolPassword must also be empty
+- Error handling: Display specific error from server (school not found, password expired, maxed, disabled, invalid)
 
 ---
 
