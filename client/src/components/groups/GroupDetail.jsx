@@ -44,7 +44,7 @@ export default function GroupDetail({ group, onEdit, onAddMember, onRemoveMember
   const loadAvailablePlayers = useCallback(async () => {
     try {
       const data = await apiFetch('/api/admin/users?role=coached_student');
-      setAllPlayers(data.users || []);
+      setAllPlayers(data.players || []);
     } catch (err) {
       console.error('Failed to load available players:', err);
     }
