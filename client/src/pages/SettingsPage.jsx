@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { colors } from '../lib/colors.js';
-import { SlidersHorizontal, School, Bell, Building2, Server, User, AlertTriangle } from 'lucide-react';
+import { SlidersHorizontal, School, Bell, Server, User, AlertTriangle } from 'lucide-react';
 import TableDefaultsTab from './settings/TableDefaultsTab.jsx';
 import SchoolTab        from './settings/SchoolTab.jsx';
-import OrgTab           from './settings/OrgTab.jsx';
 import PlatformTab      from './settings/PlatformTab.jsx';
 import ProfileTab       from './settings/ProfileTab.jsx';
 import AlertsTab        from './settings/AlertsTab.jsx';
@@ -14,7 +13,6 @@ const ALL_TABS = [
   { id: 'table-defaults', label: 'Table Defaults', icon: SlidersHorizontal, roles: ['coach','admin','superadmin'],                                                component: TableDefaultsTab },
   { id: 'school',         label: 'School',         icon: School,             roles: ['coach','admin','superadmin'],                                                component: SchoolTab        },
   { id: 'alerts',         label: 'Alerts',         icon: Bell,               roles: ['coach'],                                                                     component: AlertsTab        },
-  { id: 'org',            label: 'Org',            icon: Building2,          roles: ['admin','superadmin'],                                                         component: OrgTab           },
   { id: 'platform',       label: 'Platform',       icon: Server,             roles: ['superadmin'],                                                                 component: PlatformTab      },
   { id: 'profile',        label: 'Profile',        icon: User,               roles: ['coach','admin','superadmin','trial','coached_student','solo_student'],         component: ProfileTab       },
   { id: 'danger-zone',    label: 'Danger Zone',    icon: AlertTriangle,      roles: ['coach','admin','superadmin','trial','coached_student','solo_student'],         component: DangerZoneTab    },
