@@ -153,7 +153,7 @@ function GroupsSection({ schoolId, policy }) {
           : g
         ));
       }
-      setAddingMember(prev => ({ ...prev, [groupId]: '' }));
+      // Don't clear selection—let user add more if available. They can click Add again or select different student.
     } catch (err) {
       setGroupsError(err.message || 'Failed to add member');
       setTimeout(() => setGroupsError(''), 3000);
