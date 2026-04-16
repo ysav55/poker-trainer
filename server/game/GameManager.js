@@ -27,12 +27,20 @@ const { resolve: resolveShowdown, sortBySBProximity } = require('./ShowdownResol
 const ReplayEngine = require('./ReplayEngine');
 
 class GameManager {
-  constructor(tableId) {
+  constructor(tableId, config = {}) {
     this.tableId = tableId;
+    this.config = config;
     this._initState();
   }
 
   _initState() {
+    // max_players: clamp to [1, 9] range. Default to 9 if not provided or invalid.
+    let maxPlayers = this.config?.max_players ?? 9;
+    if (!Number.isInteger(maxPlayers) || maxPlayers < 1) {
+      maxPlayers = 9;
+    }
+    maxPlayers = Math.min(maxPlayers, 9);
+
     this.state = {
       table_id: this.tableId,
       mode: 'rng',
@@ -59,6 +67,7 @@ class GameManager {
       side_pots: [],       // SidePot[] built at showdown when ≥1 player is all-in
       last_raise_was_full: true,  // false when last raise was an incomplete all-in (< min raise)
       last_aggressor: null,       // player id of the last player who raised
+      max_players: maxPlayers,    // max number of seated players allowed at this table (1-9)
       playlist_mode: {
         active: false,
         playlistId: null,
@@ -249,7 +258,7 @@ class GameManager {
 
   _nextAvailableSeat() {
     const taken = new Set(this.state.players.filter(p => p.seat >= 0).map(p => p.seat));
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < this.state.max_players; i++) {
       if (!taken.has(i)) return i;
     }
     return null;
@@ -257,7 +266,7 @@ class GameManager {
 
   _nextAvailableSeatForCoach() {
     const taken = new Set(this.state.players.filter(p => p.seat >= 0).map(p => p.seat));
-    for (let i = 8; i >= 0; i--) {
+    for (let i = this.state.max_players - 1; i >= 0; i--) {
       if (!taken.has(i)) return i;
     }
     return null;
