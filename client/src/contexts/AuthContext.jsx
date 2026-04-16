@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { apiFetch } from '../lib/api.js';
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
 
 function parseJwt(token) {
   try {
