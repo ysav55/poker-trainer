@@ -13,14 +13,22 @@ const PRIVACY_OPTIONS = [
   { value: 'private', label: 'Private', desc: 'Invitation only' },
 ];
 
+const MAX_PLAYERS_OPTIONS = [
+  { value: 2, label: 'Heads-Up (2)' },
+  { value: 6, label: '6-Max' },
+  { value: 8, label: '8-Handed' },
+  { value: 9, label: 'Full Ring (9)' },
+];
+
 export default function CreateTableModal({ onClose, onCreated }) {
   const [name, setName]             = useState('');
   const [mode, setMode]             = useState('coached_cash');
-  const [sb, setSb]                 = useState(25);
   const [bb, setBb]                 = useState(50);
   const [startingStack, setStack]   = useState(5000);
+  const [maxPlayers, setMaxPlayers] = useState(9);
   const [privacy, setPrivacy]       = useState('open');
-  const [presets, setPresets]       = useState([]);
+  const [personalPresets, setPersonalPresets] = useState([]);
+  const [blindStructures, setBlindStructures] = useState([]);
   const [saveAsPreset, setSavePreset] = useState(false);
   const [presetName, setPresetName] = useState('');
   const [busy, setBusy]             = useState(false);
@@ -29,9 +37,15 @@ export default function CreateTableModal({ onClose, onCreated }) {
   const [searchQuery, setSearchQuery]       = useState('');
   const [searchResults, setSearchResults]   = useState([]);
 
-  // Load presets on mount
+  // Load personal presets and blind structures on mount
   useEffect(() => {
-    apiFetch('/api/table-presets').then((d) => setPresets(d?.presets ?? [])).catch(() => {});
+    apiFetch('/api/table-presets')
+      .then((d) => setPersonalPresets(d?.presets ?? []))
+      .catch(() => {});
+
+    apiFetch('/api/settings/school/blind-structures')
+      .then((d) => setBlindStructures(d?.structures ?? []))
+      .catch(() => {});
   }, []);
 
   // Debounced player search for private table invites
@@ -45,25 +59,42 @@ export default function CreateTableModal({ onClose, onCreated }) {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const applyPreset = (preset) => {
-    const cfg = preset.config ?? {};
-    if (cfg.sb)            setSb(cfg.sb);
-    if (cfg.bb)            setBb(cfg.bb);
-    if (cfg.startingStack) setStack(cfg.startingStack);
+  const applyPreset = (itemId) => {
+    // Check if it's a personal preset
+    const personalPreset = personalPresets.find((p) => String(p.id) === itemId);
+    if (personalPreset) {
+      const cfg = personalPreset.config ?? {};
+      if (cfg.sb)            {}  // SB is now computed
+      if (cfg.bb)            setBb(cfg.bb);
+      if (cfg.startingStack) setStack(cfg.startingStack);
+      return;
+    }
+
+    // Check if it's a blind structure
+    const blindStructure = blindStructures.find((bs) => String(bs.id) === itemId);
+    if (blindStructure) {
+      setBb(blindStructure.bb);
+      if (blindStructure.max_players) {
+        setMaxPlayers(blindStructure.max_players);
+      }
+      return;
+    }
   };
 
   const handleCreate = async () => {
     if (!name.trim()) { setError('Table name is required.'); return; }
-    if (sb <= 0 || bb <= sb) { setError('Big blind must be greater than small blind.'); return; }
+    if (bb <= 0) { setError('Big blind must be greater than zero.'); return; }
     setBusy(true);
     setError('');
     try {
+      const sb = bb / 2;
       const table = await apiFetch('/api/tables', {
         method: 'POST',
         body: JSON.stringify({
           name: name.trim(),
           mode,
           privacy,
+          max_players: maxPlayers,
           config: { sb, bb, startingStack },
         }),
       });
@@ -108,8 +139,8 @@ export default function CreateTableModal({ onClose, onCreated }) {
           New Table
         </h2>
 
-        {/* Preset loader */}
-        {presets.length > 0 && (
+        {/* Unified Preset Dropdown */}
+        {(personalPresets.length > 0 || blindStructures.length > 0) && (
           <div className="flex flex-col gap-1.5">
             <label className="text-xs tracking-widest uppercase" style={{ color: colors.textMuted }}>Load Preset</label>
             <select
@@ -117,14 +148,34 @@ export default function CreateTableModal({ onClose, onCreated }) {
               style={inputStyle}
               defaultValue=""
               onChange={(e) => {
-                const p = presets.find((x) => String(x.id) === e.target.value);
-                if (p) applyPreset(p);
+                if (e.target.value) applyPreset(e.target.value);
               }}
             >
               <option value="" disabled>Select a preset…</option>
-              {presets.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
+
+              {personalPresets.length > 0 && (
+                <optgroup label="My Presets">
+                  {personalPresets.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </optgroup>
+              )}
+
+              {blindStructures.filter((bs) => bs.source === 'school').length > 0 && (
+                <optgroup label="School Blinds">
+                  {blindStructures.filter((bs) => bs.source === 'school').map((bs) => (
+                    <option key={bs.id} value={bs.id}>{bs.label}</option>
+                  ))}
+                </optgroup>
+              )}
+
+              {blindStructures.filter((bs) => bs.source === 'org').length > 0 && (
+                <optgroup label="Platform Blinds">
+                  {blindStructures.filter((bs) => bs.source === 'org').map((bs) => (
+                    <option key={bs.id} value={bs.id}>{bs.label}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         )}
@@ -164,18 +215,8 @@ export default function CreateTableModal({ onClose, onCreated }) {
           </div>
         </div>
 
-        {/* Blinds */}
+        {/* Big Blind & Max Players */}
         <div className="flex gap-3">
-          <div className="flex flex-col gap-1.5 flex-1">
-            <label className="text-xs tracking-widest uppercase" style={{ color: colors.textMuted }}>Small Blind</label>
-            <input
-              type="number" min="1"
-              className="rounded-lg px-3 py-2 text-sm outline-none w-full"
-              style={inputStyle}
-              value={sb}
-              onChange={(e) => setSb(Number(e.target.value))}
-            />
-          </div>
           <div className="flex flex-col gap-1.5 flex-1">
             <label className="text-xs tracking-widest uppercase" style={{ color: colors.textMuted }}>Big Blind</label>
             <input
@@ -185,6 +226,19 @@ export default function CreateTableModal({ onClose, onCreated }) {
               value={bb}
               onChange={(e) => setBb(Number(e.target.value))}
             />
+          </div>
+          <div className="flex flex-col gap-1.5 flex-1">
+            <label className="text-xs tracking-widest uppercase" style={{ color: colors.textMuted }}>Max Players</label>
+            <select
+              className="rounded-lg px-3 py-2 text-sm outline-none w-full"
+              style={inputStyle}
+              value={maxPlayers}
+              onChange={(e) => setMaxPlayers(Number(e.target.value))}
+            >
+              {MAX_PLAYERS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
         </div>
 
