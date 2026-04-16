@@ -96,6 +96,10 @@ beforeEach(() => {
     TableVisibilityService.removeFromWhitelist.mockReset();
     TableVisibilityService.addGroupToWhitelist.mockReset();
   }
+
+  // Set default return values for service methods that now have structured returns
+  TableVisibilityService.removeFromWhitelist.mockResolvedValue({ removed: true, count: 1 });
+  TableVisibilityService.addToWhitelist.mockResolvedValue(undefined);
 });
 
 // ─── PATCH /api/tables/:id/privacy ────────────────────────────────────────────
@@ -406,7 +410,7 @@ describe('POST /api/tables/:id/whitelist', () => {
     TableRepository.getTable.mockResolvedValueOnce(privateTable);
     getPlayerPermissions.mockResolvedValueOnce(new Set());
     TableVisibilityService.addToWhitelist.mockRejectedValueOnce(
-      new Error('duplicate key value violates unique constraint')
+      new Error('Player is already invited to this table')
     );
 
     const app = buildApp({ user: { id: ownerId } });
@@ -494,7 +498,7 @@ describe('DELETE /api/tables/:id/whitelist/:playerId', () => {
   test('returns 404 when whitelist entry does not exist', async () => {
     TableRepository.getTable.mockResolvedValueOnce(privateTable);
     getPlayerPermissions.mockResolvedValueOnce(new Set());
-    TableVisibilityService.removeFromWhitelist.mockRejectedValueOnce(new Error('no rows affected'));
+    TableVisibilityService.removeFromWhitelist.mockResolvedValueOnce({ removed: false, count: 0 });
 
     const app = buildApp({ user: { id: ownerId } });
     const res = await request(app)

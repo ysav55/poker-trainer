@@ -378,8 +378,8 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
       try {
         await TableVisibilityService.addToWhitelist(req.params.id, playerId, req.user.id);
       } catch (err) {
-        // Check for duplicate constraint violation
-        if (err.message && err.message.includes('duplicate')) {
+        // Check for duplicate whitelist entry
+        if (err.message && err.message.includes('already invited')) {
           return res.status(409).json({
             error: 'conflict',
             message: 'Player is already invited to this table'
@@ -406,17 +406,12 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
       const { playerId } = req.params;
 
       // Remove player from whitelist
-      try {
-        await TableVisibilityService.removeFromWhitelist(req.params.id, playerId);
-      } catch (err) {
-        // Check if no rows were affected (entry not found)
-        if (err.message && (err.message.includes('no rows') || err.code === 'PGRST116')) {
-          return res.status(404).json({
-            error: 'not_found',
-            message: 'Whitelist entry not found'
-          });
-        }
-        throw err;
+      const result = await TableVisibilityService.removeFromWhitelist(req.params.id, playerId);
+      if (!result.removed) {
+        return res.status(404).json({
+          error: 'not_found',
+          message: 'Player not invited to this table'
+        });
       }
 
       res.status(204).end();

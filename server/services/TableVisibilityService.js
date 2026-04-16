@@ -138,11 +138,29 @@ const TableVisibilityService = {
    * @returns {Promise<void>}
    */
   async addToWhitelist(tableId, playerId, invitedBy) {
-    const { error } = await supabase.from('invited_players').upsert(
-      { table_id: tableId, player_id: playerId, added_by: invitedBy },
-      { onConflict: 'table_id,player_id', ignoreDuplicates: true }
-    );
-    if (error) throw error;
+    // Check if player already exists on whitelist
+    const { data: existing, error: checkError } = await supabase
+      .from('invited_players')
+      .select('id')
+      .eq('table_id', tableId)
+      .eq('player_id', playerId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      throw checkError; // Real error, not "no rows"
+    }
+
+    if (existing) {
+      // Player already whitelisted
+      throw new Error('Player is already invited to this table');
+    }
+
+    // Insert new whitelist entry
+    const { error: insertError } = await supabase
+      .from('invited_players')
+      .insert({ table_id: tableId, player_id: playerId, added_by: invitedBy });
+
+    if (insertError) throw insertError;
   },
 
   /**
@@ -150,15 +168,20 @@ const TableVisibilityService = {
    *
    * @param {string} tableId — table ID
    * @param {string} playerId — player UUID to remove
-   * @returns {Promise<void>}
+   * @returns {Promise<{removed: boolean, count: number}>}
    */
   async removeFromWhitelist(tableId, playerId) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('invited_players')
       .delete()
       .eq('table_id', tableId)
-      .eq('player_id', playerId);
+      .eq('player_id', playerId)
+      .select('id');
+
     if (error) throw error;
+
+    // Return count of affected rows
+    return { removed: data && data.length > 0, count: data ? data.length : 0 };
   },
 
   /**
