@@ -166,7 +166,7 @@ export default function StudentDashboardPage() {
           <MistakesSection mistakes={mistakes} playerId={playerId} />
         </div>
         <div>
-          <GroupsSection groups={groups} playerId={playerId} />
+          <GroupsSection groups={groups} playerId={playerId} onGroupsChange={loadData} />
         </div>
 
         {/* Row 4: Recent Hands | Staking */}
