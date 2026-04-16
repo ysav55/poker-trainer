@@ -404,6 +404,17 @@ function AdjustmentModal({ onClose, onSave, currentMakeup }) {
 // ─── Contract Edit Modal ──────────────────────────────────────────────────────
 
 function ContractModal({ contract, players, onClose, onSave }) {
+  // ── Initialize form with fallback defaults ─────────────────────────────────
+  const defaultForm = {
+    player_id:       '',
+    coach_split_pct: 50,
+    makeup_policy:   'carries',
+    bankroll_cap:    '',
+    start_date:      new Date().toISOString().slice(0, 10),
+    end_date:        '',
+    notes:           '',
+  };
+
   const [form, setForm] = useState(contract ? {
     player_id:       contract.player_id,
     coach_split_pct: contract.coach_split_pct,
@@ -412,17 +423,30 @@ function ContractModal({ contract, players, onClose, onSave }) {
     start_date:      contract.start_date,
     end_date:        contract.end_date ?? '',
     notes:           contract.notes ?? '',
-  } : {
-    player_id:       '',
-    coach_split_pct: 50,
-    makeup_policy:   'carries',
-    bankroll_cap:    '',
-    start_date:      new Date().toISOString().slice(0, 10),
-    end_date:        '',
-    notes:           '',
-  });
+  } : defaultForm);
+
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  // ── Pre-fill from school staking defaults on mount (new contract only) ──────
+  useEffect(() => {
+    // Only fetch school settings when creating a new contract, not editing
+    if (contract) return;
+
+    apiFetch('/api/settings/school')
+      .then((data) => {
+        const stakingDefaults = data.stakingDefaults || {};
+        setForm(f => ({
+          ...f,
+          coach_split_pct: stakingDefaults.coach_split_pct ?? 50,
+          makeup_policy:   stakingDefaults.makeup_policy ?? 'carries',
+          bankroll_cap:    stakingDefaults.bankroll_cap ? String(stakingDefaults.bankroll_cap) : '',
+        }));
+      })
+      .catch(() => {
+        // If school settings fetch fails, form already has fallback defaults
+      });
+  }, [contract]); // Only depend on contract, since it's stable
 
   async function handleSave() {
     setErr('');
