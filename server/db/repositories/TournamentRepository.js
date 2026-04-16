@@ -142,7 +142,7 @@ const TournamentRepository = {
    * Create a standalone tournament (not tied to a table).
    * Returns the new tournament UUID.
    */
-  async createTournament({ name, blindStructure = [], startingStack = 10000, rebuyAllowed = false, addonAllowed = false, createdBy = null }) {
+  async createTournament({ name, blindStructure = [], startingStack = 10000, rebuyAllowed = false, addonAllowed = false, createdBy = null, schoolId = null, privacy = 'open' }) {
     const { data, error } = await supabase
       .from('tournaments')
       .insert({
@@ -152,6 +152,8 @@ const TournamentRepository = {
         rebuy_allowed:    rebuyAllowed,
         addon_allowed:    addonAllowed,
         created_by:       createdBy,
+        school_id:        schoolId,
+        privacy:          privacy,
       })
       .select('id')
       .single();
@@ -274,6 +276,160 @@ const TournamentRepository = {
       .eq('id', id);
     if (uErr) throw uErr;
     return next;
+  },
+
+  /**
+   * Check if a player can see a tournament based on privacy level.
+   * @param {string} playerId — player UUID
+   * @param {object} tournament — tournament object with id, privacy, school_id
+   * @returns {Promise<boolean>}
+   */
+  async canPlayerSeeTournament(playerId, tournament) {
+    if (!tournament) return false;
+
+    // Open tournaments are always visible
+    if (tournament.privacy === 'open') return true;
+
+    // Get player's school_id
+    const { data: playerData } = await supabase
+      .from('player_profiles')
+      .select('school_id')
+      .eq('id', playerId)
+      .single();
+
+    const playerSchoolId = playerData?.school_id;
+
+    // School-scoped visibility
+    if (tournament.privacy === 'school') {
+      if (!playerSchoolId || !tournament.school_id) return false;
+      return playerSchoolId === tournament.school_id;
+    }
+
+    // Private tournament visibility
+    if (tournament.privacy === 'private') {
+      return await this.isPlayerWhitelisted(tournament.id, playerId);
+    }
+
+    return false;
+  },
+
+  /**
+   * Check if a player is whitelisted on a private tournament.
+   * @param {string} tournamentId — tournament ID
+   * @param {string} playerId — player UUID
+   * @returns {Promise<boolean>}
+   */
+  async isPlayerWhitelisted(tournamentId, playerId) {
+    const { data, error } = await supabase
+      .from('tournament_whitelist')
+      .select('player_id')
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', playerId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+    return data != null;
+  },
+
+  /**
+   * Add a player to a tournament's whitelist.
+   * @param {string} tournamentId — tournament ID
+   * @param {string} playerId — player UUID to invite
+   * @param {string} invitedBy — player UUID who added them
+   * @returns {Promise<void>}
+   */
+  async addToWhitelist(tournamentId, playerId, invitedBy) {
+    const { data: existing, error: checkError } = await supabase
+      .from('tournament_whitelist')
+      .select('id')
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', playerId)
+      .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      throw checkError; // Real error, not "no rows"
+    }
+
+    if (existing) {
+      throw new Error('Player is already invited to this tournament');
+    }
+
+    const { error: insertError } = await supabase
+      .from('tournament_whitelist')
+      .insert({ tournament_id: tournamentId, player_id: playerId, invited_by: invitedBy });
+
+    if (insertError) throw insertError;
+  },
+
+  /**
+   * Remove a player from a tournament's whitelist.
+   * @param {string} tournamentId — tournament ID
+   * @param {string} playerId — player UUID to remove
+   * @returns {Promise<{removed: boolean, count: number}>}
+   */
+  async removeFromWhitelist(tournamentId, playerId) {
+    const { data, error } = await supabase
+      .from('tournament_whitelist')
+      .delete()
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', playerId)
+      .select('id');
+
+    if (error) throw error;
+
+    return { removed: data && data.length > 0, count: data ? data.length : 0 };
+  },
+
+  /**
+   * Get the whitelist for a private tournament.
+   * Returns: [{ playerId, displayName, invitedBy, invitedByName, invitedAt }, ...]
+   * @param {string} tournamentId — tournament ID
+   * @returns {Promise<Array>}
+   */
+  async getWhitelist(tournamentId) {
+    const { data, error } = await supabase
+      .from('tournament_whitelist')
+      .select(`
+        player_id,
+        invited_by,
+        invited_at,
+        player_profiles!player_id(display_name),
+        player_profiles_by_invited_by:player_profiles!invited_by(display_name)
+      `)
+      .eq('tournament_id', tournamentId)
+      .order('invited_at', { ascending: true });
+
+    if (error) throw error;
+
+    return (data ?? []).map(row => ({
+      playerId: row.player_id,
+      displayName: row.player_profiles?.display_name || 'Unknown',
+      invitedBy: row.invited_by,
+      invitedByName: row.player_profiles_by_invited_by?.display_name || 'System',
+      invitedAt: row.invited_at,
+    }));
+  },
+
+  /**
+   * Update tournament privacy and school_id.
+   * @param {string} id — tournament ID
+   * @param {string} privacy — 'open', 'school', or 'private'
+   * @param {string} schoolId — school UUID (required if privacy is 'school')
+   * @returns {Promise<object>} — updated tournament
+   */
+  async updatePrivacy(id, privacy, schoolId) {
+    const update = { privacy };
+    if (schoolId !== undefined) update.school_id = schoolId;
+
+    const { data, error } = await supabase
+      .from('tournaments')
+      .update(update)
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return data;
   },
 };
 

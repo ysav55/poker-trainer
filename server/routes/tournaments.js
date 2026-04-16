@@ -32,6 +32,8 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
         startingStack  = 10000,
         rebuyAllowed   = false,
         addonAllowed   = false,
+        schoolId       = null,
+        privacy        = 'open',
       } = req.body ?? {};
 
       if (!name || typeof name !== 'string' || !name.trim()) {
@@ -39,6 +41,9 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
       }
       if (!Array.isArray(blindStructure) || blindStructure.length === 0) {
         return res.status(400).json({ error: 'blindStructure must be a non-empty array' });
+      }
+      if (!['open', 'school', 'private'].includes(privacy)) {
+        return res.status(400).json({ error: 'privacy must be open, school, or private' });
       }
 
       const id = await TournamentRepository.createTournament({
@@ -48,6 +53,8 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
         rebuyAllowed,
         addonAllowed,
         createdBy: req.user.id,
+        schoolId,
+        privacy,
       });
 
       res.status(201).json({ id });
@@ -56,11 +63,19 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
     }
   });
 
-  // GET /api/tournaments — list all tournaments
+  // GET /api/tournaments — list all tournaments filtered by visibility
   app.get('/api/tournaments', ...coachOnly, async (req, res) => {
     try {
-      const tournaments = await TournamentRepository.listTournaments();
-      res.json({ tournaments });
+      const allTournaments = await TournamentRepository.listTournaments();
+      const visibleTournaments = [];
+
+      for (const tournament of allTournaments) {
+        const canSee = await TournamentRepository.canPlayerSeeTournament(req.user.id, tournament);
+        if (!canSee) continue;
+        visibleTournaments.push(tournament);
+      }
+
+      res.json({ tournaments: visibleTournaments });
     } catch (err) {
       res.status(500).json({ error: 'internal_error', message: err.message });
     }
@@ -162,6 +177,57 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
       const currentLevel = levels[nextIndex] ?? null;
 
       res.json({ current_level_index: nextIndex, currentLevel });
+    } catch (err) {
+      res.status(500).json({ error: 'internal_error', message: err.message });
+    }
+  });
+
+  // PATCH /api/tournaments/:id/privacy — update privacy and school_id
+  app.patch('/api/tournaments/:id/privacy', ...coachOnly, async (req, res) => {
+    try {
+      const { privacy, schoolId } = req.body ?? {};
+      if (!privacy || !['open', 'school', 'private'].includes(privacy)) {
+        return res.status(400).json({ error: 'privacy must be open, school, or private' });
+      }
+
+      const tournament = await TournamentRepository.updatePrivacy(req.params.id, privacy, schoolId);
+      res.json(tournament);
+    } catch (err) {
+      res.status(500).json({ error: 'internal_error', message: err.message });
+    }
+  });
+
+  // POST /api/tournaments/:id/whitelist — add player to private tournament
+  app.post('/api/tournaments/:id/whitelist', ...coachOnly, async (req, res) => {
+    try {
+      const { playerId } = req.body ?? {};
+      if (!playerId) return res.status(400).json({ error: 'playerId is required' });
+
+      await TournamentRepository.addToWhitelist(req.params.id, playerId, req.user.id);
+      res.status(201).json({ success: true });
+    } catch (err) {
+      if (err.message.includes('already invited')) {
+        return res.status(409).json({ error: 'already_invited', message: err.message });
+      }
+      res.status(500).json({ error: 'internal_error', message: err.message });
+    }
+  });
+
+  // DELETE /api/tournaments/:id/whitelist/:playerId — remove player from whitelist
+  app.delete('/api/tournaments/:id/whitelist/:playerId', ...coachOnly, async (req, res) => {
+    try {
+      const result = await TournamentRepository.removeFromWhitelist(req.params.id, req.params.playerId);
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: 'internal_error', message: err.message });
+    }
+  });
+
+  // GET /api/tournaments/:id/whitelist — get tournament whitelist
+  app.get('/api/tournaments/:id/whitelist', ...coachOnly, async (req, res) => {
+    try {
+      const whitelist = await TournamentRepository.getWhitelist(req.params.id);
+      res.json({ whitelist });
     } catch (err) {
       res.status(500).json({ error: 'internal_error', message: err.message });
     }
