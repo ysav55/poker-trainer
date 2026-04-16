@@ -2,6 +2,8 @@
 
 const supabase = require('../db/supabase');
 const CRMRepo = require('../db/repositories/CRMRepository.js');
+const SettingsService = require('../services/SettingsService.js');
+const { findById: findPlayerById } = require('../db/repositories/PlayerRepository.js');
 
 module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger }) {
 
@@ -70,14 +72,25 @@ module.exports = function registerPlayerRoutes(app, { requireAuth, HandLogger })
   });
 
   // GET /api/players?period=7d|30d|all&gameType=cash|tournament|all
+  // Response includes leaderboardConfig resolved from caller's school context
   app.get('/api/players', requireAuth, async (req, res) => {
     try {
       const VALID_PERIODS    = ['7d', '30d', 'all'];
       const VALID_GAME_TYPES = ['cash', 'tournament', 'all'];
       const period   = VALID_PERIODS.includes(req.query.period)    ? req.query.period    : 'all';
       const gameType = VALID_GAME_TYPES.includes(req.query.gameType) ? req.query.gameType : 'all';
-      const players = await HandLogger.getAllPlayersWithStats({ period, gameType });
-      res.json({ players });
+
+      // Fetch caller's school_id to resolve leaderboard config
+      const callerProfile = await findPlayerById(req.user.id);
+      const schoolId = callerProfile?.school_id ?? null;
+
+      // Fetch players and leaderboard config in parallel
+      const [players, leaderboardConfig] = await Promise.all([
+        HandLogger.getAllPlayersWithStats({ period, gameType }),
+        SettingsService.resolveLeaderboardConfig(schoolId),
+      ]);
+
+      res.json({ players, leaderboardConfig });
     } catch (err) {
       res.status(500).json({ error: 'internal_error' });
     }

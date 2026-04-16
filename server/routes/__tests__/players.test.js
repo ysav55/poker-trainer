@@ -14,6 +14,19 @@
 // Mock supabase so that requiring players.js doesn't throw due to missing env vars
 jest.mock('../../db/supabase', () => ({}));
 
+// Mock SettingsService
+jest.mock('../../services/SettingsService.js', () => ({
+  resolveLeaderboardConfig: jest.fn().mockResolvedValue({
+    value: { primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' },
+    source: 'hardcoded',
+  }),
+}));
+
+// Mock PlayerRepository
+jest.mock('../../db/repositories/PlayerRepository.js', () => ({
+  findById: jest.fn().mockResolvedValue({ id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', school_id: 'school-123' }),
+}));
+
 const express = require('express');
 const request = require('supertest');
 
@@ -136,5 +149,52 @@ describe('GET /api/players/:stableId/stats', () => {
     const res = await request(app).get(`/api/players/${PLAYER_ID}/stats`);
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ error: 'internal_error' });
+  });
+});
+
+describe('GET /api/players', () => {
+  const SCHOOL_ID = 'school-aaa';
+
+  test('returns 200 with players and leaderboardConfig', async () => {
+    const mockPlayers = [
+      { stableId: 'player-1', name: 'Alice', net_chips: 500 },
+      { stableId: 'player-2', name: 'Bob', net_chips: 300 },
+    ];
+
+    const mockLeaderboardConfig = {
+      value: { primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' },
+      source: 'hardcoded',
+    };
+
+    const app = express();
+    app.use(express.json());
+
+    const requireAuth = (req, res, next) => {
+      req.user = { id: PLAYER_ID, stableId: PLAYER_ID };
+      next();
+    };
+
+    // Create a minimal test app by bypassing the normal players.js module loading
+    // We'll need to refactor players.js to accept SettingsService as a parameter
+    const HandLogger = {
+      getAllPlayersWithStats: jest.fn().mockResolvedValue(mockPlayers),
+      getPlayerStatsByMode: jest.fn(),
+    };
+
+    const registerPlayerRoutes = require('../../routes/players');
+    registerPlayerRoutes(app, { requireAuth, HandLogger });
+
+    const res = await request(app)
+      .get('/api/players?period=7d&gameType=cash');
+
+    expect(res.status).toBe(200);
+    expect(res.body.players).toEqual(mockPlayers);
+    // Once implemented, the response should include leaderboardConfig
+    expect(res.body).toHaveProperty('leaderboardConfig');
+    expect(res.body.leaderboardConfig).toHaveProperty('value');
+    expect(res.body.leaderboardConfig).toHaveProperty('source');
+    expect(res.body.leaderboardConfig.value).toHaveProperty('primary_metric');
+    expect(res.body.leaderboardConfig.value).toHaveProperty('secondary_metric');
+    expect(res.body.leaderboardConfig.value).toHaveProperty('update_frequency');
   });
 });
