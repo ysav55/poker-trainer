@@ -108,7 +108,7 @@ describe('POST /api/tournaments — privacy validation', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('forbidden_privacy');
-    expect(res.body.message).toContain('Only admins can create open tables');
+    expect(res.body.message).toContain('Only admins can create open tournaments');
     expect(mockCreateTournament).not.toHaveBeenCalled();
   });
 

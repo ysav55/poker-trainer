@@ -52,7 +52,7 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
       if (privacy === 'open' && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
         return res.status(400).json({
           error: 'forbidden_privacy',
-          message: 'Only admins can create open tables',
+          message: 'Only admins can create open tournaments',
         });
       }
 
