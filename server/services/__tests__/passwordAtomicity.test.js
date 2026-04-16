@@ -95,8 +95,9 @@ describe('Password Increment Atomicity (Unit Tests)', () => {
         active: true,
       };
 
+      // When expires_at is null, short-circuit evaluation returns null (falsy)
       const isExpired = password.expires_at && new Date(password.expires_at) < new Date();
-      expect(isExpired).toBe(false);
+      expect(!isExpired).toBe(true);  // falsy check instead of explicit false
     });
   });
 
