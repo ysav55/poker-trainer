@@ -120,6 +120,60 @@ async function resetTableDefaults(scope, scopeId) {
   await _deleteRows(scope, scopeId, 'table.');
 }
 
+// ─── Leaderboard config cascade ───────────────────────────────────────────────
+
+const LEADERBOARD_HARDCODED = {
+  primary_metric:   'net_chips',
+  secondary_metric: 'win_rate',
+  update_frequency: 'after_session',
+};
+
+/**
+ * Resolve leaderboard config for a school caller.
+ * Returns { value: {...}, source: 'school' | 'org' | 'hardcoded' }
+ * @param {string|null} schoolId
+ */
+async function resolveLeaderboardConfig(schoolId) {
+  const [schoolVal, orgVal] = await Promise.all([
+    schoolId ? getSchoolSetting(schoolId, 'school.leaderboard') : Promise.resolve(null),
+    getOrgSetting('org.leaderboard'),
+  ]);
+  if (schoolVal) return { value: { ...LEADERBOARD_HARDCODED, ...schoolVal }, source: 'school' };
+  if (orgVal)    return { value: { ...LEADERBOARD_HARDCODED, ...orgVal },    source: 'org' };
+  return { value: LEADERBOARD_HARDCODED, source: 'hardcoded' };
+}
+
+/**
+ * Resolve blind structures: school structures first (full CRUD), then org (read-only).
+ * Each entry is tagged with source: 'school' | 'org'.
+ * @param {string|null} schoolId
+ */
+async function resolveBlindStructures(schoolId) {
+  const [schoolVal, orgVal] = await Promise.all([
+    schoolId ? getSchoolSetting(schoolId, 'school.blind_structures') : Promise.resolve(null),
+    getOrgSetting('org.blind_structures'),
+  ]);
+  const school = Array.isArray(schoolVal) ? schoolVal : [];
+  const org    = Array.isArray(orgVal)    ? orgVal    : [];
+  return [
+    ...school.map(s => ({ ...s, source: 'school' })),
+    ...org.map(s => ({ ...s, source: 'org' })),
+  ];
+}
+
+/**
+ * Delete a school-scope setting row entirely (used for "Reset to platform default").
+ */
+async function deleteSchoolSetting(schoolId, key) {
+  const { error } = await supabase
+    .from('settings')
+    .delete()
+    .eq('scope', 'school')
+    .eq('scope_id', schoolId)
+    .eq('key', key);
+  if (error) throw error;
+}
+
 // ─── Generic org/school key access ───────────────────────────────────────────
 // Used by Phase C (org settings) and Phase D (school settings).
 
@@ -175,6 +229,9 @@ module.exports = {
   resolveTableDefaults,
   saveTableDefaults,
   resetTableDefaults,
+  resolveLeaderboardConfig,
+  resolveBlindStructures,
+  deleteSchoolSetting,
   getOrgSetting,
   setOrgSetting,
   getSchoolSetting,
