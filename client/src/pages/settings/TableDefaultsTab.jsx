@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
-import { SectionHeader, Field, Input, Select, Toggle, SaveButton, Card } from './shared.jsx';
+import { SectionHeader, Field, Input, Select, Toggle, SaveButton, Card, CascadeLabel } from './shared.jsx';
 import { colors } from '../../lib/colors.js';
 
 // ─── Table Defaults helpers ───────────────────────────────────────────────────
@@ -49,17 +49,6 @@ function defaultsApiToForm(apiDefaults) {
     if (field) { form[field] = value; scopeMap[field] = source_scope; }
   }
   return { form, scopeMap };
-}
-
-function CascadeLabel({ field, scopeMap, dirty, isAdmin }) {
-  const isDirty       = dirty.has(field);
-  const isOverridden  = isDirty || scopeMap[field] === 'school' || (isAdmin && scopeMap[field] === 'org');
-  if (!scopeMap[field] && !isDirty) return null;
-  return (
-    <span className="text-xs ml-2" style={{ color: isOverridden ? colors.warning : colors.textMuted }}>
-      {isOverridden ? '(overridden)' : isAdmin ? '(app default)' : '(platform default)'}
-    </span>
-  );
 }
 
 // ─── Tab: Table Defaults ──────────────────────────────────────────────────────

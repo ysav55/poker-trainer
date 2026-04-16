@@ -97,3 +97,23 @@ export function Card({ children }) {
     </div>
   );
 }
+
+/**
+ * Cascade source badge. Shows '(platform default)' when a field inherits
+ * from org/hardcoded, '(overridden)' when the school has set its own value.
+ *
+ * @param {string}  field    - key into scopeMap
+ * @param {Object}  scopeMap - { [field]: 'school' | 'org' | 'hardcoded' }
+ * @param {Set}     dirty    - fields that have been locally changed but not saved
+ * @param {boolean} isAdmin  - admins see 'app default' instead of 'platform default'
+ */
+export function CascadeLabel({ field, scopeMap, dirty, isAdmin }) {
+  const isDirty      = dirty.has(field);
+  const isOverridden = isDirty || scopeMap[field] === 'school' || (isAdmin && scopeMap[field] === 'org');
+  if (!scopeMap[field] && !isDirty) return null;
+  return (
+    <span className="text-xs ml-2" style={{ color: isOverridden ? colors.warning : colors.textMuted }}>
+      {isOverridden ? '(overridden)' : isAdmin ? '(app default)' : '(platform default)'}
+    </span>
+  );
+}
