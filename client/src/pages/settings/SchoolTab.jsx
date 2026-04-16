@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
-import { SectionHeader, Field, Input, Select, Card } from './shared.jsx';
+import { SectionHeader, Field, Input, Select, Card, CascadeLabel } from './shared.jsx';
 import { colors, groupColors as GROUP_COLORS } from '../../lib/colors.js';
 import { Building2, Palette, Sliders, DollarSign, TrendingUp, Globe, Users, Clock, Plus, Trash2, Key } from 'lucide-react';
 
@@ -438,8 +438,18 @@ export default function SchoolTab() {
 
   // Leaderboard
   const [leaderboard, setLeaderboard]   = useState({ primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' });
+  const [lbSource, setLbSource]         = useState('hardcoded');   // 'school' | 'org' | 'hardcoded'
   const [lbSaving, setLbSaving]         = useState(false);
+  const [lbResetting, setLbResetting]   = useState(false);
   const [lbMsg, setLbMsg]               = useState('');
+
+  // Blind Structures
+  const [blindStructures, setBlindStructures]       = useState([]);
+  const [blindLoading, setBlindLoading]             = useState(true);
+  const [newBlind, setNewBlind]                     = useState({ label: '', sb: '', bb: '', ante: '0' });
+  const [addingBlind, setAddingBlind]               = useState(false);
+  const [editingBlind, setEditingBlind]             = useState(null);  // { id, label, sb, bb, ante }
+  const [blindMsg, setBlindMsg]                     = useState('');
 
   // Passwords
   const [passwords, setPasswords]         = useState([]);
@@ -463,7 +473,10 @@ export default function SchoolTab() {
         setSchoolId(sid);
         setPlatforms(school.platforms ?? []);
         setStaking(school.staking_defaults ?? staking);
-        setLeaderboard(school.leaderboard ?? leaderboard);
+        if (school.leaderboard) {
+          setLeaderboard(school.leaderboard.value ?? leaderboard);
+          setLbSource(school.leaderboard.source ?? 'hardcoded');
+        }
 
         // Load passwords if schoolId is available
         if (sid) {
@@ -488,6 +501,13 @@ export default function SchoolTab() {
         }
       })
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    apiFetch('/api/settings/school/blind-structures')
+      .then(data => setBlindStructures(data.structures ?? []))
+      .catch(() => {})
+      .finally(() => setBlindLoading(false));
   }, []);
 
   // ── Identity ─────────────────────────────────────────────────────────────────
@@ -555,9 +575,62 @@ export default function SchoolTab() {
         body: JSON.stringify(leaderboard),
       });
       setLeaderboard(updated);
+      setLbSource('school');
       setLbMsg('Saved.');
     } catch (err) { setLbMsg(err.message || 'Save failed.'); }
     finally { setLbSaving(false); }
+  }
+
+  async function handleResetLeaderboard() {
+    setLbResetting(true); setLbMsg('');
+    try {
+      const resolved = await apiFetch('/api/settings/school/leaderboard', { method: 'DELETE' });
+      setLeaderboard(resolved.value);
+      setLbSource(resolved.source);
+      setLbMsg('Reset to platform default.');
+    } catch (err) { setLbMsg(err.message || 'Reset failed.'); }
+    finally { setLbResetting(false); }
+  }
+
+  // ── Blind Structures ──────────────────────────────────────────────────────────
+
+  async function handleAddBlind(e) {
+    e.preventDefault();
+    if (!newBlind.label.trim() || !newBlind.sb || !newBlind.bb) return;
+    setBlindMsg('');
+    try {
+      const created = await apiFetch('/api/settings/school/blind-structures', {
+        method: 'POST',
+        body: JSON.stringify({ label: newBlind.label.trim(), sb: Number(newBlind.sb), bb: Number(newBlind.bb), ante: Number(newBlind.ante) || 0 }),
+      });
+      setBlindStructures(prev => [
+        ...prev.filter(s => s.source === 'school'),
+        created,
+        ...prev.filter(s => s.source === 'org'),
+      ]);
+      setNewBlind({ label: '', sb: '', bb: '', ante: '0' });
+      setAddingBlind(false);
+    } catch (err) { setBlindMsg(err.message || 'Failed to add.'); }
+  }
+
+  async function handleSaveBlind(s) {
+    setBlindMsg('');
+    try {
+      const updated = await apiFetch(`/api/settings/school/blind-structures/${s.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ label: s.label, sb: Number(s.sb), bb: Number(s.bb), ante: Number(s.ante) }),
+      });
+      setBlindStructures(prev => prev.map(x => x.id === s.id ? updated : x));
+      setEditingBlind(null);
+    } catch (err) { setBlindMsg(err.message || 'Failed to save.'); }
+  }
+
+  async function handleDeleteBlind(id) {
+    setBlindMsg('');
+    try {
+      await apiFetch(`/api/settings/school/blind-structures/${id}`, { method: 'DELETE' });
+      setBlindStructures(prev => prev.filter(s => s.id !== id));
+    } catch (err) { setBlindMsg(err.message || 'Failed to delete.'); }
   }
 
   // ── Passwords ────────────────────────────────────────────────────────────────
@@ -735,7 +808,18 @@ export default function SchoolTab() {
       <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
       {/* ── Leaderboard ── */}
-      <SectionHeader title="Leaderboard" icon={TrendingUp} />
+      {/* CascadeLabel sits beside SectionHeader — NOT inside title, which inherits uppercase/tracking styles */}
+      <div className="flex items-center gap-2 mb-3 mt-5 first:mt-0">
+        <TrendingUp size={14} style={{ color: colors.textMuted }} />
+        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: colors.textMuted }}>Leaderboard</span>
+        {/* CascadeLabel returns null when scopeMap[field] is falsy — 'hardcoded' maps to 'org' so the badge always shows */}
+        <CascadeLabel
+          field="leaderboard"
+          scopeMap={{ leaderboard: lbSource === 'school' ? 'school' : 'org' }}
+          dirty={new Set()}
+          isAdmin={false}
+        />
+      </div>
       <Field label="Primary metric">
         <Select value={leaderboard.primary_metric} onChange={v => setLeaderboard(l => ({ ...l, primary_metric: v }))}>
           {['net_chips', 'bb_per_100', 'win_rate', 'hands_played'].map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
@@ -755,8 +839,96 @@ export default function SchoolTab() {
         <button onClick={handleSaveLeaderboard} disabled={lbSaving} className="px-5 py-2 rounded text-sm font-bold" style={{ background: colors.gold, color: colors.bgSurface, opacity: lbSaving ? 0.6 : 1 }}>
           {lbSaving ? 'Saving…' : 'Save'}
         </button>
-        {lbMsg && <span className="text-xs" style={{ color: lbMsg === 'Saved.' ? colors.success : colors.error }}>{lbMsg}</span>}
+        {lbSource === 'school' && (
+          <button
+            onClick={handleResetLeaderboard}
+            disabled={lbResetting}
+            className="text-xs"
+            style={{ color: colors.textMuted, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            {lbResetting ? 'Resetting…' : 'Reset to platform default'}
+          </button>
+        )}
+        {lbMsg && <span className="text-xs" style={{ color: lbMsg.includes('failed') ? colors.error : colors.success }}>{lbMsg}</span>}
       </div>
+
+      <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
+
+      {/* ── Blind Structures ── */}
+      <SectionHeader title="Blind Structures" icon={Sliders} />
+      <p className="text-xs mb-3" style={{ color: colors.textMuted }}>
+        School-specific presets appear first. Platform presets are read-only.
+      </p>
+
+      {blindLoading ? (
+        <p className="text-xs mb-2" style={{ color: colors.textMuted }}>Loading…</p>
+      ) : (
+        <>
+          {blindStructures.length > 0 && (
+            <div className="rounded-lg overflow-hidden mb-2" style={{ border: `1px solid ${colors.borderStrong}` }}>
+              {blindStructures.map((s, i) => {
+                const isEditing = editingBlind?.id === s.id;
+                const ed = editingBlind ?? s;
+                const isOrg = s.source === 'org';
+
+                // Divider before first org entry
+                const prevIsSchool = i > 0 && blindStructures[i - 1].source === 'school';
+                const showDivider  = isOrg && prevIsSchool;
+
+                return (
+                  <React.Fragment key={s.id}>
+                    {showDivider && (
+                      <div className="px-4 py-1 text-xs font-bold uppercase tracking-widest" style={{ color: colors.textMuted, background: colors.bgSurface, borderTop: `1px solid ${colors.borderDefault}`, borderBottom: `1px solid ${colors.borderDefault}` }}>
+                        Platform presets
+                      </div>
+                    )}
+                    <div
+                      className="flex items-center gap-3 px-4 py-2.5"
+                      style={{ borderBottom: i < blindStructures.length - 1 ? `1px solid ${colors.borderDefault}` : 'none', opacity: isOrg ? 0.7 : 1 }}
+                    >
+                      {isEditing ? (
+                        <>
+                          <input value={ed.label} onChange={e => setEditingBlind(x => ({ ...x, label: e.target.value }))} className={inputCls} style={{ ...inputStyle, width: 90 }} placeholder="Label" />
+                          <input value={ed.sb}    onChange={e => setEditingBlind(x => ({ ...x, sb: e.target.value }))}    className={inputCls} style={{ ...inputStyle, width: 60 }} placeholder="SB" type="number" />
+                          <input value={ed.bb}    onChange={e => setEditingBlind(x => ({ ...x, bb: e.target.value }))}    className={inputCls} style={{ ...inputStyle, width: 60 }} placeholder="BB" type="number" />
+                          <input value={ed.ante}  onChange={e => setEditingBlind(x => ({ ...x, ante: e.target.value }))}  className={inputCls} style={{ ...inputStyle, width: 60 }} placeholder="Ante" type="number" />
+                          <button onClick={() => handleSaveBlind(editingBlind)} className="text-xs font-semibold" style={{ color: colors.gold }}>Save</button>
+                          <button onClick={() => setEditingBlind(null)} className="text-xs" style={{ color: colors.textMuted }}>Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-24 font-semibold text-sm" style={{ color: colors.textPrimary }}>{s.label}</span>
+                          <span className="text-sm flex-1" style={{ color: colors.textMuted }}>{s.sb}/{s.bb}{s.ante > 0 ? ` · ante ${s.ante}` : ''}</span>
+                          {!isOrg && (
+                            <>
+                              <button onClick={() => setEditingBlind({ ...s })} className="text-xs" style={{ color: colors.gold }}>Edit</button>
+                              <button onClick={() => handleDeleteBlind(s.id)} className="text-xs" style={{ color: colors.error }}>✕</button>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          )}
+
+          {!addingBlind ? (
+            <button onClick={() => setAddingBlind(true)} className="text-sm font-semibold mb-3" style={{ color: colors.gold }}>+ Add School Preset</button>
+          ) : (
+            <form onSubmit={handleAddBlind} className="flex flex-wrap gap-2 mb-3 items-end">
+              <input value={newBlind.label} onChange={e => setNewBlind(x => ({ ...x, label: e.target.value }))} className={inputCls} style={{ ...inputStyle, width: 100 }} placeholder="Label" />
+              <input value={newBlind.sb}    onChange={e => setNewBlind(x => ({ ...x, sb: e.target.value }))}    className={inputCls} style={{ ...inputStyle, width: 70 }} placeholder="SB" type="number" />
+              <input value={newBlind.bb}    onChange={e => setNewBlind(x => ({ ...x, bb: e.target.value }))}    className={inputCls} style={{ ...inputStyle, width: 70 }} placeholder="BB" type="number" />
+              <input value={newBlind.ante}  onChange={e => setNewBlind(x => ({ ...x, ante: e.target.value }))}  className={inputCls} style={{ ...inputStyle, width: 70 }} placeholder="Ante" type="number" />
+              <button type="submit" className="px-3 py-1.5 rounded text-sm font-semibold" style={{ background: colors.gold, color: colors.bgSurface }}>Add</button>
+              <button type="button" onClick={() => setAddingBlind(false)} className="text-sm" style={{ color: colors.textMuted }}>Cancel</button>
+            </form>
+          )}
+          {blindMsg && <p className="text-xs mb-2" style={{ color: colors.error }}>{blindMsg}</p>}
+        </>
+      )}
 
       <div className="my-4" style={{ borderTop: `1px solid ${colors.borderDefault}` }} />
 
