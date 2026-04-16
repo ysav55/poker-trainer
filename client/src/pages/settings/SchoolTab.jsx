@@ -448,7 +448,7 @@ export default function SchoolTab() {
   const [passwordFormData, setPasswordFormData] = useState({
     plainPassword: '',
     source: '',
-    maxUses: 1,
+    maxUses: 999999,
     expiresAt: '',
     groupId: '',
   });
@@ -567,6 +567,10 @@ export default function SchoolTab() {
       setPasswordError('Password is required.');
       return;
     }
+    if (passwordFormData.plainPassword.trim().length < 4) {
+      setPasswordError('Password must be at least 4 characters.');
+      return;
+    }
     setPasswordSaving(true);
     setPasswordError('');
     try {
@@ -582,7 +586,7 @@ export default function SchoolTab() {
         body: JSON.stringify(payload),
       });
       setPasswords(prev => [...prev, newPassword]);
-      setPasswordFormData({ plainPassword: '', source: '', maxUses: 1, expiresAt: '', groupId: '' });
+      setPasswordFormData({ plainPassword: '', source: '', maxUses: 999999, expiresAt: '', groupId: '' });
       setShowPasswordModal(false);
     } catch (err) {
       setPasswordError(err.message || 'Failed to create password.');
