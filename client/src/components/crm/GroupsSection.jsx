@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { colors } from '../../lib/colors'
 import { apiFetch } from '../../lib/api'
 import CollapsibleSection from '../CollapsibleSection'
@@ -23,9 +23,14 @@ function resolveColor(color) {
 export default function GroupsSection({ groups, playerId, onGroupsChange }) {
   const [showPicker, setShowPicker] = useState(false)
   const [availableGroups, setAvailableGroups] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [addLoading, setAddLoading] = useState(false)
+  const [removingGroupId, setRemovingGroupId] = useState(null)
+  const [error, setError] = useState(null)
 
+  // Only fetch available groups when picker opens (false → true transition)
   useEffect(() => {
+    if (!showPicker) return
+
     async function fetchAvailable() {
       try {
         const res = await apiFetch('/api/admin/groups/my-school')
@@ -34,14 +39,16 @@ export default function GroupsSection({ groups, playerId, onGroupsChange }) {
         setAvailableGroups(allGroups.filter((g) => !assignedIds.has(g.id)))
       } catch (err) {
         console.error('GroupsSection: failed to fetch available groups', err)
+        setError('Failed to load available groups.')
       }
     }
     fetchAvailable()
-  }, [groups])
+  }, [showPicker, groups])
 
   async function handleAdd(groupId) {
     if (!groupId) return
-    setLoading(true)
+    setAddLoading(true)
+    setError(null)
     try {
       await apiFetch(`/api/admin/groups/${groupId}/members`, {
         method: 'POST',
@@ -51,13 +58,15 @@ export default function GroupsSection({ groups, playerId, onGroupsChange }) {
       onGroupsChange?.()
     } catch (err) {
       console.error('GroupsSection: failed to add member', err)
+      setError('Failed to add player to group.')
     } finally {
-      setLoading(false)
+      setAddLoading(false)
     }
   }
 
   async function handleRemove(groupId) {
-    setLoading(true)
+    setRemovingGroupId(groupId)
+    setError(null)
     try {
       await apiFetch(`/api/admin/groups/${groupId}/members/${playerId}`, {
         method: 'DELETE',
@@ -65,10 +74,13 @@ export default function GroupsSection({ groups, playerId, onGroupsChange }) {
       onGroupsChange?.()
     } catch (err) {
       console.error('GroupsSection: failed to remove member', err)
+      setError('Failed to remove player from group.')
     } finally {
-      setLoading(false)
+      setRemovingGroupId(null)
     }
   }
+
+  const isBusy = addLoading || removingGroupId !== null
 
   return (
     <CollapsibleSection
@@ -78,14 +90,14 @@ export default function GroupsSection({ groups, playerId, onGroupsChange }) {
       headerExtra={
         <button
           onClick={() => setShowPicker((v) => !v)}
-          disabled={loading}
+          disabled={isBusy}
           className="text-xs px-2 py-1 rounded hover:opacity-80"
           style={{
             background: colors.bgSurface,
             border: `1px solid ${colors.borderDefault}`,
             color: colors.gold,
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.5 : 1,
+            cursor: isBusy ? 'not-allowed' : 'pointer',
+            opacity: isBusy ? 0.5 : 1,
           }}
         >
           <Plus size={12} className="inline mr-1" />
@@ -94,17 +106,34 @@ export default function GroupsSection({ groups, playerId, onGroupsChange }) {
       }
     >
       <div className="space-y-2">
+        {/* Error banner */}
+        {error && (
+          <p className="text-xs px-2 py-1 rounded" style={{ color: colors.error, background: `${colors.error}18` }}>
+            {error}
+          </p>
+        )}
+
         {showPicker && (
           <div className="mb-2">
             {availableGroups.length === 0 ? (
-              <p className="text-xs" style={{ color: colors.textMuted }}>
-                No groups available to add
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs" style={{ color: colors.textMuted }}>
+                  No groups available to add
+                </p>
+                <button
+                  onClick={() => setShowPicker(false)}
+                  className="hover:opacity-80"
+                  style={{ background: 'none', border: 'none', color: colors.textMuted, cursor: 'pointer' }}
+                  title="Close"
+                >
+                  <X size={12} />
+                </button>
+              </div>
             ) : (
               <select
                 autoFocus
                 defaultValue=""
-                disabled={loading}
+                disabled={addLoading}
                 onChange={(e) => handleAdd(e.target.value)}
                 className="text-xs w-full rounded px-2 py-1"
                 style={{
@@ -132,41 +161,44 @@ export default function GroupsSection({ groups, playerId, onGroupsChange }) {
             Not assigned to any groups
           </p>
         ) : (
-          groups.map((group) => (
-            <div
-              key={group.id}
-              className="p-2 rounded flex items-center justify-between"
-              style={{
-                background: colors.bgSurface,
-                border: `1px solid ${colors.borderDefault}`,
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{ background: resolveColor(group.color) }}
-                />
-                <span className="text-xs" style={{ color: colors.textSecondary }}>
-                  {group.name}
-                </span>
-              </div>
-              <button
-                onClick={() => handleRemove(group.id)}
-                disabled={loading}
-                className="text-xs hover:opacity-80"
+          groups.map((group) => {
+            const isRemoving = removingGroupId === group.id
+            return (
+              <div
+                key={group.id}
+                className="p-2 rounded flex items-center justify-between"
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  color: colors.error,
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.5 : 1,
+                  background: colors.bgSurface,
+                  border: `1px solid ${colors.borderDefault}`,
                 }}
-                title="Remove from group"
               >
-                ✕
-              </button>
-            </div>
-          ))
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ background: resolveColor(group.color) }}
+                  />
+                  <span className="text-xs" style={{ color: colors.textSecondary }}>
+                    {group.name}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleRemove(group.id)}
+                  disabled={isRemoving}
+                  className="text-xs hover:opacity-80"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: colors.error,
+                    cursor: isRemoving ? 'not-allowed' : 'pointer',
+                    opacity: isRemoving ? 0.5 : 1,
+                  }}
+                  title="Remove from group"
+                >
+                  {isRemoving ? '…' : '✕'}
+                </button>
+              </div>
+            )
+          })
         )}
       </div>
     </CollapsibleSection>
