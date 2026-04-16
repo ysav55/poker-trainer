@@ -198,7 +198,7 @@ router.get('/school', async (req, res) => {
     const [stakingDefaults, platforms, leaderboard] = await Promise.all([
       SettingsService.getSchoolSetting(school.id, 'school.staking_defaults'),
       SettingsService.getSchoolSetting(school.id, 'school.platforms'),
-      SettingsService.getSchoolSetting(school.id, 'school.leaderboard'),
+      SettingsService.resolveLeaderboardConfig(school.id),
     ]);
 
     return res.json({
@@ -211,12 +211,7 @@ router.get('/school', async (req, res) => {
         ...(stakingDefaults ?? {}),
       },
       platforms: platforms?.platforms ?? ['PokerStars', 'GGPoker', 'Live Games'],
-      leaderboard: {
-        primary_metric:   'net_chips',
-        secondary_metric: 'win_rate',
-        update_frequency: 'after_session',
-        ...(leaderboard ?? {}),
-      },
+      leaderboard,
     });
   } catch (err) {
     return res.status(500).json({ error: 'internal_error', message: err.message });
@@ -335,6 +330,128 @@ router.put('/school/leaderboard', async (req, res) => {
     };
     await SettingsService.setSchoolSetting(school.id, 'school.leaderboard', updated);
     return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ── DELETE /api/settings/school/leaderboard ───────────────────────────────────
+// Removes school-scope override — falls back to org/hardcoded default.
+router.delete('/school/leaderboard', async (req, res) => {
+  if (!SCHOOL_ROLES.has(req.user.role))
+    return res.status(403).json({ error: 'forbidden' });
+
+  try {
+    const school = await _callerSchool(req.user.stableId);
+    if (!school) return res.status(404).json({ error: 'no_school' });
+
+    await SettingsService.deleteSchoolSetting(school.id, 'school.leaderboard');
+    const resolved = await SettingsService.resolveLeaderboardConfig(school.id);
+    return res.json(resolved);
+  } catch (err) {
+    return res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ─── School Blind Structures ──────────────────────────────────────────────────
+// Coaches manage school-specific blind structure presets.
+// Org structures are read-only (managed via /api/admin/org-settings/blind-structures).
+
+// ── GET /api/settings/school/blind-structures ────────────────────────────────
+router.get('/school/blind-structures', async (req, res) => {
+  if (!SCHOOL_ROLES.has(req.user.role))
+    return res.status(403).json({ error: 'forbidden' });
+
+  try {
+    const school = await _callerSchool(req.user.stableId);
+    if (!school) return res.status(404).json({ error: 'no_school' });
+
+    const structures = await SettingsService.resolveBlindStructures(school.id);
+    return res.json({ structures });
+  } catch (err) {
+    return res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ── POST /api/settings/school/blind-structures ───────────────────────────────
+// Body: { label, sb, bb, ante? }
+router.post('/school/blind-structures', async (req, res) => {
+  if (!SCHOOL_ROLES.has(req.user.role))
+    return res.status(403).json({ error: 'forbidden' });
+
+  const { label, sb, bb, ante } = req.body || {};
+  if (!label || !sb || !bb)
+    return res.status(400).json({ error: 'invalid_body', message: 'label, sb, and bb are required.' });
+
+  try {
+    const school = await _callerSchool(req.user.stableId);
+    if (!school) return res.status(404).json({ error: 'no_school' });
+
+    const current = await SettingsService.getSchoolSetting(school.id, 'school.blind_structures') ?? [];
+    const newStruct = {
+      id:    require('crypto').randomUUID(),
+      label: String(label).trim(),
+      sb:    Number(sb),
+      bb:    Number(bb),
+      ante:  Number(ante) || 0,
+    };
+    await SettingsService.setSchoolSetting(school.id, 'school.blind_structures', [...current, newStruct]);
+    return res.status(201).json({ ...newStruct, source: 'school' });
+  } catch (err) {
+    return res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ── PATCH /api/settings/school/blind-structures/:id ──────────────────────────
+// Body: { label?, sb?, bb?, ante? }
+router.patch('/school/blind-structures/:id', async (req, res) => {
+  if (!SCHOOL_ROLES.has(req.user.role))
+    return res.status(403).json({ error: 'forbidden' });
+
+  const { id } = req.params;
+  const { label, sb, bb, ante } = req.body || {};
+
+  try {
+    const school = await _callerSchool(req.user.stableId);
+    if (!school) return res.status(404).json({ error: 'no_school' });
+
+    const current = await SettingsService.getSchoolSetting(school.id, 'school.blind_structures') ?? [];
+    const idx = current.findIndex(s => s.id === id);
+    if (idx === -1) return res.status(404).json({ error: 'not_found' });
+
+    const updated = [...current];
+    updated[idx] = {
+      ...updated[idx],
+      ...(label !== undefined && { label: String(label).trim() }),
+      ...(sb    !== undefined && { sb: Number(sb) }),
+      ...(bb    !== undefined && { bb: Number(bb) }),
+      ...(ante  !== undefined && { ante: Number(ante) }),
+    };
+    await SettingsService.setSchoolSetting(school.id, 'school.blind_structures', updated);
+    return res.json({ ...updated[idx], source: 'school' });
+  } catch (err) {
+    return res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ── DELETE /api/settings/school/blind-structures/:id ─────────────────────────
+router.delete('/school/blind-structures/:id', async (req, res) => {
+  if (!SCHOOL_ROLES.has(req.user.role))
+    return res.status(403).json({ error: 'forbidden' });
+
+  const { id } = req.params;
+
+  try {
+    const school = await _callerSchool(req.user.stableId);
+    if (!school) return res.status(404).json({ error: 'no_school' });
+
+    const current = await SettingsService.getSchoolSetting(school.id, 'school.blind_structures') ?? [];
+    const filtered = current.filter(s => s.id !== id);
+    if (filtered.length === current.length)
+      return res.status(404).json({ error: 'not_found' });
+
+    await SettingsService.setSchoolSetting(school.id, 'school.blind_structures', filtered);
+    return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: 'internal_error', message: err.message });
   }

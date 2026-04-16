@@ -41,18 +41,24 @@ jest.mock('../db/repositories/SchoolRepository.js', () => ({
 
 const mockGetSchoolSetting = jest.fn();
 const mockSetSchoolSetting = jest.fn();
+const mockResolveLeaderboardConfig = jest.fn();
+const mockDeleteSchoolSetting = jest.fn();
+const mockResolveBlindStructures = jest.fn();
 
 jest.mock('../services/SettingsService.js', () => ({
-  ORG_SCOPE_ID:         '00000000-0000-0000-0000-000000000001',
-  getOrgSetting:        jest.fn(),
-  setOrgSetting:        jest.fn(),
-  getSchoolSetting:     (...args) => mockGetSchoolSetting(...args),
-  setSchoolSetting:     (...args) => mockSetSchoolSetting(...args),
-  resolveTableDefaults: jest.fn(),
-  saveTableDefaults:    jest.fn(),
-  resetTableDefaults:   jest.fn(),
-  TABLE_DEFAULTS_KEYS:  [],
-  TABLE_DEFAULTS_APP:   {},
+  ORG_SCOPE_ID:                   '00000000-0000-0000-0000-000000000001',
+  getOrgSetting:                  jest.fn(),
+  setOrgSetting:                  jest.fn(),
+  getSchoolSetting:               (...args) => mockGetSchoolSetting(...args),
+  setSchoolSetting:               (...args) => mockSetSchoolSetting(...args),
+  resolveLeaderboardConfig:       (...args) => mockResolveLeaderboardConfig(...args),
+  deleteSchoolSetting:            (...args) => mockDeleteSchoolSetting(...args),
+  resolveBlindStructures:         (...args) => mockResolveBlindStructures(...args),
+  resolveTableDefaults:           jest.fn(),
+  saveTableDefaults:              jest.fn(),
+  resetTableDefaults:             jest.fn(),
+  TABLE_DEFAULTS_KEYS:            [],
+  TABLE_DEFAULTS_APP:             {},
 }));
 
 // Supabase mock (needed for presets routes in the same router)
@@ -88,6 +94,12 @@ beforeEach(() => {
   mockFindSchoolById.mockResolvedValue(fakeSchool);
   mockGetSchoolSetting.mockResolvedValue(null);
   mockSetSchoolSetting.mockResolvedValue(undefined);
+  mockResolveLeaderboardConfig.mockResolvedValue({
+    value: { primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' },
+    source: 'hardcoded',
+  });
+  mockDeleteSchoolSetting.mockResolvedValue(undefined);
+  mockResolveBlindStructures.mockResolvedValue([]);
 });
 
 // ─── GET /api/settings/school ─────────────────────────────────────────────────
@@ -127,7 +139,9 @@ describe('GET /api/settings/school', () => {
     expect(res.body.identity).toMatchObject({ id: SCHOOL_UUID, name: 'Rivera Academy' });
     expect(res.body.staking_defaults).toHaveProperty('coach_split_pct', 50);
     expect(Array.isArray(res.body.platforms)).toBe(true);
-    expect(res.body.leaderboard).toHaveProperty('primary_metric');
+    expect(res.body.leaderboard).toHaveProperty('value');
+    expect(res.body.leaderboard).toHaveProperty('source');
+    expect(res.body.leaderboard.value).toHaveProperty('primary_metric');
   });
 
   test('merges stored staking defaults over built-in defaults', async () => {
