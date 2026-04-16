@@ -18,7 +18,7 @@ class AutoController extends TableController {
     // Apply table config blinds & starting stack if provided
     const cfg = tableConfig?.config ?? {};
     if (cfg.sb && cfg.bb) {
-      this.gm.setBlinds?.(cfg.sb, cfg.bb);
+      this.gm.setBlindLevels?.(cfg.sb, cfg.bb);
     }
     if (cfg.startingStack && this.gm.state?.players) {
       // Apply to any already-seated players (edge case — normally none yet)
