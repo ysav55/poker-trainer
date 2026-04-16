@@ -288,6 +288,144 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
     }
   });
 
+  // ── Privacy & Whitelist Management ───────────────────────────────────────────
+
+  // PATCH /api/tables/:id/privacy — edit privacy settings after creation
+  app.patch('/api/tables/:id/privacy', requireAuth, async (req, res) => {
+    try {
+      const table = await assertCanManage(req, res, req.params.id);
+      if (!table) return; // response already sent
+
+      const { privacy, privateConfig = {} } = req.body || {};
+
+      // Validate privacy value
+      const validPrivacy = ['open', 'school', 'private'];
+      if (!validPrivacy.includes(privacy)) {
+        return res.status(400).json({
+          error: 'invalid_privacy',
+          message: 'Privacy must be open, school, or private'
+        });
+      }
+
+      // If switching to private, validate privateConfig
+      if (privacy === 'private') {
+        const whitelistedPlayers = privateConfig.whitelistedPlayers || [];
+        if (whitelistedPlayers.length === 0) {
+          return res.status(400).json({
+            error: 'invalid_private_config',
+            message: 'Private tables require at least one whitelisted player'
+          });
+        }
+      }
+
+      // Clear old whitelist if table was previously private
+      if (table.privacy === 'private') {
+        const oldWhitelist = await TableVisibilityService.getWhitelist(req.params.id);
+        for (const entry of oldWhitelist) {
+          await TableVisibilityService.removeFromWhitelist(req.params.id, entry.playerId);
+        }
+      }
+
+      // Add new whitelist entries if switching to private
+      if (privacy === 'private') {
+        const whitelistedPlayers = privateConfig.whitelistedPlayers || [];
+        const groupId = privateConfig.groupId;
+
+        // Add individual players
+        for (const playerId of whitelistedPlayers) {
+          await TableVisibilityService.addToWhitelist(req.params.id, playerId, req.user.id);
+        }
+
+        // Auto-add group members if groupId provided
+        if (groupId) {
+          await TableVisibilityService.addGroupToWhitelist(req.params.id, groupId, req.user.id);
+        }
+      }
+
+      // Update table privacy
+      await TableRepository.updateTable(req.params.id, { privacy });
+      const updated = await TableRepository.getTable(req.params.id);
+      res.json(updated);
+    } catch (err) {
+      log.error('tables', 'privacy_update_error', `Failed to update privacy: ${err.message}`, { err });
+      res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
+  // POST /api/tables/:id/whitelist — add player to whitelist
+  app.post('/api/tables/:id/whitelist', requireAuth, async (req, res) => {
+    try {
+      const table = await assertCanManage(req, res, req.params.id);
+      if (!table) return; // response already sent
+
+      const { playerId } = req.body || {};
+      if (!playerId) {
+        return res.status(400).json({
+          error: 'invalid_request',
+          message: 'playerId is required'
+        });
+      }
+
+      // Table must be private
+      if (table.privacy !== 'private') {
+        return res.status(400).json({
+          error: 'invalid_request',
+          message: 'Table must be private to whitelist players'
+        });
+      }
+
+      // Add player to whitelist
+      try {
+        await TableVisibilityService.addToWhitelist(req.params.id, playerId, req.user.id);
+      } catch (err) {
+        // Check for duplicate constraint violation
+        if (err.message && err.message.includes('duplicate')) {
+          return res.status(409).json({
+            error: 'conflict',
+            message: 'Player is already invited to this table'
+          });
+        }
+        throw err;
+      }
+
+      // Fetch and return updated whitelist
+      const whitelist = await TableVisibilityService.getWhitelist(req.params.id);
+      res.status(201).json({ whitelist });
+    } catch (err) {
+      log.error('tables', 'whitelist_add_error', `Failed to add to whitelist: ${err.message}`, { err });
+      res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
+  // DELETE /api/tables/:id/whitelist/:playerId — remove player from whitelist
+  app.delete('/api/tables/:id/whitelist/:playerId', requireAuth, async (req, res) => {
+    try {
+      const table = await assertCanManage(req, res, req.params.id);
+      if (!table) return; // response already sent
+
+      const { playerId } = req.params;
+
+      // Remove player from whitelist
+      try {
+        await TableVisibilityService.removeFromWhitelist(req.params.id, playerId);
+      } catch (err) {
+        // Check if no rows were affected (entry not found)
+        if (err.message && (err.message.includes('no rows') || err.code === 'PGRST116')) {
+          return res.status(404).json({
+            error: 'not_found',
+            message: 'Whitelist entry not found'
+          });
+        }
+        throw err;
+      }
+
+      res.status(204).end();
+    } catch (err) {
+      log.error('tables', 'whitelist_remove_error', `Failed to remove from whitelist: ${err.message}`, { err });
+      res.status(500).json({ error: 'internal_error' });
+    }
+  });
+
   // ── Table Presets ────────────────────────────────────────────────────────────
 
   // GET /api/table-presets — list presets for authenticated coach
