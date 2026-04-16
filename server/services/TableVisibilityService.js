@@ -118,7 +118,7 @@ const TableVisibilityService = {
    */
   async isPlayerWhitelisted(tableId, playerId) {
     const { data, error } = await supabase
-      .from('invited_players')
+      .from('private_table_whitelist')
       .select('player_id')
       .eq('table_id', tableId)
       .eq('player_id', playerId)
@@ -140,7 +140,7 @@ const TableVisibilityService = {
   async addToWhitelist(tableId, playerId, invitedBy) {
     // Check if player already exists on whitelist
     const { data: existing, error: checkError } = await supabase
-      .from('invited_players')
+      .from('private_table_whitelist')
       .select('id')
       .eq('table_id', tableId)
       .eq('player_id', playerId)
@@ -157,8 +157,8 @@ const TableVisibilityService = {
 
     // Insert new whitelist entry
     const { error: insertError } = await supabase
-      .from('invited_players')
-      .insert({ table_id: tableId, player_id: playerId, added_by: invitedBy });
+      .from('private_table_whitelist')
+      .insert({ table_id: tableId, player_id: playerId, invited_by: invitedBy });
 
     if (insertError) throw insertError;
   },
@@ -172,7 +172,7 @@ const TableVisibilityService = {
    */
   async removeFromWhitelist(tableId, playerId) {
     const { data, error } = await supabase
-      .from('invited_players')
+      .from('private_table_whitelist')
       .delete()
       .eq('table_id', tableId)
       .eq('player_id', playerId)
@@ -193,25 +193,25 @@ const TableVisibilityService = {
    */
   async getWhitelist(tableId) {
     const { data, error } = await supabase
-      .from('invited_players')
+      .from('private_table_whitelist')
       .select(`
         player_id,
-        added_by,
-        added_at,
+        invited_by,
+        invited_at,
         player_profiles!player_id(display_name),
-        player_profiles_by_added_by:player_profiles!added_by(display_name)
+        player_profiles_by_invited_by:player_profiles!invited_by(display_name)
       `)
       .eq('table_id', tableId)
-      .order('added_at', { ascending: true });
+      .order('invited_at', { ascending: true });
 
     if (error) throw error;
 
     return (data ?? []).map(row => ({
       playerId: row.player_id,
       displayName: row.player_profiles?.display_name || 'Unknown',
-      invitedBy: row.added_by,
-      invitedByName: row.player_profiles_by_added_by?.display_name || 'System',
-      invitedAt: row.added_at,
+      invitedBy: row.invited_by,
+      invitedByName: row.player_profiles_by_invited_by?.display_name || 'System',
+      invitedAt: row.invited_at,
     }));
   },
 
@@ -241,12 +241,12 @@ const TableVisibilityService = {
     const rows = groupMembers.map(gm => ({
       table_id: tableId,
       player_id: gm.player_id,
-      added_by: invitedBy,
+      invited_by: invitedBy,
     }));
 
     // Upsert with ignoreDuplicates to skip existing entries
     const { error: insertError, data: insertedData } = await supabase
-      .from('invited_players')
+      .from('private_table_whitelist')
       .upsert(rows, { onConflict: 'table_id,player_id', ignoreDuplicates: true })
       .select('player_id');
 

@@ -121,7 +121,7 @@ function SchoolAutocomplete({
           className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white flex-1"
           style={{ background: colors.bgSurfaceRaised, border: `1px solid ${colors.goldBorder}` }}
         >
-          <span>{selectedSchool.display_name}</span>
+          <span>{selectedSchool.name}</span>
           <button
             type="button"
             onClick={handleClear}
@@ -181,7 +181,7 @@ function SchoolAutocomplete({
                     e.target.style.background = 'transparent';
                   }}
                 >
-                  {school.display_name}
+                  {school.name}
                 </button>
               </li>
             ))}
@@ -243,7 +243,7 @@ export default function RegisterPage() {
 
   const handleSelectSchool = (school) => {
     setSelectedSchool(school);
-    setSchoolName(school.display_name);
+    setSchoolName(school.name);
     setError('');
   };
 
@@ -288,7 +288,7 @@ export default function RegisterPage() {
 
         // Add school enrollment if school selected
         if (selectedSchool) {
-          body.schoolName = selectedSchool.display_name;
+          body.schoolName = selectedSchool.name;
           body.schoolPassword = schoolPassword.trim();
         }
 

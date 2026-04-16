@@ -2,8 +2,8 @@
 
 const express = require('express');
 const { requirePermission } = require('../../auth/requirePermission.js');
-const { requireAuth } = require('../../auth/requireAuth.js');
-const { requireRole } = require('../../auth/requireRole.js');
+const requireAuth = require('../../auth/requireAuth.js');
+const requireRole = require('../../auth/requireRole.js');
 const requireSchoolMembership = require('../../auth/requireSchoolMembership.js');
 const {
   invalidatePlayerSchoolCache,
@@ -309,6 +309,20 @@ router.patch('/:schoolId/passwords/:passwordId', requireAuth, requireRole('coach
     return res.json(password);
   } catch (err) {
     log.error('admin', 'password_update_error', `Failed to update password: ${err.message}`, { err });
+    return res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// ── DELETE /api/admin/schools/:schoolId/passwords/:passwordId ─────────────────
+router.delete('/:schoolId/passwords/:passwordId', requireAuth, requireRole('coach'), requireSchoolMembership('schoolId'), async (req, res) => {
+  const { schoolId, passwordId } = req.params;
+
+  try {
+    const SchoolPasswordService = require('../../services/SchoolPasswordService');
+    await SchoolPasswordService.deletePassword(schoolId, passwordId);
+    return res.json({ success: true });
+  } catch (err) {
+    log.error('admin', 'password_delete_error', `Failed to delete password: ${err.message}`, { err });
     return res.status(500).json({ error: 'internal_error' });
   }
 });

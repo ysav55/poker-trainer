@@ -13,6 +13,13 @@
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+jest.mock('../../db/supabase', () => ({
+  from: jest.fn().mockReturnThis(),
+  select: jest.fn().mockReturnThis(),
+  eq: jest.fn().mockReturnThis(),
+  single: jest.fn().mockResolvedValue({ data: { school_id: 'school-1' }, error: null }),
+}));
+
 jest.mock('../../db/repositories/TableRepository', () => ({
   TableRepository: {
     createTable:  jest.fn(),
@@ -31,6 +38,17 @@ jest.mock('../../auth/requirePermission', () => ({
   invalidatePermissionCache:  jest.fn(),
 }));
 
+// TableVisibilityService mock
+jest.mock('../../services/TableVisibilityService', () => ({
+  canPlayerSeeTable:    jest.fn(),
+  getVisibleTables:     jest.fn(),
+  isPlayerWhitelisted:  jest.fn(),
+  addToWhitelist:       jest.fn(),
+  removeFromWhitelist:  jest.fn(),
+  getWhitelist:         jest.fn(),
+  addGroupToWhitelist:  jest.fn(),
+}));
+
 // SharedState — mock the whole module so getTableSummaries is available
 jest.mock('../../state/SharedState', () => {
   const instance = { tables: new Map() };
@@ -44,6 +62,7 @@ const express    = require('express');
 const request    = require('supertest');
 const { TableRepository } = require('../../db/repositories/TableRepository');
 const { getPlayerPermissions } = require('../../auth/requirePermission');
+const TableVisibilityService = require('../../services/TableVisibilityService');
 const sharedState = require('../../state/SharedState');
 
 /**
@@ -69,6 +88,14 @@ function buildApp({ user = null } = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+
+  // Reset all mocks to clean state
+  TableRepository.listTables.mockReset();
+  TableRepository.getTable.mockReset();
+  TableRepository.createTable.mockReset();
+  TableRepository.updateTable.mockReset();
+  TableRepository.closeTable.mockReset();
+
   // Default: permission check passes
   mockPermMiddleware.mockImplementation((req, res, next) => next());
   // Default: no live summaries
@@ -83,6 +110,14 @@ beforeEach(() => {
   TableRepository.closeTable.mockResolvedValue(undefined);
   // Default: getPlayerPermissions returns empty set
   getPlayerPermissions.mockResolvedValue(new Set());
+  // Default: visibility service — allow all visibility checks
+  TableVisibilityService.canPlayerSeeTable.mockResolvedValue(true);
+  TableVisibilityService.getVisibleTables.mockResolvedValue([]);
+  TableVisibilityService.isPlayerWhitelisted.mockResolvedValue(false);
+  TableVisibilityService.addToWhitelist.mockResolvedValue(undefined);
+  TableVisibilityService.removeFromWhitelist.mockResolvedValue(undefined);
+  TableVisibilityService.getWhitelist.mockResolvedValue([]);
+  TableVisibilityService.addGroupToWhitelist.mockResolvedValue({ added: 0, skipped: 0 });
 });
 
 // ─── GET /api/tables ──────────────────────────────────────────────────────────

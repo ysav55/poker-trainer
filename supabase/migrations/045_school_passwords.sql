@@ -30,3 +30,14 @@ CREATE TABLE school_password_uses (
 );
 
 CREATE INDEX idx_password_uses_password_id ON school_password_uses(password_id);
+CREATE INDEX idx_password_uses_player_id ON school_password_uses(player_id);
+
+-- PostgreSQL function to increment password uses atomically
+CREATE OR REPLACE FUNCTION increment_password_uses(password_id UUID)
+RETURNS void AS $$
+BEGIN
+  UPDATE school_passwords
+  SET uses_count = uses_count + 1
+  WHERE id = password_id;
+END;
+$$ LANGUAGE plpgsql;

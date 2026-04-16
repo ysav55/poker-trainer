@@ -595,9 +595,9 @@ export default function SchoolTab() {
     try {
       await apiFetch(`/api/admin/schools/${schoolId}/passwords/${passwordId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ disabled: true }),
+        body: JSON.stringify({ active: false }),
       });
-      setPasswords(prev => prev.map(p => p.id === passwordId ? { ...p, disabled: true } : p));
+      setPasswords(prev => prev.map(p => p.id === passwordId ? { ...p, active: false } : p));
     } catch (err) {
       // Silently ignore disable errors for now
     }
@@ -778,7 +778,7 @@ export default function SchoolTab() {
               {passwords.map((pw, i) => {
                 const daysLeft = calculateDaysUntilExpiry(pw.expires_at);
                 const isExpired = isPasswordExpired(pw.expires_at);
-                const isDisabled = pw.disabled;
+                const isDisabled = !pw.active;
                 return (
                   <div
                     key={pw.id}

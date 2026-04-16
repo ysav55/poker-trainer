@@ -46,11 +46,15 @@ module.exports = {
         .from('school_passwords')
         .select('id, group_id, password_hash, active, uses_count, max_uses, expires_at')
         .eq('school_id', schoolId)
-        .eq('active', true)
         .single();
 
       if (error || !data) {
         return { valid: false, error: 'invalid_password' };
+      }
+
+      // Check active status FIRST (most informative error)
+      if (!data.active) {
+        return { valid: false, error: 'password_disabled' };
       }
 
       // Check expiry

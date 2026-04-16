@@ -33,6 +33,16 @@ jest.mock('../../auth/requirePermission', () => ({
   invalidatePermissionCache: jest.fn(),
 }));
 
+jest.mock('../../services/TableVisibilityService', () => ({
+  canPlayerSeeTable:    jest.fn().mockResolvedValue(true),
+  getVisibleTables:     jest.fn().mockResolvedValue([]),
+  isPlayerWhitelisted:  jest.fn().mockResolvedValue(false),
+  addToWhitelist:       jest.fn().mockResolvedValue(undefined),
+  removeFromWhitelist:  jest.fn().mockResolvedValue(undefined),
+  getWhitelist:         jest.fn().mockResolvedValue([]),
+  addGroupToWhitelist:  jest.fn().mockResolvedValue({ added: 0, skipped: 0 }),
+}));
+
 jest.mock('../../state/SharedState', () => {
   const instance = { tables: new Map() };
   instance.getTableSummaries = jest.fn(() => []);
