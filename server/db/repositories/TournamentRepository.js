@@ -431,6 +431,40 @@ const TournamentRepository = {
     if (error) throw error;
     return data;
   },
+
+  /**
+   * Add all members of a group to a private tournament's whitelist.
+   * @param {string} tournamentId — tournament ID
+   * @param {string} groupId — group ID
+   * @param {string} invitedBy — player UUID who is inviting them
+   * @returns {Promise<number>} — number of players added
+   */
+  async addGroupToWhitelist(tournamentId, groupId, invitedBy) {
+    // Fetch all members of the group from player_groups table
+    const { data: groupMembers, error } = await supabase
+      .from('player_groups')
+      .select('player_id')
+      .eq('group_id', groupId)
+      .order('added_at', { ascending: true });
+
+    if (error) throw error;
+
+    // Add each member to the whitelist
+    let count = 0;
+    for (const member of groupMembers ?? []) {
+      try {
+        await this.addToWhitelist(tournamentId, member.player_id, invitedBy);
+        count++;
+      } catch (err) {
+        // Skip if player already whitelisted (UNIQUE constraint); continue with others
+        if (!err.message.includes('already invited')) {
+          throw err;
+        }
+      }
+    }
+
+    return count;
+  },
 };
 
 module.exports = { TournamentRepository };

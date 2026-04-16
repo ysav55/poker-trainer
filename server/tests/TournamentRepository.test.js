@@ -245,3 +245,64 @@ describe('getConfig — null when no config found', () => {
     expect(supabase.eq).toHaveBeenCalledWith('table_id', 'tbl-filter-check');
   });
 });
+
+// ─── addGroupToWhitelist ──────────────────────────────────────────────────────
+
+describe('addGroupToWhitelist', () => {
+  test('fetches group members and adds each to whitelist', async () => {
+    const groupMembers = [
+      { player_id: 'player-1' },
+      { player_id: 'player-2' },
+      { player_id: 'player-3' },
+    ];
+
+    // Mock: fetch group members
+    supabase.order.mockResolvedValueOnce({ data: groupMembers, error: null });
+
+    // Mock: addToWhitelist calls (3 calls, no duplicates)
+    const addToWhitelistSpy = jest.spyOn(TournamentRepository, 'addToWhitelist')
+      .mockResolvedValue(undefined);
+
+    const count = await TournamentRepository.addGroupToWhitelist(
+      'tournament-1',
+      'group-1',
+      'admin-user'
+    );
+
+    expect(supabase.from).toHaveBeenCalledWith('player_groups');
+    expect(supabase.eq).toHaveBeenCalledWith('group_id', 'group-1');
+    expect(addToWhitelistSpy).toHaveBeenCalledTimes(3);
+    expect(addToWhitelistSpy).toHaveBeenCalledWith('tournament-1', 'player-1', 'admin-user');
+    expect(addToWhitelistSpy).toHaveBeenCalledWith('tournament-1', 'player-2', 'admin-user');
+    expect(addToWhitelistSpy).toHaveBeenCalledWith('tournament-1', 'player-3', 'admin-user');
+    expect(count).toBe(3);
+
+    addToWhitelistSpy.mockRestore();
+  });
+
+  test('returns 0 when group has no members', async () => {
+    supabase.order.mockResolvedValueOnce({ data: [], error: null });
+
+    const addToWhitelistSpy = jest.spyOn(TournamentRepository, 'addToWhitelist')
+      .mockResolvedValue(undefined);
+
+    const count = await TournamentRepository.addGroupToWhitelist(
+      'tournament-1',
+      'empty-group',
+      'admin-user'
+    );
+
+    expect(addToWhitelistSpy).not.toHaveBeenCalled();
+    expect(count).toBe(0);
+
+    addToWhitelistSpy.mockRestore();
+  });
+
+  test('throws when supabase returns an error', async () => {
+    supabase.order.mockResolvedValueOnce({ data: null, error: { message: 'group fetch failed' } });
+
+    await expect(
+      TournamentRepository.addGroupToWhitelist('tournament-1', 'group-1', 'admin-user')
+    ).rejects.toMatchObject({ message: 'group fetch failed' });
+  });
+});

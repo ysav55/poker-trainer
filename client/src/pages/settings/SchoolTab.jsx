@@ -972,7 +972,7 @@ export default function SchoolTab() {
                   <button
                     onClick={() => {
                       setShowPasswordModal(false);
-                      setPasswordFormData({ plainPassword: '', source: '', maxUses: 1, expiresAt: '', groupId: '' });
+                      setPasswordFormData({ plainPassword: '', source: '', maxUses: 999999, expiresAt: '', groupId: '' });
                       setPasswordError('');
                     }}
                     className="px-4 py-2 rounded text-sm"
