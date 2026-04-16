@@ -23,6 +23,13 @@ describe('DataAccessLayer (Unit Tests)', () => {
 
   afterEach(() => {
     dal.clear();
+    jest.restoreAllMocks();
+  });
+
+  // Jest worker timeout workaround: ensure cleanup
+  afterAll(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
   });
 
   // ─────────────────────────────────────────────────────────────────────────

@@ -15,6 +15,12 @@
  */
 
 describe('Password Increment Atomicity (Unit Tests)', () => {
+  // Jest worker timeout workaround: ensure cleanup
+  afterAll(() => {
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
 
   describe('Logic: max_uses enforcement', () => {
