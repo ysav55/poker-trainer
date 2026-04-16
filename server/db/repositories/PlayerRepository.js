@@ -282,7 +282,7 @@ async function getPlayerStatsByMode(stableId, mode = 'overall') {
 async function findById(id) {
   const { data } = await supabase
     .from('player_profiles')
-    .select('id, display_name, email, status, password_hash, last_seen, trial_expires_at, trial_hands_remaining')
+    .select('id, display_name, email, status, password_hash, last_seen, school_id, trial_expires_at, trial_hands_remaining')
     .eq('id', id)
     .maybeSingle();
   return data ?? null;
