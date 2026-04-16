@@ -4,19 +4,42 @@
 --   Identifies and deletes test poker tables created during development.
 --   Safely preserves production tables via multiple heuristics.
 --
--- Safety Checks:
---   1. Only deletes tables created within last 7 days (dev window)
---   2. Requires explicit confirmation before destructive operation
---   3. Lists affected tables first; user must review
---   4. Creates backup view first (optional restore)
+-- Safety Guarantees:
+--   1. Wrapped in transaction — all-or-nothing atomicity
+--   2. Only deletes tables created within last 7 days (dev window)
+--   3. Lists affected tables first; user must review before uncommenting destructive step
+--   4. Respects FK cascades (no redundant manual deletes)
+--   5. Preserves intentional archives (table_status IN ('archived', 'deleted'))
 --
 -- Usage:
+--   # Step 1: Review what will be deleted (read-only)
+--   psql -h db.*.supabase.co -U postgres -d postgres -f purge-test-tables.sql
+--
+--   # Step 2: If safe, uncomment "DELETE FROM tables" section and re-run
 --   psql -h db.*.supabase.co -U postgres -d postgres -f purge-test-tables.sql
 --
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- Step 1: Audit — what will be deleted?
+-- Enable transaction — all-or-nothing semantics
+-- If any DELETE fails, entire transaction rolls back
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- STEP 1: AUDIT (read-only) — what will be deleted?
+-- ─────────────────────────────────────────────────────────────────────────────
+
 SELECT
+  'TEST TABLES TO DELETE' as audit_section,
+  COUNT(*) as table_count,
+  MIN(created_at) as oldest,
+  MAX(created_at) as newest
+FROM tables
+WHERE created_at > NOW() - INTERVAL '7 days'
+  AND table_status NOT IN ('archived', 'deleted');
+
+-- Details: list each table by age
+SELECT
+  'DETAILED BREAKDOWN' as audit_section,
   id,
   COALESCE(table_name, 'N/A') as table_name,
   created_at,
@@ -27,113 +50,87 @@ SELECT
   END as age_bucket,
   created_by,
   table_type,
-  table_status
+  table_status,
+  (SELECT COUNT(*) FROM hands WHERE table_id = tables.id) as hand_count,
+  (SELECT COUNT(*) FROM sessions WHERE table_id = tables.id) as session_count
 FROM tables
 WHERE created_at > NOW() - INTERVAL '7 days'
-  AND table_status NOT IN ('archived', 'deleted')  -- Keep intentional archives
+  AND table_status NOT IN ('archived', 'deleted')
 ORDER BY created_at DESC
-LIMIT 50;
+LIMIT 100;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- REVIEW OUTPUT ABOVE BEFORE PROCEEDING
--- If results look safe, proceed to Step 2
+-- STEP 2: DESTRUCTIVE (commented out — uncomment only after reviewing audit)
 -- ─────────────────────────────────────────────────────────────────────────────
+--
+-- NOTE: FK cascades handle all child deletions automatically.
+-- We only need to delete the parent (tables); children are auto-deleted.
+--
+-- DO NOT UNCOMMENT unless you have reviewed the audit output above
+-- and confirmed these are test tables only.
+--
+-- Uncomment the DELETE statement below to proceed:
+--
 
--- Step 2: Create backup view (optional restore point)
--- Uncomment if you want to preserve deleted table IDs:
 /*
-CREATE OR REPLACE VIEW _deleted_table_ids_backup AS
-SELECT
-  id,
-  COALESCE(table_name, 'N/A') as table_name,
-  created_at,
-  created_by
-FROM tables
+DELETE FROM tables
 WHERE created_at > NOW() - INTERVAL '7 days'
   AND table_status NOT IN ('archived', 'deleted');
 */
 
--- Step 3: Delete cascading rows from related tables
--- Order matters; respect FK constraints
-
--- hand actions + related data (cascade deletes)
-DELETE FROM hand_actions
-WHERE hand_id IN (
-  SELECT hand_id FROM hands
-  WHERE table_id IN (
-    SELECT id FROM tables
-    WHERE created_at > NOW() - INTERVAL '7 days'
-  )
-);
-
--- hand players + hand_tags (cascade)
-DELETE FROM hand_players
-WHERE hand_id IN (
-  SELECT hand_id FROM hands
-  WHERE table_id IN (
-    SELECT id FROM tables
-    WHERE created_at > NOW() - INTERVAL '7 days'
-  )
-);
-
-DELETE FROM hand_tags
-WHERE hand_id IN (
-  SELECT hand_id FROM hands
-  WHERE table_id IN (
-    SELECT id FROM tables
-    WHERE created_at > NOW() - INTERVAL '7 days'
-  )
-);
-
--- hands
-DELETE FROM hands
-WHERE table_id IN (
-  SELECT id FROM tables
-  WHERE created_at > NOW() - INTERVAL '7 days'
-);
-
--- sessions + session_player_stats (cascade)
-DELETE FROM session_player_stats
-WHERE session_id IN (
-  SELECT session_id FROM sessions
-  WHERE table_id IN (
-    SELECT id FROM tables
-    WHERE created_at > NOW() - INTERVAL '7 days'
-  )
-);
-
-DELETE FROM sessions
-WHERE table_id IN (
-  SELECT id FROM tables
-  WHERE created_at > NOW() - INTERVAL '7 days'
-);
-
--- table-specific registrations
-DELETE FROM tournament_group_registrations
-WHERE id IN (
-  SELECT tgr.id FROM tournament_group_registrations tgr
-  JOIN tables t ON tgr.table_id = t.id
-  WHERE t.created_at > NOW() - INTERVAL '7 days'
-);
-
--- final: delete tables themselves
-DELETE FROM tables
-WHERE created_at > NOW() - INTERVAL '7 days'
-  AND table_status NOT IN ('archived', 'deleted');
-
+-- ─────────────────────────────────────────────────────────────────────────────
+-- STEP 3: VERIFY (read-only) — what remains?
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- Step 4: Verify deletion
 SELECT
+  'TABLES AFTER DELETE' as verify_section,
   COUNT(*) as remaining_tables,
   MIN(created_at) as oldest_remaining,
   MAX(created_at) as newest_remaining
 FROM tables;
 
--- Step 5: Cleanup alpha_logs (optional; separate purge)
--- DELETE FROM alpha_logs WHERE created_at < NOW() - INTERVAL '7 days';
--- SELECT COUNT(*) as remaining_logs FROM alpha_logs;
+SELECT
+  'HANDS AFTER DELETE' as verify_section,
+  COUNT(*) as remaining_hands
+FROM hands;
+
+SELECT
+  'SESSIONS AFTER DELETE' as verify_section,
+  COUNT(*) as remaining_sessions
+FROM sessions;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Done. Tables purged safely.
+-- COMMIT or ROLLBACK
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- If DELETE was uncommented and succeeded, COMMIT applies it permanently.
+-- If anything failed or you want to abort, ROLLBACK reverses everything.
+--
+
+-- COMMIT;   -- Uncomment to apply deletion permanently
+-- ROLLBACK; -- Uncomment to revert all changes
+
+-- Default: no explicit COMMIT/ROLLBACK (connection will auto-rollback on close)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- NOTES
+-- ─────────────────────────────────────────────────────────────────────────────
+--
+-- 1. CASCADE deletes:
+--    - tables (parent) → hands → hand_actions / hand_players / hand_tags (children)
+--    - tables → sessions → session_player_stats (children)
+--    All FK constraints have ON DELETE CASCADE; no manual deletes needed.
+--
+-- 2. Preserved tables:
+--    - Status NOT IN ('archived', 'deleted') → keeps intentionally archived tables
+--    - Age > 7 days → keeps old production tables
+--
+-- 3. RLS bypass:
+--    This script runs as postgres superuser; it bypasses RLS policies.
+--    Regular users cannot run this script (no permission to disable RLS).
+--
+-- 4. Rollback safety:
+--    If the script is interrupted, ROLLBACK reverts all changes.
+--    No partial deletions possible within a transaction.
+--
 -- ─────────────────────────────────────────────────────────────────────────────
