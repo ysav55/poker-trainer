@@ -92,7 +92,13 @@ class DataAccessLayer {
   }
 
   /**
-   * Batch-load multiple hands
+   * Batch-load multiple hands (deduplicates + caches within request)
+   *
+   * Key fixes:
+   * 1. Don't set placeholders before fetching (causes empty results)
+   * 2. Only fetch uncached IDs; reuse cached promises
+   * 3. Return complete map of all requested + cached hands
+   *
    * @param {string[]} handIds
    * @returns {Promise<Map<handId, hand>>}
    */
@@ -102,34 +108,36 @@ class DataAccessLayer {
     }
 
     const tableCache = this._getTableCache('hands');
-    const promises = handIds.map(id => {
-      // Reuse cache if exists; otherwise schedule fetch
+    const result = new Map();
+
+    // Step 1: Identify which IDs are already cached (don't fetch these)
+    const uncachedIds = [];
+    for (const id of handIds) {
       if (tableCache.has(id)) {
-        return tableCache.get(id);
+        // Already cached; will collect result at end
+        continue;
       }
-      // Create placeholder (will be filled by batch query below)
-      const placeholder = Promise.resolve(null);
-      tableCache.set(id, placeholder);
-      return placeholder;
-    });
+      uncachedIds.push(id);
+    }
 
-    // Deduplicate: only fetch uncached IDs
-    const uncachedIds = handIds.filter(id => !tableCache.has(id) || tableCache.get(id) === null);
-
+    // Step 2: Batch-fetch only the uncached IDs
     if (uncachedIds.length > 0) {
       const rows = await q(
         supabase
           .from('hands')
           .select(
             'hand_id, session_id, table_id, started_at, completed_normally, ' +
-            'hand_actions(id, street, action, amount, player_id, position), ' +
-            'hand_players(player_id, player_name, seat, position), ' +
-            'hand_tags(tag, tag_type, player_id)'
+            'dealer_seat, is_scenario_hand, small_blind, big_blind, ' +
+            'session_type, table_mode, created_at, ' +
+            'hand_actions(id, street, action, amount, player_id, position, actor_seat), ' +
+            'hand_players(player_id, player_name, seat, position, stack_start, stack_end), ' +
+            'hand_tags(tag, tag_type, player_id, action_id)'
           )
           .in('hand_id', uncachedIds)
       );
 
-      rows.forEach(row => {
+      // Step 2a: Cache and collect fetched rows
+      for (const row of rows) {
         const normalized = {
           ...row,
           hand_actions: row.hand_actions || [],
@@ -137,18 +145,26 @@ class DataAccessLayer {
           hand_tags: row.hand_tags || [],
         };
         tableCache.set(row.hand_id, Promise.resolve(normalized));
-      });
-    }
-
-    // Collect cached results
-    const result = new Map();
-    for (const id of handIds) {
-      const promise = tableCache.get(id);
-      if (promise) {
-        const resolved = await promise;
-        if (resolved) result.set(id, resolved);
+        result.set(row.hand_id, normalized);
       }
     }
+
+    // Step 3: Collect cached results (from previous requests)
+    for (const id of handIds) {
+      if (!result.has(id) && tableCache.has(id)) {
+        const promise = tableCache.get(id);
+        try {
+          const resolved = await promise;
+          if (resolved) {
+            result.set(id, resolved);
+          }
+        } catch (err) {
+          // Silent fail for cached promises that were rejected
+          // (shouldn't happen, but defensive)
+        }
+      }
+    }
+
     return result;
   }
 
@@ -184,9 +200,9 @@ class DataAccessLayer {
   }
 
   /**
-   * Get table with tournament/school context
+   * Get table with school context (explicit columns, not SELECT *)
    * @param {string} tableId
-   * @returns {Promise<{id, table_status, …}>}
+   * @returns {Promise<{id, table_name, table_status, …}>}
    */
   async getTable(tableId) {
     if (!tableId) throw new Error('tableId required');
@@ -199,7 +215,11 @@ class DataAccessLayer {
     const promise = q(
       supabase
         .from('tables')
-        .select('*')  // TODO: restrict to needed columns
+        .select(
+          'id, table_name, table_status, table_type, table_mode, ' +
+          'config, controller_id, school_id, privacy, ' +
+          'created_by, created_at, updated_at'
+        )
         .eq('id', tableId)
         .single()
     );
@@ -218,13 +238,17 @@ class DataAccessLayer {
   /**
    * Express middleware factory
    * Usage: app.use(DataAccessLayer.middleware)
+   *
+   * Initializes request-scoped cache; clears after response.
+   * Use req.db.getHand(), req.db.getHandBatch(), etc. in route handlers.
    */
   static middleware(req, res, next) {
     req.db = new DataAccessLayer(req.id);
 
-    // Optional: log request ID
-    if (req.db.requestId) {
-      console.log(`[DAL] Request ${req.db.requestId} initialized`);
+    // Debug logging (only if DEBUG env var set to avoid log spam)
+    if (process.env.DEBUG && req.db.requestId) {
+      const log = require('../logs/logger');
+      log.debug('dal', 'request_initialized', `[DAL] Request ${req.db.requestId} initialized`);
     }
 
     // Clear cache after response sent
