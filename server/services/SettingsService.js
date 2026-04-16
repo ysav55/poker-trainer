@@ -132,14 +132,21 @@ const LEADERBOARD_HARDCODED = {
  * Resolve leaderboard config for a school caller.
  * Returns { value: {...}, source: 'school' | 'org' | 'hardcoded' }
  * @param {string|null} schoolId
+ * @returns {{value: {primary_metric: string, secondary_metric: string, update_frequency: string}, source: string}}
  */
 async function resolveLeaderboardConfig(schoolId) {
   const [schoolVal, orgVal] = await Promise.all([
     schoolId ? getSchoolSetting(schoolId, 'school.leaderboard') : Promise.resolve(null),
     getOrgSetting('org.leaderboard'),
   ]);
-  if (schoolVal) return { value: { ...LEADERBOARD_HARDCODED, ...schoolVal }, source: 'school' };
-  if (orgVal)    return { value: { ...LEADERBOARD_HARDCODED, ...orgVal },    source: 'org' };
+  if (schoolVal) {
+    // School-level setting overrides hardcoded defaults
+    return { value: { ...LEADERBOARD_HARDCODED, ...schoolVal }, source: 'school' };
+  }
+  if (orgVal) {
+    // Org-level setting overrides hardcoded defaults
+    return { value: { ...LEADERBOARD_HARDCODED, ...orgVal }, source: 'org' };
+  }
   return { value: LEADERBOARD_HARDCODED, source: 'hardcoded' };
 }
 
@@ -147,6 +154,7 @@ async function resolveLeaderboardConfig(schoolId) {
  * Resolve blind structures: school structures first (full CRUD), then org (read-only).
  * Each entry is tagged with source: 'school' | 'org'.
  * @param {string|null} schoolId
+ * @returns {Array<{id: string, label: string, sb: number, bb: number, ante: number, source: string}>}
  */
 async function resolveBlindStructures(schoolId) {
   const [schoolVal, orgVal] = await Promise.all([
@@ -163,8 +171,17 @@ async function resolveBlindStructures(schoolId) {
 
 /**
  * Delete a school-scope setting row entirely (used for "Reset to platform default").
+ * @param {string} schoolId - School ID, must be non-empty string
+ * @param {string} key - Setting key, must be non-empty string
  */
 async function deleteSchoolSetting(schoolId, key) {
+  if (!schoolId || typeof schoolId !== 'string' || schoolId.trim() === '') {
+    throw new Error('Invalid schoolId: must be a non-empty string');
+  }
+  if (!key || typeof key !== 'string' || key.trim() === '') {
+    throw new Error('Invalid key: must be a non-empty string');
+  }
+
   const { error } = await supabase
     .from('settings')
     .delete()

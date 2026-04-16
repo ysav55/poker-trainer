@@ -90,6 +90,16 @@ describe('resolveLeaderboardConfig', () => {
     // Only one DB call made (no school lookup)
     expect(mockSupabase.from).toHaveBeenCalledTimes(1);
   });
+
+  it('throws when getSchoolSetting encounters DB error', async () => {
+    mockSupabase.from.mockReturnValueOnce({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockRejectedValue(new Error('DB connection failed')),
+    });
+
+    await expect(SettingsService.resolveLeaderboardConfig('school-abc')).rejects.toThrow('DB connection failed');
+  });
 });
 
 // ─── resolveBlindStructures ───────────────────────────────────────────────────
@@ -150,6 +160,35 @@ describe('resolveBlindStructures', () => {
     const result = await SettingsService.resolveBlindStructures(SCHOOL_ID);
     expect(result).toEqual([]);
   });
+
+  it('throws when getOrgSetting encounters DB error', async () => {
+    mockSupabase.from.mockReturnValueOnce({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    });
+    mockSupabase.from.mockReturnValueOnce({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockRejectedValue(new Error('DB error')),
+    });
+
+    await expect(SettingsService.resolveBlindStructures('school-abc')).rejects.toThrow('DB error');
+  });
+
+  it('skips school lookup when schoolId is null', async () => {
+    const orgStructs = [{ id: 'o1', label: 'Micro', sb: 5, bb: 10, ante: 0 }];
+    mockSupabase.from.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: { value: orgStructs }, error: null }),
+    });
+
+    const result = await SettingsService.resolveBlindStructures(null);
+    expect(result).toHaveLength(1);
+    expect(result[0].source).toBe('org');
+    expect(mockSupabase.from).toHaveBeenCalledTimes(1); // only org lookup
+  });
 });
 
 // ─── deleteSchoolSetting ──────────────────────────────────────────────────────
@@ -176,5 +215,41 @@ describe('deleteSchoolSetting', () => {
     expect(mockChain.eq).toHaveBeenCalledWith('scope', 'school');
     expect(mockChain.eq).toHaveBeenCalledWith('scope_id', 'school-abc');
     expect(mockChain.eq).toHaveBeenCalledWith('key', 'school.leaderboard');
+  });
+
+  it('throws when delete fails', async () => {
+    const mockChain = {
+      delete: jest.fn().mockReturnThis(),
+      eq: jest.fn(),
+    };
+    // First two .eq() calls return the chain; third returns a promise-like with error
+    mockChain.eq
+      .mockReturnValueOnce(mockChain)
+      .mockReturnValueOnce(mockChain)
+      .mockReturnValueOnce(Promise.resolve({ error: new Error('permission denied') }));
+    mockSupabase.from.mockReturnValue(mockChain);
+
+    await expect(SettingsService.deleteSchoolSetting('school-abc', 'school.leaderboard'))
+      .rejects.toThrow('permission denied');
+  });
+
+  it('throws when schoolId is invalid (empty string)', async () => {
+    await expect(SettingsService.deleteSchoolSetting('', 'school.leaderboard'))
+      .rejects.toThrow('Invalid schoolId: must be a non-empty string');
+  });
+
+  it('throws when schoolId is invalid (not a string)', async () => {
+    await expect(SettingsService.deleteSchoolSetting(null, 'school.leaderboard'))
+      .rejects.toThrow('Invalid schoolId: must be a non-empty string');
+  });
+
+  it('throws when key is invalid (empty string)', async () => {
+    await expect(SettingsService.deleteSchoolSetting('school-abc', ''))
+      .rejects.toThrow('Invalid key: must be a non-empty string');
+  });
+
+  it('throws when key is invalid (not a string)', async () => {
+    await expect(SettingsService.deleteSchoolSetting('school-abc', null))
+      .rejects.toThrow('Invalid key: must be a non-empty string');
   });
 });
