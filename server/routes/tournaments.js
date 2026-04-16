@@ -33,9 +33,11 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
         rebuyAllowed   = false,
         addonAllowed   = false,
         schoolId       = null,
-        privacy        = 'open',
+        privacy        = 'school',
+        privateConfig  = {},
       } = req.body ?? {};
 
+      // Validate basic fields
       if (!name || typeof name !== 'string' || !name.trim()) {
         return res.status(400).json({ error: 'name is required' });
       }
@@ -44,6 +46,25 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
       }
       if (!['open', 'school', 'private'].includes(privacy)) {
         return res.status(400).json({ error: 'privacy must be open, school, or private' });
+      }
+
+      // Gap 2: Non-admin cannot create 'open' tournaments
+      if (privacy === 'open' && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+        return res.status(400).json({
+          error: 'forbidden_privacy',
+          message: 'Only admins can create open tables',
+        });
+      }
+
+      // Gap 3: Validate privateConfig if private
+      if (privacy === 'private') {
+        const whitelistedPlayers = privateConfig?.whitelistedPlayers ?? [];
+        if (!Array.isArray(whitelistedPlayers) || whitelistedPlayers.length === 0) {
+          return res.status(400).json({
+            error: 'invalid_private_config',
+            message: 'Private tables require at least one whitelisted player',
+          });
+        }
       }
 
       const id = await TournamentRepository.createTournament({
@@ -56,6 +77,26 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
         schoolId,
         privacy,
       });
+
+      // Gap 4: Populate whitelist from privateConfig
+      if (privacy === 'private') {
+        const { whitelistedPlayers = [], groupId = null } = privateConfig;
+
+        // Add individual players
+        for (const playerId of whitelistedPlayers) {
+          try {
+            await TournamentRepository.addToWhitelist(id, playerId, req.user.id);
+          } catch (err) {
+            // Skip duplicates
+            if (!err.message.includes('already invited')) throw err;
+          }
+        }
+
+        // Add group members if groupId provided
+        if (groupId) {
+          await TournamentRepository.addGroupToWhitelist(id, groupId, req.user.id);
+        }
+      }
 
       res.status(201).json({ id });
     } catch (err) {
@@ -86,6 +127,16 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
     try {
       const tournament = await TournamentRepository.getTournamentById(req.params.id);
       if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+      // Gap 9: Check visibility — return 403 if not visible
+      const canSee = await TournamentRepository.canPlayerSeeTournament(req.user.id, tournament);
+      if (!canSee) {
+        return res.status(403).json({
+          error: 'forbidden',
+          message: 'You cannot see this tournament',
+        });
+      }
+
       res.json(tournament);
     } catch (err) {
       res.status(500).json({ error: 'internal_error', message: err.message });
@@ -185,13 +236,62 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
   // PATCH /api/tournaments/:id/privacy — update privacy and school_id
   app.patch('/api/tournaments/:id/privacy', ...coachOnly, async (req, res) => {
     try {
-      const { privacy, schoolId } = req.body ?? {};
+      const { privacy, privateConfig = {}, schoolId } = req.body ?? {};
       if (!privacy || !['open', 'school', 'private'].includes(privacy)) {
         return res.status(400).json({ error: 'privacy must be open, school, or private' });
       }
 
-      const tournament = await TournamentRepository.updatePrivacy(req.params.id, privacy, schoolId);
-      res.json(tournament);
+      const tournament = await TournamentRepository.getTournamentById(req.params.id);
+      if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+      // Gap 5: Assert ownership
+      if (tournament.created_by !== req.user.id) {
+        return res.status(403).json({
+          error: 'forbidden',
+          message: 'You do not own this tournament',
+        });
+      }
+
+      // Gap 6: Validate if switching to private
+      if (privacy === 'private') {
+        const whitelistedPlayers = privateConfig?.whitelistedPlayers ?? [];
+        if (!Array.isArray(whitelistedPlayers) || whitelistedPlayers.length === 0) {
+          return res.status(400).json({
+            error: 'invalid_private_config',
+            message: 'Private tables require at least one whitelisted player',
+          });
+        }
+
+        // Clear old whitelist (if applicable)
+        if (tournament.privacy === 'private') {
+          const oldWhitelist = await TournamentRepository.getWhitelist(req.params.id);
+          for (const entry of oldWhitelist) {
+            try {
+              await TournamentRepository.removeFromWhitelist(req.params.id, entry.playerId);
+            } catch (_err) {
+              // Ignore errors when clearing old whitelist
+            }
+          }
+        }
+
+        // Add new whitelist entries
+        for (const playerId of whitelistedPlayers) {
+          try {
+            await TournamentRepository.addToWhitelist(req.params.id, playerId, req.user.id);
+          } catch (err) {
+            if (!err.message.includes('already invited')) throw err;
+          }
+        }
+
+        // Add group members if groupId provided
+        const groupId = privateConfig?.groupId ?? null;
+        if (groupId) {
+          await TournamentRepository.addGroupToWhitelist(req.params.id, groupId, req.user.id);
+        }
+      }
+
+      const updated = await TournamentRepository.updatePrivacy(req.params.id, privacy, schoolId);
+      res.json(updated);
     } catch (err) {
       res.status(500).json({ error: 'internal_error', message: err.message });
     }
@@ -202,6 +302,25 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
     try {
       const { playerId } = req.body ?? {};
       if (!playerId) return res.status(400).json({ error: 'playerId is required' });
+
+      const tournament = await TournamentRepository.getTournamentById(req.params.id);
+      if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+      // Gap 7: Assert ownership
+      if (tournament.created_by !== req.user.id) {
+        return res.status(403).json({
+          error: 'forbidden',
+          message: 'You do not own this tournament',
+        });
+      }
+
+      // Gap 7: Assert privacy is 'private'
+      if (tournament.privacy !== 'private') {
+        return res.status(400).json({
+          error: 'not_private',
+          message: 'Can only add players to private tournaments',
+        });
+      }
 
       await TournamentRepository.addToWhitelist(req.params.id, playerId, req.user.id);
       res.status(201).json({ success: true });
@@ -216,6 +335,17 @@ function registerTournamentStandaloneRoutes(app, { requireAuth, requireRole }) {
   // DELETE /api/tournaments/:id/whitelist/:playerId — remove player from whitelist
   app.delete('/api/tournaments/:id/whitelist/:playerId', ...coachOnly, async (req, res) => {
     try {
+      const tournament = await TournamentRepository.getTournamentById(req.params.id);
+      if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+      // Gap 8: Assert ownership
+      if (tournament.created_by !== req.user.id) {
+        return res.status(403).json({
+          error: 'forbidden',
+          message: 'You do not own this tournament',
+        });
+      }
+
       const result = await TournamentRepository.removeFromWhitelist(req.params.id, req.params.playerId);
       res.json(result);
     } catch (err) {
