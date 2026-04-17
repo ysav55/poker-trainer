@@ -76,6 +76,8 @@ describe('BlindSchedule', () => {
 
   describe('getTimeRemainingMs', () => {
     afterEach(() => {
+      jest.clearAllTimers();
+      jest.clearAllMocks();
       jest.useRealTimers();
     });
 

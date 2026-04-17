@@ -302,6 +302,8 @@ describe('BotTableController — onHandComplete', () => {
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
@@ -358,6 +360,8 @@ describe('BotTableController — _onGameState action dispatch', () => {
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
@@ -461,6 +465,8 @@ describe('BotTableController — onPlayerLeave', () => {
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 

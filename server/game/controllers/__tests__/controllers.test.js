@@ -132,6 +132,8 @@ describe('AutoController', () => {
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
@@ -293,6 +295,8 @@ describe('TournamentController', () => {
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
@@ -380,6 +384,8 @@ describe('TournamentController — _advanceLevel at final level', () => {
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
@@ -411,6 +417,8 @@ describe('TournamentController — destroy clears levelTimer', () => {
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
@@ -444,6 +452,8 @@ describe('TournamentController — onHandComplete ends tournament when all bust'
   });
 
   afterEach(() => {
+    jest.clearAllTimers();
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
