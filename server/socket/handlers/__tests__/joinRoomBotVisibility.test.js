@@ -109,7 +109,10 @@ function makeSocket({ stableId = 'user-uuid-1', isCoach = false, authenticated =
 
 function makeCtx() {
   const tables = new Map();
-  const io = { sockets: { sockets: new Map(), adapter: { rooms: new Map() } } };
+  const io = {
+    sockets: { sockets: new Map(), adapter: { rooms: new Map() } },
+    to: jest.fn().mockReturnValue({ emit: jest.fn() }),
+  };
   return {
     tables,
     stableIdMap:     new Map(),

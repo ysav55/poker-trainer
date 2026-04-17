@@ -68,7 +68,7 @@ describe('join_room handler — max_players_per_table enforcement', () => {
 
     // Create mock io
     mockIO = {
-      to: jest.fn().mockReturnThis(),
+      to: jest.fn().mockReturnValue({ emit: jest.fn() }),
       emit: jest.fn(),
       sockets: {
         sockets: new Map([['socket-123', mockSocket]]),
