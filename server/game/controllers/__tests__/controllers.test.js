@@ -37,6 +37,12 @@ jest.mock('../../../game/AnalyzerService', () => ({
   analyzeAndTagHand: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../../../logs/logger', () => ({
+  error: jest.fn(),
+  info:  jest.fn(),
+  debug: jest.fn(),
+}));
+
 jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 
 const { TournamentRepository } = require('../../../db/repositories/TournamentRepository');
@@ -234,6 +240,42 @@ describe('AutoController', () => {
 
   test('canReplay returns false', () => {
     expect(ctrl.canReplay()).toBe(false);
+  });
+
+  test('_completeHand logs error when analyzeAndTagHand rejects', async () => {
+    jest.useRealTimers();
+    const log = require('../../../logs/logger');
+    const HandLogger = require('../../../db/HandLoggerSupabase');
+    const AnalyzerService = require('../../../game/AnalyzerService');
+
+    const ss = require('../../../state/SharedState');
+    const handId = 'hand-err-test';
+    ss.activeHands.set('table-2', { handId, sessionId: null });
+
+    HandLogger.endHand.mockResolvedValueOnce(undefined);
+    AnalyzerService.analyzeAndTagHand.mockRejectedValueOnce(new Error('DB write failed'));
+
+    // Mock io.sockets.adapter.rooms for _broadcastState call
+    io.sockets = {
+      adapter: { rooms: new Map() },
+      sockets: new Map(),
+    };
+
+    ctrl._handActive = true;
+
+    await ctrl._completeHand();
+
+    // Wait for the floating promise chain to settle
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(log.error).toHaveBeenCalledWith(
+      'game',
+      'hand_completion_failed',
+      expect.stringContaining('AutoController'),
+      expect.objectContaining({ handId })
+    );
+
+    jest.useFakeTimers();
   });
 });
 

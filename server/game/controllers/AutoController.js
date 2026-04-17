@@ -9,6 +9,7 @@ function _SharedState()  { return require('../../state/SharedState'); }
 function _HandLogger()   { return require('../../db/HandLoggerSupabase'); }
 function _uuidv4()       { const { v4 } = require('uuid'); return v4(); }
 function _Analyzer()     { return require('../AnalyzerService'); }
+function _log()          { return require('../../logs/logger'); }
 
 class AutoController extends TableController {
   constructor(tableId, gameManager, io, tableConfig = {}) {
@@ -108,7 +109,10 @@ class AutoController extends TableController {
         state:          stateCopy,
         socketToStable: Object.fromEntries(ss.stableIdMap),
       }).then(() => _Analyzer().analyzeAndTagHand(handInfo.handId))
-        .catch(() => {});
+        .catch(err => _log().error('game', 'hand_completion_failed',
+          '[AutoController] endHand or analyzeAndTagHand failed',
+          { err, handId: handInfo.handId, tableId: this.tableId }
+        ));
       ss.activeHands.delete(this.tableId);
     }
 
