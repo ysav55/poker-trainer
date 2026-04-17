@@ -228,7 +228,7 @@ class GameManager {
       is_all_in: false,
       is_coach: isCoach,
       acted_this_street: false,
-      in_hand: true,
+      in_hand: this.state.phase === 'waiting', // If hand is active, mark as spectator
       disconnected: false,
     };
 

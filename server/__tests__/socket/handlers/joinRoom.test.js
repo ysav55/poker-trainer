@@ -58,9 +58,11 @@ describe('join_room handler — max_players_per_table enforcement', () => {
         players: [],
         config: {},
         config_phase: 'table_setup',
+        phase: 'waiting',
       },
       addPlayer: jest.fn().mockReturnValue({ error: null, player: { id: 'socket-123', seat: 0, stack: 1000 } }),
       removePlayer: jest.fn(),
+      setPlayerInHand: jest.fn().mockReturnValue({ success: true }),
       getPublicState: jest.fn().mockReturnValue({}),
     };
 
