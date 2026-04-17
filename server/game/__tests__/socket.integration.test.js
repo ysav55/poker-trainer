@@ -767,3 +767,48 @@ describe('adjust_stack socket event', () => {
     expect(err.message).toMatch(/not found|player/i);
   });
 });
+
+// ─────────────────────────────────────────────
+//  Suite — is_spectating flag for mid-hand joins
+// ─────────────────────────────────────────────
+describe('join_room — is_spectating flag for mid-hand joins', () => {
+  let coach, player1, player2, joinerClient;
+  const TABLE = 'is-spectating-table';
+
+  afterEach(() => {
+    coach?.disconnect();
+    player1?.disconnect();
+    player2?.disconnect();
+    joinerClient?.disconnect();
+  });
+
+  it('player joining during active hand gets is_spectating=true in broadcast', async () => {
+    const p1 = await registerPlayer('SpecP1');
+    const p2 = await registerPlayer('SpecP2');
+
+    coach = trackClient(createClient(serverPort, { auth: { token: 'coach-spec-token' } }));
+    player1 = trackClient(createClient(serverPort, { auth: { token: p1.token } }));
+    player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
+
+    // Set up: coach + 2 players join
+    await joinRoom(coach, { name: 'SpecCoach', tableId: TABLE });
+    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE });
+    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE });
+
+    // Start game (puts game in 'preflop' phase)
+    coach.emit('start_game', { mode: 'rng' });
+    await new Promise(r => setTimeout(r, 100)); // Let game state propagate
+
+    // New player joins WHILE HAND IS IN PROGRESS
+    joinerClient = trackClient(createClient(serverPort, { auth: { token: 'late-joiner-token' } }));
+
+    // Listen for player:joined broadcast on coach (or other clients)
+    const playerJoinedPromise = waitForEvent(coach, 'player:joined', 2000);
+    joinerClient.emit('join_room', { name: 'LateJoiner', isCoach: false, isSpectator: false, tableId: TABLE });
+
+    const playerJoinedEvent = await playerJoinedPromise;
+    expect(playerJoinedEvent).toBeDefined();
+    expect(playerJoinedEvent.name).toBe('LateJoiner');
+    expect(playerJoinedEvent.is_spectating).toBe(true); // CRITICAL: mid-hand joiner is spectator
+  });
+});

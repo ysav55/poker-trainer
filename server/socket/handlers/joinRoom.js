@@ -299,6 +299,16 @@ module.exports = function registerJoinRoom(socket, ctx) {
 
     socket.emit('room_joined', { playerId: socket.id, isCoach, isSpectator: false, isManager: false, name: trimmedName, tableId });
     broadcastState(tableId, { type: 'join', message: `${trimmedName} ${isCoach ? '(Coach)' : ''} joined the table` });
+
+    // Broadcast player:joined event with is_spectating flag
+    const player = gm.state.players.find(p => p.id === socket.id);
+    io.to(tableId).emit('player:joined', {
+      playerId: socket.id,
+      name: trimmedName,
+      stack: player?.stack || 0,
+      is_spectating: gm.state.phase !== 'waiting',
+    });
+
     log.info('game', 'player_join', `${trimmedName} joined`, { tableId, name: trimmedName, role: isCoach ? 'coach' : 'player', playerId: resolvedStableId });
     log.trackSocket('join_room', tableId, resolvedStableId, { name: trimmedName, isCoach });
     console.log(`[join] ${trimmedName} (coach=${isCoach}, mode=${mode}) → ${tableId}`);
