@@ -93,6 +93,21 @@ const TableRepository = {
     if (error) throw error;
     return data ?? [];
   },
+
+  /**
+   * Counts the number of active (non-closed) tables created by a user.
+   * Used to enforce the max_tables_per_student platform limit.
+   */
+  async countActiveTablesByUser(userId) {
+    const { count, error } = await supabase
+      .from('tables')
+      .select('id', { count: 'exact', head: true })
+      .eq('created_by', userId)
+      .neq('status', 'closed');
+
+    if (error) throw error;
+    return count || 0;
+  },
 };
 
 // ─── Invited Players ──────────────────────────────────────────────────────────

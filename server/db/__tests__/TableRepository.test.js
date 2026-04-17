@@ -313,3 +313,45 @@ describe('activateScheduledTables', () => {
     expect(lteArg <= after).toBe(true);
   });
 });
+
+// ─── countActiveTablesByUser ──────────────────────────────────────────────────
+
+describe('countActiveTablesByUser', () => {
+  test('should count active tables created by a user', async () => {
+    // The final neq call resolves with count
+    supabase.neq.mockResolvedValueOnce({ count: 2, error: null });
+
+    const count = await TableRepository.countActiveTablesByUser('user1');
+
+    expect(supabase.from).toHaveBeenCalledWith('tables');
+    expect(supabase.select).toHaveBeenCalledWith('id', { count: 'exact', head: true });
+    expect(supabase.eq).toHaveBeenCalledWith('created_by', 'user1');
+    expect(supabase.neq).toHaveBeenCalledWith('status', 'closed');
+    expect(count).toBe(2);
+  });
+
+  test('should return 0 if user has no active tables', async () => {
+    supabase.neq.mockResolvedValueOnce({ count: 0, error: null });
+
+    const count = await TableRepository.countActiveTablesByUser('nonexistent-user');
+
+    expect(count).toBe(0);
+  });
+
+  test('should not count closed tables', async () => {
+    supabase.neq.mockResolvedValueOnce({ count: 0, error: null });
+
+    const count = await TableRepository.countActiveTablesByUser('user1');
+
+    expect(count).toBe(0);
+    expect(supabase.neq).toHaveBeenCalledWith('status', 'closed');
+  });
+
+  test('throws when supabase returns an error', async () => {
+    supabase.neq.mockResolvedValueOnce({ error: { message: 'query failed' } });
+
+    await expect(TableRepository.countActiveTablesByUser('user1')).rejects.toMatchObject({
+      message: 'query failed',
+    });
+  });
+});
