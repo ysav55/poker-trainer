@@ -250,6 +250,18 @@ module.exports = function registerJoinRoom(socket, ctx) {
       }
     }
 
+    // Enforce max_players_per_table limit — only count seated players (not coaches or spectators)
+    if (!isCoach && !payloadSpectator) {
+      const SettingsService = require('../../services/SettingsService');
+      const limits = await SettingsService.getOrgSetting('org.platform_limits');
+      const maxPlayers = limits?.max_players_per_table ?? 9;
+      const seatedCount = gm.state.players.filter(p => !p.is_coach && !p.isCoach && !p.isSpectator).length;
+
+      if (seatedCount >= maxPlayers) {
+        return sendError(socket, 'Table is full');
+      }
+    }
+
     const result = gm.addPlayer(socket.id, trimmedName, isCoach, resolvedStableId);
     if (result.error) return sendError(socket, result.error);
 

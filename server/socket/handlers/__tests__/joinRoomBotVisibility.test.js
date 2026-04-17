@@ -66,6 +66,11 @@ jest.mock('../../../db/repositories/ChipBankRepository', () => ({
   buyIn:      jest.fn().mockResolvedValue(undefined),
 }));
 
+// SettingsService — returns org settings for max_players_per_table enforcement
+jest.mock('../../../services/SettingsService', () => ({
+  getOrgSetting: jest.fn().mockResolvedValue(null),
+}));
+
 // HandLogger stub
 const mockHandLogger = {
   upsertPlayerIdentity: jest.fn().mockResolvedValue(undefined),
