@@ -2,7 +2,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../supabase');
-const { q } = require('../utils');
+const { q, parseTags } = require('../utils');
 
 // ─── Playlist API ─────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ async function getPlaylistHands(playlistId) {
     final_pot:     row.hands?.final_pot,
     winner_name:   row.hands?.winner_name,
     phase_ended:   row.hands?.phase_ended,
-    auto_tags:     (row.hands?.hand_tags || []).filter(t => t.tag_type === 'auto').map(t => t.tag),
+    ...parseTags(row.hands?.hand_tags ?? []),
   }));
 }
 
