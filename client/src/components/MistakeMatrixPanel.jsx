@@ -36,6 +36,7 @@ export function MistakeMatrixPanel({ stableId, visible = true }) {
 
       const tags = [
         ...(Array.isArray(hand.auto_tags) ? hand.auto_tags : []),
+        ...(Array.isArray(hand.mistake_tags) ? hand.mistake_tags : []),
         ...(Array.isArray(hand.coach_tags) ? hand.coach_tags : []),
       ].filter(t => isMistakeTag(t));
 

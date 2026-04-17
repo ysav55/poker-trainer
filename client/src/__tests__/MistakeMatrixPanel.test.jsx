@@ -308,4 +308,33 @@ describe('MistakeMatrixPanel', () => {
       expect(apiFetch).toHaveBeenCalledWith('/api/players/xyz-789/hands')
     })
   })
+
+  it('uses mistake_tags bucket in addition to auto_tags', async () => {
+    const hands = [
+      {
+        hero_hole_cards: ['As', 'Ks'],
+        auto_tags: [],
+        mistake_tags: ['OPEN_LIMP'],  // mistake from analyzer
+        coach_tags: [],
+      },
+    ]
+    apiFetch.mockResolvedValue(hands)
+
+    let capturedMistakeTags = null
+    RangeMatrix.mockImplementation(({ mistakeTags }) => {
+      capturedMistakeTags = mistakeTags
+      return <div data-testid="range-matrix" />
+    })
+
+    render(<MistakeMatrixPanel stableId="player-1" visible={true} />)
+    await waitFor(() => {
+      expect(screen.getByTestId('range-matrix')).toBeTruthy()
+    })
+
+    // AKs group should appear in the heatmap since it has a mistake
+    expect(capturedMistakeTags).toBeTruthy()
+    const aksGroup = capturedMistakeTags.get('AKs')
+    expect(aksGroup).toBeDefined()
+    expect(aksGroup).toContain('OPEN_LIMP')
+  })
 })
