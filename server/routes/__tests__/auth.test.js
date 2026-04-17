@@ -74,6 +74,11 @@ jest.mock('../../services/SchoolPasswordService', () => ({
   recordUsage:      jest.fn(),
 }));
 
+jest.mock('../../services/SettingsService', () => ({
+  getOrgSetting: jest.fn(),
+  setOrgSetting: jest.fn(),
+}));
+
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 const express  = require('express');
@@ -1000,5 +1005,107 @@ describe('POST /api/auth/register with school password', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('internal_error');
+  });
+
+  // ─── Trial constants from org settings ─────────────────────────────────────────
+
+  describe('POST /api/auth/register — trial constants from org settings', () => {
+    it('should use org settings trial_days and trial_hand_limit when available', async () => {
+      const SettingsService = require('../../services/SettingsService');
+
+      // Mock SettingsService to return custom trial limits
+      jest.spyOn(SettingsService, 'getOrgSetting').mockResolvedValue({
+        trial_days: 14,
+        trial_hand_limit: 50,
+      });
+
+      findByDisplayName.mockResolvedValue(null);
+      createPlayer.mockResolvedValue('test-student-uuid');
+      getPrimaryRole.mockResolvedValue('solo_student');
+
+      // Track the update call to verify trial_hands_remaining is set to 50
+      mockSupabase.single.mockResolvedValue({ data: { id: 'role-solo-uuid' }, error: null });
+
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          name: 'Test Student Org',
+          password: 'password123',
+          email: 'testorg@example.com',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.trialStatus).toBe('active');
+
+      // Verify SettingsService.getOrgSetting was called
+      expect(SettingsService.getOrgSetting).toHaveBeenCalledWith('org.platform_limits');
+
+      // Verify update was called (which will contain trial_hands_remaining with value from org settings)
+      expect(mockSupabase.update).toHaveBeenCalled();
+
+      SettingsService.getOrgSetting.mockRestore();
+    });
+
+    it('should use fallback constants (7 days, 20 hands) if org settings returns null', async () => {
+      const SettingsService = require('../../services/SettingsService');
+
+      // Mock SettingsService to return null (setting not configured)
+      jest.spyOn(SettingsService, 'getOrgSetting').mockResolvedValue(null);
+
+      findByDisplayName.mockResolvedValue(null);
+      createPlayer.mockResolvedValue('test-student-fallback-uuid');
+      getPrimaryRole.mockResolvedValue('solo_student');
+      mockSupabase.single.mockResolvedValue({ data: { id: 'role-solo-uuid' }, error: null });
+
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          name: 'Test Student Fallback',
+          password: 'password123',
+          email: 'testfallback@example.com',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.trialStatus).toBe('active');
+
+      // Verify SettingsService.getOrgSetting was called
+      expect(SettingsService.getOrgSetting).toHaveBeenCalledWith('org.platform_limits');
+
+      // Verify update was called with fallback values
+      expect(mockSupabase.update).toHaveBeenCalled();
+
+      SettingsService.getOrgSetting.mockRestore();
+    });
+
+    it('should use fallback constants if org settings fetch throws error', async () => {
+      const SettingsService = require('../../services/SettingsService');
+
+      // Mock SettingsService to throw an error
+      jest.spyOn(SettingsService, 'getOrgSetting').mockRejectedValue(new Error('DB connection failed'));
+
+      findByDisplayName.mockResolvedValue(null);
+      createPlayer.mockResolvedValue('test-student-error-uuid');
+      getPrimaryRole.mockResolvedValue('solo_student');
+      mockSupabase.single.mockResolvedValue({ data: { id: 'role-solo-uuid' }, error: null });
+
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({
+          name: 'Test Student Error',
+          password: 'password123',
+          email: 'testerror@example.com',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.trialStatus).toBe('active');
+
+      // Verify SettingsService.getOrgSetting was called
+      expect(SettingsService.getOrgSetting).toHaveBeenCalledWith('org.platform_limits');
+
+      // Verify update was called (with fallback values)
+      expect(mockSupabase.update).toHaveBeenCalled();
+
+      SettingsService.getOrgSetting.mockRestore();
+    });
   });
 });

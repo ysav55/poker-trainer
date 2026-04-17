@@ -3,8 +3,9 @@
 const bcrypt      = require('bcrypt');
 const requireAuth = require('../auth/requireAuth.js');
 
-const TRIAL_DAYS    = 7;
-const TRIAL_HANDS   = 20;
+// Hardcoded fallback values (when org settings are not available)
+const TRIAL_DAYS_FALLBACK    = 7;
+const TRIAL_HANDS_FALLBACK   = 20;
 const BCRYPT_ROUNDS = 12;
 
 /**
@@ -121,7 +122,24 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
 
       // ─── Create player ────────────────────────────────────────────────────────────
       const passwordHash   = await bcrypt.hash(password, BCRYPT_ROUNDS);
-      const trialExpiresAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+      // Fetch trial limits from org settings, with fallback to hardcoded defaults
+      let trialDays = TRIAL_DAYS_FALLBACK;
+      let trialHandLimit = TRIAL_HANDS_FALLBACK;
+
+      try {
+        const SettingsService = require('../services/SettingsService');
+        const limits = await SettingsService.getOrgSetting('org.platform_limits');
+        if (limits) {
+          trialDays = limits.trial_days ?? TRIAL_DAYS_FALLBACK;
+          trialHandLimit = limits.trial_hand_limit ?? TRIAL_HANDS_FALLBACK;
+        }
+      } catch (err) {
+        console.error('Failed to fetch org trial limits, using fallback:', err.message);
+        // Continue with fallback values already set
+      }
+
+      const trialExpiresAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
 
       const newId = await createPlayer({
         displayName: name.trim(),
@@ -130,10 +148,10 @@ module.exports = function registerAuthRoutes(app, { HandLogger, PlayerRoster, Jw
         createdBy:   null,
       });
 
-      // Set trial fields
+      // Set trial fields with values from org settings (or fallback)
       await supabase.from('player_profiles').update({
         trial_expires_at:      trialExpiresAt,
-        trial_hands_remaining: TRIAL_HANDS,
+        trial_hands_remaining: trialHandLimit,
       }).eq('id', newId);
 
       // ─── Assign role ──────────────────────────────────────────────────────────────
