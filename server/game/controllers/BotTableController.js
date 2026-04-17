@@ -31,6 +31,7 @@ const { v4: uuidv4 }     = require('uuid');
 function _ioClient()    { return require('socket.io-client'); }
 function _HandLogger()  { return require('../../db/HandLoggerSupabase'); }
 function _SharedState() { return require('../../state/SharedState'); }
+function _Analyzer()    { return require('../AnalyzerService'); }
 
 const DEAL_DELAY_MS      = 2500;
 const MIN_THINK_MS       = 300;
@@ -259,7 +260,8 @@ class BotTableController extends AutoController {
         handId:         handInfo.handId,
         state:          stateCopy,
         socketToStable: Object.fromEntries(ss.stableIdMap),
-      }).catch(() => {});
+      }).then(() => _Analyzer().analyzeAndTagHand(handInfo.handId))
+        .catch(err => console.error('[BotTableController] endHand/analyzeAndTagHand failed:', err, handInfo.handId));
       ss.activeHands.delete(this.tableId);
     }
 

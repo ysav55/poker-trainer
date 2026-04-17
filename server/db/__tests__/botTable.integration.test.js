@@ -238,6 +238,12 @@ test('human joins bot table, bots auto-join and complete a hand', async () => {
 
   // Hand should have been finalized
   expect(mockHandLogger.endHand).toHaveBeenCalledTimes(1);
+
+  // After endHand, analyzeAndTagHand should have been called with the handId
+  const AnalyzerService = require('../../game/AnalyzerService');
+  expect(AnalyzerService.analyzeAndTagHand).toHaveBeenCalledTimes(1);
+  const handId = mockHandLogger.endHand.mock.calls[0][0].handId;
+  expect(AnalyzerService.analyzeAndTagHand).toHaveBeenCalledWith(handId);
 }, HAND_TIMEOUT + 5000);
 
 test('unauthenticated socket cannot join a bot_cash table', async () => {
