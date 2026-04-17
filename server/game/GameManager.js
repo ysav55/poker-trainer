@@ -981,6 +981,14 @@ class GameManager {
     this.state.winner_name = null;
     this.state.showdown_result = null;
     this.state.side_pots = [];
+
+    // Auto-rejoin spectators for next hand (players sitting out with chips rejoin)
+    for (const player of this.state.players) {
+      if (player.seat >= 0 && !player.in_hand && player.stack > 0) {
+        player.in_hand = true;
+      }
+    }
+
     this.state.phase = 'waiting';
     this.state.current_turn = null;
     this.state.street_snapshots = [];
