@@ -18,14 +18,25 @@
 
 // ── Mock supabase client — CI has no DB credentials ──────────────────────────
 // index.js requires supabase directly; without this mock it throws at load time.
-jest.mock('../../db/supabase', () => ({
-  from: jest.fn().mockReturnValue({
-    select:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
-    insert:  jest.fn().mockResolvedValue({ data: [], error: null }),
-    update:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
-    delete:  jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: [], error: null }) }),
-  }),
-}));
+jest.mock('../../db/supabase', () => {
+  // Create a chainable query builder that supports .select().eq().eq().eq().maybeSingle()
+  const createChainableQuery = () => ({
+    eq: jest.fn(function() { return this; }),
+    maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    select: jest.fn(function() { return this; }),
+  });
+
+  return {
+    from: jest.fn().mockReturnValue({
+      select:  jest.fn(function() { return this; }),
+      insert:  jest.fn().mockResolvedValue({ data: [], error: null }),
+      update:  jest.fn(function() { return this; }),
+      delete:  jest.fn(function() { return this; }),
+      eq:      jest.fn(function() { return this; }),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    }),
+  };
+});
 
 // ── Mock HandLoggerSupabase (replaces SQLite Database mock) ──────────────────
 // Stateful in-memory store so loginRosterPlayer → isRegisteredPlayer works.
