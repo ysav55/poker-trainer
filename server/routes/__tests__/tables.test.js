@@ -22,11 +22,12 @@ jest.mock('../../db/supabase', () => ({
 
 jest.mock('../../db/repositories/TableRepository', () => ({
   TableRepository: {
-    createTable:  jest.fn(),
-    getTable:     jest.fn(),
-    listTables:   jest.fn(),
-    closeTable:   jest.fn(),
-    updateTable:  jest.fn(),
+    createTable:           jest.fn(),
+    getTable:              jest.fn(),
+    listTables:            jest.fn(),
+    closeTable:            jest.fn(),
+    updateTable:           jest.fn(),
+    countActiveTablesByUser: jest.fn(),
   },
 }));
 
@@ -49,6 +50,11 @@ jest.mock('../../services/TableVisibilityService', () => ({
   addGroupToWhitelist:  jest.fn(),
 }));
 
+// SettingsService mock
+jest.mock('../../services/SettingsService', () => ({
+  getOrgSetting: jest.fn(),
+}));
+
 // SharedState — mock the whole module so getTableSummaries is available
 jest.mock('../../state/SharedState', () => {
   const instance = { tables: new Map() };
@@ -63,6 +69,7 @@ const request    = require('supertest');
 const { TableRepository } = require('../../db/repositories/TableRepository');
 const { getPlayerPermissions } = require('../../auth/requirePermission');
 const TableVisibilityService = require('../../services/TableVisibilityService');
+const SettingsService = require('../../services/SettingsService');
 const sharedState = require('../../state/SharedState');
 
 /**
@@ -95,6 +102,7 @@ beforeEach(() => {
   TableRepository.createTable.mockReset();
   TableRepository.updateTable.mockReset();
   TableRepository.closeTable.mockReset();
+  TableRepository.countActiveTablesByUser.mockReset();
 
   // Default: permission check passes
   mockPermMiddleware.mockImplementation((req, res, next) => next());
@@ -108,6 +116,8 @@ beforeEach(() => {
   TableRepository.createTable.mockResolvedValue(undefined);
   TableRepository.updateTable.mockResolvedValue(undefined);
   TableRepository.closeTable.mockResolvedValue(undefined);
+  // Default: user has 0 active tables (under limit)
+  TableRepository.countActiveTablesByUser.mockResolvedValue(0);
   // Default: getPlayerPermissions returns empty set
   getPlayerPermissions.mockResolvedValue(new Set());
   // Default: visibility service — allow all visibility checks
@@ -118,6 +128,8 @@ beforeEach(() => {
   TableVisibilityService.removeFromWhitelist.mockResolvedValue(undefined);
   TableVisibilityService.getWhitelist.mockResolvedValue([]);
   TableVisibilityService.addGroupToWhitelist.mockResolvedValue({ added: 0, skipped: 0 });
+  // Default: SettingsService returns no org limits (fallback to 4)
+  SettingsService.getOrgSetting.mockResolvedValue(null);
 });
 
 // ─── GET /api/tables ──────────────────────────────────────────────────────────
@@ -483,5 +495,105 @@ describe('PATCH /api/tables/:id — additional coverage', () => {
       .send({ name: 'Failing' });
 
     expect(res.status).toBe(500);
+  });
+});
+
+// ─── POST /api/tables — max_tables_per_student enforcement ──────────────────────
+
+describe('POST /api/tables — max_tables_per_student enforcement', () => {
+  test('returns 403 when user exceeds max_tables_per_student limit', async () => {
+    // Mock SettingsService to return limit of 1
+    SettingsService.getOrgSetting.mockResolvedValueOnce({
+      max_tables_per_student: 1,
+    });
+
+    // Mock TableRepository to show user already has 1 active table
+    TableRepository.countActiveTablesByUser.mockResolvedValueOnce(1);
+
+    const app = buildApp({ user: { id: 'user-123' } });
+    const res = await request(app)
+      .post('/api/tables')
+      .send({
+        name: 'Exceed Limit Table',
+        mode: 'uncoached_cash',
+        config: {},
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'table_limit_reached' });
+    expect(TableRepository.createTable).not.toHaveBeenCalled();
+  });
+
+  test('allows table creation when under limit', async () => {
+    // Mock SettingsService to return limit of 4
+    SettingsService.getOrgSetting.mockResolvedValueOnce({
+      max_tables_per_student: 4,
+    });
+
+    // Mock TableRepository to show user has 2 active tables
+    TableRepository.countActiveTablesByUser.mockResolvedValueOnce(2);
+
+    // Mock successful table creation
+    const fakeTable = { id: 'table-1', name: 'Under Limit Table', status: 'waiting' };
+    TableRepository.getTable.mockResolvedValueOnce(fakeTable);
+
+    const app = buildApp({ user: { id: 'user-456' } });
+    const res = await request(app)
+      .post('/api/tables')
+      .send({
+        name: 'Under Limit Table',
+        mode: 'uncoached_cash',
+        config: {},
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveProperty('id');
+    expect(TableRepository.createTable).toHaveBeenCalled();
+  });
+
+  test('uses fallback limit of 4 if org settings not set', async () => {
+    // Mock SettingsService to return null (no setting)
+    SettingsService.getOrgSetting.mockResolvedValueOnce(null);
+
+    // Mock TableRepository to show user already has 4 active tables (at fallback limit)
+    TableRepository.countActiveTablesByUser.mockResolvedValueOnce(4);
+
+    const app = buildApp({ user: { id: 'user-789' } });
+    const res = await request(app)
+      .post('/api/tables')
+      .send({
+        name: 'Fallback Limit Table',
+        mode: 'uncoached_cash',
+        config: {},
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'table_limit_reached' });
+    expect(TableRepository.createTable).not.toHaveBeenCalled();
+  });
+
+  test('allows table creation when at limit boundary (one under max)', async () => {
+    // Mock SettingsService to return limit of 3
+    SettingsService.getOrgSetting.mockResolvedValueOnce({
+      max_tables_per_student: 3,
+    });
+
+    // Mock TableRepository to show user has 2 active tables (one under limit)
+    TableRepository.countActiveTablesByUser.mockResolvedValueOnce(2);
+
+    const fakeTable = { id: 'table-2', name: 'Boundary Table', status: 'waiting' };
+    TableRepository.getTable.mockResolvedValueOnce(fakeTable);
+
+    const app = buildApp({ user: { id: 'user-boundary' } });
+    const res = await request(app)
+      .post('/api/tables')
+      .send({
+        name: 'Boundary Table',
+        mode: 'uncoached_cash',
+        config: {},
+      });
+
+    expect(res.status).toBe(201);
+    expect(TableRepository.createTable).toHaveBeenCalled();
   });
 });

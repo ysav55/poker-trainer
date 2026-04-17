@@ -3,6 +3,7 @@
 const { TableRepository, InvitedPlayersRepository, TablePresetsRepository } = require('../db/repositories/TableRepository.js');
 const { requirePermission, getPlayerPermissions } = require('../auth/requirePermission.js');
 const TableVisibilityService = require('../services/TableVisibilityService.js');
+const SettingsService = require('../services/SettingsService.js');
 const supabase = require('../db/supabase.js');
 const log = require('../logs/logger.js');
 
@@ -115,6 +116,15 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
         schoolId = null; // Open tables have no school
       } else {
         schoolId = player.school_id; // Coach: assigned to their school
+      }
+
+      // Enforce max_tables_per_student limit
+      const platformLimits = await SettingsService.getOrgSetting('org.platform_limits');
+      const activeTables = await TableRepository.countActiveTablesByUser(req.user.id);
+      const maxTables = platformLimits?.max_tables_per_student ?? 4;
+
+      if (activeTables >= maxTables) {
+        return res.status(403).json({ error: 'table_limit_reached' });
       }
 
       // Validate private table config
