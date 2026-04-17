@@ -307,6 +307,7 @@ function ResultsTable({ hands, showNet, onHandClick, isCoach, onSaveAsScenario }
             const allTags = [
               ...(hand.auto_tags    || []).map(t => ({ tag: t, type: 'auto'    })),
               ...(hand.mistake_tags || []).map(t => ({ tag: t, type: 'mistake' })),
+              ...(hand.sizing_tags  || []).map(t => ({ tag: t, type: 'sizing'  })),
               ...(hand.coach_tags   || []).map(t => ({ tag: t, type: 'coach'   })),
             ];
             return (
