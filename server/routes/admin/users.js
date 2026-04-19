@@ -5,6 +5,7 @@ const bcrypt  = require('bcrypt');
 
 const { requirePermission, invalidatePermissionCache } = require('../../auth/requirePermission.js');
 const supabase = require('../../db/supabase.js');
+const { findById: findSchoolById } = require('../../db/repositories/SchoolRepository');
 const {
   listPlayers,
   createPlayer,
@@ -187,8 +188,12 @@ router.post('/users/bulk-assign-school', async (req, res) => {
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return res.status(400).json({ error: 'userIds must be a non-empty array' });
     }
-    if (schoolId === undefined) {
+    if (!schoolId) {
       return res.status(400).json({ error: 'schoolId is required' });
+    }
+    const school = await findSchoolById(schoolId);
+    if (!school) {
+      return res.status(400).json({ error: 'School not found' });
     }
     await Promise.all(userIds.map(id => updatePlayer(id, { schoolId })));
     res.json({ success: true, assigned: userIds.length });

@@ -57,6 +57,10 @@ jest.mock('../../../db/supabase.js', () => {
   return chain;
 });
 
+jest.mock('../../../db/repositories/SchoolRepository', () => ({
+  findById: jest.fn(),
+}));
+
 // requirePermission is hoisted — we expose a jest.fn so individual tests
 // can control whether the permission check passes or fails.
 const mockPermMiddleware = jest.fn((req, res, next) => next());
@@ -566,6 +570,8 @@ describe('PUT /users/:id — school assignment', () => {
 
 describe('POST /api/admin/users/bulk-assign-school', () => {
   it('assigns multiple users to a school', async () => {
+    const { findById } = require('../../../db/repositories/SchoolRepository');
+    findById.mockResolvedValue({ id: 'school-abc', name: 'Test School' });
     updatePlayer.mockResolvedValue();
 
     const app = buildApp({ user: { id: 'admin-uuid' } });
@@ -597,6 +603,32 @@ describe('POST /api/admin/users/bulk-assign-school', () => {
       .send({ userIds: ['u1'] });
 
     expect(res.status).toBe(400);
+  });
+
+  it('rejects non-existent schoolId', async () => {
+    const { findById } = require('../../../db/repositories/SchoolRepository');
+    findById.mockResolvedValue(null);
+
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app)
+      .post('/api/admin/users/bulk-assign-school')
+      .send({ userIds: ['u1'], schoolId: 'nonexistent-id' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not found/i);
+  });
+
+  it('accepts valid schoolId', async () => {
+    const { findById } = require('../../../db/repositories/SchoolRepository');
+    findById.mockResolvedValue({ id: 'school-abc', name: 'Test School' });
+    updatePlayer.mockResolvedValue();
+
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app)
+      .post('/api/admin/users/bulk-assign-school')
+      .send({ userIds: ['u1'], schoolId: 'school-abc' });
+
+    expect(res.status).toBe(200);
   });
 });
 
