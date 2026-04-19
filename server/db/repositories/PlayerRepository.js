@@ -41,26 +41,62 @@ async function getAllPlayersWithStats({ period = 'all', gameType = 'all' } = {})
     const data = await q(
       supabase.from('leaderboard').select('*').order('net_chips', { ascending: false })
     );
-    return (data || []).map(r => {
-      const total = r.total_hands ?? 0;
+    const players = (data || []).map(r => {
+      const total   = r.total_hands  ?? 0;
+      const wtsdCnt = r.wtsd_count   ?? 0;
       return {
-        stableId:        r.player_id,
-        name:            r.display_name,
-        total_hands:     total,
-        total_wins:      r.total_wins   ?? 0,
-        total_net_chips: r.net_chips    ?? 0,
-        vpip_percent:    total > 0 ? Math.round((r.vpip_count ?? 0) / total * 100) : 0,
-        pfr_percent:     total > 0 ? Math.round((r.pfr_count  ?? 0) / total * 100) : 0,
-        last_hand_at:    r.last_hand_at,
+        stableId:           r.player_id,
+        name:               r.display_name,
+        total_hands:        total,
+        total_wins:         r.total_wins   ?? 0,
+        total_net_chips:    r.net_chips    ?? 0,
+        vpip_percent:       total > 0 ? Math.round((r.vpip_count      ?? 0) / total   * 100) : 0,
+        pfr_percent:        total > 0 ? Math.round((r.pfr_count       ?? 0) / total   * 100) : 0,
+        wtsd_percent:       total > 0 ? Math.round(wtsdCnt                   / total   * 100) : 0,
+        wsd_percent:        wtsdCnt > 0 ? Math.round((r.wsd_count     ?? 0) / wtsdCnt * 100) : 0,
+        three_bet_percent:  total > 0 ? Math.round((r.three_bet_count ?? 0) / total   * 100) : 0,
+        last_hand_at:       r.last_hand_at,
+        // Baseline-sourced fields filled below (null if no baseline row)
+        bb_per_100: null, af: null, cbet_flop: null, fold_to_cbet: null,
+        open_limp_rate: null, cold_call_3bet_rate: null, min_raise_rate: null,
+        overlimp_rate: null, equity_fold_rate: null,
       };
     });
+
+    // Merge rolling-30d baselines for advanced stats
+    if (players.length > 0) {
+      const ids = players.map(p => p.stableId);
+      const { data: blRows } = await supabase
+        .from('student_baselines')
+        .select('player_id, bb_per_100, aggression, cbet_flop, fold_to_cbet, open_limp_rate, cold_call_3bet_rate, min_raise_rate, overlimp_rate, equity_fold_rate')
+        .eq('period_type', 'rolling_30d')
+        .in('player_id', ids);
+      if (blRows) {
+        const blMap = new Map(blRows.map(b => [b.player_id, b]));
+        for (const p of players) {
+          const bl = blMap.get(p.stableId);
+          if (!bl) continue;
+          p.bb_per_100          = bl.bb_per_100 != null          ? Number(bl.bb_per_100)          : null;
+          p.af                  = bl.aggression != null          ? Number(bl.aggression)           : null;
+          p.cbet_flop           = bl.cbet_flop  != null          ? Math.round(Number(bl.cbet_flop)      * 100) : null;
+          p.fold_to_cbet        = bl.fold_to_cbet != null        ? Math.round(Number(bl.fold_to_cbet)   * 100) : null;
+          p.open_limp_rate      = bl.open_limp_rate != null      ? Number(bl.open_limp_rate)      : null;
+          p.cold_call_3bet_rate = bl.cold_call_3bet_rate != null ? Number(bl.cold_call_3bet_rate) : null;
+          p.min_raise_rate      = bl.min_raise_rate != null      ? Number(bl.min_raise_rate)      : null;
+          p.overlimp_rate       = bl.overlimp_rate != null       ? Number(bl.overlimp_rate)       : null;
+          p.equity_fold_rate    = bl.equity_fold_rate != null    ? Number(bl.equity_fold_rate)    : null;
+        }
+      }
+    }
+
+    return players;
   }
 
   // Filtered path: aggregate from hand_players + hands with date/mode constraints
   // Step 1: build filtered hand_players query
   let query = supabase
     .from('hand_players')
-    .select('player_id, vpip, pfr, is_winner, stack_start, stack_end, hands!inner(started_at, table_mode)');
+    .select('player_id, vpip, pfr, wtsd, wsd, three_bet, is_winner, stack_start, stack_end, hands!inner(started_at, table_mode)');
 
   if (period !== 'all') {
     const days = period === '7d' ? 7 : 30;
@@ -82,14 +118,17 @@ async function getAllPlayersWithStats({ period = 'all', gameType = 'all' } = {})
   for (const hp of hpRows || []) {
     let p = playerMap.get(hp.player_id);
     if (!p) {
-      p = { player_id: hp.player_id, total_hands: 0, total_wins: 0, net_chips: 0, vpip_count: 0, pfr_count: 0 };
+      p = { player_id: hp.player_id, total_hands: 0, total_wins: 0, net_chips: 0, vpip_count: 0, pfr_count: 0, wtsd_count: 0, wsd_count: 0, three_bet_count: 0 };
       playerMap.set(hp.player_id, p);
     }
     p.total_hands += 1;
     if (hp.is_winner)  p.total_wins += 1;
     p.net_chips  += (hp.stack_end ?? 0) - (hp.stack_start ?? 0);
-    if (hp.vpip)       p.vpip_count += 1;
-    if (hp.pfr)        p.pfr_count  += 1;
+    if (hp.vpip)       p.vpip_count     += 1;
+    if (hp.pfr)        p.pfr_count      += 1;
+    if (hp.wtsd)       p.wtsd_count     += 1;
+    if (hp.wsd)        p.wsd_count      += 1;
+    if (hp.three_bet)  p.three_bet_count += 1;
   }
 
   if (playerMap.size === 0) return [];
@@ -107,14 +146,21 @@ async function getAllPlayersWithStats({ period = 'all', gameType = 'all' } = {})
     .map(p => {
       const total = p.total_hands;
       return {
-        stableId:        p.player_id,
-        name:            nameMap.get(p.player_id) ?? p.player_id,
-        total_hands:     total,
-        total_wins:      p.total_wins,
-        total_net_chips: p.net_chips,
-        vpip_percent:    total > 0 ? Math.round(p.vpip_count / total * 100) : 0,
-        pfr_percent:     total > 0 ? Math.round(p.pfr_count  / total * 100) : 0,
-        last_hand_at:    null,
+        stableId:           p.player_id,
+        name:               nameMap.get(p.player_id) ?? p.player_id,
+        total_hands:        total,
+        total_wins:         p.total_wins,
+        total_net_chips:    p.net_chips,
+        vpip_percent:       total > 0 ? Math.round(p.vpip_count      / total          * 100) : 0,
+        pfr_percent:        total > 0 ? Math.round(p.pfr_count       / total          * 100) : 0,
+        wtsd_percent:       total > 0 ? Math.round(p.wtsd_count      / total          * 100) : 0,
+        wsd_percent:        p.wtsd_count > 0 ? Math.round(p.wsd_count / p.wtsd_count  * 100) : 0,
+        three_bet_percent:  total > 0 ? Math.round(p.three_bet_count / total          * 100) : 0,
+        last_hand_at:       null,
+        // Baseline stats unavailable for filtered views
+        bb_per_100: null, af: null, cbet_flop: null, fold_to_cbet: null,
+        open_limp_rate: null, cold_call_3bet_rate: null, min_raise_rate: null,
+        overlimp_rate: null, equity_fold_rate: null,
       };
     });
 }
@@ -366,6 +412,7 @@ async function updatePlayer(id, patch) {
   if (patch.status      !== undefined) dbPatch.status       = patch.status;
   if (patch.avatarUrl   !== undefined) dbPatch.avatar_url   = patch.avatarUrl;
   if (patch.coachId     !== undefined) dbPatch.coach_id     = patch.coachId;
+  if (patch.schoolId    !== undefined) dbPatch.school_id    = patch.schoolId;
   const { error } = await supabase.from('player_profiles').update(dbPatch).eq('id', id);
   if (error) throw error;
 }
@@ -403,7 +450,7 @@ async function listPlayers({ status, role, limit = 50, offset = 0 } = {}) {
 
   let query = supabase
     .from('player_profiles')
-    .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at')
+    .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, school_id')
     .order('display_name')
     .range(offset, offset + limit - 1);
   if (status) query = query.eq('status', status);

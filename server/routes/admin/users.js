@@ -49,6 +49,7 @@ function normalizeUser(row) {
     last_seen:    row.last_seen  ?? null,
     coach_id:     row.coach_id   ?? null,
     created_at:   row.created_at ?? null,
+    school_id:    row.school_id  ?? null,
     role:         row.player_roles !== undefined ? normalizeRole(row.player_roles) : (row.role ?? null),
   };
 }
@@ -247,13 +248,14 @@ router.put('/users/:id', async (req, res) => {
   try {
     const body = req.body || {};
     const displayName = body.displayName || body.display_name;
-    const { email, status, avatarUrl, role: roleName } = body;
+    const { email, status, avatarUrl, role: roleName, schoolId } = body;
 
     const patch = {};
     if (displayName !== undefined) patch.displayName = displayName;
     if (email       !== undefined) patch.email       = email;
     if (status      !== undefined) patch.status      = status;
     if (avatarUrl   !== undefined) patch.avatarUrl   = avatarUrl;
+    if (schoolId    !== undefined) patch.schoolId    = schoolId;
 
     await updatePlayer(req.params.id, patch);
 

@@ -443,6 +443,38 @@ describe('PUT /api/admin/users/:id', () => {
   });
 });
 
+// ─── PUT /api/admin/users/:id — school assignment ────────────────────────────
+
+describe('PUT /users/:id — school assignment', () => {
+  it('updates school_id when schoolId is provided', async () => {
+    updatePlayer.mockResolvedValue();
+
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app)
+      .put('/api/admin/users/user-1')
+      .send({ schoolId: 'school-abc' });
+
+    expect(res.status).toBe(200);
+    expect(updatePlayer).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      schoolId: 'school-abc',
+    }));
+  });
+
+  it('accepts null schoolId to unassign from school', async () => {
+    updatePlayer.mockResolvedValue();
+
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app)
+      .put('/api/admin/users/user-1')
+      .send({ schoolId: null });
+
+    expect(res.status).toBe(200);
+    expect(updatePlayer).toHaveBeenCalledWith('user-1', expect.objectContaining({
+      schoolId: null,
+    }));
+  });
+});
+
 // ─── POST /api/admin/users/:id/roles ─────────────────────────────────────────
 
 describe('POST /api/admin/users/:id/roles', () => {
