@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api';
 import { colors } from '../../lib/colors';
+import { useToast } from '../../contexts/ToastContext';
 
 const ROLES = ['superadmin', 'admin', 'coach', 'coached_student', 'solo_student'];
 
 export default function UserDrawerRoleSchool({ user, schools, onUserUpdated }) {
+  const { addToast } = useToast();
   const [role, setRole] = useState(user.role || '');
   const [schoolId, setSchoolId] = useState(user.school_id || '');
   const [coachId, setCoachId] = useState(user.coach_id || '');
@@ -32,7 +34,7 @@ export default function UserDrawerRoleSchool({ user, schools, onUserUpdated }) {
       });
       setRole(newRole);
       onUserUpdated?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to update role', 'error'); }
     finally { setSaving(false); }
   };
 
@@ -45,7 +47,7 @@ export default function UserDrawerRoleSchool({ user, schools, onUserUpdated }) {
       });
       setSchoolId(newSchoolId);
       onUserUpdated?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to assign school', 'error'); }
     finally { setSaving(false); }
   };
 
@@ -58,7 +60,7 @@ export default function UserDrawerRoleSchool({ user, schools, onUserUpdated }) {
       });
       setCoachId(newCoachId);
       onUserUpdated?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to assign coach', 'error'); }
     finally { setSaving(false); }
   };
 

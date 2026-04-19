@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { apiFetch } from '../../lib/api';
 import { colors } from '../../lib/colors';
+import { useToast } from '../../contexts/ToastContext';
 
 function Initials({ name }) {
   const letters = (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -38,6 +39,7 @@ function InfoRow({ label, children }) {
 }
 
 export default function UserDrawerProfile({ user, onUserUpdated }) {
+  const { addToast } = useToast();
   const [editName, setEditName] = useState(false);
   const [editEmail, setEditEmail] = useState(false);
   const [name, setName] = useState(user.display_name || '');
@@ -52,7 +54,7 @@ export default function UserDrawerProfile({ user, onUserUpdated }) {
         body: JSON.stringify({ [field]: value }),
       });
       onUserUpdated?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to save', 'error'); }
     finally { setSaving(false); }
   };
 

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { apiFetch } from '../../lib/api';
 import { colors } from '../../lib/colors';
+import { useToast } from '../../contexts/ToastContext';
 
 export default function UserDrawerAccount({ user, onUserUpdated, onClose }) {
+  const { addToast } = useToast();
   const [password, setPassword] = useState('');
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetError, setResetError] = useState(null);
@@ -36,7 +38,7 @@ export default function UserDrawerAccount({ user, onUserUpdated, onClose }) {
         body: JSON.stringify({ status: isSuspended ? 'active' : 'suspended' }),
       });
       onUserUpdated?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to update status', 'error'); }
     finally { setSuspending(false); }
   };
 
@@ -46,7 +48,7 @@ export default function UserDrawerAccount({ user, onUserUpdated, onClose }) {
       await apiFetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
       onUserUpdated?.();
       onClose?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to archive user', 'error'); }
     finally { setArchiving(false); }
   };
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { colors } from '../../lib/colors';
+import { useToast } from '../../contexts/ToastContext';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -22,6 +23,7 @@ function isStale(iso) {
 }
 
 export default function IncomingZone({ users, schools, onSelectUser, onUsersUpdated }) {
+  const { addToast } = useToast();
   const [bulkSchoolId, setBulkSchoolId] = useState('');
   const [assigning, setAssigning] = useState(false);
 
@@ -40,7 +42,7 @@ export default function IncomingZone({ users, schools, onSelectUser, onUsersUpda
       });
       setBulkSchoolId('');
       onUsersUpdated?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to assign users', 'error'); }
     finally { setAssigning(false); }
   };
 
