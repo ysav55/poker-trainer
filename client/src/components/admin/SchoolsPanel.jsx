@@ -1,15 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MoreHorizontal, Trash2, Pencil, Plus } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { colors } from '../../lib/colors';
+import { useToast } from '../../contexts/ToastContext';
 
 export default function SchoolsPanel({ schools, selectedSchoolId, totalUsers, onSelectSchool, onSchoolsChanged }) {
+  const { addToast } = useToast();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [menuOpen, setMenuOpen] = useState(null);
   const [renaming, setRenaming] = useState(null);
   const [renameVal, setRenameVal] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (menuOpen === null) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -22,7 +37,7 @@ export default function SchoolsPanel({ schools, selectedSchoolId, totalUsers, on
       setNewName('');
       setCreating(false);
       onSchoolsChanged?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to create school', 'error'); }
     finally { setSaving(false); }
   };
 
@@ -37,22 +52,26 @@ export default function SchoolsPanel({ schools, selectedSchoolId, totalUsers, on
       setRenaming(null);
       setRenameVal('');
       onSchoolsChanged?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to rename school', 'error'); }
     finally { setSaving(false); }
   };
 
-  const handleDelete = async (id, name) => {
+  const handleDelete = (id, name) => {
     const school = schools.find(s => s.id === id);
     if (school && school.total > 0) {
-      alert(`Cannot delete "${name}" — it has ${school.total} members. Remove them first.`);
+      addToast(`Cannot delete "${name}" — it has ${school.total} members. Remove them first.`, 'error');
       return;
     }
-    if (!confirm(`Delete school "${name}"?`)) return;
+    setConfirmingDelete(id);
+  };
+
+  const confirmDelete = async (id) => {
+    setConfirmingDelete(null);
     try {
       await apiFetch(`/api/admin/schools/${id}`, { method: 'DELETE' });
       if (selectedSchoolId === id) onSelectSchool(null);
       onSchoolsChanged?.();
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to delete school', 'error'); }
   };
 
   const itemStyle = (isSelected) => ({
@@ -118,6 +137,7 @@ export default function SchoolsPanel({ schools, selectedSchoolId, totalUsers, on
 
           {menuOpen === s.id && (
             <div
+              ref={menuRef}
               className="absolute right-0 z-10 rounded shadow-lg py-1"
               style={{
                 top: '100%',
@@ -133,13 +153,24 @@ export default function SchoolsPanel({ schools, selectedSchoolId, totalUsers, on
               >
                 <Pencil size={11} /> Rename
               </button>
-              <button
-                onClick={() => { handleDelete(s.id, s.name); setMenuOpen(null); }}
-                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left"
-                style={{ color: '#f85149', background: 'none', border: 'none', cursor: 'pointer' }}
-              >
-                <Trash2 size={11} /> Delete
-              </button>
+              {confirmingDelete === s.id ? (
+                <div className="flex items-center gap-1 px-3 py-1.5">
+                  <button onClick={() => { confirmDelete(s.id); setMenuOpen(null); }}
+                    className="text-xs px-2 py-0.5 rounded"
+                    style={{ background: '#f85149', color: '#fff', border: 'none', cursor: 'pointer' }}>Yes</button>
+                  <button onClick={() => setConfirmingDelete(null)}
+                    className="text-xs px-2 py-0.5 rounded"
+                    style={{ background: 'none', border: `1px solid ${colors.borderDefault}`, color: colors.textMuted, cursor: 'pointer' }}>No</button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { handleDelete(s.id, s.name); }}
+                  className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-left"
+                  style={{ color: '#f85149', background: 'none', border: 'none', cursor: 'pointer' }}
+                >
+                  <Trash2 size={11} /> Delete
+                </button>
+              )}
             </div>
           )}
         </div>
