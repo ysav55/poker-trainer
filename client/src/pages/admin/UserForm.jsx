@@ -42,28 +42,15 @@ function TextInput({ id, value, onChange, placeholder, type = 'text', required =
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function UserForm({ user, onClose, onSaved }) {
-  const isCreate = user == null;
-
-  const [name, setName]         = useState(user?.display_name ?? '');
-  const [email, setEmail]       = useState(user?.email ?? '');
+export default function UserForm({ onClose, onSaved }) {
+  const [name, setName]         = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole]         = useState(user?.role ?? 'coached_student');
+  const [role, setRole]         = useState('coached_student');
   const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState(null);
   const [coaches,  setCoaches]  = useState([]);
-  const [coachId,  setCoachId]  = useState(user?.coach_id ?? '');
-
-  // Reset form if user prop changes
-  useEffect(() => {
-    setName(user?.display_name ?? '');
-    setEmail(user?.email ?? '');
-    setPassword('');
-    setRole(user?.role ?? 'coached_student');
-    setCoachId(user?.coach_id ?? '');
-    setCoaches([]);
-    setError(null);
-  }, [user]);
+  const [coachId,  setCoachId]  = useState('');
 
   // Load coaches when role is coached_student
   useEffect(() => {
@@ -96,21 +83,13 @@ export default function UserForm({ user, onClose, onSaved }) {
     setSaving(true);
 
     try {
-      const body = { display_name: name.trim(), email: email.trim(), role };
+      const body = { display_name: name.trim(), email: email.trim(), role, password };
       if (coachId) body.coachId = coachId;
-      if (isCreate) body.password = password;
 
-      if (isCreate) {
-        await apiFetch('/api/admin/users', {
-          method: 'POST',
-          body: JSON.stringify(body),
-        });
-      } else {
-        await apiFetch(`/api/admin/users/${user.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(body),
-        });
-      }
+      await apiFetch('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
 
       onSaved();
       onClose();
@@ -144,7 +123,7 @@ export default function UserForm({ user, onClose, onSaved }) {
           style={{ borderBottom: '1px solid #30363d' }}
         >
           <span className="text-sm font-bold tracking-[0.15em]" style={{ color: '#d4af37' }}>
-            {isCreate ? 'CREATE USER' : 'EDIT USER'}
+            CREATE USER
           </span>
           <button
             onClick={onClose}
@@ -186,20 +165,18 @@ export default function UserForm({ user, onClose, onSaved }) {
               />
             </div>
 
-            {/* Password — create mode only */}
-            {isCreate && (
-              <div>
-                <FieldLabel htmlFor="uf-password">Password <span style={{ color: '#f85149' }}>*</span></FieldLabel>
-                <TextInput
-                  id="uf-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Minimum 8 characters"
-                  required
-                />
-              </div>
-            )}
+            {/* Password */}
+            <div>
+              <FieldLabel htmlFor="uf-password">Password <span style={{ color: '#f85149' }}>*</span></FieldLabel>
+              <TextInput
+                id="uf-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimum 8 characters"
+                required
+              />
+            </div>
 
             {/* Role */}
             <div>
@@ -297,17 +274,17 @@ export default function UserForm({ user, onClose, onSaved }) {
           <button
             type="submit"
             onClick={handleSubmit}
-            disabled={saving || !name.trim() || (isCreate && !password)}
+            disabled={saving || !name.trim() || !password}
             className="px-4 py-2 rounded text-sm font-bold tracking-wider transition-colors"
             style={{
               background: saving ? 'rgba(212,175,55,0.3)' : '#d4af37',
               border: '1px solid transparent',
               color: saving ? '#6e7681' : '#0d1117',
               cursor: saving ? 'not-allowed' : 'pointer',
-              opacity: (!name.trim() || (isCreate && !password)) ? 0.4 : 1,
+              opacity: (!name.trim() || !password) ? 0.4 : 1,
             }}
           >
-            {saving ? 'SAVING…' : isCreate ? 'CREATE' : 'SAVE'}
+            {saving ? 'SAVING…' : 'CREATE'}
           </button>
         </div>
       </div>
