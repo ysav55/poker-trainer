@@ -95,6 +95,20 @@ router.get('/users', async (req, res) => {
 
     const normalized = players.map(normalizeUser);
 
+    // Resolve coach names
+    const coachIds = [...new Set(normalized.map(u => u.coach_id).filter(Boolean))];
+    const coachNames = {};
+    if (coachIds.length > 0) {
+      const { data: coaches } = await supabase
+        .from('player_profiles')
+        .select('id, display_name')
+        .in('id', coachIds);
+      for (const c of coaches || []) coachNames[c.id] = c.display_name;
+    }
+    for (const u of normalized) {
+      u.coach_name = u.coach_id ? (coachNames[u.coach_id] ?? null) : null;
+    }
+
     // Role filter applied in memory (user sets are small in this app)
     const filtered = role
       ? normalized.filter(u => u.role === role)
@@ -172,7 +186,7 @@ router.get('/users/:id', async (req, res) => {
     let data, playerRoles = [];
     const withRoles = await supabase
       .from('player_profiles')
-      .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, player_roles(assigned_at, roles(name))')
+      .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, created_by, player_roles(assigned_at, roles(name))')
       .eq('id', req.params.id)
       .maybeSingle();
 
@@ -180,7 +194,7 @@ router.get('/users/:id', async (req, res) => {
       // Fallback: bare profile without role history
       const bare = await supabase
         .from('player_profiles')
-        .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at')
+        .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, created_by')
         .eq('id', req.params.id)
         .maybeSingle();
       if (bare.error) return res.status(500).json({ error: 'internal_error' });
@@ -193,6 +207,19 @@ router.get('/users/:id', async (req, res) => {
     if (!data) return res.status(404).json({ error: 'not_found' });
 
     const user = normalizeUser({ ...data, player_roles: playerRoles });
+
+    // Resolve created_by_name
+    const createdById = data.created_by ?? null;
+    if (createdById) {
+      const { data: creator } = await supabase
+        .from('player_profiles')
+        .select('display_name')
+        .eq('id', createdById)
+        .maybeSingle();
+      user.created_by_name = creator?.display_name ?? null;
+    } else {
+      user.created_by_name = null;
+    }
 
     // Include per-role assignment timestamps for the detail view
     user.roles = playerRoles.map(pr => ({

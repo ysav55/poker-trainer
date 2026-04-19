@@ -36,6 +36,7 @@ jest.mock('../../../db/supabase.js', () => {
     from:         jest.fn(),
     select:       jest.fn(),
     eq:           jest.fn(),
+    in:           jest.fn(),
     single:       jest.fn(),
     maybeSingle:  jest.fn(),
     delete:       jest.fn(),
@@ -44,6 +45,7 @@ jest.mock('../../../db/supabase.js', () => {
   chain.from.mockReturnValue(chain);
   chain.select.mockReturnValue(chain);
   chain.eq.mockReturnValue(chain);
+  chain.in.mockReturnValue(chain);
   chain.delete.mockReturnValue(chain);
   // update returns chain so chained .eq() calls work; resolves with no error
   chain.update.mockReturnValue(chain);
@@ -107,6 +109,7 @@ beforeEach(() => {
   supabase.from.mockReturnValue(supabase);
   supabase.select.mockReturnValue(supabase);
   supabase.eq.mockReturnValue(supabase);
+  supabase.in.mockReturnValue(supabase);
   supabase.delete.mockReturnValue(supabase);
   supabase.single.mockResolvedValue({ data: null, error: null });
   supabase.maybeSingle.mockResolvedValue({ data: null, error: null });
@@ -164,6 +167,44 @@ describe('GET /api/admin/users', () => {
     const res = await request(app).get('/api/admin/users');
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('internal_error');
+  });
+
+  test('resolves coach_name for users that have a coach_id', async () => {
+    const fakePlayers = [
+      { id: 'uuid-001', display_name: 'Alice', status: 'active', coach_id: 'coach-uuid-1', player_roles: [] },
+      { id: 'uuid-002', display_name: 'Bob',   status: 'active', coach_id: null,            player_roles: [] },
+    ];
+    listPlayers.mockResolvedValueOnce(fakePlayers);
+    // The .in() query for coach names resolves with coach data
+    supabase.in.mockResolvedValueOnce({
+      data: [{ id: 'coach-uuid-1', display_name: 'Coach Carol' }],
+      error: null,
+    });
+
+    const app = buildApp({ user: { id: 'admin-uuid', role: 'admin' } });
+    const res = await request(app).get('/api/admin/users');
+
+    expect(res.status).toBe(200);
+    const alice = res.body.players.find(u => u.id === 'uuid-001');
+    const bob   = res.body.players.find(u => u.id === 'uuid-002');
+    expect(alice.coach_name).toBe('Coach Carol');
+    expect(bob.coach_name).toBeNull();
+  });
+
+  test('sets coach_name to null when no players have a coach_id', async () => {
+    const fakePlayers = [
+      { id: 'uuid-003', display_name: 'Charlie', status: 'active', coach_id: null, player_roles: [] },
+    ];
+    listPlayers.mockResolvedValueOnce(fakePlayers);
+
+    const app = buildApp({ user: { id: 'admin-uuid', role: 'admin' } });
+    const res = await request(app).get('/api/admin/users');
+
+    expect(res.status).toBe(200);
+    const charlie = res.body.players.find(u => u.id === 'uuid-003');
+    expect(charlie.coach_name).toBeNull();
+    // .in() should NOT have been called when there are no coach_ids
+    expect(supabase.in).not.toHaveBeenCalled();
   });
 });
 
@@ -343,6 +384,13 @@ describe('GET /api/admin/users/:id', () => {
     });
   });
 
+  // Reset maybeSingle after each test to drain any unconsumed mockResolvedValueOnce
+  // entries that would otherwise pollute subsequent test suites.
+  afterEach(() => {
+    supabase.maybeSingle.mockReset();
+    supabase.maybeSingle.mockResolvedValue({ data: null, error: null });
+  });
+
   test('returns 200 with player data when found', async () => {
     const fakeProfile = {
       id: 'uuid-player-001',
@@ -387,6 +435,45 @@ describe('GET /api/admin/users/:id', () => {
     const app = buildApp({ user: null });
     const res = await request(app).get('/api/admin/users/uuid-001');
     expect(res.status).toBe(401);
+  });
+
+  test('resolves created_by_name when created_by is present', async () => {
+    const fakeProfile = {
+      id: 'uuid-player-002',
+      display_name: 'Dave',
+      email: 'dave@example.com',
+      status: 'active',
+      created_by: 'creator-uuid-1',
+      player_roles: [],
+    };
+    // First maybeSingle: the player profile (with roles join)
+    supabase.maybeSingle
+      .mockResolvedValueOnce({ data: fakeProfile, error: null })
+      // Second maybeSingle: the creator lookup
+      .mockResolvedValueOnce({ data: { display_name: 'Admin Ann' }, error: null });
+
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app).get('/api/admin/users/uuid-player-002');
+
+    expect(res.status).toBe(200);
+    expect(res.body.created_by_name).toBe('Admin Ann');
+  });
+
+  test('sets created_by_name to null when created_by is absent', async () => {
+    const fakeProfile = {
+      id: 'uuid-player-003',
+      display_name: 'Eve',
+      status: 'active',
+      created_by: null,
+      player_roles: [],
+    };
+    supabase.maybeSingle.mockResolvedValueOnce({ data: fakeProfile, error: null });
+
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app).get('/api/admin/users/uuid-player-003');
+
+    expect(res.status).toBe(200);
+    expect(res.body.created_by_name).toBeNull();
   });
 });
 
