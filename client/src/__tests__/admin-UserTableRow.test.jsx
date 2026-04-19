@@ -39,62 +39,43 @@ describe('RolePill', () => {
 describe('Pagination', () => {
   it('renders nothing when single page', () => {
     const { container } = render(
-      <Pagination page={0} total={5} pageSize={10} onPage={() => {}} />
+      <Pagination page={0} pageCount={1} onPrev={() => {}} onNext={() => {}} />
     );
     expect(container.firstChild).toBeNull();
   });
   it('renders Prev/Next when multi-page', () => {
-    render(<Pagination page={0} total={50} pageSize={10} onPage={() => {}} />);
+    render(<Pagination page={0} pageCount={5} onPrev={() => {}} onNext={() => {}} />);
     expect(screen.getByText(/Prev/)).toBeTruthy();
     expect(screen.getByText(/Next/)).toBeTruthy();
   });
-  it('invokes onPage with next page', () => {
-    const onPage = vi.fn();
-    render(<Pagination page={0} total={50} pageSize={10} onPage={onPage} />);
+  it('invokes onNext when Next clicked', () => {
+    const onNext = vi.fn();
+    render(<Pagination page={0} pageCount={5} onPrev={() => {}} onNext={onNext} />);
     screen.getByText(/Next/).click();
-    expect(onPage).toHaveBeenCalledWith(1);
+    expect(onNext).toHaveBeenCalled();
   });
 });
 
 describe('UserTableRow', () => {
   it('renders user name and email', () => {
     render(
-      <UserTableRow
-        user={USER}
-        index={0}
-        currentUserRole="admin"
-        gridTemplateColumns="1fr"
-        isLast={false}
-        onView={() => {}}
-        onEdit={() => {}}
-        onResetPassword={() => {}}
-        onSuspend={() => {}}
-        onDelete={() => {}}
-      />
+      <table><tbody>
+        <UserTableRow user={USER} onClick={() => {}} />
+      </tbody></table>
     );
     expect(screen.getByText('Alice')).toBeTruthy();
     expect(screen.getByText('alice@x.com')).toBeTruthy();
-    expect(screen.getByText('coach')).toBeTruthy();
     expect(screen.getByText('ACTIVE')).toBeTruthy();
   });
 
-  it('calls onView when name clicked', () => {
-    const onView = vi.fn();
+  it('calls onClick when row clicked', () => {
+    const onClick = vi.fn();
     render(
-      <UserTableRow
-        user={USER}
-        index={0}
-        currentUserRole="admin"
-        gridTemplateColumns="1fr"
-        isLast={false}
-        onView={onView}
-        onEdit={() => {}}
-        onResetPassword={() => {}}
-        onSuspend={() => {}}
-        onDelete={() => {}}
-      />
+      <table><tbody>
+        <UserTableRow user={USER} onClick={onClick} />
+      </tbody></table>
     );
     screen.getByText('Alice').click();
-    expect(onView).toHaveBeenCalledWith('u1');
+    expect(onClick).toHaveBeenCalledWith('u1');
   });
 });

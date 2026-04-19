@@ -2,9 +2,9 @@
  * UserManagement.test.jsx
  *
  * Tests for User Management page:
- *  - Verifies currentUserRole is derived from useAuth() hook, not manual JWT decode
- *  - Confirms role-based action menu visibility (superadmin actions)
- *  - Tests user list loading and filtering
+ *  - Loads user list from /api/admin/users
+ *  - Renders scope label ("All Users" when no school selected)
+ *  - Displays user names from API response
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -23,13 +23,8 @@ vi.mock('../lib/api.js', () => ({
   apiFetch: vi.fn(),
 }));
 
-vi.mock('../contexts/AuthContext.jsx', () => ({
-  useAuth: vi.fn(),
-}));
-
 import UserManagement from '../pages/admin/UserManagement.jsx';
 import { apiFetch } from '../lib/api.js';
-import { useAuth } from '../contexts/AuthContext.jsx';
 
 // ── Mock data ──────────────────────────────────────────────────────────────────
 
@@ -66,20 +61,22 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  apiFetch.mockResolvedValue(MOCK_USERS);
-  useAuth.mockReturnValue({
-    user: { id: 'current-user', role: 'superadmin' },
-    hasPermission: vi.fn(() => true),
+  // apiFetch is called for both /api/admin/users and /api/admin/schools
+  apiFetch.mockImplementation((url) => {
+    if (url.includes('/api/admin/users')) return Promise.resolve(MOCK_USERS);
+    if (url.includes('/api/admin/schools')) return Promise.resolve([]);
+    return Promise.resolve([]);
   });
 });
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe('UserManagement', () => {
-  it('renders the USER MANAGEMENT title', async () => {
+  it('renders the "All Users" scope label', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('User Management')).toBeTruthy();
+      // getAllByText because IncomingZone may also render this text in sub-components
+      expect(screen.getAllByText('All Users').length).toBeGreaterThan(0);
     });
   });
 
@@ -89,55 +86,31 @@ describe('UserManagement', () => {
       expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining('/api/admin/users'));
     });
     await waitFor(() => {
-      expect(screen.getByText('Alice Admin')).toBeTruthy();
-      expect(screen.getByText('Bob Coach')).toBeTruthy();
+      // getAllByText because users appear in both the table and IncomingZone
+      expect(screen.getAllByText('Alice Admin').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Bob Coach').length).toBeGreaterThan(0);
     });
   });
 
-  it('retrieves currentUserRole from useAuth hook, not manual JWT decode', async () => {
+  it('shows user count in scope label area', async () => {
     renderPage();
     await waitFor(() => {
-      expect(useAuth).toHaveBeenCalled();
+      expect(screen.getByText('2 users')).toBeTruthy();
     });
-    // Verify the hook was called (which means not using manual decode)
-    expect(useAuth.mock.calls.length).toBeGreaterThan(0);
   });
 
-  it('passes currentUserRole to ActionsMenu for role-based visibility', async () => {
-    useAuth.mockReturnValue({
-      user: { id: 'current-user', role: 'superadmin' },
-      hasPermission: vi.fn(() => true),
-    });
+  it('renders search input', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Alice Admin')).toBeTruthy();
+      expect(screen.getByPlaceholderText('Search…')).toBeTruthy();
     });
-    // The component correctly receives useAuth data
-    expect(useAuth).toHaveBeenCalled();
   });
 
-  it('handles non-superadmin role (coach cannot see superadmin actions)', async () => {
-    useAuth.mockReturnValue({
-      user: { id: 'current-user', role: 'coach' },
-      hasPermission: vi.fn(() => false),
-    });
+  it('handles empty user list gracefully', async () => {
+    apiFetch.mockImplementation(() => Promise.resolve([]));
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Alice Admin')).toBeTruthy();
-    });
-    // Component still renders with coach role (no crash)
-    expect(useAuth).toHaveBeenCalled();
-  });
-
-  it('handles null currentUserRole gracefully', async () => {
-    useAuth.mockReturnValue({
-      user: null,
-      hasPermission: vi.fn(() => false),
-    });
-    renderPage();
-    await waitFor(() => {
-      // Page should still render even with null user
-      expect(screen.getByText('User Management')).toBeTruthy();
+      expect(screen.getByText('No users found')).toBeTruthy();
     });
   });
 });
