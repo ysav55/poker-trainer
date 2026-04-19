@@ -83,8 +83,9 @@ export default function UserManagement() {
 
   const handleExport = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/admin/users/export-csv', {
+      const API_BASE = import.meta.env.DEV ? 'http://localhost:3001' : '';
+      const token = sessionStorage.getItem('poker_trainer_jwt');
+      const res = await fetch(`${API_BASE}/api/admin/users/export-csv`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const text = await res.text();

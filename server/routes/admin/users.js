@@ -205,7 +205,7 @@ router.get('/users/:id', async (req, res) => {
     let data, playerRoles = [];
     const withRoles = await supabase
       .from('player_profiles')
-      .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, created_by, player_roles(assigned_at, roles(name))')
+      .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, created_by, school_id, player_roles(assigned_at, roles(name))')
       .eq('id', req.params.id)
       .maybeSingle();
 
@@ -213,7 +213,7 @@ router.get('/users/:id', async (req, res) => {
       // Fallback: bare profile without role history
       const bare = await supabase
         .from('player_profiles')
-        .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, created_by')
+        .select('id, display_name, email, status, avatar_url, last_seen, coach_id, created_at, created_by, school_id')
         .eq('id', req.params.id)
         .maybeSingle();
       if (bare.error) return res.status(500).json({ error: 'internal_error' });
@@ -294,7 +294,7 @@ router.put('/users/:id', async (req, res) => {
   try {
     const body = req.body || {};
     const displayName = body.displayName || body.display_name;
-    const { email, status, avatarUrl, role: roleName, schoolId } = body;
+    const { email, status, avatarUrl, role: roleName, schoolId, coachId } = body;
 
     const patch = {};
     if (displayName !== undefined) patch.displayName = displayName;
@@ -302,6 +302,7 @@ router.put('/users/:id', async (req, res) => {
     if (status      !== undefined) patch.status      = status;
     if (avatarUrl   !== undefined) patch.avatarUrl   = avatarUrl;
     if (schoolId    !== undefined) patch.schoolId    = schoolId;
+    if (coachId     !== undefined) patch.coachId     = coachId;
 
     await updatePlayer(req.params.id, patch);
 

@@ -28,7 +28,7 @@ export default function UserDrawerRoleSchool({ user, schools, onUserUpdated }) {
     try {
       await apiFetch(`/api/admin/users/${user.id}`, {
         method: 'PUT',
-        body: JSON.stringify({ roleName: newRole }),
+        body: JSON.stringify({ role: newRole }),
       });
       setRole(newRole);
       onUserUpdated?.();
