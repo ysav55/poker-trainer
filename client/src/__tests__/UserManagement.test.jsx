@@ -23,6 +23,7 @@ vi.mock('../lib/api.js', () => ({
   apiFetch: vi.fn(),
 }));
 
+import { ToastProvider } from '../contexts/ToastContext.jsx';
 import UserManagement from '../pages/admin/UserManagement.jsx';
 import { apiFetch } from '../lib/api.js';
 
@@ -54,7 +55,9 @@ const MOCK_USERS = [
 function renderPage() {
   return render(
     <MemoryRouter>
-      <UserManagement />
+      <ToastProvider>
+        <UserManagement />
+      </ToastProvider>
     </MemoryRouter>
   );
 }
