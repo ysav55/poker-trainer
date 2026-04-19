@@ -2,7 +2,7 @@ import React from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Home, Table2, Trophy, Clock, Medal,
-  Users, FolderOpen, Target, DollarSign,
+  Users, FolderOpen, Target, DollarSign, UserCog,
   Settings, PanelLeftClose, PanelLeftOpen, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -27,6 +27,12 @@ const COACHING_ITEMS = [
   { icon: FolderOpen,  label: 'Groups',    path: '/groups' },
   { icon: DollarSign,  label: 'Staking',   path: '/admin/staking' },
   { icon: Target,      label: 'Scenarios', path: '/admin/hands' },
+];
+
+const ADMIN_ROLES = new Set(['admin', 'superadmin']);
+
+const ADMIN_ITEMS = [
+  { icon: UserCog, label: 'Users', path: '/admin/users' },
 ];
 
 export default function SideNav({ chipBalance, badges = {}, schoolName, studentsOnline, activeTables }) {
@@ -95,6 +101,22 @@ export default function SideNav({ chipBalance, badges = {}, schoolName, students
               expanded={expanded}
               active={isActive(item.path)}
               badge={item.badgeKey ? badges[item.badgeKey] : false}
+            />
+          ))}
+        </NavGroup>
+      )}
+
+      {/* ADMIN — admin+ only */}
+      {ADMIN_ROLES.has(role) && (
+        <NavGroup label="ADMIN" expanded={expanded}>
+          {ADMIN_ITEMS.map((item) => (
+            <NavItem
+              key={item.path}
+              icon={item.icon}
+              label={item.label}
+              path={item.path}
+              expanded={expanded}
+              active={isActive(item.path)}
             />
           ))}
         </NavGroup>
