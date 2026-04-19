@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Download, Plus } from 'lucide-react';
+import { Download, Plus, ChevronUp, ChevronDown } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
 import { colors } from '../../lib/colors';
+import { useToast } from '../../contexts/ToastContext';
 import UserForm from './UserForm';
 import IncomingZone from '../../components/admin/IncomingZone';
 import SchoolsPanel from '../../components/admin/SchoolsPanel';
@@ -12,6 +13,7 @@ const PAGE_SIZE = 15;
 const ROLES = ['superadmin', 'admin', 'coach', 'coached_student', 'solo_student'];
 
 export default function UserManagement() {
+  const { addToast } = useToast();
   const [users, setUsers] = useState([]);
   const [schools, setSchools] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +25,8 @@ export default function UserManagement() {
   const [filterStatus, setFilterStatus] = useState('active');
 
   const [selectedSchoolId, setSelectedSchoolId] = useState(null);
+  const [sortKey, setSortKey] = useState('name');
+  const [sortDir, setSortDir] = useState('asc');
 
   const [showCreate, setShowCreate] = useState(false);
   const [drawerUserId, setDrawerUserId] = useState(null);
@@ -48,8 +52,8 @@ export default function UserManagement() {
     try {
       const data = await apiFetch('/api/admin/schools');
       setSchools(Array.isArray(data) ? data : (data.schools ?? []));
-    } catch { setSchools([]); }
-  }, []);
+    } catch (err) { setSchools([]); addToast(err.message || 'Failed to load schools', 'error'); }
+  }, [addToast]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
   useEffect(() => { loadSchools(); }, [loadSchools]);
@@ -58,6 +62,15 @@ export default function UserManagement() {
     loadUsers();
     loadSchools();
   }, [loadUsers, loadSchools]);
+
+  const toggleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
 
   const filtered = useMemo(() => {
     let list = users;
@@ -71,10 +84,16 @@ export default function UserManagement() {
         (u.email || '').toLowerCase().includes(q)
       );
     }
-    return [...list].sort((a, b) =>
-      (a.display_name || '').localeCompare(b.display_name || '')
-    );
-  }, [users, selectedSchoolId, search]);
+    const fieldMap = { name: 'display_name', role: 'role', status: 'status', last_seen: 'last_seen' };
+    const field = fieldMap[sortKey] || 'display_name';
+    const dir = sortDir === 'asc' ? 1 : -1;
+
+    return [...list].sort((a, b) => {
+      const av = a[field] || '';
+      const bv = b[field] || '';
+      return dir * av.localeCompare(bv);
+    });
+  }, [users, selectedSchoolId, search, sortKey, sortDir]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -96,7 +115,7 @@ export default function UserManagement() {
       a.download = 'users.csv';
       a.click();
       URL.revokeObjectURL(url);
-    } catch { /* silent */ }
+    } catch (err) { addToast(err.message || 'Failed to export CSV', 'error'); }
   };
 
   const selectedSchool = schools.find(s => s.id === selectedSchoolId);
@@ -199,10 +218,28 @@ export default function UserManagement() {
             <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ color: colors.textMuted, textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.5px' }}>
-                  <th className="text-left px-3 py-2" style={{ borderBottom: `1px solid ${colors.borderDefault}` }}>Name</th>
-                  <th className="text-left px-3 py-2" style={{ borderBottom: `1px solid ${colors.borderDefault}` }}>Role</th>
-                  <th className="text-left px-3 py-2" style={{ borderBottom: `1px solid ${colors.borderDefault}` }}>Status</th>
-                  <th className="text-left px-3 py-2" style={{ borderBottom: `1px solid ${colors.borderDefault}` }}>Last Seen</th>
+                  {[
+                    { key: 'name', label: 'Name' },
+                    { key: 'role', label: 'Role' },
+                    { key: 'status', label: 'Status' },
+                    { key: 'last_seen', label: 'Last Seen' },
+                  ].map(col => (
+                    <th
+                      key={col.key}
+                      className="text-left px-3 py-2"
+                      style={{ borderBottom: `1px solid ${colors.borderDefault}`, cursor: 'pointer', userSelect: 'none' }}
+                      onClick={() => toggleSort(col.key)}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {col.label}
+                        {sortKey === col.key && (
+                          sortDir === 'asc'
+                            ? <ChevronUp size={10} />
+                            : <ChevronDown size={10} />
+                        )}
+                      </span>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
