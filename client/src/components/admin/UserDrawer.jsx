@@ -47,6 +47,14 @@ export default function UserDrawer({ userId, schools, onClose, onUserUpdated }) 
       .finally(() => setLoading(false));
   }, [userId]);
 
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   const refreshUser = () => {
     apiFetch(`/api/admin/users/${userId}`).then(setUser);
     onUserUpdated?.();
