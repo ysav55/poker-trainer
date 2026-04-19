@@ -562,6 +562,44 @@ describe('PUT /users/:id — school assignment', () => {
   });
 });
 
+// ─── POST /api/admin/users/bulk-assign-school ────────────────────────────────
+
+describe('POST /api/admin/users/bulk-assign-school', () => {
+  it('assigns multiple users to a school', async () => {
+    updatePlayer.mockResolvedValue();
+
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app)
+      .post('/api/admin/users/bulk-assign-school')
+      .send({ userIds: ['u1', 'u2', 'u3'], schoolId: 'school-abc' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.assigned).toBe(3);
+    expect(updatePlayer).toHaveBeenCalledTimes(3);
+    expect(updatePlayer).toHaveBeenCalledWith('u1', { schoolId: 'school-abc' });
+    expect(updatePlayer).toHaveBeenCalledWith('u2', { schoolId: 'school-abc' });
+    expect(updatePlayer).toHaveBeenCalledWith('u3', { schoolId: 'school-abc' });
+  });
+
+  it('rejects empty userIds array', async () => {
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app)
+      .post('/api/admin/users/bulk-assign-school')
+      .send({ userIds: [], schoolId: 'school-abc' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects missing schoolId', async () => {
+    const app = buildApp({ user: { id: 'admin-uuid' } });
+    const res = await request(app)
+      .post('/api/admin/users/bulk-assign-school')
+      .send({ userIds: ['u1'] });
+
+    expect(res.status).toBe(400);
+  });
+});
+
 // ─── POST /api/admin/users/:id/roles ─────────────────────────────────────────
 
 describe('POST /api/admin/users/:id/roles', () => {

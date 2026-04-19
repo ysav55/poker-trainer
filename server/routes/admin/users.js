@@ -178,6 +178,25 @@ router.get('/users/export-csv', async (req, res) => {
   }
 });
 
+// ── POST /users/bulk-assign-school ────────────────────────────────────────────
+// Must appear before /:id routes to prevent Express matching "bulk-assign-school" as an id param.
+
+router.post('/users/bulk-assign-school', async (req, res) => {
+  try {
+    const { userIds, schoolId } = req.body || {};
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: 'userIds must be a non-empty array' });
+    }
+    if (schoolId === undefined) {
+      return res.status(400).json({ error: 'schoolId is required' });
+    }
+    await Promise.all(userIds.map(id => updatePlayer(id, { schoolId })));
+    res.json({ success: true, assigned: userIds.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'internal_error' });
+  }
+});
+
 // ─── GET /api/admin/users/:id ─────────────────────────────────────────────────
 
 router.get('/users/:id', async (req, res) => {
