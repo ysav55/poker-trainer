@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { colors } from '../../lib/colors.js';
 
 export function Pagination({ page, pageCount, onPrev, onNext }) {
-  if (pageCount <= 1) return null;
+  if (pageCount <= 1) return <span />;
   const btnStyle = (disabled) => ({
     padding: '4px 10px', borderRadius: 4, fontSize: 12,
     cursor: disabled ? 'not-allowed' : 'pointer',
@@ -12,15 +12,16 @@ export function Pagination({ page, pageCount, onPrev, onNext }) {
     display: 'inline-flex', alignItems: 'center', gap: 4,
   });
   return (
-    <div className="flex items-center justify-end mt-4" style={{ color: colors.textMuted, fontSize: 12 }}>
-      <div className="flex gap-1">
-        <button onClick={onPrev} disabled={page === 0} style={btnStyle(page === 0)}>
-          <ChevronLeft size={12} /> Prev
-        </button>
-        <button onClick={onNext} disabled={page >= pageCount - 1} style={btnStyle(page >= pageCount - 1)}>
-          Next <ChevronRight size={12} />
-        </button>
-      </div>
+    <div className="flex items-center gap-2" style={{ color: colors.textMuted, fontSize: 12 }}>
+      <button onClick={onPrev} disabled={page === 0} style={btnStyle(page === 0)}>
+        <ChevronLeft size={12} /> Prev
+      </button>
+      <span style={{ fontSize: 11, minWidth: 70, textAlign: 'center' }}>
+        Page {page + 1} of {pageCount}
+      </span>
+      <button onClick={onNext} disabled={page >= pageCount - 1} style={btnStyle(page >= pageCount - 1)}>
+        Next <ChevronRight size={12} />
+      </button>
     </div>
   );
 }
