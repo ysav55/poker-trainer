@@ -13,7 +13,7 @@ const ALL_TABS = [
   { id: 'table-defaults', label: 'Table Defaults', icon: SlidersHorizontal, roles: ['coach','admin','superadmin'],                                                component: TableDefaultsTab },
   { id: 'school',         label: 'School',         icon: School,             roles: ['coach','admin','superadmin'],                                                component: SchoolTab        },
   { id: 'alerts',         label: 'Alerts',         icon: Bell,               roles: ['coach'],                                                                     component: AlertsTab        },
-  { id: 'platform',       label: 'Platform',       icon: Server,             roles: ['superadmin'],                                                                 component: PlatformTab      },
+  { id: 'platform',       label: 'Platform',       icon: Server,             roles: ['admin','superadmin'],                                                          component: PlatformTab      },
   { id: 'profile',        label: 'Profile',        icon: User,               roles: ['coach','admin','superadmin','trial','coached_student','solo_student'],         component: ProfileTab       },
   { id: 'danger-zone',    label: 'Danger Zone',    icon: AlertTriangle,      roles: ['coach','admin','superadmin','trial','coached_student','solo_student'],         component: DangerZoneTab    },
 ];

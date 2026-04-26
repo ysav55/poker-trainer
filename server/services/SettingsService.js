@@ -123,31 +123,65 @@ async function resetTableDefaults(scope, scopeId) {
 // ─── Leaderboard config cascade ───────────────────────────────────────────────
 
 const LEADERBOARD_HARDCODED = {
-  primary_metric:   'net_chips',
-  secondary_metric: 'win_rate',
+  columns:          ['hands_played', 'bb_per_100', 'vpip', 'pfr'],
+  sort_by:          'bb_per_100',
   update_frequency: 'after_session',
 };
 
+const VALID_LEADERBOARD_STATS = [
+  'hands_played', 'bb_per_100', 'vpip', 'pfr', 'net_chips', 'win_rate',
+  'wtsd', 'wsd', 'three_bet', 'af', 'cbet_flop', 'fold_to_cbet',
+  'open_limp_rate', 'cold_call_3bet_rate', 'min_raise_rate', 'overlimp_rate', 'equity_fold_rate',
+];
+
+/**
+ * Migrate old leaderboard config shape (primary_metric/secondary_metric) to new (columns/sort_by).
+ */
+function _migrateLeaderboardConfig(val) {
+  if (!val || val.columns) return val;
+  if (val.primary_metric) {
+    const cols = [...new Set(['hands_played', val.primary_metric, val.secondary_metric].filter(Boolean))];
+    return {
+      columns:          cols,
+      sort_by:          val.primary_metric,
+      update_frequency: val.update_frequency ?? 'after_session',
+    };
+  }
+  return val;
+}
+
 /**
  * Resolve leaderboard config for a school caller.
- * Returns { value: {...}, source: 'school' | 'org' | 'hardcoded' }
+ * Returns { value: { columns, sort_by, update_frequency }, source: 'school' | 'org' | 'hardcoded' }
  * @param {string|null} schoolId
- * @returns {{value: {primary_metric: string, secondary_metric: string, update_frequency: string}, source: string}}
  */
 async function resolveLeaderboardConfig(schoolId) {
   const [schoolVal, orgVal] = await Promise.all([
     schoolId ? getSchoolSetting(schoolId, 'school.leaderboard') : Promise.resolve(null),
     getOrgSetting('org.leaderboard'),
   ]);
+
+  let value, source;
   if (schoolVal) {
-    // School-level setting overrides hardcoded defaults
-    return { value: { ...LEADERBOARD_HARDCODED, ...schoolVal }, source: 'school' };
+    value = { ...LEADERBOARD_HARDCODED, ..._migrateLeaderboardConfig(schoolVal) };
+    source = 'school';
+  } else if (orgVal) {
+    value = { ...LEADERBOARD_HARDCODED, ..._migrateLeaderboardConfig(orgVal) };
+    source = 'org';
+  } else {
+    value = { ...LEADERBOARD_HARDCODED };
+    source = 'hardcoded';
   }
-  if (orgVal) {
-    // Org-level setting overrides hardcoded defaults
-    return { value: { ...LEADERBOARD_HARDCODED, ...orgVal }, source: 'org' };
+
+  // Filter out invalid stat names first
+  value.columns = value.columns.filter(c => VALID_LEADERBOARD_STATS.includes(c));
+  if (value.columns.length === 0) value.columns = [...LEADERBOARD_HARDCODED.columns];
+  // Then validate: sort_by must be in the filtered columns
+  if (!value.columns.includes(value.sort_by)) {
+    value.sort_by = value.columns[0] ?? 'bb_per_100';
   }
-  return { value: LEADERBOARD_HARDCODED, source: 'hardcoded' };
+
+  return { value, source };
 }
 
 /**
@@ -247,6 +281,8 @@ module.exports = {
   saveTableDefaults,
   resetTableDefaults,
   resolveLeaderboardConfig,
+  VALID_LEADERBOARD_STATS,
+  migrateLeaderboardConfig: _migrateLeaderboardConfig,
   resolveBlindStructures,
   deleteSchoolSetting,
   getOrgSetting,

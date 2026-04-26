@@ -59,6 +59,11 @@ jest.mock('../services/SettingsService.js', () => ({
   resetTableDefaults:             jest.fn(),
   TABLE_DEFAULTS_KEYS:            [],
   TABLE_DEFAULTS_APP:             {},
+  VALID_LEADERBOARD_STATS: [
+    'hands_played', 'bb_per_100', 'vpip', 'pfr', 'net_chips', 'win_rate',
+    'wtsd', 'wsd', 'three_bet', 'af', 'cbet_flop', 'fold_to_cbet',
+    'open_limp_rate', 'cold_call_3bet_rate', 'min_raise_rate', 'overlimp_rate', 'equity_fold_rate',
+  ],
 }));
 
 // Supabase mock (needed for presets routes in the same router)
@@ -298,13 +303,14 @@ describe('PUT /api/settings/school/leaderboard', () => {
     const res = await request(app)
       .put('/api/settings/school/leaderboard')
       .set('Authorization', 'Bearer valid')
-      .send({ primary_metric: 'bb_per_100' });
+      .send({ columns: ['hands_played', 'bb_per_100', 'vpip'], sort_by: 'bb_per_100' });
 
     expect(res.status).toBe(200);
-    expect(res.body.primary_metric).toBe('bb_per_100');
+    expect(res.body.columns).toEqual(['hands_played', 'bb_per_100', 'vpip']);
+    expect(res.body.sort_by).toBe('bb_per_100');
     expect(mockSetSchoolSetting).toHaveBeenCalledWith(
       SCHOOL_UUID, 'school.leaderboard',
-      expect.objectContaining({ primary_metric: 'bb_per_100' })
+      expect.objectContaining({ columns: ['hands_played', 'bb_per_100', 'vpip'], sort_by: 'bb_per_100' })
     );
   });
 });

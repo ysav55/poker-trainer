@@ -3,6 +3,8 @@ import { apiFetch } from '../../lib/api.js';
 import { SectionHeader, Field, Input, Select, Card, CascadeLabel } from './shared.jsx';
 import { colors, groupColors as GROUP_COLORS } from '../../lib/colors.js';
 import { Building2, Palette, Sliders, DollarSign, TrendingUp, Globe, Users, Clock, Plus, Trash2, Key } from 'lucide-react';
+import { DEFAULT_COLUMNS, DEFAULT_SORT_BY } from '../../lib/leaderboardStats.js';
+import LeaderboardColumnPicker from './LeaderboardColumnPicker.jsx';
 
 // ─── Tab: School ──────────────────────────────────────────────────────────────
 
@@ -437,7 +439,7 @@ export default function SchoolTab() {
   const [stakingMsg, setStakingMsg]     = useState('');
 
   // Leaderboard
-  const [leaderboard, setLeaderboard]   = useState({ primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' });
+  const [leaderboard, setLeaderboard]   = useState({ columns: DEFAULT_COLUMNS, sort_by: DEFAULT_SORT_BY, update_frequency: 'after_session' });
   const [lbSource, setLbSource]         = useState('hardcoded');   // 'school' | 'org' | 'hardcoded'
   const [lbSaving, setLbSaving]         = useState(false);
   const [lbResetting, setLbResetting]   = useState(false);
@@ -820,16 +822,11 @@ export default function SchoolTab() {
           isAdmin={false}
         />
       </div>
-      <Field label="Primary metric">
-        <Select value={leaderboard.primary_metric} onChange={v => setLeaderboard(l => ({ ...l, primary_metric: v }))}>
-          {['net_chips', 'bb_per_100', 'win_rate', 'hands_played'].map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
-        </Select>
-      </Field>
-      <Field label="Secondary metric">
-        <Select value={leaderboard.secondary_metric} onChange={v => setLeaderboard(l => ({ ...l, secondary_metric: v }))}>
-          {['win_rate', 'net_chips', 'bb_per_100', 'hands_played'].map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
-        </Select>
-      </Field>
+      <LeaderboardColumnPicker
+        columns={leaderboard.columns ?? DEFAULT_COLUMNS}
+        sortBy={leaderboard.sort_by ?? DEFAULT_SORT_BY}
+        onChange={(cols, sort) => setLeaderboard(l => ({ ...l, columns: cols, sort_by: sort }))}
+      />
       <Field label="Update frequency">
         <Select value={leaderboard.update_frequency} onChange={v => setLeaderboard(l => ({ ...l, update_frequency: v }))}>
           {['after_session', 'hourly', 'daily'].map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}

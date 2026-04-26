@@ -17,7 +17,7 @@ jest.mock('../../db/supabase', () => ({}));
 // Mock SettingsService
 jest.mock('../../services/SettingsService.js', () => ({
   resolveLeaderboardConfig: jest.fn().mockResolvedValue({
-    value: { primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' },
+    value: { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'bb_per_100', update_frequency: 'after_session' },
     source: 'hardcoded',
   }),
 }));
@@ -162,7 +162,7 @@ describe('GET /api/players', () => {
     ];
 
     const mockLeaderboardConfig = {
-      value: { primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' },
+      value: { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'bb_per_100', update_frequency: 'after_session' },
       source: 'hardcoded',
     };
 
@@ -193,8 +193,8 @@ describe('GET /api/players', () => {
     expect(res.body).toHaveProperty('leaderboardConfig');
     expect(res.body.leaderboardConfig).toHaveProperty('value');
     expect(res.body.leaderboardConfig).toHaveProperty('source');
-    expect(res.body.leaderboardConfig.value).toHaveProperty('primary_metric');
-    expect(res.body.leaderboardConfig.value).toHaveProperty('secondary_metric');
+    expect(res.body.leaderboardConfig.value).toHaveProperty('columns');
+    expect(res.body.leaderboardConfig.value).toHaveProperty('sort_by');
     expect(res.body.leaderboardConfig.value).toHaveProperty('update_frequency');
   });
 });

@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { colors } from '../../lib/colors.js';
 
 export function Pagination({ page, pageCount, onPrev, onNext }) {
-  if (pageCount <= 1) return <span />;
+  if (pageCount <= 1) return null;
   const btnStyle = (disabled) => ({
     padding: '4px 10px', borderRadius: 4, fontSize: 12,
     cursor: disabled ? 'not-allowed' : 'pointer',

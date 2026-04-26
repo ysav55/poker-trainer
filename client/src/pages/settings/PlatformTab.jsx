@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api.js';
 import { colors } from '../../lib/colors.js';
 import { SectionHeader, Field, Input, Select, Toggle, SaveButton, Card } from './shared.jsx';
+import { DEFAULT_COLUMNS, DEFAULT_SORT_BY } from '../../lib/leaderboardStats.js';
+import LeaderboardColumnPicker from './LeaderboardColumnPicker.jsx';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -362,7 +364,7 @@ function PlatformDefaultsSubTab() {
   const [autospawn, setAutospawn]   = useState({ enabled: false, occupancy_threshold: 60, default_config: 'low' });
   const [spawnSaving, setSpawnSaving]     = useState(false);
   const [spawnMsg, setSpawnMsg]     = useState('');
-  const [leaderboard, setLeaderboard] = useState({ primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' });
+  const [leaderboard, setLeaderboard] = useState({ columns: [...DEFAULT_COLUMNS], sort_by: DEFAULT_SORT_BY, update_frequency: 'after_session' });
   const [lbSaving, setLbSaving]     = useState(false);
   const [lbMsg, setLbMsg]           = useState('');
 
@@ -547,16 +549,11 @@ function PlatformDefaultsSubTab() {
 
       {/* Leaderboard */}
       <SectionHeader title="Leaderboard Defaults" />
-      <Field label="Primary metric">
-        <Select value={leaderboard.primary_metric} onChange={v => setLeaderboard(l => ({ ...l, primary_metric: v }))}>
-          {['net_chips', 'bb_per_100', 'win_rate', 'hands_played'].map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
-        </Select>
-      </Field>
-      <Field label="Secondary metric">
-        <Select value={leaderboard.secondary_metric} onChange={v => setLeaderboard(l => ({ ...l, secondary_metric: v }))}>
-          {['win_rate', 'net_chips', 'bb_per_100', 'hands_played'].map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
-        </Select>
-      </Field>
+      <LeaderboardColumnPicker
+        columns={leaderboard.columns ?? DEFAULT_COLUMNS}
+        sortBy={leaderboard.sort_by ?? DEFAULT_SORT_BY}
+        onChange={(columns, sort_by) => setLeaderboard(l => ({ ...l, columns, sort_by }))}
+      />
       <Field label="Update frequency">
         <Select value={leaderboard.update_frequency} onChange={v => setLeaderboard(l => ({ ...l, update_frequency: v }))}>
           {['after_session', 'hourly', 'daily'].map(o => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}

@@ -32,8 +32,8 @@ const DEFAULT_AUTOSPAWN = {
 };
 
 const DEFAULT_LEADERBOARD = {
-  primary_metric:   'net_chips',
-  secondary_metric: 'win_rate',
+  columns:          ['hands_played', 'bb_per_100', 'vpip', 'pfr'],
+  sort_by:          'bb_per_100',
   update_frequency: 'after_session',
 };
 
@@ -62,7 +62,7 @@ router.get('/org-settings', canManage, async (req, res) => {
       blind_structures: structures,
       platform_limits:  { ...DEFAULT_PLATFORM_LIMITS, ...(limits ?? {}) },
       autospawn:        { ...DEFAULT_AUTOSPAWN,        ...(autospawn ?? {}) },
-      leaderboard:      { ...DEFAULT_LEADERBOARD,      ...(leaderboard ?? {}) },
+      leaderboard:      { ...DEFAULT_LEADERBOARD, ...(SettingsService.migrateLeaderboardConfig(leaderboard) ?? {}) },
     });
   } catch (err) {
     return res.status(500).json({ error: 'internal_error', message: err.message });
@@ -176,18 +176,41 @@ router.put('/org-settings/autospawn', canManage, async (req, res) => {
 });
 
 // ── PUT /api/admin/org-settings/leaderboard ───────────────────────────────────
-// Body: { primary_metric?, secondary_metric?, update_frequency? }
+// Body: { columns?, sort_by?, update_frequency? }
 router.put('/org-settings/leaderboard', canManage, async (req, res) => {
-  const { primary_metric, secondary_metric, update_frequency } = req.body || {};
+  const { columns, sort_by, update_frequency } = req.body || {};
+  const { VALID_LEADERBOARD_STATS } = SettingsService;
   try {
     const current = await SettingsService.getOrgSetting('org.leaderboard') ?? {};
-    const updated = {
-      ...DEFAULT_LEADERBOARD,
-      ...current,
-      ...(primary_metric   !== undefined && { primary_metric:   String(primary_metric) }),
-      ...(secondary_metric !== undefined && { secondary_metric: String(secondary_metric) }),
-      ...(update_frequency !== undefined && { update_frequency: String(update_frequency) }),
-    };
+    const updated = { ...DEFAULT_LEADERBOARD, ...current };
+
+    if (columns !== undefined) {
+      if (!Array.isArray(columns) || columns.length === 0 || columns.length > 8) {
+        return res.status(400).json({ error: 'columns must be an array of 1-8 stat names' });
+      }
+      const invalid = columns.filter(c => !VALID_LEADERBOARD_STATS.includes(c));
+      if (invalid.length > 0) {
+        return res.status(400).json({ error: `Invalid stat names: ${invalid.join(', ')}` });
+      }
+      updated.columns = [...new Set(columns)];
+    }
+    if (sort_by !== undefined) {
+      if (!VALID_LEADERBOARD_STATS.includes(sort_by)) {
+        return res.status(400).json({ error: `Invalid sort_by: ${sort_by}` });
+      }
+      updated.sort_by = sort_by;
+    }
+    if (update_frequency !== undefined) {
+      updated.update_frequency = String(update_frequency);
+    }
+    // Ensure sort_by is in columns
+    if (!updated.columns.includes(updated.sort_by)) {
+      updated.sort_by = updated.columns[0];
+    }
+    // Remove legacy fields
+    delete updated.primary_metric;
+    delete updated.secondary_metric;
+
     await SettingsService.setOrgSetting('org.leaderboard', updated);
     return res.json(updated);
   } catch (err) {

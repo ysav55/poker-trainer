@@ -35,8 +35,9 @@ function formatRelativeTime(iso) {
     if (diffMins < 1) return 'now'
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffHours < 24) return `${diffHours}h ago`
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString()
+    if (diffDays < 30) return `${diffDays}d ago`
+    if (diffDays < 365) return `${Math.floor(diffDays / 7)}w ago`
+    return `${Math.floor(diffDays / 365)}y ago`
   } catch {
     return '—'
   }

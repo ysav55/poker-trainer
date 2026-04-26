@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { apiFetch } from '../lib/api.js';
+import { STAT_CATALOG, getStatValue, formatStatValue, DEFAULT_COLUMNS, DEFAULT_SORT_BY } from '../lib/leaderboardStats.js';
 
 const GOLD  = '#d4af37';
 const PANEL = { background: '#161b22', border: '1px solid #30363d', borderRadius: 8 };
@@ -18,14 +19,6 @@ const GAME_TYPES = [
   { label: 'Tournament', value: 'tournament' },
 ];
 
-// Map config metric names to player data fields
-const METRIC_FIELD_MAP = {
-  'net_chips': 'total_net_chips',
-  'hands_played': 'total_hands',
-  'win_rate': null,  // Computed: total_wins / total_hands
-  'bb_per_100': null, // Computed: total_net_chips / total_hands * 100
-};
-
 // Medal colors for top 3
 const RANK_STYLE = {
   1: { color: '#ffd700', bg: 'rgba(255,215,0,0.12)'  },
@@ -34,84 +27,6 @@ const RANK_STYLE = {
 };
 
 const MEDAL = ['🥇', '🥈', '🥉'];
-
-function fmtNum(n) {
-  if (n == null || n === '') return '—';
-  const v = Number(n);
-  return Number.isNaN(v) ? '—' : v.toLocaleString('en-US');
-}
-
-function fmtNet(n) {
-  if (n == null || n === '') return '—';
-  const v = Number(n);
-  if (Number.isNaN(v)) return '—';
-  return (v >= 0 ? '+' : '') + v.toLocaleString('en-US');
-}
-
-function fmtPct(n) {
-  if (n == null || n === '') return '—';
-  const v = Number(n);
-  return Number.isNaN(v) ? '—' : `${v}%`;
-}
-
-/** Chips per 100 hands — the primary score metric */
-function computeScore(netChips, hands) {
-  const h = Number(hands) || 0;
-  const c = Number(netChips) || 0;
-  if (h === 0) return null;
-  return Math.round(c / h * 100);
-}
-
-/** Win rate as a percent */
-function computeWinRate(wins, hands) {
-  const h = Number(hands) || 0;
-  const w = Number(wins)  || 0;
-  if (h === 0) return null;
-  return Math.round(w / h * 100);
-}
-
-/** Compute a metric value for a player given the metric name */
-function computeMetricValue(player, metricName) {
-  const h = Number(player.total_hands ?? 0);
-  const c = Number(player.total_net_chips ?? player.net_chips ?? 0);
-  const w = Number(player.total_wins ?? player.wins ?? 0);
-
-  if (metricName === 'net_chips') {
-    return c;
-  }
-  if (metricName === 'hands_played') {
-    return h;
-  }
-  if (metricName === 'win_rate') {
-    if (h === 0) return 0;
-    return (w / h) * 100; // Return as percentage for consistent sorting
-  }
-  if (metricName === 'bb_per_100') {
-    if (h === 0) return 0;
-    return c / h * 100;
-  }
-  return 0;
-}
-
-/** Format a metric value for display based on metric name */
-function formatMetricValue(value, metricName) {
-  if (value == null || value === '') return '—';
-  const v = Number(value);
-  if (Number.isNaN(v)) return '—';
-
-  if (metricName === 'win_rate') {
-    // Value is already a percentage (0-100), just add % sign
-    return `${Math.round(v)}%`;
-  }
-  if (metricName === 'bb_per_100') {
-    // Value is already computed as (netChips / hands * 100)
-    return Math.round(v).toString();
-  }
-  if (metricName === 'net_chips') {
-    return (v >= 0 ? '+' : '') + v.toLocaleString('en-US');
-  }
-  return v.toLocaleString('en-US');
-}
 
 // Tab button component
 function TabBtn({ active, onClick, children, ...rest }) {
@@ -182,6 +97,9 @@ export default function LeaderboardPage() {
       .finally(()   => setLoading(false));
   }, [period, gameType]);
 
+  const columns = leaderboardConfig?.value?.columns ?? DEFAULT_COLUMNS;
+  const sortBy  = leaderboardConfig?.value?.sort_by ?? DEFAULT_SORT_BY;
+
   const filtered = useMemo(() => {
     let list = players;
 
@@ -191,16 +109,15 @@ export default function LeaderboardPage() {
       list = list.filter((p) => (p.name || p.display_name || '').toLowerCase().includes(q));
     }
 
-    // Determine primary metric from config, default to net_chips
-    const primaryMetric = leaderboardConfig?.value?.primary_metric ?? 'net_chips';
-
-    // Sort by primary metric descending
+    // Sort by sort_by metric (ascending for leak stats, descending otherwise)
+    const asc = STAT_CATALOG[sortBy]?.sortAsc;
     return [...list].sort((a, b) => {
-      const av = computeMetricValue(a, primaryMetric);
-      const bv = computeMetricValue(b, primaryMetric);
-      return bv - av;
+      const av = getStatValue(a, sortBy);
+      const bv = getStatValue(b, sortBy);
+      if (asc) return (av ?? Infinity) - (bv ?? Infinity);
+      return (bv ?? -Infinity) - (av ?? -Infinity);
     });
-  }, [players, search, leaderboardConfig]);
+  }, [players, search, sortBy]);
 
   function handleRowClick(player) {
     if (!isCoach) return;
@@ -303,59 +220,58 @@ export default function LeaderboardPage() {
               <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #30363d', background: '#0d1117' }}>
-                    {(() => {
-                      // Determine the secondary metric for the Score column
-                      const secondaryMetric = leaderboardConfig?.value?.secondary_metric ?? 'bb_per_100';
-                      const scoreLabels = {
-                        'net_chips': 'Net Chips',
-                        'hands_played': 'Hands',
-                        'win_rate': 'Win Rate',
-                        'bb_per_100': 'Score',
-                      };
-                      const scoreLabel = scoreLabels[secondaryMetric] || 'Score';
-                      const scoreTitles = {
-                        'net_chips': 'Total chips won/lost',
-                        'hands_played': 'Total hands played',
-                        'win_rate': 'Percentage of hands won',
-                        'bb_per_100': 'Chips won per 100 hands',
-                      };
-                      const scoreTitle = scoreTitles[secondaryMetric] || 'Chips won per 100 hands';
-
-                      return [
-                        { label: '#',          w: 48   },
-                        { label: 'Player',     w: null },
-                        { label: 'Hands',      w: 80   },
-                        { label: 'Win Rate',   w: 90   },
-                        { label: 'Net Chips',  w: 110  },
-                        { label: scoreLabel,   w: 90, title: scoreTitle },
-                      ].map(({ label, w, title }) => (
+                    <th
+                      style={{
+                        padding: '10px 14px',
+                        textAlign: 'center',
+                        color: '#6e7681',
+                        fontWeight: 600,
+                        fontSize: 10,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
+                        width: 48,
+                      }}
+                    >
+                      #
+                    </th>
+                    <th
+                      style={{
+                        padding: '10px 14px',
+                        textAlign: 'left',
+                        color: '#6e7681',
+                        fontWeight: 600,
+                        fontSize: 10,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Player
+                    </th>
+                    {columns.map((col) => {
+                      const meta = STAT_CATALOG[col];
+                      if (!meta) return null;
+                      const isSorted = col === sortBy;
+                      return (
                         <th
-                          key={label}
+                          key={col}
                           style={{
                             padding: '10px 14px',
-                            textAlign: label === '#' ? 'center' : 'left',
-                            color: '#6e7681',
+                            textAlign: 'left',
+                            color: isSorted ? GOLD : '#6e7681',
                             fontWeight: 600,
                             fontSize: 10,
                             letterSpacing: '0.08em',
                             textTransform: 'uppercase',
                             whiteSpace: 'nowrap',
-                            width: w ?? undefined,
+                            width: 90,
                           }}
-                          title={title}
                         >
-                          {label}
-                          {title && (
-                            <span
-                              title={title}
-                              style={{ marginLeft: 3, cursor: 'help', opacity: 0.5 }}
-                            >
-                              ⓘ
-                            </span>
-                          )}
+                          {meta.label}{isSorted ? (meta.sortAsc ? ' \u25B2' : ' \u25BC') : ''}
                         </th>
-                      ));
-                    })()}
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody>
@@ -367,30 +283,7 @@ export default function LeaderboardPage() {
                       player.id === user.id
                     );
                     const rankSt   = RANK_STYLE[rank];
-                    const netRaw   = Number(player.total_net_chips ?? player.net_chips ?? 0);
-                    const netColor = netRaw > 0 ? '#4ade80' : netRaw < 0 ? '#f87171' : '#9ca3af';
                     const name     = player.name || player.display_name || '—';
-                    const hands    = player.total_hands ?? 0;
-                    const wins     = player.total_wins  ?? player.wins ?? 0;
-                    const winRate  = computeWinRate(wins, hands);
-
-                    // Compute score based on secondary_metric from config
-                    const secondaryMetric = leaderboardConfig?.value?.secondary_metric ?? 'bb_per_100';
-                    let score = null;
-                    let scoreColor = '#6e7681';
-                    if (secondaryMetric === 'net_chips') {
-                      score = netRaw;
-                    } else if (secondaryMetric === 'hands_played') {
-                      score = hands;
-                    } else if (secondaryMetric === 'win_rate') {
-                      score = computeWinRate(wins, hands);
-                    } else if (secondaryMetric === 'bb_per_100') {
-                      score = computeScore(netRaw, hands);
-                    }
-
-                    if (score != null) {
-                      scoreColor = score > 0 ? '#4ade80' : score < 0 ? '#f87171' : '#9ca3af';
-                    }
 
                     return (
                       <tr
@@ -477,39 +370,20 @@ export default function LeaderboardPage() {
                           </div>
                         </td>
 
-                        {/* Hands */}
-                        <td style={{ padding: '10px 14px', color: '#8b949e', fontFamily: 'monospace' }}>
-                          {fmtNum(hands)}
-                        </td>
-
-                        {/* Win Rate */}
-                        <td style={{ padding: '10px 14px', color: '#8b949e', fontFamily: 'monospace' }}>
-                          {winRate == null ? '—' : fmtPct(winRate)}
-                        </td>
-
-                        {/* Net Chips */}
-                        <td
-                          style={{
-                            padding: '10px 14px',
-                            fontFamily: 'monospace',
-                            fontWeight: 600,
-                            color: netColor,
-                          }}
-                        >
-                          {fmtNet(netRaw)}
-                        </td>
-
-                        {/* Score */}
-                        <td
-                          style={{
-                            padding: '10px 14px',
-                            fontFamily: 'monospace',
-                            fontWeight: 600,
-                            color: scoreColor,
-                          }}
-                        >
-                          {score == null ? '—' : formatMetricValue(score, secondaryMetric)}
-                        </td>
+                        {/* Dynamic stat columns */}
+                        {columns.map((col) => {
+                          const val = getStatValue(player, col);
+                          const display = formatStatValue(val, col);
+                          const meta = STAT_CATALOG[col];
+                          const color = meta?.colorCoded && val != null
+                            ? (val > 0 ? '#4ade80' : val < 0 ? '#f87171' : '#9ca3af')
+                            : '#8b949e';
+                          return (
+                            <td key={col} style={{ padding: '10px 14px', fontFamily: 'monospace', fontWeight: col === sortBy ? 600 : 400, color }}>
+                              {display}
+                            </td>
+                          );
+                        })}
                       </tr>
                     );
                   })}

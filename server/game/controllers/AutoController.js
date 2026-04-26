@@ -15,6 +15,7 @@ class AutoController extends TableController {
   constructor(tableId, gameManager, io, tableConfig = {}) {
     super(tableId, gameManager, io);
     this._handActive = false;
+    this._dealTimer = null;
 
     // Apply table config blinds & starting stack if provided
     const cfg = tableConfig?.config ?? {};
@@ -137,7 +138,8 @@ class AutoController extends TableController {
       }
     }
 
-    setTimeout(async () => {
+    this._dealTimer = setTimeout(async () => {
+      this._dealTimer = null;
       if (!this.active) return;
       const freshState = this.gm.state ?? {};
       const active = (freshState.players ?? []).filter(
@@ -147,6 +149,14 @@ class AutoController extends TableController {
         await this._startHand();
       }
     }, DEAL_DELAY_MS);
+  }
+
+  destroy() {
+    if (this._dealTimer) {
+      clearTimeout(this._dealTimer);
+      this._dealTimer = null;
+    }
+    super.destroy();
   }
 
   /**

@@ -273,7 +273,8 @@ class BotTableController extends AutoController {
   async onHandComplete(handResult) {
     this.io.to(this.tableId).emit('hand_complete', handResult);
 
-    setTimeout(async () => {
+    this._dealTimer = setTimeout(async () => {
+      this._dealTimer = null;
       if (!this.active) return;
       const state   = this.gm.state ?? {};
       const players = (state.players ?? []).filter(p => !p.is_coach && p.seat >= 0);

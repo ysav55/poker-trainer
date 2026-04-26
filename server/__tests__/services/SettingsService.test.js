@@ -22,12 +22,12 @@ function mockMaybeSingle(value) {
 
 describe('resolveLeaderboardConfig', () => {
   const SCHOOL_ID = 'school-abc';
-  const HARDCODED = { primary_metric: 'net_chips', secondary_metric: 'win_rate', update_frequency: 'after_session' };
+  const HARDCODED = { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'bb_per_100', update_frequency: 'after_session' };
 
   beforeEach(() => jest.clearAllMocks());
 
   it('returns school source when school-scope row exists', async () => {
-    const schoolVal = { primary_metric: 'bb_per_100', secondary_metric: 'win_rate', update_frequency: 'daily' };
+    const schoolVal = { columns: ['hands_played', 'bb_per_100'], sort_by: 'bb_per_100', update_frequency: 'daily' };
     // getSchoolSetting called first, getOrgSetting second
     mockSupabase.from
       .mockReturnValueOnce({
@@ -43,11 +43,12 @@ describe('resolveLeaderboardConfig', () => {
 
     const result = await SettingsService.resolveLeaderboardConfig(SCHOOL_ID);
     expect(result.source).toBe('school');
-    expect(result.value.primary_metric).toBe('bb_per_100');
+    expect(result.value.sort_by).toBe('bb_per_100');
+    expect(result.value.columns).toEqual(['hands_played', 'bb_per_100']);
   });
 
   it('returns org source when no school row but org row exists', async () => {
-    const orgVal = { primary_metric: 'hands_played', secondary_metric: 'net_chips', update_frequency: 'hourly' };
+    const orgVal = { columns: ['hands_played', 'net_chips'], sort_by: 'hands_played', update_frequency: 'hourly' };
     mockSupabase.from
       .mockReturnValueOnce({
         select: jest.fn().mockReturnThis(),
@@ -62,7 +63,7 @@ describe('resolveLeaderboardConfig', () => {
 
     const result = await SettingsService.resolveLeaderboardConfig(SCHOOL_ID);
     expect(result.source).toBe('org');
-    expect(result.value.primary_metric).toBe('hands_played');
+    expect(result.value.sort_by).toBe('hands_played');
   });
 
   it('returns hardcoded source when neither school nor org row exists', async () => {
@@ -78,7 +79,7 @@ describe('resolveLeaderboardConfig', () => {
   });
 
   it('skips school lookup when schoolId is null', async () => {
-    const orgVal = { primary_metric: 'win_rate', secondary_metric: 'net_chips', update_frequency: 'daily' };
+    const orgVal = { columns: ['win_rate', 'net_chips'], sort_by: 'win_rate', update_frequency: 'daily' };
     mockSupabase.from.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),

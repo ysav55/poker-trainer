@@ -311,23 +311,48 @@ router.put('/school/platforms', async (req, res) => {
 });
 
 // ── PUT /api/settings/school/leaderboard ─────────────────────────────────────
-// Body: { primary_metric?, secondary_metric?, update_frequency? }
+// Body: { columns?, sort_by?, update_frequency? }
 router.put('/school/leaderboard', async (req, res) => {
   if (!SCHOOL_ROLES.has(req.user.role))
     return res.status(403).json({ error: 'forbidden' });
+
+  const { VALID_LEADERBOARD_STATS } = SettingsService;
 
   try {
     const school = await _callerSchool(req.user.stableId);
     if (!school) return res.status(404).json({ error: 'no_school' });
 
     const current = await SettingsService.getSchoolSetting(school.id, 'school.leaderboard') ?? {};
-    const { primary_metric, secondary_metric, update_frequency } = req.body || {};
-    const updated = {
-      ...current,
-      ...(primary_metric   !== undefined && { primary_metric:   String(primary_metric) }),
-      ...(secondary_metric !== undefined && { secondary_metric: String(secondary_metric) }),
-      ...(update_frequency !== undefined && { update_frequency: String(update_frequency) }),
-    };
+    const { columns, sort_by, update_frequency } = req.body || {};
+    const DEFAULT_LB = { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'bb_per_100', update_frequency: 'after_session' };
+    const updated = { ...DEFAULT_LB, ...current };
+
+    if (columns !== undefined) {
+      if (!Array.isArray(columns) || columns.length === 0 || columns.length > 8) {
+        return res.status(400).json({ error: 'columns must be an array of 1-8 stat names' });
+      }
+      const invalid = columns.filter(c => !VALID_LEADERBOARD_STATS.includes(c));
+      if (invalid.length > 0) {
+        return res.status(400).json({ error: `Invalid stat names: ${invalid.join(', ')}` });
+      }
+      updated.columns = [...new Set(columns)];
+    }
+    if (sort_by !== undefined) {
+      if (!VALID_LEADERBOARD_STATS.includes(sort_by)) {
+        return res.status(400).json({ error: `Invalid sort_by: ${sort_by}` });
+      }
+      updated.sort_by = sort_by;
+    }
+    if (update_frequency !== undefined) updated.update_frequency = String(update_frequency);
+
+    // Ensure sort_by is in columns when both are present
+    if (updated.columns && updated.sort_by && !updated.columns.includes(updated.sort_by)) {
+      updated.sort_by = updated.columns[0];
+    }
+    // Remove legacy fields
+    delete updated.primary_metric;
+    delete updated.secondary_metric;
+
     await SettingsService.setSchoolSetting(school.id, 'school.leaderboard', updated);
     return res.json(updated);
   } catch (err) {

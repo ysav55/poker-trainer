@@ -39,6 +39,12 @@ jest.mock('../../server/services/SettingsService.js', () => ({
   setOrgSetting:    (...args) => mockSetOrgSetting(...args),
   getSchoolSetting: jest.fn(),
   setSchoolSetting: jest.fn(),
+  migrateLeaderboardConfig: (val) => val,
+  VALID_LEADERBOARD_STATS: [
+    'hands_played', 'bb_per_100', 'vpip', 'pfr', 'net_chips', 'win_rate',
+    'wtsd', 'wsd', 'three_bet', 'af', 'cbet_flop', 'fold_to_cbet',
+    'open_limp_rate', 'cold_call_3bet_rate', 'min_raise_rate', 'overlimp_rate', 'equity_fold_rate',
+  ],
 }));
 
 jest.mock('../../server/db/repositories/SchoolRepository.js', () => ({
@@ -95,7 +101,7 @@ describe('GET /api/admin/org-settings', () => {
     // Hardcoded defaults
     expect(res.body.platform_limits.trial_days).toBe(7);
     expect(res.body.autospawn.enabled).toBe(false);
-    expect(res.body.leaderboard.primary_metric).toBe('net_chips');
+    expect(res.body.leaderboard.sort_by).toBe('bb_per_100');
     expect(Array.isArray(res.body.blind_structures)).toBe(true);
     expect(res.body.blind_structures.length).toBe(4);
   });
@@ -251,11 +257,11 @@ describe('PUT /api/admin/org-settings/leaderboard', () => {
   test('saves and returns leaderboard config', async () => {
     const res = await request(app)
       .put('/api/admin/org-settings/leaderboard')
-      .send({ primary_metric: 'bb_per_100', update_frequency: 'daily' });
+      .send({ columns: ['hands_played', 'bb_per_100', 'vpip'], sort_by: 'bb_per_100', update_frequency: 'daily' });
 
     expect(res.status).toBe(200);
-    expect(res.body.primary_metric).toBe('bb_per_100');
+    expect(res.body.columns).toEqual(['hands_played', 'bb_per_100', 'vpip']);
+    expect(res.body.sort_by).toBe('bb_per_100');
     expect(res.body.update_frequency).toBe('daily');
-    expect(res.body.secondary_metric).toBe('win_rate'); // default preserved
   });
 });
