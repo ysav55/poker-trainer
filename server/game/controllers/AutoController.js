@@ -5,11 +5,16 @@ const { v4: _uuidv4 }    = require('uuid');
 
 const DEAL_DELAY_MS = 2000;
 
-// Lazy requires to avoid circular deps at module load time
-function _SharedState()  { return require('../../state/SharedState'); }
-function _HandLogger()   { return require('../../db/HandLoggerSupabase'); }
-function _Analyzer()     { return require('../AnalyzerService'); }
-function _log()          { return require('../../logs/logger'); }
+// Lazy requires to avoid circular deps at module load time.
+// Cache the result on first call so the captured reference survives Jest's
+// module-registry teardown — otherwise pending timers that fire after teardown
+// would re-enter require() and get back `{}` (see commit 3790824 for the
+// equivalent uuid fix).
+let _ssCache = null, _hlCache = null, _anCache = null, _logCache = null;
+function _SharedState()  { return _ssCache  ??= require('../../state/SharedState'); }
+function _HandLogger()   { return _hlCache  ??= require('../../db/HandLoggerSupabase'); }
+function _Analyzer()     { return _anCache  ??= require('../AnalyzerService'); }
+function _log()          { return _logCache ??= require('../../logs/logger'); }
 
 class AutoController extends TableController {
   constructor(tableId, gameManager, io, tableConfig = {}) {

@@ -28,10 +28,13 @@ const JwtService         = require('../../auth/JwtService');
 const { v4: uuidv4 }     = require('uuid');
 
 // Lazy-load to avoid circular deps at module parse time.
-function _ioClient()    { return require('socket.io-client'); }
-function _HandLogger()  { return require('../../db/HandLoggerSupabase'); }
-function _SharedState() { return require('../../state/SharedState'); }
-function _Analyzer()    { return require('../AnalyzerService'); }
+// Cache the result on first call so references survive Jest's module-registry
+// teardown — see AutoController for full rationale.
+let _ioCache = null, _hlCache = null, _ssCache = null, _anCache = null;
+function _ioClient()    { return _ioCache ??= require('socket.io-client'); }
+function _HandLogger()  { return _hlCache ??= require('../../db/HandLoggerSupabase'); }
+function _SharedState() { return _ssCache ??= require('../../state/SharedState'); }
+function _Analyzer()    { return _anCache ??= require('../AnalyzerService'); }
 
 const DEAL_DELAY_MS      = 2500;
 const MIN_THINK_MS       = 300;
