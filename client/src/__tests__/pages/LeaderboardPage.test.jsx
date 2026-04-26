@@ -28,10 +28,10 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
     vi.clearAllMocks();
   });
 
-  describe('Dynamic sorting by primary_metric', () => {
-    it('should sort by net_chips (default) when leaderboardConfig.value.primary_metric is net_chips', async () => {
+  describe('Dynamic sorting by sort_by', () => {
+    it('should sort by net_chips when sort_by is net_chips', async () => {
       const leaderboardConfig = {
-        value: { primary_metric: 'net_chips', secondary_metric: 'win_rate' },
+        value: { columns: ['hands_played', 'net_chips', 'vpip', 'pfr'], sort_by: 'net_chips' },
         source: 'hardcoded',
       };
 
@@ -51,15 +51,14 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
 
       // Players should be sorted by total_net_chips DESC: Alice (500), Bob (400), Charlie (300)
       const rows = screen.getAllByRole('row');
-      // rows[0] is header, rows[1] is first player
       expect(rows[1]).toHaveTextContent('Alice');
       expect(rows[2]).toHaveTextContent('Bob');
       expect(rows[3]).toHaveTextContent('Charlie');
     });
 
-    it('should sort by hands_played when primary_metric is hands_played', async () => {
+    it('should sort by hands_played when sort_by is hands_played', async () => {
       const leaderboardConfig = {
-        value: { primary_metric: 'hands_played', secondary_metric: 'win_rate' },
+        value: { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'hands_played' },
         source: 'school',
       };
 
@@ -84,7 +83,7 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
       expect(rows[3]).toHaveTextContent('Charlie');
     });
 
-    it('should sort by win_rate when primary_metric is win_rate', async () => {
+    it('should sort by win_rate when sort_by is win_rate', async () => {
       const players = [
         { id: 'p1', stable_id: 'p1', name: 'Alice', total_hands: 100, total_wins: 30, total_net_chips: 500 },
         { id: 'p2', stable_id: 'p2', name: 'Bob', total_hands: 80, total_wins: 20, total_net_chips: 400 },
@@ -92,7 +91,7 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
       ];
 
       const leaderboardConfig = {
-        value: { primary_metric: 'win_rate', secondary_metric: 'net_chips' },
+        value: { columns: ['hands_played', 'win_rate', 'vpip', 'pfr'], sort_by: 'win_rate' },
         source: 'org',
       };
 
@@ -110,23 +109,23 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // Alice: 30/100=0.30, Bob: 20/80=0.25, Charlie: 18/60=0.30
-      // Tie between Alice and Charlie, so order preserved: Alice, Charlie, Bob
+      // Alice: 30/100=30%, Bob: 20/80=25%, Charlie: 18/60=30%
+      // Stable sort desc: Alice(30%), Charlie(30%), Bob(25%)
       const rows = screen.getAllByRole('row');
       expect(rows[1]).toHaveTextContent('Alice'); // 30%
-      expect(rows[2]).toHaveTextContent('Charlie'); // 30%, appears second
+      expect(rows[2]).toHaveTextContent('Charlie'); // 30%, stable after Alice
       expect(rows[3]).toHaveTextContent('Bob'); // 25%
     });
 
-    it('should sort by bb_per_100 when primary_metric is bb_per_100', async () => {
+    it('should sort by bb_per_100 when sort_by is bb_per_100', async () => {
       const players = [
-        { id: 'p1', stable_id: 'p1', name: 'Alice', total_hands: 100, total_wins: 25, total_net_chips: 500 },
-        { id: 'p2', stable_id: 'p2', name: 'Bob', total_hands: 100, total_wins: 20, total_net_chips: 400 },
-        { id: 'p3', stable_id: 'p3', name: 'Charlie', total_hands: 100, total_wins: 18, total_net_chips: 300 },
+        { id: 'p1', stable_id: 'p1', name: 'Alice',   total_hands: 100, total_wins: 25, total_net_chips: 500, bb_per_100: 10 },
+        { id: 'p2', stable_id: 'p2', name: 'Bob',     total_hands: 100, total_wins: 20, total_net_chips: 400, bb_per_100: 5  },
+        { id: 'p3', stable_id: 'p3', name: 'Charlie', total_hands: 100, total_wins: 18, total_net_chips: 300, bb_per_100: 2  },
       ];
 
       const leaderboardConfig = {
-        value: { primary_metric: 'bb_per_100', secondary_metric: 'win_rate' },
+        value: { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'bb_per_100' },
         source: 'school',
       };
 
@@ -144,15 +143,16 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // Alice: 500/100*100=500, Bob: 400/100*100=400, Charlie: 300/100*100=300
+      // Alice(10) > Bob(5) > Charlie(2)
       const rows = screen.getAllByRole('row');
       expect(rows[1]).toHaveTextContent('Alice');
       expect(rows[2]).toHaveTextContent('Bob');
       expect(rows[3]).toHaveTextContent('Charlie');
     });
 
-    it('should fall back to net_chips when leaderboardConfig is null', async () => {
-      apiLib.apiFetch.mockResolvedValueOnce({ players: mockPlayers, leaderboardConfig: null });
+    it('should fall back to bb_per_100 when leaderboardConfig is null', async () => {
+      const playersWithBb = mockPlayers.map((p, i) => ({ ...p, bb_per_100: [10, 5, 2][i] }));
+      apiLib.apiFetch.mockResolvedValueOnce({ players: playersWithBb, leaderboardConfig: null });
 
       render(
         <Router>
@@ -166,7 +166,7 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // Default to net_chips: Alice (500), Bob (400), Charlie (300)
+      // Default sort_by = bb_per_100: Alice(10) > Bob(5) > Charlie(2)
       const rows = screen.getAllByRole('row');
       expect(rows[1]).toHaveTextContent('Alice');
       expect(rows[2]).toHaveTextContent('Bob');
@@ -174,14 +174,14 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
     });
   });
 
-  describe('Dynamic score display by secondary_metric', () => {
-    it('should compute score as bb_per_100 when secondary_metric is bb_per_100', async () => {
+  describe('Column display by columns config', () => {
+    it('should show bb_per_100 column value when columns includes bb_per_100', async () => {
       const players = [
-        { id: 'p1', stable_id: 'p1', name: 'Alice', total_hands: 100, total_wins: 25, total_net_chips: 500 },
+        { id: 'p1', stable_id: 'p1', name: 'Alice', total_hands: 100, total_wins: 25, total_net_chips: 500, bb_per_100: 5 },
       ];
 
       const leaderboardConfig = {
-        value: { primary_metric: 'net_chips', secondary_metric: 'bb_per_100' },
+        value: { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'bb_per_100' },
         source: 'hardcoded',
       };
 
@@ -199,19 +199,19 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // Alice: 500/100*100=500 (rounded to 500)
+      // bb_per_100 = 5 → formatted as +5 (signed_number)
       const rows = screen.getAllByRole('row');
-      const scoreCell = rows[1].querySelectorAll('td')[5]; // Score is the 6th column (0-indexed)
-      expect(scoreCell.textContent).toMatch(/500/);
+      const bbCell = rows[1].querySelectorAll('td')[3]; // rank, name, hands, bb_per_100
+      expect(bbCell.textContent).toMatch(/\+5/);
     });
 
-    it('should compute score as win_rate% when secondary_metric is win_rate', async () => {
+    it('should show win_rate column value when columns includes win_rate', async () => {
       const players = [
         { id: 'p1', stable_id: 'p1', name: 'Alice', total_hands: 100, total_wins: 25, total_net_chips: 500 },
       ];
 
       const leaderboardConfig = {
-        value: { primary_metric: 'net_chips', secondary_metric: 'win_rate' },
+        value: { columns: ['hands_played', 'win_rate', 'vpip', 'pfr'], sort_by: 'win_rate' },
         source: 'org',
       };
 
@@ -229,19 +229,19 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // Alice: 25/100*100=25%
+      // win_rate = 25/100 = 25%
       const rows = screen.getAllByRole('row');
-      const scoreCell = rows[1].querySelectorAll('td')[5];
-      expect(scoreCell.textContent).toMatch(/25%/);
+      const cell = rows[1].querySelectorAll('td')[3]; // rank, name, hands, win_rate
+      expect(cell.textContent).toMatch(/25%/);
     });
 
-    it('should compute score as net_chips when secondary_metric is net_chips', async () => {
+    it('should show net_chips column value when columns includes net_chips', async () => {
       const players = [
         { id: 'p1', stable_id: 'p1', name: 'Alice', total_hands: 100, total_wins: 25, total_net_chips: 500 },
       ];
 
       const leaderboardConfig = {
-        value: { primary_metric: 'win_rate', secondary_metric: 'net_chips' },
+        value: { columns: ['hands_played', 'net_chips', 'vpip', 'pfr'], sort_by: 'net_chips' },
         source: 'school',
       };
 
@@ -259,19 +259,19 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // Alice: 500 (net chips)
+      // net_chips = 500 → formatted as +500 (signed_number)
       const rows = screen.getAllByRole('row');
-      const scoreCell = rows[1].querySelectorAll('td')[5];
-      expect(scoreCell.textContent).toMatch(/\+500/);
+      const cell = rows[1].querySelectorAll('td')[3]; // rank, name, hands, net_chips
+      expect(cell.textContent).toMatch(/\+500/);
     });
 
-    it('should compute score as hands_played when secondary_metric is hands_played', async () => {
+    it('should show hands_played column value', async () => {
       const players = [
         { id: 'p1', stable_id: 'p1', name: 'Alice', total_hands: 100, total_wins: 25, total_net_chips: 500 },
       ];
 
       const leaderboardConfig = {
-        value: { primary_metric: 'net_chips', secondary_metric: 'hands_played' },
+        value: { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'hands_played' },
         source: 'hardcoded',
       };
 
@@ -289,15 +289,15 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // Alice: 100 hands
+      // hands_played = 100
       const rows = screen.getAllByRole('row');
-      const scoreCell = rows[1].querySelectorAll('td')[5];
-      expect(scoreCell.textContent).toMatch(/100/);
+      const cell = rows[1].querySelectorAll('td')[2]; // rank, name, hands
+      expect(cell.textContent).toMatch(/100/);
     });
 
-    it('should update Score column header title based on secondary_metric', async () => {
+    it('should render column headers matching STAT_CATALOG labels', async () => {
       const leaderboardConfig = {
-        value: { primary_metric: 'net_chips', secondary_metric: 'hands_played' },
+        value: { columns: ['hands_played', 'bb_per_100', 'vpip', 'pfr'], sort_by: 'bb_per_100' },
         source: 'hardcoded',
       };
 
@@ -315,13 +315,13 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // When secondary_metric is 'hands_played', the dynamic score header should have the correct title
       const headers = screen.getAllByRole('columnheader');
       // Find the header with the dynamic title (only the score column has a title attribute)
-      const dynamicHeaders = headers.filter(h => h.title && h.title.length > 0);
-      expect(dynamicHeaders.length).toBeGreaterThan(0);
-      const scoreHeader = dynamicHeaders[dynamicHeaders.length - 1];
-      expect(scoreHeader.title).toMatch(/total hands played/i);
+      const headerText = headers.map(h => h.textContent.trim());
+      expect(headerText.some(t => t.includes('Hands'))).toBe(true);
+      expect(headerText.some(t => t.includes('BB/100'))).toBe(true);
+      expect(headerText.some(t => /VPIP/i.test(t))).toBe(true);
+      expect(headerText.some(t => /PFR/i.test(t))).toBe(true);
     });
   });
 
@@ -329,7 +329,7 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
     it('should preserve sort order when searching', async () => {
       const user = userEvent.setup();
       const leaderboardConfig = {
-        value: { primary_metric: 'net_chips', secondary_metric: 'bb_per_100' },
+        value: { columns: ['hands_played', 'net_chips', 'vpip', 'pfr'], sort_by: 'net_chips' },
         source: 'hardcoded',
       };
 
@@ -347,7 +347,7 @@ describe('LeaderboardPage — Dynamic Metric Sorting & Scoring', () => {
         expect(screen.getByText('Alice')).toBeInTheDocument();
       });
 
-      // Verify initial sort
+      // Verify initial sort (Alice 500 > Bob 400 > Charlie 300)
       let rows = screen.getAllByRole('row');
       expect(rows[1]).toHaveTextContent('Alice');
 

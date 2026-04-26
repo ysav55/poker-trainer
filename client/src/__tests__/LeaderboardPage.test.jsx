@@ -49,9 +49,9 @@ function renderPage() {
 }
 
 const PLAYERS = [
-  { stable_id: 'user-1', display_name: 'Alice', total_hands: 50, total_wins: 20, total_net_chips: 1500, vpip_percent: 28, pfr_percent: 22 },
-  { stable_id: 'user-2', display_name: 'Bob',   total_hands: 40, total_wins: 15, total_net_chips: -200, vpip_percent: 35, pfr_percent: 18 },
-  { stable_id: 'user-3', display_name: 'Carol', total_hands: 60, total_wins: 30, total_net_chips: 800,  vpip_percent: 24, pfr_percent: 20 },
+  { stable_id: 'user-1', display_name: 'Alice', total_hands: 50, total_wins: 20, total_net_chips: 1500, vpip_percent: 28, pfr_percent: 22, bb_per_100: 15 },
+  { stable_id: 'user-2', display_name: 'Bob',   total_hands: 40, total_wins: 15, total_net_chips: -200, vpip_percent: 35, pfr_percent: 18, bb_per_100: -5 },
+  { stable_id: 'user-3', display_name: 'Carol', total_hands: 60, total_wins: 30, total_net_chips: 800,  vpip_percent: 24, pfr_percent: 20, bb_per_100: 8  },
 ];
 
 beforeEach(() => {
@@ -124,7 +124,7 @@ describe('LeaderboardPage player rows', () => {
     expect(screen.getByText('YOU')).toBeTruthy();
   });
 
-  it('sorts players by net chips descending (Alice 1500 > Carol 800 > Bob -200)', async () => {
+  it('sorts players by bb_per_100 descending (Alice 15 > Carol 8 > Bob -5)', async () => {
     renderPage();
     await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
     const rows = screen.getAllByRole('row').slice(1); // skip header
@@ -203,16 +203,20 @@ describe('LeaderboardPage search', () => {
   });
 });
 
-// ── Net chips colors ───────────────────────────────────────────────────────────
+// ── Stat formatting ────────────────────────────────────────────────────────────
 
 describe('LeaderboardPage net chips formatting', () => {
+  const withNetChips = { leaderboardConfig: { value: { columns: ['hands_played', 'net_chips', 'vpip', 'pfr'], sort_by: 'net_chips' } } };
+
   it('formats positive net chips with + sign', async () => {
+    mockApiFetch.mockResolvedValueOnce({ players: PLAYERS, ...withNetChips });
     renderPage();
     await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
     expect(screen.getByText('+1,500')).toBeTruthy();
   });
 
   it('formats negative net chips without + sign', async () => {
+    mockApiFetch.mockResolvedValueOnce({ players: PLAYERS, ...withNetChips });
     renderPage();
     await waitFor(() => expect(screen.queryByText(/Loading…/i)).toBeNull());
     expect(screen.getByText('-200')).toBeTruthy();
