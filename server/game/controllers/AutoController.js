@@ -1,13 +1,13 @@
 'use strict';
 
 const { TableController } = require('./TableController');
+const { v4: _uuidv4 }    = require('uuid');
 
 const DEAL_DELAY_MS = 2000;
 
 // Lazy requires to avoid circular deps at module load time
 function _SharedState()  { return require('../../state/SharedState'); }
 function _HandLogger()   { return require('../../db/HandLoggerSupabase'); }
-function _uuidv4()       { const { v4 } = require('uuid'); return v4(); }
 function _Analyzer()     { return require('../AnalyzerService'); }
 function _log()          { return require('../../logs/logger'); }
 
