@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import { usePreferences } from '../hooks/usePreferences.js';
 import PokerTable from '../components/PokerTable.jsx';
 import CoachSidebar from '../components/CoachSidebar.jsx';
+import SidebarV3 from '../components/sidebar-v3/Sidebar.jsx';
+import { buildLiveData } from '../components/sidebar-v3/buildLiveData.js';
 import { useDrillSession } from '../hooks/useDrillSession';
 import TournamentInfoPanel from '../components/TournamentInfoPanel.jsx';
 import TournamentTopBar from '../components/TournamentTopBar.jsx';
@@ -113,6 +115,8 @@ function FullTableView() {
   const drill = useDrillSession({ socket: socket?.socket, tableId });
   const { user } = useAuth();
   const { bbView } = usePreferences();
+  const [searchParamsFTV] = useSearchParams();
+  const useSidebarV3 = searchParamsFTV.get('sidebarV3') === '1';
 
   // Destructure hook return — hookState is the full useGameState() return value
   const {
@@ -330,6 +334,9 @@ function FullTableView() {
     // sit-out/sit-in (uncoached tables)
     sitOut: () => socket.emit('player_sit_out'),
     sitIn:  () => socket.emit('player_sit_in'),
+    // Coach actions added in Phase 2 server work — gated server-side by requireCoach.
+    coachAddBot:    (difficulty = 'easy') => socket.emit('coach:add_bot', { difficulty }),
+    coachKickPlayer: (playerId) => socket.emit('coach:kick_player', { playerId }),
     // equity helpers
     toggleEquityDisplay,
     toggleRangeDisplay,
@@ -412,7 +419,14 @@ function FullTableView() {
         </div>
 
         {/* Coach sidebar — only in coached_cash mode where the coach runs the game */}
-        {actingAsCoach && (
+        {actingAsCoach && useSidebarV3 && (
+          <SidebarV3
+            data={buildLiveData({ hookState, user, playlist })}
+            emit={emit}
+            tableId={tableId}
+          />
+        )}
+        {actingAsCoach && !useSidebarV3 && (
           <CoachSidebar
             gameState={gameState ?? {}}
             emit={emit}
