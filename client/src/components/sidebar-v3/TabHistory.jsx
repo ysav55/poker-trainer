@@ -1,0 +1,287 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { MiniCard, Segmented } from './shared.jsx';
+import { useHistory } from '../../hooks/useHistory.js';
+
+const PHASE_LABEL = { preflop: 'preflop', flop: 'flop', turn: 'turn', river: 'river', showdown: 'showdown' };
+
+// Server hand row → v3 HandCard shape. heroHand isn't on the list endpoint;
+// shown as ghost cards. Net P&L also requires per-player join — left null
+// (HandCard renders neutral for null). Phase 4 may upgrade to /api/hands/history
+// with playerId for full hero-centric data.
+function adaptServerHand(h, idx, total) {
+  return {
+    n: total - idx,
+    hand_id: h.hand_id,
+    phase: PHASE_LABEL[h.phase_ended] ?? h.phase_ended ?? 'unknown',
+    board: Array.isArray(h.board) ? h.board : [],
+    heroHand: [],
+    action: h.winner_name ? `${h.winner_name} won` : 'completed',
+    pot: h.final_pot ?? 0,
+    net: null,
+    live: false,
+  };
+}
+
+export default function TabHistory({ data, tableId, onLoadReview }) {
+  const [view, setView] = useState('table');
+  const { hands: serverHands, loading, fetchHands } = useHistory();
+  // Players sub-tab depends on per-player session stats that aren't on the
+  // /api/hands list endpoint. Hidden in live mode (the only reachable mode
+  // when ?sidebarV3=1 + tableId are set) until Phase 4 wires per-player REST
+  // calls. The mock-fixture leak it would otherwise produce — Ariela / Ido /
+  // Guy / Noa stats on a real coach session — is exactly the trust-erosion
+  // failure project CLAUDE.md warns against.
+  const showPlayersTab = !tableId; // i.e., dev fixture mode only
+
+  // Fetch on mount + whenever the table changes. Refetch when tab is reopened
+  // is intentionally NOT wired — once fetched, the list is stable until the
+  // hook is re-instantiated (sidebar tab switch keeps the component mounted
+  // here, so this fires once per tab open in practice).
+  useEffect(() => {
+    if (tableId) fetchHands(tableId);
+  }, [tableId, fetchHands]);
+
+  const liveHistory = useMemo(() => {
+    if (!serverHands || serverHands.length === 0) return null;
+    return serverHands.map((h, i) => adaptServerHand(h, i, serverHands.length));
+  }, [serverHands]);
+
+  // Merge: prefer live history when present, fall back to fixture only when
+  // fetching is in flight or empty (so the tab never renders blank).
+  const tabData = useMemo(() => {
+    if (liveHistory && liveHistory.length > 0) {
+      return { ...data, history: liveHistory };
+    }
+    return data;
+  }, [data, liveHistory]);
+
+  return (
+    <>
+      {showPlayersTab && (
+        <Segmented
+          cols={2}
+          options={[
+            { value: 'table',   label: 'Table' },
+            { value: 'players', label: 'Players' },
+          ]}
+          value={view}
+          onChange={setView}
+        />
+      )}
+      {(showPlayersTab && view === 'players')
+        ? <PlayersHistoryView data={tabData} onLoadReview={onLoadReview} />
+        : <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} />
+      }
+    </>
+  );
+}
+
+function TableHistoryView({ data, loading, isLive, onLoadReview }) {
+  const [filter, setFilter] = useState('all');
+
+  const sessionPnl = data.history.filter((h) => h.net != null).reduce((a, b) => a + b.net, 0);
+  const handsDone = data.history.filter((h) => !h.live).length;
+  const wins = data.history.filter((h) => h.net > 0).length;
+  const losses = data.history.filter((h) => h.net < 0).length;
+  // For live hands, net P&L is unavailable from /api/hands list (no per-player
+  // join). Hide the won/lost stat tiles to avoid lying — show pot stats only.
+  const hideNetStats = isLive;
+
+  const filtered = useMemo(
+    () => data.history.filter((h) => {
+      if (filter === 'all') return true;
+      if (filter === 'won') return h.net > 0;
+      if (filter === 'lost') return h.net < 0;
+      if (filter === 'showdown') return h.phase === 'showdown';
+      return true;
+    }),
+    [filter, data.history]
+  );
+
+  return (
+    <>
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title">Session</div>
+          <div className="card-kicker">{handsDone} hand{handsDone === 1 ? '' : 's'}{loading ? ' · loading…' : ''}</div>
+        </div>
+        {!hideNetStats && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 6 }}>
+            <div className="stat">
+              <div className="stat-lbl">Hero Net</div>
+              <div className={'stat-val serif ' + (sessionPnl >= 0 ? 'ok' : 'bad')}>
+                {sessionPnl >= 0 ? '+' : ''}{sessionPnl}
+              </div>
+            </div>
+            <div className="stat"><div className="stat-lbl">Won</div><div className="stat-val">{wins}</div></div>
+            <div className="stat"><div className="stat-lbl">Lost</div><div className="stat-val">{losses}</div></div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          <MiniStat label="Biggest Pot" value={Math.max(0, ...data.history.map((h) => h.pot ?? 0))} />
+          <MiniStat label="Hands" value={handsDone} />
+        </div>
+      </div>
+
+      <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+        {[
+          { v: 'all',      l: 'All' },
+          { v: 'won',      l: 'Won' },
+          { v: 'lost',     l: 'Lost' },
+          { v: 'showdown', l: 'Showdown' },
+        ].map((f) => (
+          <span key={f.v} className={'chip' + (filter === f.v ? ' active' : ' ghost')} onClick={() => setFilter(f.v)}>{f.l}</span>
+        ))}
+      </div>
+
+      <div className="card" style={{ padding: '12px 12px 8px' }}>
+        <div className="card-head">
+          <div className="card-title">Recent Hands</div>
+          <div className="card-kicker">scroll ↔ · {filtered.length}</div>
+        </div>
+        <div className="h-scroll">
+          {filtered.map((h) => <HandCard key={h.hand_id ?? h.n} hand={h} onClick={() => onLoadReview(h.hand_id ?? h.n)} />)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PlayersHistoryView({ data, onLoadReview }) {
+  const playerList = Object.values(data.playerHistory);
+  const [selectedId, setSelectedId] = useState(playerList[0].stableId);
+  const selected = data.playerHistory[selectedId];
+
+  const playerHands = useMemo(() => {
+    const set = new Set(selected.handIds);
+    return data.history.filter((h) => set.has(h.n));
+  }, [selectedId, data.history]);
+
+  return (
+    <>
+      <div className="card" style={{ padding: '11px 12px 9px' }}>
+        <div className="card-head" style={{ marginBottom: 7 }}>
+          <div className="card-title">Player</div>
+          <div className="card-kicker">{playerList.length} at table</div>
+        </div>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {playerList.map((p) => {
+            const isOn = selectedId === p.stableId;
+            const color = data.equityData.colors[p.stableId] || 'var(--accent)';
+            return (
+              <button
+                key={p.stableId}
+                className={'chip' + (isOn ? ' active' : '')}
+                onClick={() => setSelectedId(p.stableId)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, borderColor: isOn ? color : 'rgba(201,163,93,0.2)' }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, boxShadow: isOn ? `0 0 6px ${color}` : 'none' }} />
+                {p.name.split(' ')[0]}
+                {p.isHero && <span style={{ fontSize: 8, opacity: 0.7 }}>· you</span>}
+                {p.isBot && <span style={{ fontSize: 8, opacity: 0.7 }}>· bot</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <PlayerStatsCard player={selected} color={data.equityData.colors[selected.stableId]} />
+
+      <div className="card" style={{ padding: '12px 12px 8px' }}>
+        <div className="card-head">
+          <div className="card-title">{selected.name.split(' ')[0]}'s Hands</div>
+          <div className="card-kicker">scroll ↔ · {playerHands.length}</div>
+        </div>
+        <div className="h-scroll">
+          {playerHands.map((h) => <HandCard key={h.hand_id ?? h.n} hand={h} onClick={() => onLoadReview(h.hand_id ?? h.n)} />)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PlayerStatsCard({ player, color }) {
+  const s = player.stats;
+  const c = color || 'var(--accent)';
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="card-title" style={{ color: c }}>{player.name}</div>
+        <div className="card-kicker">{s.hands} hands</div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+        <div className="stat">
+          <div className="stat-lbl">Net</div>
+          <div className={'stat-val serif ' + (s.net >= 0 ? 'ok' : 'bad')}>{s.net >= 0 ? '+' : ''}{s.net}</div>
+        </div>
+        <div className="stat">
+          <div className="stat-lbl">bb / 100</div>
+          <div className={'stat-val ' + (s.bb100 >= 0 ? 'ok' : 'bad')}>{s.bb100 >= 0 ? '+' : ''}{s.bb100}</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+        <MiniStat label="VPIP" value={s.vpip + '%'} />
+        <MiniStat label="PFR"  value={s.pfr + '%'} />
+        <MiniStat label="W$SD" value={s.wonAtSd + '%'} />
+      </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }) {
+  return (
+    <div className="stat" style={{ padding: '6px 8px' }}>
+      <div className="stat-lbl" style={{ fontSize: 7 }}>{label}</div>
+      <div className="stat-val" style={{ fontSize: 13 }}>{value}</div>
+    </div>
+  );
+}
+
+function HandCard({ hand, onClick }) {
+  const isLive = hand.live;
+  const net = hand.net;
+  const netColor = net == null ? 'var(--ink-dim)' : net >= 0 ? 'var(--ok)' : 'var(--bad)';
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        flex: '0 0 146px',
+        scrollSnapAlign: 'start',
+        background: isLive ? 'rgba(201,163,93,0.08)' : 'var(--bg-3)',
+        border: `1px solid ${isLive ? 'rgba(201,163,93,0.4)' : 'var(--line)'}`,
+        borderRadius: 9,
+        padding: '9px 10px',
+        cursor: isLive ? 'default' : 'pointer',
+        display: 'flex', flexDirection: 'column', gap: 6,
+        transition: 'border-color 150ms, background 150ms',
+      }}
+      onMouseOver={(e) => !isLive && (e.currentTarget.style.borderColor = 'rgba(201,163,93,0.4)')}
+      onMouseOut={(e) => !isLive && (e.currentTarget.style.borderColor = 'var(--line)')}
+    >
+      <div className="row between">
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ink-faint)' }}>#{hand.n}</span>
+        {isLive ? (
+          <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: '0.16em', color: 'var(--ok)', textTransform: 'uppercase' }}>● Live</span>
+        ) : (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: netColor }}>{net >= 0 ? '+' : ''}{net}</span>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {hand.heroHand.map((c, i) => <MiniCard key={i} code={c} />)}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          hand.board[i] ? <MiniCard key={i} code={hand.board[i]} /> : <MiniCard key={i} ghost />
+        ))}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--ink-dim)', lineHeight: 1.35, minHeight: 26 }}>{hand.action}</div>
+      <div className="row between" style={{ paddingTop: 5, borderTop: '1px solid rgba(201,163,93,0.08)' }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--ink-faint)' }}>{hand.phase}</span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-dim)' }}>pot {hand.pot}</span>
+      </div>
+    </div>
+  );
+}
