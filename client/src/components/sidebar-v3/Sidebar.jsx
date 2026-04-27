@@ -8,7 +8,7 @@ import TabReview from './TabReview.jsx';
 import TabSettings from './TabSettings.jsx';
 import { SIDEBAR_V3_DATA } from './data.js';
 
-export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId = null, initialTab = 'live' }) {
+export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId = null, replay = null, initialTab = 'live' }) {
   const [tab, setTab] = useState(() => {
     try { return localStorage.getItem('fs.sb3.tab') || initialTab; }
     catch { return initialTab; }
@@ -35,11 +35,16 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
   else if (tab === 'review') status = 'review';
   else if (data.gameState.is_scenario) status = 'scenario';
 
+  // Server's getPublicState() does not emit a hand_number; use the truncated
+  // handId in the Review subtitle so it actually reflects the loaded hand.
+  const reviewSubtitle = data.review?.handId
+    ? `Hand · ${String(data.review.handId).slice(0, 8)}`
+    : 'Hand · —';
   const subtitle = {
     live:     'Coach',
     drills:   'Drill Builder',
     history:  `Session · ${data.session?.hands ?? 0} hands`,
-    review:   `Hand #${data.review.handNumber}`,
+    review:   reviewSubtitle,
     settings: 'Table Setup',
   }[tab];
 
@@ -92,10 +97,22 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
       );
     }
     if (tab === 'review') {
+      // Save Branch + Run This Spot are now driven inline within TabReview's
+      // Save Branch card and the Branch button on the controls. Footer reduces
+      // to Exit Replay → Live to keep the gold primary action prominent.
       return (
         <>
-          <button className="btn" style={{ flex: 1 }} disabled title="Phase 4 (branch_to_drill)">Save Branch</button>
-          <button className="btn primary" style={{ flex: 1.6 }} disabled title="Phase 4">Run This Spot →</button>
+          <button
+            className="btn ghost"
+            style={{ flex: 1 }}
+            onClick={() => { setSelectedHandId(null); replay?.replayExit?.(); setAndPersist('history'); }}
+            title="Close replay and go back to History"
+          >← History</button>
+          <button
+            className="btn primary"
+            style={{ flex: 1.6 }}
+            onClick={() => { setSelectedHandId(null); replay?.replayExit?.(); setAndPersist('live'); }}
+          >Exit Replay → Live</button>
         </>
       );
     }
@@ -117,6 +134,8 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
         {tab === 'history'  && <TabHistory  data={data} tableId={tableId} onLoadReview={loadReview} />}
         {tab === 'review'   && <TabReview
                                    data={data}
+                                   emit={emit}
+                                   replay={replay}
                                    selectedHandId={selectedHandId}
                                    onBack={() => { setSelectedHandId(null); setAndPersist('live'); }}
                                 />}

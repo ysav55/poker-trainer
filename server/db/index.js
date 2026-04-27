@@ -68,6 +68,7 @@ module.exports = {
   // Playlists
   createPlaylist:          PlaylistRepo.createPlaylist,
   getPlaylists:            PlaylistRepo.getPlaylists,
+  getPlaylist:             PlaylistRepo.getPlaylist,
   getPlaylistHands:        PlaylistRepo.getPlaylistHands,
   addHandToPlaylist:       PlaylistRepo.addHandToPlaylist,
   removeHandFromPlaylist:  PlaylistRepo.removeHandFromPlaylist,

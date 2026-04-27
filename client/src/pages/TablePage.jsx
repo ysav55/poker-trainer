@@ -337,6 +337,8 @@ function FullTableView() {
     // Coach actions added in Phase 2 server work — gated server-side by requireCoach.
     coachAddBot:    (difficulty = 'easy') => socket.emit('coach:add_bot', { difficulty }),
     coachKickPlayer: (playerId) => socket.emit('coach:kick_player', { playerId }),
+    branchToDrill:  ({ handId, playlistId, newPlaylistName, cursor } = {}) =>
+                       socket.emit('branch_to_drill', { handId, playlistId, newPlaylistName, cursor }),
     // equity helpers
     toggleEquityDisplay,
     toggleRangeDisplay,
@@ -424,6 +426,7 @@ function FullTableView() {
             data={buildLiveData({ hookState, user, playlist })}
             emit={emit}
             tableId={tableId}
+            replay={replay}
           />
         )}
         {actingAsCoach && !useSidebarV3 && (

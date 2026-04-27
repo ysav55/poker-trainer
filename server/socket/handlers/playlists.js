@@ -149,6 +149,82 @@ module.exports = function registerPlaylists(socket, ctx) {
     }
   });
 
+  // ── branch_to_drill: capture a (replay or live-history) hand into a playlist
+  // for later drilling. New playlists are created on demand by name. The
+  // optional cursor argument is logged but not yet persisted — playlist_hands
+  // has no per-snapshot column. Once that lands the cursor will let the drill
+  // load the hand at a specific decision point instead of from the start.
+  socket.on('branch_to_drill', async ({ handId, playlistId, newPlaylistName, cursor } = {}) => {
+    if (requireCoach(socket, 'branch to drill')) return;
+    if (!handId || typeof handId !== 'string') {
+      return sendError(socket, 'handId is required');
+    }
+    if (!playlistId && !newPlaylistName) {
+      return sendError(socket, 'Provide either playlistId or newPlaylistName');
+    }
+    if (playlistId && newPlaylistName) {
+      return sendError(socket, 'Provide one of playlistId or newPlaylistName, not both');
+    }
+    const tableId = socket.data.tableId;
+
+    // Authorization: when adding to an existing playlist, verify it belongs
+    // to this coach's table. Without this, a coach with a known playlist UUID
+    // could pollute another table's drill. UUIDs are unguessable in practice
+    // but the principle ("never trust client-supplied IDs") is the rule per
+    // CLAUDE.md auth scope guidance.
+    if (playlistId) {
+      let playlist;
+      try {
+        playlist = await HandLogger.getPlaylist(playlistId);
+      } catch (err) {
+        return sendError(socket, `Failed to verify playlist: ${err.message}`);
+      }
+      if (!playlist) return sendError(socket, 'Playlist not found');
+      // Allow null table_id (legacy global playlists) or matching table.
+      if (playlist.table_id != null && playlist.table_id !== tableId) {
+        return sendError(socket, 'Playlist belongs to a different table');
+      }
+    }
+
+    let resolvedPlaylistId = playlistId;
+    let createdNewPlaylist = false;
+    try {
+      if (!resolvedPlaylistId) {
+        const trimmed = String(newPlaylistName).trim();
+        if (!trimmed) return sendError(socket, 'newPlaylistName cannot be empty');
+        const created = await HandLogger.createPlaylist({
+          name: trimmed,
+          description: 'Created from Review tab branch',
+          tableId,
+        });
+        resolvedPlaylistId = created.playlist_id;
+        createdNewPlaylist = true;
+      }
+      try {
+        await HandLogger.addHandToPlaylist(resolvedPlaylistId, handId);
+      } catch (addErr) {
+        // Rollback: if we just created the playlist for this branch, drop it
+        // so DB doesn't accumulate empty drill ghosts on transient failures.
+        if (createdNewPlaylist) {
+          await HandLogger.deletePlaylist(resolvedPlaylistId).catch(() => {});
+        }
+        throw addErr;
+      }
+      socket.emit('branch_to_drill_saved', {
+        playlistId: resolvedPlaylistId,
+        handId,
+        cursor: typeof cursor === 'number' ? cursor : null,
+      });
+      socket.emit('playlist_state', { playlists: await HandLogger.getPlaylists({ tableId }) });
+      socket.emit('notification', {
+        type: 'branched_to_drill',
+        message: 'Hand saved to drill',
+      });
+    } catch (err) {
+      sendError(socket, `Failed to save branch: ${err.message}`);
+    }
+  });
+
   socket.on('deactivate_playlist', () => {
     if (requireCoach(socket, 'deactivate playlists')) return;
     const tableId = socket.data.tableId;

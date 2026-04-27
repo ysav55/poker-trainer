@@ -108,16 +108,46 @@ describe('buildLiveData — drillSession mapping', () => {
   });
 });
 
-describe('buildLiveData — review override', () => {
-  // The fixture review.loaded=true would otherwise leak into live mode and
-  // show a mocked hand instead of the placeholder when a coach clicks a real
-  // hand. Live mode must return loaded=false so TabReview's placeholder can fire.
-  it('forces review.loaded=false in live mode (no fixture leak)', () => {
+describe('buildLiveData — review mapping', () => {
+  // Without an explicit override, the fixture's review.loaded=true would leak
+  // into live mode and show a mocked hand. Live mode must surface real
+  // replay_mode state instead.
+  it('replay_mode inactive → review.loaded=false (no fixture leak)', () => {
     const hookState = liveHookState({ players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] });
     const data = buildLiveData({ hookState, user: null, playlist: { playlists: [] } });
     expect(data.review.loaded).toBe(false);
-    expect(data.review.handNumber).toBeNull();
-    expect(data.review.streets).toEqual([]);
+    expect(data.review.handId).toBeNull();
+    expect(data.review.cursor).toBe(-1);
+  });
+
+  it('replay_mode active → review carries handId, cursor, totalActions, branched, board', () => {
+    const hookState = liveHookState({
+      players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }],
+      board: ['Ks', '9d', '4c', '2h'],
+      replay_mode: {
+        active: true,
+        cursor: 5,
+        total_actions: 12,
+        source_hand_id: 'hand-uuid-xyz',
+        branched: false,
+      },
+    });
+    const data = buildLiveData({ hookState, user: null, playlist: { playlists: [] } });
+    expect(data.review.loaded).toBe(true);
+    expect(data.review.handId).toBe('hand-uuid-xyz');
+    expect(data.review.cursor).toBe(5);
+    expect(data.review.totalActions).toBe(12);
+    expect(data.review.branched).toBe(false);
+    expect(data.review.board).toEqual(['Ks', '9d', '4c', '2h']);
+  });
+
+  it('replay_mode branched=true propagates to review.branched', () => {
+    const hookState = liveHookState({
+      players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }],
+      replay_mode: { active: true, cursor: 2, total_actions: 8, source_hand_id: 'h-1', branched: true },
+    });
+    const data = buildLiveData({ hookState, user: null, playlist: { playlists: [] } });
+    expect(data.review.branched).toBe(true);
   });
 });
 

@@ -95,7 +95,21 @@ async function deletePlaylist(playlistId) {
   await q(supabase.from('playlists').delete().eq('playlist_id', playlistId));
 }
 
+// Fetch a single playlist by id. Returns null if not found. Used by
+// authorization guards (e.g. branch_to_drill verifies the playlist belongs
+// to the coach's table before adding hands to it).
+async function getPlaylist(playlistId) {
+  if (!playlistId) return null;
+  const data = await q(
+    supabase.from('playlists')
+      .select('playlist_id, name, description, table_id, created_at')
+      .eq('playlist_id', playlistId)
+      .maybeSingle()
+  );
+  return data || null;
+}
+
 module.exports = {
-  createPlaylist, getPlaylists, getPlaylistHands,
+  createPlaylist, getPlaylists, getPlaylist, getPlaylistHands,
   addHandToPlaylist, removeHandFromPlaylist, deletePlaylist,
 };

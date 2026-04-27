@@ -136,12 +136,21 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
         ante: 0,
       },
     },
-    // The fixture's `review` block is mock hand #140; without override it
-    // would leak into live mode (the spread keeps fixture keys we don't
-    // explicitly replace). In live mode there is no loaded review state until
-    // Phase 4 wires the load_replay flow — return loaded:false so TabReview
-    // renders its own placeholder/empty state.
-    review: { loaded: false, handNumber: null, board: [], heroHand: [], streets: [], result: { heroWon: false, net: 0, heroShowed: null } },
+    // Surface the live replay state so TabReview can drive its UI. When
+    // replay_mode.active is true, the GameManager has loaded a hand via
+    // load_replay and the cursor advances through actions[]. The v3 review
+    // pane renders streets from that cursor; full action-by-action rendering
+    // also needs handDetail (fetched separately by TabReview via useHistory).
+    review: gs.replay_mode?.active
+      ? {
+          loaded: true,
+          handId: gs.replay_mode.source_hand_id ?? null,
+          cursor: gs.replay_mode.cursor ?? -1,
+          totalActions: gs.replay_mode.total_actions ?? 0,
+          branched: !!gs.replay_mode.branched,
+          board: Array.isArray(gs.board) ? gs.board : [],
+        }
+      : { loaded: false, handId: null, cursor: -1, totalActions: 0, branched: false, board: [] },
     // Server playlist shape: { playlist_id, name, description, hand_count }
     // v3 shape:              { id, name, count, scenarios }
     // We don't track scenarios as a separate entity server-side, so scenarios
