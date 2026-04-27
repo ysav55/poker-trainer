@@ -85,6 +85,10 @@ module.exports = function registerDisconnect(socket, ctx) {
 
       const socketsInRoom = io.sockets.adapter.rooms.get(tableId);
       if (!socketsInRoom || socketsInRoom.size === 0) {
+        try {
+          const { disconnectAllAtTable } = require('../../game/BotConnection');
+          disconnectAllAtTable(tableId);
+        } catch { /* ignore */ }
         tables.delete(tableId);
         console.log(`[prune] table ${tableId} removed — no sockets remain`);
         // Close in DB so lobby stops showing this table

@@ -26,9 +26,16 @@ module.exports = function registerHandConfig(socket, ctx) {
     if (requireCoach(socket, 'update hand config')) return;
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
-    const result = gm.updateHandConfig(config);
+    // If config_phase is open (coach explicitly called open_config_phase, phase=waiting),
+    // edits write directly to the active config slot. Otherwise the hand is in flight, so
+    // the edit gets queued onto pendingHandConfig and consumed by resetForNextHand().
+    const queued = !gm.state.config_phase;
+    const result = queued ? gm.queueHandConfig(config) : gm.updateHandConfig(config);
     if (result.error) return sendError(socket, result.error);
-    broadcastState(socket.data.tableId, { type: 'config_updated', message: 'Hand configuration updated' });
+    broadcastState(socket.data.tableId, {
+      type: queued ? 'config_queued' : 'config_updated',
+      message: queued ? 'Hand configuration queued for next hand' : 'Hand configuration updated',
+    });
   });
 
   socket.on('load_hand_scenario', async ({ handId, stackMode = 'keep' } = {}) => {

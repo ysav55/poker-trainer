@@ -41,6 +41,13 @@ function startTableCleanup(io, tables) {
           .filter(p => !p.is_coach && p.id && p.id.length === 36) // stable UUIDs only
           .map(p => p.id);
 
+        // Disconnect any coach-spawned bots before deleting the table so their
+        // socket-clients close cleanly instead of looping on stale game_state.
+        try {
+          const { disconnectAllAtTable } = require('../game/BotConnection');
+          disconnectAllAtTable(tableId);
+        } catch { /* ignore — module may not be loaded in tests */ }
+
         tables.delete(tableId);
         lastActivityMap.delete(tableId);
         await TableRepository.closeTable(tableId).catch(() => {});

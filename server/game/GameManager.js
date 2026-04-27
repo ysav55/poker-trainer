@@ -62,6 +62,12 @@ class GameManager {
       street_snapshots: [], // street-level snapshots (for rollback-street)
       config_phase: false,
       config: null,
+      // Coach can call update_hand_config mid-hand. The config is parked here and
+      // consumed by resetForNextHand(), where it becomes the active config + opens
+      // a config_phase so the next start_configured_hand picks it up. Cleared after
+      // consumption so a new mid-hand edit replaces (not stacks on top of) the prior
+      // queued one.
+      pendingHandConfig: null,
       _full_board: null,   // internal: stores all 5 resolved board cards when config is used
       showdown_result: null,
       side_pots: [],       // SidePot[] built at showdown when ≥1 player is all-in
@@ -171,6 +177,7 @@ class GameManager {
       can_rollback_street: s.street_snapshots.length > 0,
       config_phase: s.config_phase,
       config: sanitisedConfig,
+      pending_hand_config: !!s.pendingHandConfig,
       showdown_result: s.showdown_result,
       side_pots: s.side_pots,
       playlist_mode: {
@@ -375,6 +382,21 @@ class GameManager {
     // mutating game state. This keeps updateHandConfig lightweight and lets the
     // coach fix card assignments without leaving the table in an error state.
     this.state.config = config;
+    return { success: true };
+  }
+
+  /**
+   * queueHandConfig — coach updates the config mid-hand. Stored on
+   * state.pendingHandConfig and consumed by resetForNextHand() so it becomes
+   * the active config for the next deal. Replaces (not merges) any prior queued
+   * config so the most recent edit wins.
+   */
+  queueHandConfig(config) {
+    const validModes = ['rng', 'manual', 'hybrid'];
+    if (!config || !validModes.includes(config.mode)) {
+      return { error: `config.mode must be one of: ${validModes.join(', ')}` };
+    }
+    this.state.pendingHandConfig = config;
     return { success: true };
   }
 
@@ -992,6 +1014,23 @@ class GameManager {
     this.state.phase = 'waiting';
     this.state.current_turn = null;
     this.state.street_snapshots = [];
+
+    // Consume any queued mid-hand config: re-open config_phase + restore the
+    // override so the next start_configured_hand picks it up. Done before the
+    // generic config reset below so we don't immediately wipe the queued one.
+    if (this.state.pendingHandConfig) {
+      this.state.config_phase = true;
+      this.state.config = this.state.pendingHandConfig;
+      this.state.pendingHandConfig = null;
+      this.state.is_scenario = false;
+      this.state.replay_mode = {
+        active: false, source_hand_id: null, actions: [], cursor: -1,
+        original_hole_cards: {}, original_board: [], original_stacks: {},
+        player_meta: {}, dealer_seat: 0, branched: false, pre_branch_snapshot: null,
+        playlist_was_active: false,
+      };
+      return { success: true, consumedPendingConfig: true };
+    }
     this.state.config_phase = false;
     this.state.config = null;
     this.state.is_scenario = false;

@@ -189,6 +189,113 @@ module.exports = function registerCoachControls(socket, ctx) {
     io.to(socket.data.tableId).emit('range_shared', null);
   });
 
+  // ── Coach add-bot (works on coached_cash + uncoached_cash) ──────────────
+  socket.on('coach:add_bot', ({ difficulty = 'easy' } = {}) => {
+    if (requireCoach(socket, 'add a bot')) return;
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    if (gm.state.players.length >= gm.state.max_players) {
+      return sendSyncError(socket, 'Table is full');
+    }
+    const { spawnBot } = require('../../game/BotConnection');
+    const result = spawnBot({
+      tableId,
+      difficulty,
+      onConnectError: (err) => {
+        log.error('game', 'coach_add_bot_connect_error',
+          `Bot ${result?.name ?? '(unknown)'} failed to connect`, { err, tableId, difficulty });
+        socket.emit('notification', {
+          type: 'bot_failed',
+          message: `Bot failed to connect: ${err?.message || 'unknown error'}`,
+        });
+      },
+    });
+    if (result.error) return sendError(socket, result.error);
+    log.info('game', 'coach_add_bot', `Coach added bot ${result.name}`, { tableId, difficulty });
+    socket.emit('notification', {
+      type: 'bot_added',
+      message: `Bot ${result.name} joining…`,
+    });
+    // The bot's join_room flow will broadcast state once it's seated.
+  });
+
+  // ── Coach kick player ─────────────────────────────────────────────────
+  // Note: 'kicked' is the dedicated kick event (vs the generic 'error' used by
+  // joinRoom's duplicate-tab path). Clients can listen for 'kicked' separately
+  // to show a friendly toast + navigate to the lobby.
+  socket.on('coach:kick_player', ({ playerId } = {}) => {
+    if (requireCoach(socket, 'kick a player')) return;
+    if (!playerId || typeof playerId !== 'string' || !playerId.trim()) {
+      return sendError(socket, 'playerId is required');
+    }
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const player = gm.state.players.find(p => p.id === playerId);
+    if (!player) return sendSyncError(socket, 'Player not found at this table');
+    if (player.is_coach) return sendSyncError(socket, 'Cannot kick the coach');
+
+    const stack = player.stack ?? 0;
+    const stableId = stableIdMap.get(playerId) || playerId;
+    const name = player.name || playerId;
+    const isBot = player.is_bot === true;
+
+    // If the kicked player is the current actor in a betting round, fold them
+    // first so the round advances cleanly via the normal placeBet path. Without
+    // this, the action timer's auto-fold lookup fails (player no longer exists)
+    // and the round stalls until the next external trigger. See review-pass-1
+    // critical issue #1.
+    //
+    // Paused tables: placeBet refuses with "Game is paused", which would leave
+    // current_turn dangling at the removed player. Refuse the kick instead so
+    // the coach makes the call to resume first.
+    const BETTING_PHASES = new Set(['preflop', 'flop', 'turn', 'river']);
+    if (gm.state.current_turn === playerId && BETTING_PHASES.has(gm.state.phase)) {
+      if (gm.state.paused) {
+        return sendSyncError(socket, 'Resume the game before kicking the active actor');
+      }
+      clearActionTimer(tableId);
+      const foldResult = gm.placeBet(playerId, 'fold');
+      if (foldResult.error) {
+        log.error('game', 'kick_pre_fold_failed',
+          `[coachControls] pre-kick fold failed for ${name}`,
+          { err: foldResult.error, tableId, playerId });
+        // Continue with removal anyway — better stall recovery than nothing.
+      } else {
+        // Re-arm the timer for whoever is now on the clock (if any).
+        startActionTimer(tableId);
+      }
+    }
+
+    // Cash out remaining chips before removal so the coach-initiated kick
+    // mirrors the natural-disconnect flow but skips the 60s reconnect window.
+    // Bots have UUID stableIds but no chip bank — skip them explicitly.
+    if (stack > 0 && !player.is_coach && !isBot && !String(stableId).startsWith('coach_')) {
+      const ChipBankRepo = require('../../db/repositories/ChipBankRepository');
+      ChipBankRepo.cashOut(stableId, stack, tableId).catch(err =>
+        log.error('db', 'kick_cash_out_failed', `[coachControls] cashOut failed for kicked ${name}`, { err, tableId, stableId }));
+    }
+
+    gm.removePlayer(playerId);
+    stableIdMap.delete(playerId);
+
+    // Notify the kicked client and force their socket out of the room. They'll
+    // receive 'kicked' and the lobby route will clear their table state.
+    const targetSocket = io.sockets.sockets.get(playerId);
+    if (targetSocket) {
+      targetSocket.emit('kicked', { tableId, by: socket.data.name || 'Coach' });
+      try { targetSocket.disconnect(true); } catch { /* ignore */ }
+    }
+
+    io.to(tableId).emit('notification', {
+      type: 'player_kicked',
+      message: `${name} was removed from the table`,
+    });
+    broadcastState(tableId, { type: 'player_kicked', message: `${name} kicked` });
+    log.info('game', 'coach_kick_player', `Coach kicked ${name}`, { tableId, playerId, stableId, isBot });
+  });
+
   // transfer_controller — current coach hands table control to another player
   socket.on('transfer_controller', async ({ toPlayerId } = {}) => {
     if (requireCoach(socket, 'transfer controller')) return;
