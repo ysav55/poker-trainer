@@ -7,6 +7,12 @@
  * then invoke handlers directly. ctx deps are plain jest mocks — no real server.
  */
 
+// Mock PlaylistExecutionService to avoid real DB calls and control REST drill session state
+jest.mock('../../../services/PlaylistExecutionService', () => ({
+  getStatus: jest.fn().mockResolvedValue({ active: false }),
+}));
+const PlaylistExecutionService = require('../../../services/PlaylistExecutionService');
+
 const registerPlaylists = require('../playlists');
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -418,6 +424,25 @@ describe('activate_playlist', () => {
 
     const ioToMock = ctx.io.to.mock.results[0]?.value;
     expect(ioToMock.emit).toHaveBeenCalledWith('notification', expect.objectContaining({ type: 'warning' }));
+  });
+
+  test('sendError when REST drill session is active (conflict guard)', async () => {
+    PlaylistExecutionService.getStatus.mockResolvedValueOnce({ active: true });
+    const gm = makeGm();
+    const { socket, ctx } = setup({}, { gm });
+    await socket._handlers['activate_playlist']({ playlistId: 'pl1' });
+
+    expect(ctx.sendError).toHaveBeenCalledWith(socket, expect.stringContaining('drill session'));
+    expect(gm.activatePlaylistMode).not.toHaveBeenCalled();
+  });
+
+  test('proceeds normally when REST drill session is inactive', async () => {
+    PlaylistExecutionService.getStatus.mockResolvedValueOnce({ active: false });
+    const gm = makeGm();
+    const { socket, ctx } = setup({}, { gm });
+    await socket._handlers['activate_playlist']({ playlistId: 'pl1' });
+
+    expect(gm.activatePlaylistMode).toHaveBeenCalled();
   });
 });
 

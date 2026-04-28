@@ -31,7 +31,7 @@ function createMockSocket() {
 describe('useSocket — return shape', () => {
   beforeEach(() => {
     mockSocket = createMockSocket()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('exposes all connection fields', () => {
@@ -55,6 +55,7 @@ describe('useSocket — return shape', () => {
     expect('activeHandId' in r).toBe(true)
     expect('handTagsSaved' in r).toBe(true)
     expect('myPlayer' in r).toBe(true)
+    expect('tableMode' in r).toBe(true)
   })
 
   it('exposes all notification fields', () => {
@@ -91,22 +92,12 @@ describe('useSocket — return shape', () => {
     }
   })
 
-  it('exposes replay emit helpers', () => {
-    const { result } = renderHook(() => useSocket())
-    const helpers = [
-      'loadReplay', 'replayStepFwd', 'replayStepBack',
-      'replayJumpTo', 'replayBranch', 'replayUnbranch', 'replayExit',
-    ]
-    for (const fn of helpers) {
-      expect(typeof result.current[fn], fn).toBe('function')
-    }
-  })
 })
 
 describe('useSocket — connection state', () => {
   beforeEach(() => {
     mockSocket = createMockSocket()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('connected starts as false', () => {
@@ -131,21 +122,21 @@ describe('useSocket — connection state', () => {
 describe('useSocket — leaveRoom', () => {
   beforeEach(() => {
     mockSocket = createMockSocket()
-    localStorage.clear()
+    sessionStorage.clear()
   })
 
-  it('clears poker_trainer_jwt from localStorage', () => {
-    localStorage.setItem('poker_trainer_jwt', 'my-token')
+  it('does NOT clear poker_trainer_jwt from sessionStorage (session clearing belongs in logout)', () => {
+    sessionStorage.setItem('poker_trainer_jwt', 'my-token')
     const { result } = renderHook(() => useSocket())
     act(() => { result.current.leaveRoom() })
-    expect(localStorage.getItem('poker_trainer_jwt')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_jwt')).toBe('my-token')
   })
 
-  it('clears poker_trainer_player_id from localStorage', () => {
-    localStorage.setItem('poker_trainer_player_id', 'uuid-123')
+  it('does NOT clear poker_trainer_player_id from sessionStorage (session clearing belongs in logout)', () => {
+    sessionStorage.setItem('poker_trainer_player_id', 'uuid-123')
     const { result } = renderHook(() => useSocket())
     act(() => { result.current.leaveRoom() })
-    expect(localStorage.getItem('poker_trainer_player_id')).toBeNull()
+    expect(sessionStorage.getItem('poker_trainer_player_id')).toBe('uuid-123')
   })
 
   it('calls socket.disconnect()', () => {

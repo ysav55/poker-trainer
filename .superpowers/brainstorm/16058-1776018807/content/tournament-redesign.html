@@ -1,0 +1,336 @@
+<h2>Tournament Pages — V1 Redesign</h2>
+<p class="subtitle">Token migration + lucide icons + CollapsibleSections. Same structure, V1 skin.</p>
+
+<!-- LIST PAGE -->
+<div class="section">
+  <h3>TournamentListPage (179L)</h3>
+  <div class="mockup">
+    <div class="mockup-header">http://localhost:5173/tournaments</div>
+    <div class="mockup-body" style="padding: 0; background: #060a0f;">
+
+      <!-- Page header -->
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 0;">
+        <div>
+          <div style="font-size: 18px; font-weight: 700; color: #e6edf3;">Tournaments</div>
+          <div style="font-size: 11px; color: #8b949e; margin-top: 2px;">Register, play, and track poker tournaments</div>
+        </div>
+        <div style="padding: 7px 16px; border-radius: 6px; background: #d4af37; color: #000; font-size: 12px; font-weight: 700; cursor: pointer;">
+          <span style="margin-right: 4px;">+</span> Create Tournament
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display: flex; gap: 0; padding: 16px 24px 0; border-bottom: 1px solid #21262d;">
+        <div style="padding: 8px 16px; font-size: 12px; font-weight: 700; color: #d4af37; border-bottom: 2px solid #d4af37; margin-bottom: -1px;">
+          Upcoming <span style="background: rgba(212,175,55,0.15); padding: 1px 6px; border-radius: 8px; font-size: 10px; margin-left: 4px;">3</span>
+        </div>
+        <div style="padding: 8px 16px; font-size: 12px; font-weight: 500; color: #6e7681; border-bottom: 2px solid transparent;">
+          Active <span style="background: rgba(110,118,129,0.15); padding: 1px 6px; border-radius: 8px; font-size: 10px; margin-left: 4px;">1</span>
+        </div>
+        <div style="padding: 8px 16px; font-size: 12px; font-weight: 500; color: #6e7681; border-bottom: 2px solid transparent;">
+          Completed
+        </div>
+      </div>
+
+      <!-- Cards -->
+      <div style="padding: 16px 24px; display: flex; flex-direction: column; gap: 8px;">
+
+        <!-- Card 1 -->
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px; transition: all 0.12s;">
+          <div style="display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
+            <div style="font-size: 14px; font-weight: 700; color: #e6edf3;">Saturday Night Freezeout</div>
+            <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; background: rgba(147,197,253,0.1); border: 1px solid rgba(147,197,253,0.3); color: #93c5fd; white-space: nowrap;">pending</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: #8b949e; margin-bottom: 10px;">
+            <span>Buy-in: <strong style="color: #d4af37;">5,000 chips</strong></span>
+            <span>Starts: <strong style="color: #e6edf3;">Sat 8:00 PM</strong></span>
+            <span>8 / 18 registered</span>
+            <span style="text-transform: capitalize;">public</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 12px; border-radius: 4px; border: 1px solid rgba(212,175,55,0.3); color: #d4af37; cursor: pointer;">View Details</div>
+            <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 12px; border-radius: 4px; background: #d4af37; color: #000; cursor: pointer;">Register</div>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px;">
+          <div style="display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
+            <div style="font-size: 14px; font-weight: 700; color: #e6edf3;">Beginner Freeroll</div>
+            <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; background: rgba(147,197,253,0.1); border: 1px solid rgba(147,197,253,0.3); color: #93c5fd; white-space: nowrap;">pending</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: #8b949e; margin-bottom: 10px;">
+            <span style="color: #3fb950;">Free</span>
+            <span>Starts: <strong style="color: #e6edf3;">Sun 2:00 PM</strong></span>
+            <span>3 / 9 registered</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 12px; border-radius: 4px; border: 1px solid rgba(212,175,55,0.3); color: #d4af37; cursor: pointer;">View Details</div>
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px;">
+          <div style="display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
+            <div style="font-size: 14px; font-weight: 700; color: #e6edf3;">Coach Cup #4</div>
+            <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; background: rgba(147,197,253,0.1); border: 1px solid rgba(147,197,253,0.3); color: #93c5fd; white-space: nowrap;">pending</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: #8b949e;">
+            <span>Buy-in: <strong style="color: #d4af37;">2,500 chips</strong></span>
+            <span>Starts: <strong style="color: #e6edf3;">Mon 7:00 PM</strong></span>
+            <span>Private</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL PAGE -->
+<div class="section">
+  <h3>TournamentDetailPage (272L)</h3>
+  <div class="mockup">
+    <div class="mockup-header">http://localhost:5173/tournaments/abc-123</div>
+    <div class="mockup-body" style="padding: 0; background: #060a0f;">
+
+      <!-- Back button -->
+      <div style="padding: 16px 24px 0;">
+        <div style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #8b949e; cursor: pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Back to Tournaments
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div style="padding: 12px 24px 16px; display: flex; align-items: start; justify-content: space-between;">
+        <div>
+          <div style="font-size: 20px; font-weight: 700; color: #e6edf3; margin-bottom: 6px;">Saturday Night Freezeout</div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; background: rgba(147,197,253,0.1); border: 1px solid rgba(147,197,253,0.3); color: #93c5fd;">pending</span>
+            <span style="font-size: 11px; color: #8b949e;">Sat, Apr 12, 8:00 PM</span>
+            <span style="font-size: 11px; color: #8b949e;">Public</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div style="padding: 7px 16px; border-radius: 6px; background: #d4af37; color: #000; font-size: 12px; font-weight: 700; cursor: pointer;">Register (5,000)</div>
+          <div style="padding: 7px 12px; border-radius: 6px; border: 1px solid rgba(212,175,55,0.3); color: #d4af37; font-size: 12px; font-weight: 600; cursor: pointer;">Control View</div>
+        </div>
+      </div>
+
+      <!-- Info grid (CollapsibleSection style) -->
+      <div style="padding: 0 24px 12px;">
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+            <span style="font-size: 12px; font-weight: 600; color: #e6edf3;">Tournament Info</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0;">
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #161b22;">
+              <span style="font-size: 11px; color: #8b949e;">Starting Stack</span>
+              <span style="font-size: 12px; color: #e6edf3; font-weight: 500;">10,000 chips</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0 8px 16px; border-bottom: 1px solid #161b22;">
+              <span style="font-size: 11px; color: #8b949e;">Buy-In</span>
+              <span style="font-size: 12px; color: #d4af37; font-weight: 500;">5,000 chips</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0;">
+              <span style="font-size: 11px; color: #8b949e;">Registrations</span>
+              <span style="font-size: 12px; color: #e6edf3; font-weight: 500;">8 players</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0 8px 16px;">
+              <span style="font-size: 11px; color: #8b949e;">Late Registration</span>
+              <span style="font-size: 12px; color: #e6edf3; font-weight: 500;">15 minutes</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Three collapsible sections -->
+      <div style="padding: 0 24px 20px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+
+        <!-- Blind Structure -->
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16l4-8 4 4 4-8"/></svg>
+              <span style="font-size: 12px; font-weight: 600; color: #e6edf3;">Blind Structure</span>
+            </div>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6e7681" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding-bottom: 6px; font-weight: 700; font-size: 10px; color: #6e7681; text-transform: uppercase;">Lvl</th>
+                <th style="text-align: left; padding-bottom: 6px; font-weight: 700; font-size: 10px; color: #6e7681; text-transform: uppercase;">SB</th>
+                <th style="text-align: left; padding-bottom: 6px; font-weight: 700; font-size: 10px; color: #6e7681; text-transform: uppercase;">BB</th>
+                <th style="text-align: left; padding-bottom: 6px; font-weight: 700; font-size: 10px; color: #6e7681; text-transform: uppercase;">Min</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td style="padding: 3px 0; color: #d4af37; font-weight: 700;">1</td><td style="color: #e6edf3;">25</td><td style="color: #e6edf3;">50</td><td style="color: #8b949e;">15</td></tr>
+              <tr><td style="padding: 3px 0; color: #d4af37; font-weight: 700;">2</td><td style="color: #e6edf3;">50</td><td style="color: #e6edf3;">100</td><td style="color: #8b949e;">15</td></tr>
+              <tr><td style="padding: 3px 0; color: #d4af37; font-weight: 700;">3</td><td style="color: #e6edf3;">100</td><td style="color: #e6edf3;">200</td><td style="color: #8b949e;">12</td></tr>
+              <tr><td style="padding: 3px 0; color: #d4af37; font-weight: 700;">4</td><td style="color: #e6edf3;">200</td><td style="color: #e6edf3;">400</td><td style="color: #8b949e;">12</td></tr>
+              <tr><td style="padding: 3px 0; color: #d4af37; font-weight: 700;">5</td><td style="color: #e6edf3;">300</td><td style="color: #e6edf3;">600</td><td style="color: #8b949e;">10</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Registrants -->
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+              <span style="font-size: 12px; font-weight: 600; color: #e6edf3;">Registrants</span>
+              <span style="font-size: 10px; color: #8b949e;">(8)</span>
+            </div>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6e7681" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; background: #161b22; border-radius: 4px;">
+              <span style="font-size: 12px; color: #e6edf3;">Mike</span>
+              <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #3fb950;">registered</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; background: #161b22; border-radius: 4px;">
+              <span style="font-size: 12px; color: #e6edf3;">Sarah</span>
+              <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #3fb950;">registered</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; background: #161b22; border-radius: 4px;">
+              <span style="font-size: 12px; color: #e6edf3;">Alex</span>
+              <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #3fb950;">registered</span>
+            </div>
+            <div style="font-size: 11px; color: #6e7681; text-align: center; padding: 4px 0;">+ 5 more</div>
+          </div>
+        </div>
+
+        <!-- Payouts -->
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+              <span style="font-size: 12px; font-weight: 600; color: #e6edf3;">Payouts</span>
+            </div>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6e7681" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; background: #161b22; border-radius: 4px;">
+              <span style="font-size: 12px; color: #d4af37; font-weight: 700;">#1</span>
+              <span style="font-size: 11px; color: #8b949e;">50%</span>
+              <span style="font-size: 12px; color: #3fb950; font-weight: 600;">20,000</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; background: #161b22; border-radius: 4px;">
+              <span style="font-size: 12px; color: #e6edf3; font-weight: 700;">#2</span>
+              <span style="font-size: 11px; color: #8b949e;">30%</span>
+              <span style="font-size: 12px; color: #3fb950; font-weight: 600;">12,000</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; background: #161b22; border-radius: 4px;">
+              <span style="font-size: 12px; color: #e6edf3; font-weight: 700;">#3</span>
+              <span style="font-size: 11px; color: #8b949e;">20%</span>
+              <span style="font-size: 12px; color: #3fb950; font-weight: 600;">8,000</span>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: #8b949e; margin-top: 8px;">Prize pool: <strong style="color: #d4af37;">40,000 chips</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTROL PAGE -->
+<div class="section">
+  <h3>TournamentControlPage (173L)</h3>
+  <div class="mockup">
+    <div class="mockup-header">http://localhost:5173/tournaments/abc-123/control</div>
+    <div class="mockup-body" style="padding: 0; background: #060a0f;">
+
+      <!-- Back -->
+      <div style="padding: 16px 24px 0;">
+        <div style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #8b949e; cursor: pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Back to Tournament
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 24px 16px;">
+        <div>
+          <div style="font-size: 18px; font-weight: 700; color: #e6edf3;">Saturday Night Freezeout — Control</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+            <span style="font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: #3fb950;">running</span>
+            <span style="font-size: 11px; color: #8b949e;">2 tables · 8 players</span>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div style="padding: 7px 14px; border-radius: 6px; border: 1px solid rgba(212,175,55,0.3); color: #d4af37; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer;">End & Finalize</div>
+          <div style="padding: 7px 14px; border-radius: 6px; background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); color: #f85149; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; cursor: pointer;">Cancel</div>
+        </div>
+      </div>
+
+      <!-- Section header -->
+      <div style="padding: 0 24px;">
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: #8b949e; text-transform: uppercase; margin-bottom: 12px;">Active Tables</div>
+      </div>
+
+      <!-- Table cards -->
+      <div style="padding: 0 24px 20px; display: flex; flex-wrap: wrap; gap: 12px;">
+
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px; min-width: 200px; flex: 1;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 13px; font-weight: 700; color: #e6edf3;">Table 1</span>
+            <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: #3fb950;">4 players</span>
+          </div>
+          <div style="font-size: 10px; color: #6e7681; margin-bottom: 8px;">Blind Level 3 · 100/200</div>
+          <div style="display: flex; gap: 6px;">
+            <div style="font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(212,175,55,0.3); color: #d4af37; cursor: pointer;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2" style="vertical-align: middle; margin-right: 3px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              Spectate
+            </div>
+            <div style="font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; background: #d4af37; color: #000; cursor: pointer;">Open</div>
+          </div>
+        </div>
+
+        <div style="background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px 16px; min-width: 200px; flex: 1;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 13px; font-weight: 700; color: #e6edf3;">Table 2</span>
+            <span style="font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; background: rgba(63,185,80,0.1); border: 1px solid rgba(63,185,80,0.3); color: #3fb950;">4 players</span>
+          </div>
+          <div style="font-size: 10px; color: #6e7681; margin-bottom: 8px;">Blind Level 3 · 100/200</div>
+          <div style="display: flex; gap: 6px;">
+            <div style="font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(212,175,55,0.3); color: #d4af37; cursor: pointer;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2" style="vertical-align: middle; margin-right: 3px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              Spectate
+            </div>
+            <div style="font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; background: #d4af37; color: #000; cursor: pointer;">Open</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Changes summary -->
+<div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-top: 8px;">
+  <h3 style="margin-top: 0;">What changes from current</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div>
+      <div style="color: #d4af37; font-size: 11px; font-weight: 600; margin-bottom: 8px;">VISUAL</div>
+      <ul style="margin: 0; padding-left: 16px; color: #8b949e; font-size: 12px; line-height: 1.8;">
+        <li><strong style="color: #e6edf3;">colors.js tokens</strong> replace all hardcoded hex</li>
+        <li><strong style="color: #e6edf3;">Lucide icons</strong> replace ← emoji (ArrowLeft, ChevronDown, Eye, Users, TrendingUp, ShoppingBag)</li>
+        <li><strong style="color: #e6edf3;">bgSurface (#0d1117)</strong> cards instead of bgSurfaceRaised — matches V1 card pattern</li>
+        <li><strong style="color: #e6edf3;">Count badges</strong> on list tabs</li>
+        <li><strong style="color: #e6edf3;">Collapsible headers</strong> on detail page sections (blind/registrants/payouts)</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color: #d4af37; font-size: 11px; font-weight: 600; margin-bottom: 8px;">STRUCTURAL</div>
+      <ul style="margin: 0; padding-left: 16px; color: #8b949e; font-size: 12px; line-height: 1.8;">
+        <li><strong style="color: #e6edf3;">StatusBadge</strong> shared → extract to components/tournament/</li>
+        <li><strong style="color: #e6edf3;">InfoRow</strong> uses 2-column grid instead of stacked rows</li>
+        <li><strong style="color: #e6edf3;">TableMiniCard</strong> gains player count + blind level info</li>
+        <li><strong style="color: #e6edf3;">No new routes</strong> — same 3 pages</li>
+        <li><strong style="color: #e6edf3;">No line count increase</strong> — token swap is ~same LOC</li>
+      </ul>
+    </div>
+  </div>
+</div>

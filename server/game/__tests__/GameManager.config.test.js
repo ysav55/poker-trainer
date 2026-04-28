@@ -789,3 +789,87 @@ describe('startGame() — invalid card in config returns error', () => {
     expect(gm.state.phase).toBe('waiting');
   });
 });
+
+// ── Pending hand config queue (mid-hand updates) ─────────────────────────────
+describe('GameManager — pending hand config queue', () => {
+  test('queueHandConfig stores config on state.pendingHandConfig', () => {
+    const gm = makeTable(2);
+    expect(gm.state.pendingHandConfig).toBeNull();
+    const r = gm.queueHandConfig({ mode: 'hybrid', hole_cards: { p1: ['As', 'Kd'] }, board: [null, null, null, null, null] });
+    expect(r).toEqual({ success: true });
+    expect(gm.state.pendingHandConfig?.mode).toBe('hybrid');
+    expect(gm.state.pendingHandConfig?.hole_cards?.p1).toEqual(['As', 'Kd']);
+  });
+
+  test('queueHandConfig validates mode', () => {
+    const gm = makeTable(2);
+    const r = gm.queueHandConfig({ mode: 'bogus' });
+    expect(r.error).toMatch(/mode must be one of/);
+    expect(gm.state.pendingHandConfig).toBeNull();
+  });
+
+  test('queueHandConfig replaces (does not merge) prior queued config', () => {
+    const gm = makeTable(2);
+    gm.queueHandConfig({ mode: 'hybrid', hole_cards: { p1: ['As', 'Kd'] }, board: [null, null, null, null, null] });
+    gm.queueHandConfig({ mode: 'manual', hole_cards: { p1: ['Qh', 'Qs'] }, board: [null, null, null, null, null] });
+    expect(gm.state.pendingHandConfig.mode).toBe('manual');
+    expect(gm.state.pendingHandConfig.hole_cards.p1).toEqual(['Qh', 'Qs']);
+  });
+
+  test('resetForNextHand consumes pendingHandConfig: opens config_phase + sets active config + clears pending', () => {
+    const gm = makeTable(2);
+    gm.openConfigPhase();
+    gm.updateHandConfig({ mode: 'hybrid', hole_cards: {}, board: [null, null, null, null, null] });
+    gm.startGame();
+    expect(gm.state.phase).toBe('preflop');
+    expect(gm.state.config_phase).toBe(false);
+
+    // Mid-hand: coach queues an override for the *next* hand
+    gm.queueHandConfig({
+      mode: 'hybrid',
+      hole_cards: { p1: ['As', 'Kd'] },
+      board: ['Kh', null, null, null, null],
+    });
+    expect(gm.state.pendingHandConfig).not.toBeNull();
+
+    // Hand ends — reset consumes the queued config
+    const result = gm.resetForNextHand();
+    expect(result.consumedPendingConfig).toBe(true);
+    expect(gm.state.pendingHandConfig).toBeNull();
+    expect(gm.state.config_phase).toBe(true);
+    expect(gm.state.config?.hole_cards?.p1).toEqual(['As', 'Kd']);
+    expect(gm.state.config?.board?.[0]).toBe('Kh');
+    expect(gm.state.phase).toBe('waiting');
+  });
+
+  test('resetForNextHand without pendingHandConfig clears config as before', () => {
+    const gm = makeTable(2);
+    gm.openConfigPhase();
+    gm.updateHandConfig({ mode: 'hybrid', hole_cards: {}, board: [null, null, null, null, null] });
+    gm.startGame();
+    const result = gm.resetForNextHand();
+    expect(result.consumedPendingConfig).toBeUndefined();
+    expect(gm.state.config_phase).toBe(false);
+    expect(gm.state.config).toBeNull();
+  });
+
+  test('getPublicState exposes pending_hand_config boolean', () => {
+    const gm = makeTable(2);
+    expect(gm.getPublicState('p1', false).pending_hand_config).toBe(false);
+    gm.queueHandConfig({ mode: 'hybrid', hole_cards: {}, board: [null, null, null, null, null] });
+    expect(gm.getPublicState('p1', false).pending_hand_config).toBe(true);
+  });
+
+  test('queued config survives multiple mid-hand edits and applies the latest on reset', () => {
+    const gm = makeTable(2);
+    gm.openConfigPhase();
+    gm.updateHandConfig({ mode: 'hybrid', hole_cards: {}, board: [null, null, null, null, null] });
+    gm.startGame();
+
+    gm.queueHandConfig({ mode: 'hybrid', hole_cards: { p1: ['2c', '3c'] }, board: [null, null, null, null, null] });
+    gm.queueHandConfig({ mode: 'hybrid', hole_cards: { p1: ['As', 'Kd'] }, board: [null, null, null, null, null] });
+
+    gm.resetForNextHand();
+    expect(gm.state.config.hole_cards.p1).toEqual(['As', 'Kd']);
+  });
+});

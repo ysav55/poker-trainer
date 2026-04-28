@@ -1,0 +1,233 @@
+<h2>HandBuilder Redesign — Layout Options</h2>
+<p class="subtitle">Same split-pane bones, better UX. QuickSave promoted to toolbar.</p>
+
+<div class="cards" style="grid-template-columns: 1fr 1fr;">
+
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0;">
+      <div style="display: flex; height: 420px; font-family: 'Consolas', monospace; font-size: 11px;">
+
+        <!-- LEFT PANEL -->
+        <div style="width: 240px; flex-shrink: 0; display: flex; flex-direction: column; background: #0d1117; border-right: 1px solid #21262d;">
+
+          <!-- Tabs with count badges -->
+          <div style="display: flex; border-bottom: 1px solid #21262d;">
+            <div style="flex: 1; padding: 10px 8px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 2px solid #d4af37; color: #d4af37; background: rgba(212,175,55,0.05);">
+              Scenarios <span style="background: rgba(212,175,55,0.2); padding: 1px 5px; border-radius: 8px; font-size: 9px; margin-left: 3px;">12</span>
+            </div>
+            <div style="flex: 1; padding: 10px 8px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6e7681; border-bottom: 2px solid transparent;">
+              Playlists <span style="background: rgba(110,118,129,0.2); padding: 1px 5px; border-radius: 8px; font-size: 9px; margin-left: 3px;">4</span>
+            </div>
+          </div>
+
+          <!-- Search -->
+          <div style="padding: 10px 12px 6px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; border: 1px solid #30363d; background: #060a0f;">
+              <span style="color: #6e7681; font-size: 12px;">🔍</span>
+              <span style="color: #6e7681; font-size: 11px;">Search scenarios…</span>
+            </div>
+          </div>
+
+          <!-- Folder filter -->
+          <div style="padding: 0 12px 8px;">
+            <div style="padding: 5px 10px; border-radius: 6px; border: 1px solid #30363d; background: #060a0f; color: #6e7681; font-size: 11px;">All folders ▾</div>
+          </div>
+
+          <!-- Scenario cards with street-colored left border -->
+          <div style="flex: 1; overflow: hidden; padding: 0 8px;">
+            <div style="padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.35); border-left: 3px solid #93c5fd;">
+              <div style="font-size: 12px; color: #e6edf3; font-weight: 500;">3-Bet Pot BTN vs BB</div>
+              <div style="display: flex; gap: 4px; margin-top: 4px; align-items: center;">
+                <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); color: #93c5fd;">Preflop</span>
+                <span style="font-size: 10px; color: #6e7681;">6p</span>
+              </div>
+            </div>
+            <div style="padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; border: 1px solid transparent; border-left: 3px solid #86efac;">
+              <div style="font-size: 12px; color: #e6edf3; font-weight: 500;">C-Bet Dry Flop</div>
+              <div style="display: flex; gap: 4px; margin-top: 4px; align-items: center;">
+                <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: #86efac;">Flop</span>
+                <span style="font-size: 10px; color: #6e7681;">3p</span>
+              </div>
+            </div>
+            <div style="padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; border: 1px solid transparent; border-left: 3px solid #fcd34d;">
+              <div style="font-size: 12px; color: #e6edf3; font-weight: 500;">Barrel Turn Check-Raise</div>
+              <div style="display: flex; gap: 4px; margin-top: 4px; align-items: center;">
+                <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d;">Turn</span>
+                <span style="font-size: 10px; color: #6e7681;">2p</span>
+              </div>
+            </div>
+            <div style="padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; border: 1px solid transparent; border-left: 3px solid #fca5a5;">
+              <div style="font-size: 12px; color: #e6edf3; font-weight: 500;">River Bluff Catch</div>
+              <div style="display: flex; gap: 4px; margin-top: 4px; align-items: center;">
+                <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5;">River</span>
+                <span style="font-size: 10px; color: #6e7681;">4p</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- New button -->
+          <div style="padding: 10px 12px; border-top: 1px solid #21262d;">
+            <div style="width: 100%; padding: 7px; border-radius: 6px; background: #d4af37; color: #000; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">+ New Scenario</div>
+          </div>
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div style="flex: 1; display: flex; flex-direction: column; background: #060a0f;">
+
+          <!-- TOP TOOLBAR — QuickSave lives here -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid #21262d; background: #0d1117; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 13px; color: #e6edf3; font-weight: 600;">3-Bet Pot BTN vs BB</span>
+              <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); color: #93c5fd;">Preflop</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <!-- QuickSave as toolbar dropdown -->
+              <div style="display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 6px; background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.3);">
+                <span style="font-size: 11px; color: #d4af37; font-weight: 600;">+ Playlist</span>
+                <span style="font-size: 10px; color: rgba(212,175,55,0.5);">▾</span>
+              </div>
+              <div style="padding: 5px 10px; border-radius: 6px; border: 1px solid #30363d; font-size: 11px; color: #8b949e;">⋯</div>
+            </div>
+          </div>
+
+          <!-- Builder area (placeholder) -->
+          <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+            <div style="text-align: center;">
+              <div style="color: #30363d; font-size: 40px; margin-bottom: 8px;">♠</div>
+              <div style="color: #6e7681; font-size: 12px;">ScenarioBuilder renders here</div>
+              <div style="color: #30363d; font-size: 11px; margin-top: 4px;">(existing component, unchanged)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Toolbar with dropdown</h3>
+      <p>QuickSave becomes a <strong>"+ Playlist"</strong> dropdown in the top toolbar. Always visible when a scenario is selected. Click opens a dropdown to pick playlist + save. Toolbar also shows scenario name + street badge + overflow menu (duplicate, delete).</p>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Always discoverable</li><li>Doesn't push builder content down</li><li>Clean action hierarchy</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Adds a persistent toolbar row</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 0;">
+      <div style="display: flex; height: 420px; font-family: 'Consolas', monospace; font-size: 11px;">
+
+        <!-- LEFT PANEL (same) -->
+        <div style="width: 240px; flex-shrink: 0; display: flex; flex-direction: column; background: #0d1117; border-right: 1px solid #21262d;">
+
+          <div style="display: flex; border-bottom: 1px solid #21262d;">
+            <div style="flex: 1; padding: 10px 8px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 2px solid #d4af37; color: #d4af37; background: rgba(212,175,55,0.05);">
+              Scenarios <span style="background: rgba(212,175,55,0.2); padding: 1px 5px; border-radius: 8px; font-size: 9px; margin-left: 3px;">12</span>
+            </div>
+            <div style="flex: 1; padding: 10px 8px; text-align: center; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6e7681; border-bottom: 2px solid transparent;">
+              Playlists <span style="background: rgba(110,118,129,0.2); padding: 1px 5px; border-radius: 8px; font-size: 9px; margin-left: 3px;">4</span>
+            </div>
+          </div>
+
+          <div style="padding: 10px 12px 6px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; border: 1px solid #30363d; background: #060a0f;">
+              <span style="color: #6e7681; font-size: 12px;">🔍</span>
+              <span style="color: #6e7681; font-size: 11px;">Search scenarios…</span>
+            </div>
+          </div>
+
+          <div style="padding: 0 12px 8px;">
+            <div style="padding: 5px 10px; border-radius: 6px; border: 1px solid #30363d; background: #060a0f; color: #6e7681; font-size: 11px;">All folders ▾</div>
+          </div>
+
+          <div style="flex: 1; overflow: hidden; padding: 0 8px;">
+            <div style="padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.35); border-left: 3px solid #93c5fd;">
+              <div style="font-size: 12px; color: #e6edf3; font-weight: 500;">3-Bet Pot BTN vs BB</div>
+              <div style="display: flex; gap: 4px; margin-top: 4px; align-items: center;">
+                <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); color: #93c5fd;">Preflop</span>
+                <span style="font-size: 10px; color: #6e7681;">6p</span>
+                <!-- Playlist indicator -->
+                <span style="font-size: 9px; color: #d4af37; margin-left: auto;">📋 2</span>
+              </div>
+            </div>
+            <div style="padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; border: 1px solid transparent; border-left: 3px solid #86efac;">
+              <div style="font-size: 12px; color: #e6edf3; font-weight: 500;">C-Bet Dry Flop</div>
+              <div style="display: flex; gap: 4px; margin-top: 4px; align-items: center;">
+                <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); color: #86efac;">Flop</span>
+                <span style="font-size: 10px; color: #6e7681;">3p</span>
+              </div>
+            </div>
+            <div style="padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; border: 1px solid transparent; border-left: 3px solid #fcd34d;">
+              <div style="font-size: 12px; color: #e6edf3; font-weight: 500;">Barrel Turn Check-Raise</div>
+              <div style="display: flex; gap: 4px; margin-top: 4px; align-items: center;">
+                <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d;">Turn</span>
+                <span style="font-size: 10px; color: #6e7681;">2p</span>
+              </div>
+            </div>
+            <div style="padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; border: 1px solid transparent; border-left: 3px solid #fca5a5;">
+              <div style="font-size: 12px; color: #e6edf3; font-weight: 500;">River Bluff Catch</div>
+              <div style="display: flex; gap: 4px; margin-top: 4px; align-items: center;">
+                <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5;">River</span>
+                <span style="font-size: 10px; color: #6e7681;">4p</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding: 10px 12px; border-top: 1px solid #21262d;">
+            <div style="width: 100%; padding: 7px; border-radius: 6px; background: #d4af37; color: #000; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">+ New Scenario</div>
+          </div>
+        </div>
+
+        <!-- RIGHT PANEL — no toolbar, page-level header -->
+        <div style="flex: 1; display: flex; flex-direction: column; background: #060a0f;">
+
+          <!-- PAGE HEADER — sits above both panels -->
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; flex-shrink: 0; background: #060a0f;">
+            <div>
+              <h1 style="font-size: 18px; color: #e6edf3; font-weight: 700; margin: 0;">Scenarios</h1>
+              <span style="font-size: 11px; color: #6e7681;">12 scenarios · 4 playlists</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <!-- QuickSave as page-level action -->
+              <div style="display: flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 6px; background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.3); cursor: pointer;">
+                <span style="font-size: 12px; color: #d4af37; font-weight: 600;">+ Add to Playlist</span>
+              </div>
+              <div style="padding: 6px 12px; border-radius: 6px; background: #d4af37; color: #000; font-size: 12px; font-weight: 700; cursor: pointer;">+ New</div>
+            </div>
+          </div>
+
+          <div style="width: 100%; height: 1px; background: #21262d;"></div>
+
+          <!-- Builder area -->
+          <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+            <div style="text-align: center;">
+              <div style="color: #30363d; font-size: 40px; margin-bottom: 8px;">♠</div>
+              <div style="color: #6e7681; font-size: 12px;">ScenarioBuilder renders here</div>
+              <div style="color: #30363d; font-size: 11px; margin-top: 4px;">(existing component, unchanged)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Page header with actions</h3>
+      <p>Page-level header above the right panel with title, counts, and action buttons. <strong>"+ Add to Playlist"</strong> is a primary ghost button. <strong>"+ New"</strong> is the gold CTA. Scenario cards in sidebar show playlist count indicator (📋 2) so you see at a glance which scenarios are already in playlists.</p>
+      <div class="pros-cons" style="margin-top: 12px;">
+        <div class="pros"><h4>Pros</h4><ul><li>Cleaner page hierarchy</li><li>Actions visible even on empty state</li><li>Playlist count on cards = less hunting</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>"Add to Playlist" less context-specific</li><li>Header takes vertical space from builder</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top: 20px; padding: 16px; background: #161b22; border: 1px solid #30363d; border-radius: 8px;">
+  <h3 style="margin-top: 0;">Shared improvements (both options)</h3>
+  <ul style="margin: 8px 0 0; padding-left: 20px; color: #8b949e; font-size: 13px; line-height: 1.8;">
+    <li><strong style="color: #e6edf3;">Street-colored left border</strong> on scenario cards — instant visual scan of what street each scenario starts on</li>
+    <li><strong style="color: #e6edf3;">Count badges</strong> on Scenarios/Playlists tabs</li>
+    <li><strong style="color: #e6edf3;">Lucide icons</strong> replace emoji (Search, Plus, MoreHorizontal, ListMusic)</li>
+    <li><strong style="color: #e6edf3;">colors.js tokens</strong> everywhere — no hardcoded hex</li>
+    <li><strong style="color: #e6edf3;">Rounded corners</strong> on search input, folder select (border-radius: 6px consistent)</li>
+    <li><strong style="color: #e6edf3;">Gold focus ring</strong> on search input (matches V1 sidebar pattern)</li>
+  </ul>
+</div>

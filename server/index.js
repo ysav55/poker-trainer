@@ -20,6 +20,7 @@ const supabaseAdmin   = require('./db/supabase');
 const { generateHTMLReport }          = require('./reports/SessionReport');
 const { generateReport: generateAlphaReport } = require('./logs/AlphaReporter');
 const sharedState = require('./state/SharedState');
+const EquityService = require('./game/EquityService');
 
 const { registerSocketHandlers } = require('./socket/index');
 
@@ -30,9 +31,39 @@ const registerPlaylistRoutes    = require('./routes/playlists');
 const registerAuthRoutes        = require('./routes/auth');
 const registerHealthRoute       = require('./routes/health');
 const registerAlphaReportRoute  = require('./routes/alphaReport');
+const registerTableRoutes       = require('./routes/tables');
+const registerAnnotationRoutes  = require('./routes/annotations');
+const registerChipBankRoutes         = require('./routes/chipBank');
+const registerAnnouncementRoutes     = require('./routes/announcements');
+const registerAnalysisRoutes         = require('./routes/analysis');
+const registerPrepBriefRoutes        = require('./routes/prepBriefs');
+const registerAlertRoutes            = require('./routes/alerts');
+const registerReportRoutes           = require('./routes/reports');
+const registerBotTableRoutes         = require('./routes/botTables');
+const registerTournamentStandaloneRoutes = require('./routes/tournaments');
+const { registerRefereeRoutes } = require('./routes/tournaments');
+const registerBlindPresetRoutes          = require('./routes/blindPresets');
+const registerPayoutPresetRoutes         = require('./routes/payoutPresets');
+const adminUsersRouter          = require('./routes/admin/users.js');
+const adminScenariosRouter      = require('./routes/admin/scenarios.js');
+const adminCRMRouter            = require('./routes/admin/crm.js');
+const adminGroupsRouter         = require('./routes/admin/groups.js');
+const adminOrgSettingsRouter    = require('./routes/admin/orgSettings.js');
+const settingsRouter            = require('./routes/settings.js');
+const schoolSettingsRouter      = require('./routes/school-settings.js');
+const adminTournamentsRouter    = require('./routes/admin/tournaments.js');
+const adminSchoolsRouter        = require('./routes/admin/schools.js');
+const stakingRouter             = require('./routes/staking.js');
+const { registerTournamentRoutes } = require('./routes/admin/tournaments.js');
+const scenarioBuilderRouter     = require('./routes/scenarioBuilder.js');
+const { registerTournamentGroupRoutes } = require('./routes/tournamentGroups');
+const coachStudentsRouter        = require('./routes/coachStudents.js');
+const registerLogRoutes          = require('./routes/logs.js');
 
 const { registerShutdown }  = require('./lifecycle/shutdown');
 const { registerIdleTimer } = require('./lifecycle/idleTimer');
+const { startTableCleanup } = require('./lifecycle/tableCleanup');
+const { scheduleSundaySnapshot } = require('./jobs/snapshotJob');
 
 // ─── Startup checks ───────────────────────────────────────────────────────────
 
@@ -62,6 +93,7 @@ const httpServer = http.createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: ALLOWED_ORIGIN, methods: ['GET', 'POST'] },
 });
+app.set('io', io);
 
 io.use(socketAuthMiddleware);
 
@@ -81,13 +113,41 @@ registerSocketHandlers(io);
 
 // ─── REST routes ──────────────────────────────────────────────────────────────
 
-registerHandRoutes(app, { requireAuth, HandLogger });
+registerHandRoutes(app, { requireAuth, HandLogger, EquityService });
 registerPlayerRoutes(app, { requireAuth, HandLogger });
 registerSessionRoutes(app, { requireAuth, HandLogger, tables: sharedState.tables, generateHTMLReport });
-registerPlaylistRoutes(app, { requireAuth, requireRole, HandLogger });
+registerPlaylistRoutes(app, { requireAuth, HandLogger });
 registerAuthRoutes(app, { HandLogger, PlayerRoster, JwtService, authLimiter, log });
 registerHealthRoute(app, { supabaseAdmin, tables: sharedState.tables });
-registerAlphaReportRoute(app, { generateAlphaReport, log, requireAuth, requireRole });
+registerAlphaReportRoute(app, { generateAlphaReport, log, requireAuth });
+registerTableRoutes(app, { requireAuth });
+registerAnnotationRoutes(app, { requireAuth, supabaseAdmin });
+registerChipBankRoutes(app, { requireAuth, requireRole });
+registerAnnouncementRoutes(app, { requireAuth, requireRole });
+registerAnalysisRoutes(app, { requireAuth });
+registerPrepBriefRoutes(app, { requireAuth, requireRole });
+registerAlertRoutes(app, { requireAuth, requireRole });
+registerReportRoutes(app, { requireAuth, requireRole });
+registerBotTableRoutes(app, { requireAuth });
+registerTournamentStandaloneRoutes(app, { requireAuth, requireRole });
+registerRefereeRoutes(app, { requireAuth });
+registerBlindPresetRoutes(app, { requireAuth, requireRole });
+registerPayoutPresetRoutes(app, { requireAuth, requireRole });
+app.use('/api/admin', requireAuth, adminCRMRouter);
+app.use('/api/admin', requireAuth, adminGroupsRouter);
+app.use('/api/admin', requireAuth, adminUsersRouter);
+app.use('/api/admin', requireAuth, adminScenariosRouter);
+app.use('/api/admin', requireAuth, adminOrgSettingsRouter);
+app.use('/api/settings', requireAuth, settingsRouter);
+app.use('/api/settings/school', requireAuth, schoolSettingsRouter);
+app.use('/api/admin', requireAuth, adminTournamentsRouter);
+app.use('/api/admin', requireAuth, adminSchoolsRouter);
+app.use('/api/staking', requireAuth, stakingRouter);
+app.use('/api', requireAuth, scenarioBuilderRouter);
+registerTournamentRoutes(app);
+registerTournamentGroupRoutes(app, { requireAuth });
+app.use('/api/coach/students', requireAuth, requireRole('coach'), coachStudentsRouter);
+registerLogRoutes(app);
 
 // ─── Global Express error handler ────────────────────────────────────────────
 
@@ -105,6 +165,8 @@ registerShutdown(sharedState.tables, sharedState.activeHands, HandLogger);
 
 const IDLE_MINUTES = parseInt(process.env.IDLE_TIMEOUT_MINUTES, 10) || 0;
 const scheduleIdleShutdown = registerIdleTimer(io, sharedState.activeHands, HandLogger, IDLE_MINUTES);
+startTableCleanup(io, sharedState.tables);
+scheduleSundaySnapshot();
 
 // ─── Static file serving (production) ────────────────────────────────────────
 

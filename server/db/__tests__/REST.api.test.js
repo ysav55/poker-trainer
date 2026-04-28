@@ -10,15 +10,15 @@
  * Coverage:
  *   GET  /health
  *   GET  /api/hands                       (requires auth)
- *   GET  /api/hands/:handId               (requires auth, 404 path)
+ *   GET  /api/hands/:handId               (requires auth, not-found path)
  *   GET  /api/players                     (requires auth)
- *   GET  /api/players/:stableId/stats     (requires auth, 404 path)
+ *   GET  /api/players/:stableId/stats     (requires auth, zero-state path)
  *   GET  /api/players/:stableId/hands     (requires auth)
  *   GET  /api/players/:stableId/hover-stats (no auth required)
  *   GET  /api/sessions/current            (requires auth)
  *   GET  /api/sessions/:sessionId/stats   (requires auth)
  *   GET  /api/sessions/:sessionId/report  (requires auth, 404 path)
- *   POST /api/auth/register               (disabled → 410)
+ *   POST /api/auth/register               (self-registration enabled; 201 on success)
  *   POST /api/auth/login                  (roster-based, returns JWT)
  *   GET  /api/playlists                   (requires auth)
  *   POST /api/playlists                   (requires coach role)
@@ -26,6 +26,21 @@
  *   POST /api/playlists/:id/hands         (requires coach role)
  *   DELETE /api/playlists/:id/hands/:hid  (requires coach role)
  */
+
+// ── Mock requirePermission — grants playlist:manage to coach role ────────────
+jest.mock('../../auth/requirePermission.js', () => ({
+  requirePermission: (...keys) => (req, res, next) => {
+    const uid = req.user?.stableId ?? req.user?.id;
+    if (!uid) return res.status(401).json({ error: 'Unauthorized' });
+    // In tests, only the 'coach' role has playlist:manage
+    if (keys.includes('playlist:manage') && req.user?.role !== 'coach') {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  },
+  getPlayerPermissions:     jest.fn().mockResolvedValue(new Set()),
+  invalidatePermissionCache: jest.fn(),
+}));
 
 // ── Mock HandLoggerSupabase ───────────────────────────────────────────────────
 jest.mock('../HandLoggerSupabase', () => {
@@ -47,6 +62,7 @@ jest.mock('../HandLoggerSupabase', () => {
     getSessionStats:       jest.fn().mockResolvedValue([]),
     getSessionReport:      jest.fn().mockResolvedValue(null),
     getPlayerStats:        jest.fn().mockResolvedValue(null),
+    getPlayerStatsByMode:  jest.fn().mockResolvedValue(null),
     getAllPlayersWithStats: jest.fn().mockResolvedValue([]),
     getPlayerHands:        jest.fn().mockResolvedValue([]),
     getPlayerHoverStats:   jest.fn().mockResolvedValue({ allTime: null, session: null }),
@@ -94,16 +110,41 @@ jest.mock('../../auth/PlayerRoster', () => ({
 }));
 
 // ── Mock supabase admin client ───────────────────────────────────────────────
-// Supports the health-check probe (select from player_profiles) and any insert calls.
+// Supports the health-check probe, insert calls, and the new registration endpoints.
 jest.mock('../supabase', () => {
   const chain = {
     insert:      jest.fn().mockResolvedValue({ data: null, error: null }),
     select:      jest.fn().mockReturnThis(),
+    update:      jest.fn().mockReturnThis(),
     limit:       jest.fn().mockReturnThis(),
+    eq:          jest.fn().mockReturnThis(),
     maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    single:      jest.fn().mockResolvedValue({ data: { id: 'mock-new-id' }, error: null }),
   };
   return { from: jest.fn(() => chain) };
 });
+
+// ── Mock PlayerRepository (used by new auth endpoints + admin routes) ─────────
+jest.mock('../../db/repositories/PlayerRepository', () => ({
+  findByDisplayName:    jest.fn().mockResolvedValue(null),
+  findById:             jest.fn().mockResolvedValue(null),
+  createPlayer:         jest.fn().mockResolvedValue('reg-new-uuid'),
+  getPrimaryRole:       jest.fn().mockResolvedValue('solo_student'),
+  assignRole:           jest.fn().mockResolvedValue(undefined),
+  setPassword:          jest.fn().mockResolvedValue(undefined),
+  updatePlayer:         jest.fn().mockResolvedValue(undefined),
+  archivePlayer:        jest.fn().mockResolvedValue(undefined),
+  removeRole:           jest.fn().mockResolvedValue(undefined),
+  listPlayers:          jest.fn().mockResolvedValue([]),
+  decrementTrialHands:  jest.fn().mockResolvedValue(undefined),
+  upsertPlayerIdentity: jest.fn().mockResolvedValue(undefined),
+  loginRosterPlayer:    jest.fn().mockResolvedValue({ stableId: 'uuid', name: 'test' }),
+  isRegisteredPlayer:   jest.fn().mockResolvedValue(true),
+  getPlayerStats:       jest.fn().mockResolvedValue(null),
+  getAllPlayersWithStats:jest.fn().mockResolvedValue([]),
+  getPlayerHands:       jest.fn().mockResolvedValue([]),
+  getPlayerHoverStats:  jest.fn().mockResolvedValue({ allTime: null, session: null }),
+}));
 
 // ── Ensure required env vars are set before index.js is loaded ───────────────
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-for-jest';
@@ -232,10 +273,12 @@ describe('GET /api/players/:stableId/stats', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 for a player that does not exist', async () => {
+  it('returns 200 with zero-state for a player that has no stats', async () => {
     const res = await request(app).get('/api/players/ghost-uuid/stats').set('Authorization', AUTH_HEADER);
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBeDefined();
+    expect(res.status).toBe(200);
+    expect(res.body.hands_played).toBe(0);
+    expect(res.body.net_chips).toBe(0);
+    expect(res.body.rank).toBeNull();
   });
 });
 
@@ -341,24 +384,24 @@ describe('GET /api/sessions/:sessionId/report', () => {
 });
 
 // ─────────────────────────────────────────────
-//  POST /api/auth/register  (disabled → 410)
+//  POST /api/auth/register  (self-registration enabled)
 // ─────────────────────────────────────────────
 
 describe('POST /api/auth/register', () => {
-  it('returns 410 for any registration attempt', async () => {
+  it('returns 201 with a token on valid registration', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Alice', password: 'password1' });
-    expect(res.status).toBe(410);
-    expect(res.body.error).toBe('registration_disabled');
+      .send({ name: 'Alice', password: 'password123' });
+    expect(res.status).toBe(201);
+    expect(res.body.token).toBeDefined();
+    expect(res.body.stableId).toBeDefined();
   });
 
-  it('410 response includes a message about contacting the coach', async () => {
+  it('returns 400 when required fields are missing', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({});
-    expect(res.status).toBe(410);
-    expect(res.body.message).toMatch(/coach|roster/i);
+    expect(res.status).toBe(400);
   });
 });
 

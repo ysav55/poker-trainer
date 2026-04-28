@@ -5,6 +5,7 @@ function parseTagsFromRows(hand_tags = []) {
   return {
     auto_tags:    (hand_tags || []).filter(t => t.tag_type === 'auto').map(t => t.tag),
     mistake_tags: (hand_tags || []).filter(t => t.tag_type === 'mistake').map(t => t.tag),
+    sizing_tags:  (hand_tags || []).filter(t => t.tag_type === 'sizing').map(t => t.tag),
     coach_tags:   (hand_tags || []).filter(t => t.tag_type === 'coach').map(t => t.tag),
   };
 }
@@ -230,28 +231,74 @@ function HandHistoryView() {
   );
 }
 
+// ─── Stats mode toggle ────────────────────────────────────────────────────────
+
+const STATS_MODES = [
+  { id: 'overall', label: 'Overall' },
+  { id: 'human',   label: 'Human Only' },
+  { id: 'bot',     label: 'vs Bots' },
+];
+
+function StatsModeToggle({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 3 }}>
+      {STATS_MODES.map(m => (
+        <button
+          key={m.id}
+          onClick={() => onChange(m.id)}
+          style={{
+            padding: '3px 9px',
+            fontSize: '10px',
+            fontWeight: 600,
+            borderRadius: '5px',
+            border: `1px solid ${value === m.id ? 'rgba(212,175,55,0.5)' : 'rgba(255,255,255,0.1)'}`,
+            background: value === m.id ? 'rgba(212,175,55,0.14)' : 'transparent',
+            color: value === m.id ? '#d4af37' : '#6e7681',
+            cursor: 'pointer',
+            transition: 'all 0.1s',
+            letterSpacing: '0.03em',
+          }}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ─── Player Detail view ───────────────────────────────────────────────────────
 
 function PlayerDetailView({ player, onBack }) {
-  const [hands, setHands]     = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
+  const [hands, setHands]         = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState(null);
+  const [statsMode, setStatsMode] = useState('overall');
+  const [modeStats, setModeStats] = useState(null); // null = use player prop
 
+  // Re-fetch mode-specific stats whenever mode changes (except overall which uses the prop)
+  useEffect(() => {
+    if (statsMode === 'overall') { setModeStats(null); return; }
+    if (!player?.stableId) return;
+    apiFetch(`/api/players/${encodeURIComponent(player.stableId)}/stats?mode=${statsMode}`)
+      .then(data => setModeStats(data))
+      .catch(() => setModeStats(null));
+  }, [statsMode, player?.stableId]);
+
+  // Re-fetch hands whenever mode changes
   useEffect(() => {
     if (!player?.stableId) return;
     setLoading(true);
-    apiFetch(`/api/players/${encodeURIComponent(player.stableId)}/hands?limit=50`)
-      .then(data => {
-        setHands(data.hands || []);
-        setLoading(false);
-      })
+    apiFetch(`/api/players/${encodeURIComponent(player.stableId)}/hands?limit=50&mode=${statsMode}`)
+      .then(data => { setHands(data.hands || []); setLoading(false); })
       .catch(err => { setError(err.message); setLoading(false); });
-  }, [player?.stableId]);
+  }, [player?.stableId, statsMode]);
 
-  const winPct = player?.total_hands > 0
-    ? ((player.total_wins / player.total_hands) * 100).toFixed(1)
+  // Display stats: mode-specific if available, otherwise fall back to overall from prop
+  const displayStats = modeStats ?? player;
+  const winPct = (displayStats?.total_hands ?? 0) > 0
+    ? ((displayStats.total_wins / displayStats.total_hands) * 100).toFixed(1)
     : '0.0';
-  const net = player?.total_net_chips ?? 0;
+  const net = displayStats?.total_net_chips ?? 0;
 
   function formatDate(ts) {
     if (!ts) return '—';
@@ -291,13 +338,16 @@ function PlayerDetailView({ player, onBack }) {
           </h2>
         </div>
 
-        {/* Stats bar */}
+        {/* Mode toggle + stats bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <StatsModeToggle value={statsMode} onChange={setStatsMode} />
+        </div>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {[
-            { label: 'Hands', value: player?.total_hands ?? 0 },
+            { label: 'Hands', value: displayStats?.total_hands ?? 0 },
             { label: 'Win %', value: `${winPct}%` },
-            { label: 'VPIP', value: `${player?.vpip_percent ?? 0}%` },
-            { label: 'PFR', value: `${player?.pfr_percent ?? 0}%` },
+            { label: 'VPIP', value: `${displayStats?.vpip_percent ?? 0}%` },
+            { label: 'PFR', value: `${displayStats?.pfr_percent ?? 0}%` },
             { label: 'Net Chips', value: `${net > 0 ? '+' : ''}${Number(net).toLocaleString()}`, color: net > 0 ? '#3fb950' : net < 0 ? '#f85149' : '#8b949e' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

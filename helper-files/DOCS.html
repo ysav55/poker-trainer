@@ -1,0 +1,1698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Poker Trainer — Developer Docs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:         #0c1018;
+  --surface:    #131922;
+  --surface2:   #19212e;
+  --border:     #1e2a3a;
+  --border-dim: rgba(255,255,255,.04);
+  --accent:     #c4a35a;
+  --accent-dim: rgba(196,163,90,.13);
+  --accent-fnt: rgba(196,163,90,.06);
+  --accent-bdr: rgba(196,163,90,.25);
+  --text:       #dde4f0;
+  --text-sub:   #8896ab;
+  --text-muted: #4e5d72;
+  --green:  #52c278; --green-d:  rgba(82,194,120,.12);
+  --blue:   #5fa8fa; --blue-d:   rgba(95,168,250,.12);
+  --red:    #e96060; --red-d:    rgba(233,96,96,.12);
+  --amber:  #f5a94a; --amber-d:  rgba(245,169,74,.12);
+  --purple: #9d79f0; --purple-d: rgba(157,121,240,.12);
+  --teal:   #38c5b2; --teal-d:   rgba(56,197,178,.12);
+  --pink:   #e87db0; --pink-d:   rgba(232,125,176,.12);
+  --nav-w:  252px;
+  --radius: 8px;
+}
+*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Outfit','Segoe UI Variable','Segoe UI',system-ui,sans-serif;
+  line-height: 1.65; display: flex; min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────── */
+aside#sidebar {
+  width: var(--nav-w); flex-shrink: 0; position: fixed;
+  top: 0; left: 0; bottom: 0;
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; z-index: 100; overflow-y: auto;
+}
+.nav-header {
+  padding: 22px 20px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.nav-suits { font-size: 12px; letter-spacing: 5px; color: var(--accent); opacity:.55; margin-bottom: 8px; }
+.nav-title { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -.01em; }
+.nav-version { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+nav.main-nav { padding: 10px 0 24px; flex: 1; }
+.nav-group { padding: 0 12px; margin-bottom: 16px; }
+.nav-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--text-muted); padding: 4px 8px 5px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  border-radius: 6px; color: var(--text-sub); text-decoration: none;
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  border: none; background: none; width: 100%; text-align: left;
+  transition: background .15s, color .15s;
+  border-left: 2px solid transparent; margin-left: -2px;
+}
+.nav-item:hover  { background: var(--accent-fnt); color: var(--text); border-left-color: rgba(196,163,90,.2); }
+.nav-item.active { background: var(--accent-dim); color: var(--text); border-left-color: var(--accent); }
+.nav-arrow { margin-left: auto; font-size: 10px; color: var(--text-muted); transition: transform .2s; }
+.nav-item.open .nav-arrow { transform: rotate(90deg); }
+.nav-subnav { display: none; padding: 2px 0 4px 12px; }
+.nav-subnav.open { display: block; animation: fade .15s ease; }
+.nav-sub-item {
+  display: block; padding: 5px 10px; border-radius: 5px;
+  color: var(--text-muted); font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: background .12s, color .12s; margin-bottom: 1px;
+  border-left: 2px solid transparent; margin-left: -2px;
+}
+.nav-sub-item:hover  { background: var(--accent-fnt); color: var(--text-sub); }
+.nav-sub-item.active { background: var(--accent-dim); color: var(--accent); border-left-color: var(--accent); }
+
+/* ── MAIN ─────────────────────────────────────────────────── */
+main#main { margin-left: var(--nav-w); flex: 1; min-height: 100dvh; }
+.page { display: none; }
+.page.active { display: block; animation: pageIn .22s cubic-bezier(.16,1,.3,1); }
+@keyframes pageIn  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fade    { from { opacity:0; transform:translateY(-3px); } to { opacity:1; transform:translateY(0); } }
+
+/* ── STRUCTURE ───────────────────────────────────────────── */
+.page-header { padding: 48px 56px 30px; border-bottom: 1px solid var(--border); }
+.page-eyebrow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); margin-bottom: 10px; }
+.page-header h1 { font-size: 1.9rem; font-weight: 800; letter-spacing: -.025em; line-height: 1.1; color: var(--text); margin-bottom: 10px; }
+.page-header p { font-size: 13.5px; color: var(--text-sub); max-width: 58ch; }
+.page-body { padding: 36px 56px 80px; max-width: 1000px; }
+.doc-section { margin-bottom: 44px; }
+.doc-section h2 { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -.01em; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.doc-section h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin: 22px 0 10px; }
+.doc-section p { font-size: 13.5px; color: var(--text-sub); line-height: 1.7; max-width: 62ch; margin-bottom: 14px; }
+hr.div { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+code {
+  font-family: 'JetBrains Mono',monospace; font-size: 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 2px 6px; border-radius: 4px; color: var(--blue);
+}
+
+/* ── STATS STRIP ─────────────────────────────────────────── */
+.stat-strip { display: grid; grid-template-columns: repeat(5,1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 32px; }
+.stat-cell { background: var(--surface); padding: 18px 20px; }
+.stat-cell .num { font-family: 'JetBrains Mono',monospace; font-size: 1.8rem; font-weight: 700; letter-spacing: -.03em; color: var(--text); }
+.stat-cell .label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+/* ── BADGES ──────────────────────────────────────────────── */
+.badge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text-sub); }
+.badge .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── STEP LIST ───────────────────────────────────────────── */
+.step-list { display: flex; flex-direction: column; gap: 0; margin-bottom: 24px; }
+.step { display: flex; gap: 18px; padding-bottom: 22px; position: relative; }
+.step:not(:last-child)::before { content:''; position:absolute; left:13px; top:28px; bottom:0; width:1px; background: var(--border); }
+.step-num { width: 27px; height: 27px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+.step-body strong { display: block; font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+.step-body p { font-size: 13px; color: var(--text-sub); margin-bottom: 8px; max-width: 55ch; }
+
+/* ── CODE ────────────────────────────────────────────────── */
+.code-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 12px; }
+.code-head { display: flex; align-items: center; justify-content: space-between; padding: 7px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+.code-head span { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .07em; }
+.code-body { padding: 14px 18px; font-family: 'JetBrains Mono',monospace; font-size: 12.5px; line-height: 1.75; color: var(--text-sub); overflow-x: auto; white-space: pre; }
+.code-body .c { color: var(--text-muted); }
+.code-body .k { color: var(--accent); }
+.code-body .v { color: var(--green); }
+.code-body .s { color: var(--blue); }
+.code-body .e { color: var(--red); }
+
+/* ── TABLES ──────────────────────────────────────────────── */
+.table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 20px; overflow-x: auto; }
+.doc-table { width: 100%; border-collapse: collapse; }
+.doc-table th { text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); white-space: nowrap; }
+.doc-table td { padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; color: var(--text-sub); }
+.doc-table td.mono { font-family: 'JetBrains Mono',monospace; font-size: 11.5px; color: var(--text); }
+.doc-table tr:last-child td { border-bottom: none; }
+.doc-table tr:hover td { background: rgba(255,255,255,.015); }
+.req { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-family: 'JetBrains Mono',monospace; }
+.req.yes { background: var(--red-d); color: var(--red); }
+.req.opt { background: var(--surface2); color: var(--text-muted); }
+
+/* ── TABS ────────────────────────────────────────────────── */
+.tab-nav { display: flex; gap: 2px; padding: 4px; background: var(--surface2); border-radius: var(--radius); margin-bottom: 22px; width: fit-content; flex-wrap: wrap; }
+.tab-btn { padding: 6px 16px; border-radius: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-muted); cursor: pointer; border: none; background: none; transition: background .15s, color .15s; }
+.tab-btn:hover { color: var(--text-sub); }
+.tab-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; animation: pageIn .18s ease; }
+
+/* ── FEATURE LISTS ───────────────────────────────────────── */
+.feature-group { margin-bottom: 24px; }
+.feature-group-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.feature-item { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-dim); font-size: 13.5px; }
+.feature-item:last-child { border-bottom: none; }
+.feature-item::before { content: '›'; color: var(--accent); font-size: 14px; flex-shrink: 0; }
+.feature-item strong { color: var(--text); font-weight: 600; margin-right: 6px; white-space: nowrap; }
+.feature-item span { color: var(--text-sub); font-size: 13px; }
+
+/* ── API LAYOUT ──────────────────────────────────────────── */
+.api-layout { display: grid; grid-template-columns: 160px 1fr; gap: 28px; align-items: start; }
+.api-subnav { position: sticky; top: 24px; }
+.api-subnav-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); padding: 8px 8px 5px; }
+.api-subnav-item { display: block; padding: 6px 10px; border-radius: 5px; font-size: 12.5px; font-weight: 500; color: var(--text-muted); text-decoration: none; cursor: pointer; margin-bottom: 1px; transition: background .12s, color .12s; border-left: 2px solid transparent; margin-left: -2px; }
+.api-subnav-item:hover { background: var(--accent-fnt); color: var(--text-sub); }
+.api-subnav-item.active { background: var(--accent-dim); color: var(--accent); border-left-color: var(--accent); }
+.api-pane { display: none; }
+.api-pane.active { display: block; animation: pageIn .18s ease; }
+.api-pane > h2 { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.api-pane > .desc { font-size: 13px; color: var(--text-sub); margin-bottom: 18px; max-width: 55ch; }
+
+/* ── ENDPOINTS ───────────────────────────────────────────── */
+.endpoint { display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: baseline; padding: 8px 12px; border-radius: 6px; border: 1px solid transparent; margin-bottom: 2px; transition: background .12s, border-color .12s; }
+.endpoint:hover { background: var(--surface); border-color: var(--border); }
+.method { font-family: 'JetBrains Mono',monospace; font-size: 10px; font-weight: 700; padding: 3px 5px; border-radius: 4px; text-align: center; letter-spacing: .04em; }
+.method.GET    { background: var(--green-d);  color: var(--green);  }
+.method.POST   { background: var(--amber-d);  color: var(--amber);  }
+.method.PATCH  { background: var(--blue-d);   color: var(--blue);   }
+.method.PUT    { background: var(--blue-d);   color: var(--blue);   }
+.method.DELETE { background: var(--red-d);    color: var(--red);    }
+.ep-path { font-family: 'JetBrains Mono',monospace; font-size: 11.5px; color: var(--text); margin-bottom: 2px; }
+.ep-desc { font-size: 12px; color: var(--text-sub); }
+.chip { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 7px; vertical-align: middle; font-family: 'JetBrains Mono',monospace; }
+.chip.auth   { background: var(--accent-dim); color: var(--accent); }
+.chip.admin  { background: var(--red-d);      color: var(--red);    }
+.chip.coach  { background: var(--purple-d);   color: var(--purple); }
+.chip.perm   { background: var(--teal-d);     color: var(--teal);   }
+.chip.pub    { background: var(--surface2);   color: var(--text-muted); }
+.chip.own    { background: var(--blue-d);     color: var(--blue);   }
+
+/* ── SOCKET ──────────────────────────────────────────────── */
+.socket-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.socket-col h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
+.event-group { margin-bottom: 16px; }
+.event-group-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); padding: 4px 10px 5px; }
+.event-item { display: flex; gap: 12px; padding: 6px 10px; border-radius: 5px; margin-bottom: 1px; transition: background .1s; }
+.event-item:hover { background: var(--surface); }
+.event-name { font-family: 'JetBrains Mono',monospace; font-size: 11px; color: var(--text); font-weight: 500; flex-shrink: 0; min-width: 200px; }
+.event-desc { font-size: 12px; color: var(--text-sub); }
+
+/* ── ROLE MATRIX ─────────────────────────────────────────── */
+.matrix-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; overflow-x: auto; }
+.matrix-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.matrix-table th { padding: 9px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
+.matrix-table th:first-child { text-align: left; }
+.matrix-table th:not(:first-child) { text-align: center; min-width: 70px; }
+.matrix-table td { padding: 8px 14px; border-bottom: 1px solid var(--border-dim); }
+.matrix-table td:first-child { color: var(--text); font-size: 13px; font-weight: 500; }
+.matrix-table td:not(:first-child) { text-align: center; }
+.matrix-table tr:last-child td { border-bottom: none; }
+.matrix-table tr:hover td { background: rgba(255,255,255,.015); }
+.matrix-table .group-header td { background: var(--surface2); color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 6px 14px; }
+.check { color: var(--green); font-size: 14px; }
+.dash  { color: var(--text-muted); font-size: 12px; }
+
+/* ── PERMISSION CHIPS ────────────────────────────────────── */
+.perm-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.perm-pill { display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono',monospace; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: 1px solid; cursor: default; transition: transform .1s; }
+.perm-pill:hover { transform: translateY(-1px); }
+.perm-pill.table   { background: var(--blue-d);   border-color: rgba(95,168,250,.25);  color: var(--blue);   }
+.perm-pill.hand    { background: var(--green-d);  border-color: rgba(82,194,120,.25);  color: var(--green);  }
+.perm-pill.user    { background: var(--red-d);    border-color: rgba(233,96,96,.25);   color: var(--red);    }
+.perm-pill.playlist{ background: var(--purple-d); border-color: rgba(157,121,240,.25); color: var(--purple); }
+.perm-pill.crm     { background: var(--amber-d);  border-color: rgba(245,169,74,.25);  color: var(--amber);  }
+.perm-pill.admin   { background: var(--red-d);    border-color: rgba(233,96,96,.25);   color: var(--red);    }
+.perm-pill.tour    { background: var(--teal-d);   border-color: rgba(56,197,178,.25);  color: var(--teal);   }
+
+/* ── MIGRATION LIST ──────────────────────────────────────── */
+.migration-item { display: grid; grid-template-columns: 56px 1fr; gap: 16px; padding: 9px 0; border-bottom: 1px solid var(--border-dim); align-items: baseline; }
+.migration-item:last-child { border-bottom: none; }
+.mig-id { font-family: 'JetBrains Mono',monospace; font-size: 11px; font-weight: 700; color: var(--accent); }
+.mig-desc { font-size: 13px; color: var(--text-sub); }
+.mig-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 8px; font-family: 'JetBrains Mono',monospace; background: var(--amber-d); color: var(--amber); vertical-align: middle; }
+
+/* ── SERVICE CARDS ───────────────────────────────────────── */
+.service-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap: 16px; margin-bottom: 20px; }
+.service-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; position: relative; overflow: hidden; }
+.service-card::before { content:''; position:absolute; top:0; left:0; width:3px; height:100%; }
+.service-card.green::before { background: var(--green); }
+.service-card.blue::before  { background: var(--blue); }
+.service-card.amber::before { background: var(--amber); }
+.service-card.purple::before{ background: var(--purple); }
+.service-card.teal::before  { background: var(--teal); }
+.service-name { font-weight: 700; font-size: 13.5px; color: var(--text); margin-bottom: 6px; }
+.service-path { font-family: 'JetBrains Mono',monospace; font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }
+.service-desc { font-size: 13px; color: var(--text-sub); margin-bottom: 10px; }
+.service-card ul { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.service-card ul li { font-size: 12px; color: var(--text-muted); padding-left: 14px; position: relative; }
+.service-card ul li::before { content:'·'; position:absolute; left:3px; color: var(--accent); font-weight: 700; }
+
+/* ── NOTICE ──────────────────────────────────────────────── */
+.notice { background: var(--accent-fnt); border: 1px solid var(--accent-bdr); border-radius: var(--radius); padding: 11px 15px; font-size: 13px; color: var(--text-sub); margin-bottom: 16px; }
+.notice strong { color: var(--accent); }
+.notice.blue { background: var(--blue-d); border-color: rgba(95,168,250,.25); }
+.notice.blue strong { color: var(--blue); }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+/* ── SCROLLBAR ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #253040; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ SIDEBAR ═══════════════ -->
+<aside id="sidebar">
+  <div class="nav-header">
+    <div class="nav-suits">&#9824; &#9829; &#9830; &#9827;</div>
+    <div class="nav-title">Poker Trainer</div>
+    <div class="nav-version">Developer Docs &middot; 2026-04-03</div>
+  </div>
+  <nav class="main-nav">
+
+    <div class="nav-group">
+      <div class="nav-label">Getting Started</div>
+      <button class="nav-item active" data-page="overview">Overview</button>
+      <button class="nav-item" data-page="setup">Setup &amp; Scripts</button>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Platform</div>
+      <button class="nav-item" data-page="roles">Roles &amp; Permissions</button>
+      <button class="nav-item" data-page="features">Features by Role</button>
+      <button class="nav-item" data-page="routes">Client Routes</button>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Backend</div>
+      <button class="nav-item expandable" data-page="api" data-first-sub="api-auth">
+        API Reference <span class="nav-arrow">›</span>
+      </button>
+      <div class="nav-subnav" id="subnav-api">
+        <a class="nav-sub-item" data-page="api" data-sub="api-auth">Auth</a>
+        <a class="nav-sub-item" data-page="api" data-sub="api-tables">Tables</a>
+        <a class="nav-sub-item" data-page="api" data-sub="api-hands">Hands &amp; Tags</a>
+        <a class="nav-sub-item" data-page="api" data-sub="api-players">Players &amp; Chips</a>
+        <a class="nav-sub-item" data-page="api" data-sub="api-coach">Coach Intelligence</a>
+        <a class="nav-sub-item" data-page="api" data-sub="api-tournaments">Tournaments</a>
+        <a class="nav-sub-item" data-page="api" data-sub="api-playlists">Playlists</a>
+        <a class="nav-sub-item" data-page="api" data-sub="api-announcements">Announcements</a>
+        <a class="nav-sub-item" data-page="api" data-sub="api-admin">Admin</a>
+      </div>
+      <button class="nav-item" data-page="socket">Socket Events</button>
+      <button class="nav-item" data-page="auth">Auth System</button>
+      <button class="nav-item" data-page="services">Coach Services</button>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Data</div>
+      <button class="nav-item" data-page="analyzer">Hand Analyzer</button>
+      <button class="nav-item" data-page="schema">DB Schema</button>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Operations</div>
+      <button class="nav-item" data-page="deploy">Deployment</button>
+      <button class="nav-item" data-page="issues">Known Issues</button>
+    </div>
+
+  </nav>
+</aside>
+
+<!-- ═══════════════ PAGES ═══════════════ -->
+<main id="main">
+
+<!-- ── OVERVIEW ───────────────────────────────────────────── -->
+<div id="page-overview" class="page active">
+  <div class="page-header">
+    <div class="page-eyebrow">Getting Started</div>
+    <h1>Poker Trainer</h1>
+    <p>A real-time, multi-table poker coaching platform. Coaches run live sessions, review hands with replay branching, auto-tag mistakes, and track student development with an AI-backed intelligence layer.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <div class="stat-strip">
+        <div class="stat-cell"><div class="num">5</div><div class="label">User Roles</div></div>
+        <div class="stat-cell"><div class="num">26</div><div class="label">Client Pages</div></div>
+        <div class="stat-cell"><div class="num">47</div><div class="label">Auto-Tags</div></div>
+        <div class="stat-cell"><div class="num">50+</div><div class="label">API Endpoints</div></div>
+        <div class="stat-cell"><div class="num">2148</div><div class="label">Server Tests</div></div>
+      </div>
+
+      <h2>Tech Stack</h2>
+      <div class="badge-row">
+        <span class="badge"><span class="dot" style="background:var(--green)"></span>Node.js 18 + Express</span>
+        <span class="badge"><span class="dot" style="background:var(--blue)"></span>React 18 + Vite 5</span>
+        <span class="badge"><span class="dot" style="background:var(--blue)"></span>Socket.io 4</span>
+        <span class="badge"><span class="dot" style="background:var(--green)"></span>Supabase (PostgreSQL)</span>
+        <span class="badge"><span class="dot" style="background:var(--amber)"></span>Tailwind CSS 3</span>
+        <span class="badge"><span class="dot" style="background:var(--purple)"></span>Recharts</span>
+        <span class="badge"><span class="dot" style="background:var(--accent)"></span>JWT + RBAC</span>
+        <span class="badge"><span class="dot" style="background:var(--pink)"></span>Claude Haiku (NarratorService)</span>
+        <span class="badge"><span class="dot" style="background:var(--teal)"></span>Fly.io</span>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Architecture</h2>
+      <div class="code-wrap">
+        <div class="code-head"><span>High-Level</span></div>
+        <div class="code-body"><span class="c">┌─────────────────── CLIENT (port 5173) ───────────────────┐</span>
+│  React + React Router v6 + Tailwind                      │
+│  26 pages · 40+ components · 6 focused socket hooks     │
+│  apiFetch() → JWT injected on every REST call            │
+<span class="c">└──────────────────────────────────────────────────────────┘</span>
+         │  WebSocket (Socket.io)    │  REST (JWT Bearer)
+<span class="c">┌─────────────────── SERVER (port 3001) ───────────────────┐</span>
+│  Express + Socket.io                                     │
+│  server/index.js (~110 lines) → imports all modules     │
+│                                                          │
+│  server/game/         GameManager, BettingRound,         │
+│                       ShowdownResolver, ReplayEngine,    │
+│                       HandGenerator, AnalyzerService     │
+│  server/socket/       io.use() auth + 11 handler groups  │
+│  server/routes/       REST endpoints (JWT-protected)     │
+│  server/auth/         JwtService, requireAuth, requireRole│
+│                       requirePermission, socketGuards    │
+│  server/db/           5 repositories + Supabase client   │
+│  server/services/     AlertService, ProgressReportService│
+│                       BaselineService, SessionPrepService│
+│  server/ai/           NarratorService (Claude Haiku)     │
+<span class="c">└──────────────────────────────────────────────────────────┘</span>
+         │  service-role key only (no anon key in browser)
+<span class="c">┌─────────────────── SUPABASE (PostgreSQL) ────────────────┐</span>
+│  24 migrations · 25+ tables · RLS on all public tables  │
+<span class="c">└──────────────────────────────────────────────────────────┘</span></div>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Key Design Decisions</h2>
+      <div class="two-col">
+        <div>
+          <div class="feature-item"><strong>No Supabase in browser</strong><span><code>client/src/lib/supabase.js</code> is a Proxy stub that throws. All data goes via authenticated Express routes.</span></div>
+          <div class="feature-item"><strong>Real-time via Socket.io</strong><span>Game state only. History, stats, tags travel REST.</span></div>
+          <div class="feature-item"><strong>RBAC at two layers</strong><span>REST: <code>requirePermission(key)</code>. Socket: <code>requireCoach(socket)</code> guards.</span></div>
+        </div>
+        <div>
+          <div class="feature-item"><strong>Auto-tag pipeline</strong><span>10 analyzers run in parallel after every hand. Tags written atomically; coach tags never overwritten.</span></div>
+          <div class="feature-item"><strong>Stable player identity</strong><span><code>stableId</code> UUID in localStorage. Persists across sessions and devices.</span></div>
+          <div class="feature-item"><strong>AI is optional</strong><span>NarratorService degrades gracefully if <code>ANTHROPIC_API_KEY</code> is absent.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SETUP ───────────────────────────────────────────────── -->
+<div id="page-setup" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Getting Started</div>
+    <h1>Setup &amp; Scripts</h1>
+    <p>Node 18+ required. You also need a Supabase project (free tier works) and its service role key.</p>
+  </div>
+  <div class="page-body">
+
+    <div class="doc-section">
+      <h2>Local Installation</h2>
+      <div class="step-list">
+        <div class="step"><div class="step-num">1</div><div class="step-body">
+          <strong>Clone &amp; install</strong>
+          <div class="code-wrap"><div class="code-head"><span>bash</span></div><div class="code-body"><span class="k">git clone</span> &lt;repo&gt; &amp;&amp; <span class="k">cd</span> poker-trainer
+<span class="k">npm run install-all</span>   <span class="c"># installs root + server + client</span></div></div>
+        </div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body">
+          <strong>Create .env</strong>
+          <div class="code-wrap"><div class="code-head"><span>bash</span></div><div class="code-body"><span class="k">cp</span> .env.example .env
+<span class="c"># Generate SESSION_SECRET:</span>
+<span class="k">node -e</span> <span class="s">"console.log(require('crypto').randomBytes(48).toString('hex'))"</span></div></div>
+        </div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body">
+          <strong>Add players to players.csv</strong>
+          <p>One row per player: <code>name, bcrypt_hash, role</code>. Then hash:</p>
+          <div class="code-wrap"><div class="code-head"><span>bash</span></div><div class="code-body"><span class="k">node</span> scripts/hash-passwords.js</div></div>
+        </div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body">
+          <strong>Apply DB migrations</strong>
+          <p>Run all 24 SQL files in <code>supabase/migrations/</code> via Supabase dashboard or CLI. Migrations 021–023 are pending production but should be applied.</p>
+        </div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-body">
+          <strong>Start dev servers</strong>
+          <div class="code-wrap"><div class="code-head"><span>Terminal 1 — Server</span></div><div class="code-body"><span class="k">npm run dev:server</span>   <span class="c"># nodemon, port 3001</span></div></div>
+          <div class="code-wrap"><div class="code-head"><span>Terminal 2 — Client</span></div><div class="code-body"><span class="k">npm run dev:client</span>   <span class="c"># Vite, http://localhost:5173</span></div></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Environment Variables</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Variable</th><th>Required</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">SESSION_SECRET</td><td><span class="req yes">Required</span></td><td>48-byte hex JWT signing key — never commit</td></tr>
+            <tr><td class="mono">SUPABASE_URL</td><td><span class="req yes">Required</span></td><td>Supabase project REST URL</td></tr>
+            <tr><td class="mono">SUPABASE_SERVICE_ROLE_KEY</td><td><span class="req yes">Required</span></td><td>Server-side admin key — never in browser</td></tr>
+            <tr><td class="mono">DATABASE_URL</td><td><span class="req yes">Required</span></td><td>PostgreSQL connection string for migrations</td></tr>
+            <tr><td class="mono">PORT</td><td><span class="req opt">Optional</span></td><td>Server port (default: 3001)</td></tr>
+            <tr><td class="mono">CORS_ORIGIN</td><td><span class="req opt">Optional</span></td><td>Allowed origin — defaults to localhost:5173 in dev</td></tr>
+            <tr><td class="mono">NODE_ENV</td><td><span class="req opt">Optional</span></td><td>Set to <code>production</code> for strict CORS</td></tr>
+            <tr><td class="mono">ANTHROPIC_API_KEY</td><td><span class="req opt">Optional</span></td><td>For NarratorService (Claude Haiku). Missing = graceful degradation.</td></tr>
+            <tr><td class="mono">IDLE_TIMEOUT_MINUTES</td><td><span class="req opt">Optional</span></td><td>Auto-shutdown timer (default: 0 = disabled). Set to 20 on Fly.io.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>npm Scripts</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Script</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">npm run install-all</td><td>Install root + client + server dependencies</td></tr>
+            <tr><td class="mono">npm run dev:server</td><td>Start server with nodemon (hot-reload)</td></tr>
+            <tr><td class="mono">npm run dev:client</td><td>Vite dev server on port 5173</td></tr>
+            <tr><td class="mono">npm run build</td><td>Build React client into client/dist</td></tr>
+            <tr><td class="mono">npm start</td><td>Production: serves React build + API on port 3001</td></tr>
+            <tr><td class="mono">npm run test:server</td><td>Jest — 85 suites, 2148 tests</td></tr>
+            <tr><td class="mono">npm run test:client</td><td>Vitest on client components</td></tr>
+            <tr><td class="mono">npm run simulate</td><td>Simulate a single game (dev utility)</td></tr>
+            <tr><td class="mono">npm run batches</td><td>Simulate batch games for performance testing</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ROLES & PERMISSIONS ────────────────────────────────── -->
+<div id="page-roles" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Platform</div>
+    <h1>Roles &amp; Permissions</h1>
+    <p>RBAC is enforced server-side via an in-memory permission cache backed by the <code>roles → role_permissions → permissions</code> DB chain. There are 5 assignable roles and 12 permission keys.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <h2>The 5 Roles</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Role</th><th>CSV / DB value</th><th>Who uses it</th><th>Key distinctions</th></tr></thead>
+          <tbody>
+            <tr><td>Player</td><td class="mono">player</td><td>Regular students</td><td>No elevated permissions. Own hands only.</td></tr>
+            <tr><td>Trial</td><td class="mono">trial</td><td>Self-registered students</td><td>7-day window or 20-hand limit. Same as Player after trial ends.</td></tr>
+            <tr><td>Moderator</td><td class="mono">moderator</td><td>Trusted senior students</td><td>Can tag hands, run tables. No CRM or user management.</td></tr>
+            <tr><td>Referee</td><td class="mono">referee</td><td>Tournament officials</td><td>Tournament management only. Limited lobby access.</td></tr>
+            <tr><td>Coach</td><td class="mono">coach</td><td>Instructors</td><td>Full student management, playlists, coach intelligence suite.</td></tr>
+            <tr><td>Admin</td><td class="mono">admin</td><td>School owners / operators</td><td>Everything: user management, schools, scenarios, chip adjustments.</td></tr>
+            <tr><td>Superadmin</td><td class="mono">superadmin</td><td>System owner</td><td>All permissions unconditionally. No restriction checks.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>12 Permission Keys</h2>
+      <div class="perm-grid">
+        <span class="perm-pill table">table:create</span>
+        <span class="perm-pill table">table:manage</span>
+        <span class="perm-pill hand">hand:tag</span>
+        <span class="perm-pill hand">hand:analyze</span>
+        <span class="perm-pill user">user:manage</span>
+        <span class="perm-pill user">user:view</span>
+        <span class="perm-pill playlist">playlist:create</span>
+        <span class="perm-pill playlist">playlist:manage</span>
+        <span class="perm-pill crm">crm:view</span>
+        <span class="perm-pill crm">crm:edit</span>
+        <span class="perm-pill admin">admin:access</span>
+        <span class="perm-pill tour">tournament:manage</span>
+      </div>
+      <p>Permission checks use AND logic — <code>requirePermission('table:create', 'table:manage')</code> requires both. Checks are cached per <code>stableId</code> and invalidated when roles change.</p>
+    </div>
+
+    <div class="doc-section">
+      <h2>Permission Matrix by Role</h2>
+      <div class="matrix-wrap">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th>Permission</th>
+              <th>Player</th>
+              <th>Moderator</th>
+              <th>Referee</th>
+              <th>Coach</th>
+              <th>Admin</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="group-header"><td colspan="6">Tables</td></tr>
+            <tr><td>table:create</td><td class="dash">—</td><td class="check">&#10003;</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr><td>table:manage</td><td class="dash">—</td><td class="check">&#10003;</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr class="group-header"><td colspan="6">Hands</td></tr>
+            <tr><td>hand:tag</td><td class="dash">—</td><td class="check">&#10003;</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr><td>hand:analyze</td><td class="dash">—</td><td class="check">&#10003;</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr class="group-header"><td colspan="6">Users &amp; CRM</td></tr>
+            <tr><td>user:manage</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="check">&#10003;</td></tr>
+            <tr><td>user:view</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="check">&#10003;</td></tr>
+            <tr><td>crm:view</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr><td>crm:edit</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr class="group-header"><td colspan="6">Playlists &amp; Tournaments</td></tr>
+            <tr><td>playlist:create</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr><td>playlist:manage</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+            <tr><td>tournament:manage</td><td class="dash">—</td><td class="dash">—</td><td class="check">&#10003;</td><td class="dash">—</td><td class="check">&#10003;</td></tr>
+            <tr class="group-header"><td colspan="6">Admin</td></tr>
+            <tr><td>admin:access</td><td class="dash">—</td><td class="check">&#10003;</td><td class="dash">—</td><td class="check">&#10003;</td><td class="check">&#10003;</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FEATURES BY ROLE ────────────────────────────────────── -->
+<div id="page-features" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Platform</div>
+    <h1>Features by Role</h1>
+    <p>What each role can do, grouped by capability area.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <div class="tab-nav">
+        <button class="tab-btn active" data-tab="feat-player">Player</button>
+        <button class="tab-btn" data-tab="feat-coach">Coach</button>
+        <button class="tab-btn" data-tab="feat-admin">Admin</button>
+        <button class="tab-btn" data-tab="feat-mod">Moderator</button>
+        <button class="tab-btn" data-tab="feat-ref">Referee</button>
+      </div>
+
+      <div id="feat-player" class="tab-pane active">
+        <div class="feature-group">
+          <div class="feature-group-title">Live Play</div>
+          <div class="feature-item"><strong>Table Lobby</strong><span>Browse open tables, filter by type, join or spectate</span></div>
+          <div class="feature-item"><strong>Poker Table</strong><span>Full betting UI — check, call, raise, fold, all-in with real-time game state via Socket.io</span></div>
+          <div class="feature-item"><strong>Bot Tables</strong><span>Play solo vs configurable bots (easy / medium / hard) via /bot-lobby</span></div>
+          <div class="feature-item"><strong>Multi-Table View</strong><span>Monitor multiple tables simultaneously in grid layout</span></div>
+          <div class="feature-item"><strong>Tournaments</strong><span>Register and view standings for active tournaments</span></div>
+        </div>
+        <div class="feature-group">
+          <div class="feature-group-title">Review &amp; History</div>
+          <div class="feature-item"><strong>Hand History</strong><span>Browse own hands with tag, date, scenario, and mistake filters</span></div>
+          <div class="feature-item"><strong>Hand Replay</strong><span>Step through hands action-by-action; branch into alternate lines via ReplayEngine</span></div>
+          <div class="feature-item"><strong>Analysis Page</strong><span>Tag frequency bar charts — top-12 tags, click to drill into matching hands</span></div>
+        </div>
+        <div class="feature-group">
+          <div class="feature-group-title">Account</div>
+          <div class="feature-item"><strong>Leaderboard</strong><span>Chip-based ranking across all players</span></div>
+          <div class="feature-item"><strong>Chip Bank</strong><span>View balance and transaction history</span></div>
+          <div class="feature-item"><strong>Settings</strong><span>BB-view toggle, password change, display preferences</span></div>
+          <div class="feature-item"><strong>Announcements</strong><span>Receive and read coach broadcasts</span></div>
+        </div>
+        <div class="notice"><strong>Trial limits:</strong> Self-registered players have a 7-day window or 20-hand limit. After expiry, new sessions are blocked but replay/review still works.</div>
+      </div>
+
+      <div id="feat-coach" class="tab-pane">
+        <div class="feature-group">
+          <div class="feature-group-title">Table &amp; Session Management</div>
+          <div class="feature-item"><strong>Create Tables</strong><span>coached_cash, uncoached_cash, or tournament mode. Set privacy: open / school / private.</span></div>
+          <div class="feature-item"><strong>Table Presets</strong><span>Save, update, clone table configurations for quick setup</span></div>
+          <div class="feature-item"><strong>Invited Players</strong><span>Manage per-table invitations for private tables</span></div>
+          <div class="feature-item"><strong>Coach Sidebar</strong><span>In-table: range display, equity toggle, heatmap, blind levels, stack adjustments, scenario loader, undo controls</span></div>
+          <div class="feature-item"><strong>Controller Transfer</strong><span>Hand off table controller to another coach/admin</span></div>
+        </div>
+        <div class="feature-group">
+          <div class="feature-group-title">Student Management (CRM)</div>
+          <div class="feature-item"><strong>Player CRM</strong><span>Notes, custom tags, coaching session log, coach assignment per student</span></div>
+          <div class="feature-item"><strong>Stable Overview</strong><span>All students at a glance — status badges, top alerts, summary stats</span></div>
+          <div class="feature-item"><strong>Chip Reload</strong><span>Add chips to any student's bank balance</span></div>
+          <div class="feature-item"><strong>Announcements</strong><span>Broadcast to all students, a group, or an individual. Track reads.</span></div>
+        </div>
+        <div class="feature-group">
+          <div class="feature-group-title">Coach Intelligence Suite</div>
+          <div class="feature-item"><strong>Alerts Dashboard</strong><span>6 auto-detectors: inactivity, volume drop, mistake spike, losing streak, stat regression, positive milestones</span></div>
+          <div class="feature-item"><strong>Progress Reports</strong><span>Weekly / monthly / custom-date reports with 8 sections, 0–100 grade, leak evolution, narrative summary (AI)</span></div>
+          <div class="feature-item"><strong>Session Prep Brief</strong><span>Per-student pre-session overview: recent leaks, baseline stats, active alerts, session streak</span></div>
+          <div class="feature-item"><strong>Baseline Tracking</strong><span>30-day rolling stat baselines for every student — powers alerts and regression detection</span></div>
+        </div>
+        <div class="feature-group">
+          <div class="feature-group-title">Hand Tools</div>
+          <div class="feature-item"><strong>View All Hands</strong><span>Access hand history for any student, not just own hands</span></div>
+          <div class="feature-item"><strong>Playlists</strong><span>Curate hand collections for teaching; load scenario onto a live table</span></div>
+          <div class="feature-item"><strong>Annotations</strong><span>Attach notes to specific actions within a hand for student review</span></div>
+          <div class="feature-item"><strong>Analysis View</strong><span>Tag frequency charts per student with drill-down</span></div>
+        </div>
+      </div>
+
+      <div id="feat-admin" class="tab-pane">
+        <div class="notice"><strong>All Coach features, plus:</strong></div>
+        <div class="feature-group">
+          <div class="feature-group-title">User Management</div>
+          <div class="feature-item"><strong>User CRUD</strong><span>Create, edit, deactivate, delete user accounts. Assign roles.</span></div>
+          <div class="feature-item"><strong>Approve Applications</strong><span>Review pending coach registrations and activate them</span></div>
+          <div class="feature-item"><strong>CSV Export</strong><span>Export full user list with stats</span></div>
+          <div class="feature-item"><strong>Password Reset</strong><span>Force-reset any user's password</span></div>
+        </div>
+        <div class="feature-group">
+          <div class="feature-group-title">School &amp; Group Management</div>
+          <div class="feature-item"><strong>Schools</strong><span>Create schools, set student capacity, assign students</span></div>
+          <div class="feature-item"><strong>Groups</strong><span>Create named groups (stables), assign students for targeted announcements and reporting</span></div>
+        </div>
+        <div class="feature-group">
+          <div class="feature-group-title">Operations</div>
+          <div class="feature-item"><strong>Hand Builder</strong><span>Design and configure specific hand scenarios for drilling</span></div>
+          <div class="feature-item"><strong>Referee Dashboard</strong><span>Monitor all active tables, manage disputes, oversee tournament play</span></div>
+          <div class="feature-item"><strong>Tournament Setup</strong><span>Create standalone tournaments with blind structures, manage standings and eliminations</span></div>
+          <div class="feature-item"><strong>Manual Chip Adjust</strong><span>Add or deduct chips from any account with audit trail</span></div>
+          <div class="feature-item"><strong>Alert Thresholds</strong><span>Configure per-type alert sensitivity (inactivity days, volume drop %, etc.)</span></div>
+        </div>
+      </div>
+
+      <div id="feat-mod" class="tab-pane">
+        <p>Moderators are trusted senior students given limited operational capabilities without full coach access.</p>
+        <div class="feature-group">
+          <div class="feature-group-title">Capabilities</div>
+          <div class="feature-item"><strong>Run tables</strong><span>Create and manage tables (coached_cash, uncoached_cash)</span></div>
+          <div class="feature-item"><strong>Tag hands</strong><span>Apply tags and run hand analysis</span></div>
+          <div class="feature-item"><strong>View hand history</strong><span>Browse hand history (all students)</span></div>
+          <div class="feature-item"><strong>Admin dashboard access</strong><span>Via admin:access permission — but no CRM, user management, or playlists</span></div>
+        </div>
+        <div class="notice"><strong>Cannot:</strong> view CRM, create playlists, generate coach reports, manage users, access chip bank for others.</div>
+      </div>
+
+      <div id="feat-ref" class="tab-pane">
+        <p>Referees manage tournament logistics only. Limited lobby and history access.</p>
+        <div class="feature-group">
+          <div class="feature-group-title">Capabilities</div>
+          <div class="feature-item"><strong>tournament:manage</strong><span>Create tournaments, register players, update standings, advance blind levels, change tournament status</span></div>
+          <div class="feature-item"><strong>View lobby</strong><span>Standard lobby and leaderboard access</span></div>
+          <div class="feature-item"><strong>Own history</strong><span>View and replay own hands only</span></div>
+        </div>
+        <div class="notice"><strong>Cannot:</strong> create regular tables, view other players' hands, access CRM, or modify users.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CLIENT ROUTES ───────────────────────────────────────── -->
+<div id="page-routes" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Platform</div>
+    <h1>Client Routes</h1>
+    <p>React Router v6. Admin routes use a <code>RequirePermission</code> guard component checking <code>admin:access</code>. All other authenticated routes redirect to <code>/login</code> if JWT is absent or expired.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <h2>Public Routes</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Path</th><th>Component</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">/login</td><td>LoginPage</td><td>JWT stored in localStorage on success</td></tr>
+            <tr><td class="mono">/register</td><td>RegisterPage</td><td>Self-registration — creates trial account</td></tr>
+            <tr><td class="mono">/forgot-password</td><td>ForgotPasswordPage</td><td>Password recovery flow</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Full-Screen Authenticated Routes</h2>
+      <p>No global layout (no SideNav/TopBar). Full viewport for immersive use.</p>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Path</th><th>Component</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">/table/:tableId</td><td>TablePage</td><td>Live poker table — Socket.io real-time game state</td></tr>
+            <tr><td class="mono">/multi</td><td>MultiTablePage</td><td>Watch/manage multiple tables in a grid</td></tr>
+            <tr><td class="mono">/review</td><td>ReviewTablePage</td><td>Hand replay viewer with branching</td></tr>
+            <tr><td class="mono">/tournament/:tableId/lobby</td><td>TournamentLobby</td><td>Tournament registration + status view</td></tr>
+            <tr><td class="mono">/tournament/:tableId/standings</td><td>TournamentStandings</td><td>Live chip counts and eliminations</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>AppLayout Routes (SideNav + GlobalTopBar)</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Path</th><th>Component</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">/lobby</td><td>LobbyPage</td><td>Default home — table list, create table, join</td></tr>
+            <tr><td class="mono">/bot-lobby</td><td>BotLobbyPage</td><td>Bot game lobby — solo vs AI</td></tr>
+            <tr><td class="mono">/history</td><td>HandHistoryPage</td><td>Hand browser with tag, date, scenario filters</td></tr>
+            <tr><td class="mono">/analysis</td><td>AnalysisPage</td><td>Aggregate tag stats and drill-down charts</td></tr>
+            <tr><td class="mono">/leaderboard</td><td>LeaderboardPage</td><td>Chip-based player rankings</td></tr>
+            <tr><td class="mono">/settings</td><td>SettingsPage</td><td>Account settings, BB-view toggle, password</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Admin Routes (require admin:access)</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Path</th><th>Component</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">/admin/users</td><td>UserManagement</td><td>User CRUD, role assignment, status management</td></tr>
+            <tr><td class="mono">/admin/crm</td><td>PlayerCRM</td><td>Student notes, tags, coach sessions, snapshots</td></tr>
+            <tr><td class="mono">/admin/hands</td><td>HandBuilder</td><td>Scenario/drill designer for coached sessions</td></tr>
+            <tr><td class="mono">/admin/tournaments</td><td>TournamentSetup</td><td>Create and manage standalone tournaments</td></tr>
+            <tr><td class="mono">/admin/referee</td><td>RefereeDashboard</td><td>Table oversight, disputes, moderator management</td></tr>
+            <tr><td class="mono">/admin/alerts</td><td>CoachAlertsPage</td><td>Coach intelligence alert feed + config</td></tr>
+            <tr><td class="mono">/admin/stable</td><td>StableOverviewPage</td><td>All students overview with progress reports and prep briefs</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>All routes fall through to <code>/lobby</code> (which bounces to <code>/login</code> if unauthenticated).</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── API REFERENCE ───────────────────────────────────────── -->
+<div id="page-api" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Backend</div>
+    <h1>API Reference</h1>
+    <p>Express REST on port 3001. All protected routes require <code>Authorization: Bearer &lt;jwt&gt;</code>. Tokens issued at login, expire after 7 days.</p>
+  </div>
+  <div class="page-body">
+    <div class="api-layout">
+      <div class="api-subnav">
+        <div class="api-subnav-label">Groups</div>
+        <a class="api-subnav-item active" data-sub="api-auth">Auth</a>
+        <a class="api-subnav-item" data-sub="api-tables">Tables</a>
+        <a class="api-subnav-item" data-sub="api-hands">Hands &amp; Tags</a>
+        <a class="api-subnav-item" data-sub="api-players">Players &amp; Chips</a>
+        <a class="api-subnav-item" data-sub="api-coach">Coach Intel</a>
+        <a class="api-subnav-item" data-sub="api-tournaments">Tournaments</a>
+        <a class="api-subnav-item" data-sub="api-playlists">Playlists</a>
+        <a class="api-subnav-item" data-sub="api-announcements">Announcements</a>
+        <a class="api-subnav-item" data-sub="api-admin">Admin</a>
+      </div>
+      <div>
+
+        <div id="api-auth" class="api-pane active">
+          <h2>Auth</h2>
+          <p class="desc">Login, registration, password reset. Closed system — credentials verified against players.csv (bcrypt).</p>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/auth/login<span class="chip pub">public</span></div><div class="ep-desc">Login — returns <code>{stableId, name, role, token}</code></div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/auth/register<span class="chip pub">rate-limited</span></div><div class="ep-desc">Student self-registration — creates trial account (7 days / 20 hands)</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/auth/register-coach<span class="chip pub">rate-limited</span></div><div class="ep-desc">Coach application — requires admin approval before activation</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/auth/reset-password<span class="chip auth">auth</span></div><div class="ep-desc">Reset own password</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/auth/permissions<span class="chip auth">auth</span></div><div class="ep-desc">Return current user's full permission key set</div></div></div>
+        </div>
+
+        <div id="api-tables" class="api-pane">
+          <h2>Tables &amp; Presets</h2>
+          <p class="desc">Table lifecycle management. Privacy modes: open / school / private. Bot tables are separate (see below).</p>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/tables<span class="chip auth">auth</span></div><div class="ep-desc">List non-completed tables merged with live SharedState</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/tables<span class="chip perm">table:create</span></div><div class="ep-desc">Create table — payload: name, mode, privacy, config, scheduledFor</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/tables/:id<span class="chip auth">auth</span></div><div class="ep-desc">Single table detail + live status</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/tables/:id<span class="chip own">owner</span><span class="chip admin">admin</span></div><div class="ep-desc">Update table name, config, or privacy</div></div></div>
+          <div class="endpoint"><span class="method DELETE">DELETE</span><div><div class="ep-path">/api/tables/:id<span class="chip own">owner</span><span class="chip admin">admin</span></div><div class="ep-desc">Close and archive table</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/tables/:id/controller<span class="chip own">owner</span></div><div class="ep-desc">Transfer controller to another connected socket</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/tables/:id/invited<span class="chip own">owner</span></div><div class="ep-desc">List invited players for private table</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/tables/:id/invited<span class="chip own">owner</span></div><div class="ep-desc">Add player to invite list</div></div></div>
+          <div class="endpoint"><span class="method DELETE">DELETE</span><div><div class="ep-path">/api/tables/:id/invited/:playerId<span class="chip own">owner</span></div><div class="ep-desc">Remove player from invite list</div></div></div>
+          <hr class="div"/>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/table-presets<span class="chip auth">auth</span></div><div class="ep-desc">List caller's saved table presets</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/table-presets<span class="chip auth">auth</span></div><div class="ep-desc">Save new preset from current config</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/table-presets/:id<span class="chip own">owner</span></div><div class="ep-desc">Update preset name or config</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/table-presets/:id/clone<span class="chip auth">auth</span></div><div class="ep-desc">Clone a preset</div></div></div>
+          <div class="endpoint"><span class="method DELETE">DELETE</span><div><div class="ep-path">/api/table-presets/:id<span class="chip own">owner</span></div><div class="ep-desc">Delete preset</div></div></div>
+          <hr class="div"/>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/bot-tables<span class="chip auth">auth</span></div><div class="ep-desc">Create bot table — payload: name, difficulty (easy|medium|hard), humanSeats, blinds</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/bot-tables<span class="chip auth">auth</span></div><div class="ep-desc">List bot tables visible to caller</div></div></div>
+        </div>
+
+        <div id="api-hands" class="api-pane">
+          <h2>Hands, Tags &amp; Annotations</h2>
+          <p class="desc">Hand log browser with tag filtering. Students see own hands only; coaches/admins see all. Annotations are action-level notes.</p>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/hands/history<span class="chip auth">auth</span></div><div class="ep-desc">Paginated hand browser — params: <code>playerId, tags, startDate, endDate, mistakesOnly, scenariosOnly, limit, offset</code></div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/hands/tags<span class="chip auth">auth</span></div><div class="ep-desc">All distinct tags in the system (for filter dropdowns)</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/hands/tables<span class="chip auth">auth</span></div><div class="ep-desc">Distinct table IDs seen in hand log</div></div></div>
+          <hr class="div"/>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/hands/:id/annotations<span class="chip coach">coach</span></div><div class="ep-desc">Add annotation to a specific action in a hand</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/hands/:id/annotations<span class="chip auth">auth</span></div><div class="ep-desc">List annotations for a hand</div></div></div>
+          <div class="endpoint"><span class="method DELETE">DELETE</span><div><div class="ep-path">/api/hands/:id/annotations/:annoId<span class="chip coach">coach</span></div><div class="ep-desc">Delete annotation</div></div></div>
+          <hr class="div"/>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/analysis/tags<span class="chip auth">auth</span></div><div class="ep-desc">Aggregate tag counts by type per player — requires analysis feature gate</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/analysis/hands-by-tag<span class="chip auth">auth</span></div><div class="ep-desc">Hands matching a specific tag (for Analysis drill-down)</div></div></div>
+        </div>
+
+        <div id="api-players" class="api-pane">
+          <h2>Players &amp; Chip Bank</h2>
+          <p class="desc">Player profiles, stats, and the persistent chip economy.</p>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/players<span class="chip auth">auth</span></div><div class="ep-desc">List all players with stats</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/players/:stableId/hover-stats<span class="chip pub">public</span></div><div class="ep-desc">Quick stats for hover tooltip — no auth required</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/players/:stableId/stats<span class="chip auth">auth</span></div><div class="ep-desc">Full stats: VPIP, PFR, WTSD, WSD, aggression factor</td></div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/players/:stableId/hands<span class="chip auth">auth</span></div><div class="ep-desc">Player's paginated hand history</div></div></div>
+          <hr class="div"/>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/players/:id/chip-balance<span class="chip own">own</span><span class="chip coach">coach</span></div><div class="ep-desc">Current chip bank balance</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/players/:id/chip-history<span class="chip own">own</span><span class="chip coach">coach</span></div><div class="ep-desc">Chip transaction log with timestamps and notes</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/players/:id/chips<span class="chip coach">coach</span></div><div class="ep-desc">Coach reload — add chips to student balance</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/players/:id/chip-adjust<span class="chip admin">admin</span></div><div class="ep-desc">Admin manual adjust (+ or −) with audit note</div></div></div>
+          <hr class="div"/>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/sessions/current<span class="chip auth">auth</span></div><div class="ep-desc">Active session info</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/health<span class="chip pub">public</span></div><div class="ep-desc">Health check — pings Supabase, returns 503 if DB is down</div></div></div>
+        </div>
+
+        <div id="api-coach" class="api-pane">
+          <h2>Coach Intelligence</h2>
+          <p class="desc">Alerts, progress reports, prep briefs. All require coach+ role. Data powered by BaselineService rolling 30-day windows.</p>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/coach/alerts<span class="chip coach">coach</span></div><div class="ep-desc">Get active alerts for coach — pass <code>?refresh=1</code> to regenerate</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/coach/alerts/:id<span class="chip coach">coach</span></div><div class="ep-desc">Mark alert dismissed or acted_on</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/coach/alerts/config<span class="chip coach">coach</span></div><div class="ep-desc">Get alert detection thresholds</div></div></div>
+          <div class="endpoint"><span class="method PUT">PUT</span><div><div class="ep-path">/api/coach/alerts/config/:alertType<span class="chip coach">coach</span></div><div class="ep-desc">Update threshold for a specific alert type</div></div></div>
+          <hr class="div"/>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/coach/reports/stable<span class="chip coach">coach</span></div><div class="ep-desc">Stable-wide summary across all students</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/coach/students/:id/reports<span class="chip coach">coach</span></div><div class="ep-desc">List progress reports for student</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/coach/students/:id/reports/:rid<span class="chip coach">coach</span></div><div class="ep-desc">Single report detail — stats, leaks, grade, AI narrative</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/coach/students/:id/reports<span class="chip coach">coach</span></div><div class="ep-desc">Generate custom report — payload: periodStart, periodEnd, reportType</div></div></div>
+          <hr class="div"/>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/coach/students/:id/prep-brief<span class="chip coach">coach</span></div><div class="ep-desc">Get cached prep brief for upcoming session</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/coach/students/:id/prep-brief/refresh<span class="chip coach">coach</span></div><div class="ep-desc">Force-regenerate session prep brief</div></div></div>
+        </div>
+
+        <div id="api-tournaments" class="api-pane">
+          <h2>Standalone Tournaments</h2>
+          <p class="desc">Full tournament lifecycle separate from table sessions. Coaches manage; referees can also manage (tournament:manage permission).</p>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/tournaments<span class="chip coach">coach</span></div><div class="ep-desc">Create tournament with blind structure and starting stacks</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/tournaments<span class="chip coach">coach</span></div><div class="ep-desc">List all tournaments (coach+ only)</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/tournaments/:id<span class="chip coach">coach</span></div><div class="ep-desc">Tournament detail with players, standings, and current blind level</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/tournaments/:id/register<span class="chip coach">coach</span></div><div class="ep-desc">Register a player for the tournament</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/tournaments/:id/status<span class="chip coach">coach</span></div><div class="ep-desc">Update status: pending → running → paused → finished</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/tournaments/:id/standings<span class="chip auth">auth</span></div><div class="ep-desc">Current standings — chip counts and eliminations</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/tournaments/:id/standings/:playerId<span class="chip coach">coach</span></div><div class="ep-desc">Update player chips or mark eliminated</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/tournaments/:id/level<span class="chip coach">coach</span></div><div class="ep-desc">Advance to next blind level</div></div></div>
+        </div>
+
+        <div id="api-playlists" class="api-pane">
+          <h2>Playlists</h2>
+          <p class="desc">Curated hand collections for teaching. Mutations require playlist:manage permission. Loading onto a live table uses socket events.</p>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/playlists<span class="chip auth">auth</span></div><div class="ep-desc">List all playlists — requires playlists feature gate</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/playlists<span class="chip perm">playlist:manage</span></div><div class="ep-desc">Create playlist</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/playlists/:id/hands<span class="chip auth">auth</span></div><div class="ep-desc">Hands in playlist with metadata</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/playlists/:id/hands<span class="chip perm">playlist:manage</span></div><div class="ep-desc">Add hand to playlist</div></div></div>
+          <div class="endpoint"><span class="method DELETE">DELETE</span><div><div class="ep-path">/api/playlists/:id/hands/:handId<span class="chip perm">playlist:manage</span></div><div class="ep-desc">Remove hand from playlist</div></div></div>
+          <div class="endpoint"><span class="method DELETE">DELETE</span><div><div class="ep-path">/api/playlists/:id<span class="chip perm">playlist:manage</span></div><div class="ep-desc">Delete playlist</div></div></div>
+        </div>
+
+        <div id="api-announcements" class="api-pane">
+          <h2>Announcements</h2>
+          <p class="desc">Coach broadcasts to all students, a group, or an individual. Players receive them in-app with unread badge tracking.</p>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/announcements<span class="chip coach">coach</span></div><div class="ep-desc">Create announcement — payload: title, body, targetType (all|group|individual), targetId</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/announcements<span class="chip auth">auth</span></div><div class="ep-desc">List announcements visible to caller</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/announcements/unread-count<span class="chip auth">auth</span></div><div class="ep-desc">Integer count for notification badge</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/announcements/:id/read<span class="chip auth">auth</span></div><div class="ep-desc">Mark announcement as read</div></div></div>
+        </div>
+
+        <div id="api-admin" class="api-pane">
+          <h2>Admin</h2>
+          <p class="desc">All admin routes require <code>admin:access</code> permission. Prefixed <code>/api/admin/</code>.</p>
+
+          <h3 style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin:16px 0 8px;">Users</h3>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/admin/users<span class="chip admin">admin</span></div><div class="ep-desc">List all users with roles and status</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/admin/users<span class="chip admin">admin</span></div><div class="ep-desc">Create user account</div></div></div>
+          <div class="endpoint"><span class="method PUT">PUT</span><div><div class="ep-path">/api/admin/users/:id<span class="chip admin">admin</span></div><div class="ep-desc">Update profile fields</div></div></div>
+          <div class="endpoint"><span class="method DELETE">DELETE</span><div><div class="ep-path">/api/admin/users/:id<span class="chip admin">admin</span></div><div class="ep-desc">Delete account</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/admin/users/:id/role<span class="chip admin">admin</span></div><div class="ep-desc">Assign or change role</div></div></div>
+          <div class="endpoint"><span class="method PATCH">PATCH</span><div><div class="ep-path">/api/admin/users/:id/status<span class="chip admin">admin</span></div><div class="ep-desc">Set status: active / suspended / pending</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/admin/users/:id/reset-password<span class="chip admin">admin</span></div><div class="ep-desc">Force-reset user password</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/admin/users/export-csv<span class="chip admin">admin</span></div><div class="ep-desc">Export full user list as CSV</div></div></div>
+
+          <h3 style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin:16px 0 8px;">CRM &amp; Students</h3>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/admin/players/:id/crm<span class="chip admin">admin</span></div><div class="ep-desc">Full CRM profile: notes, tags, sessions, snapshots</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/admin/players/:id/notes<span class="chip admin">admin</span></div><div class="ep-desc">Add CRM note</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/admin/players/:id/snapshots<span class="chip admin">admin</span></div><div class="ep-desc">Performance snapshots list</div></div></div>
+          <div class="endpoint"><span class="method POST">POST</span><div><div class="ep-path">/api/admin/snapshots/compute<span class="chip admin">admin</span></div><div class="ep-desc">Compute and store new snapshot for student</div></div></div>
+          <div class="endpoint"><span class="method GET">GET</span><div><div class="ep-path">/api/admin/players/:id/groups<span class="chip admin">admin</span></div><div class="ep-desc">Groups the player belongs to</div></div></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SOCKET EVENTS ───────────────────────────────────────── -->
+<div id="page-socket" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Backend</div>
+    <h1>Socket Events</h1>
+    <p>All real-time game state flows over Socket.io. Auth is checked on handshake via <code>socketAuthMiddleware</code> — unauthenticated connections are rejected before any handler runs.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <div class="socket-grid">
+        <div class="socket-col">
+          <h3>Client &#8594; Server</h3>
+
+          <div class="event-group">
+            <div class="event-group-label">Connection</div>
+            <div class="event-item"><span class="event-name">join_room</span><span class="event-desc">Join a table room by tableId. Lazy-creates SessionManager if needed.</span></div>
+            <div class="event-item"><span class="event-name">disconnect</span><span class="event-desc">Auto-fired by Socket.io on connection close</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Game Lifecycle</div>
+            <div class="event-item"><span class="event-name">start_game</span><span class="event-desc">Deal first hand on the table</span></div>
+            <div class="event-item"><span class="event-name">reset_hand</span><span class="event-desc">Abandon current hand, reset state</span></div>
+            <div class="event-item"><span class="event-name">pause_game</span><span class="event-desc">Pause the table (coach only)</span></div>
+            <div class="event-item"><span class="event-name">resume_game</span><span class="event-desc">Resume from pause</span></div>
+            <div class="event-item"><span class="event-name">transfer_controller</span><span class="event-desc">Pass coach controller to another socket</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Betting</div>
+            <div class="event-item"><span class="event-name">place_bet</span><span class="event-desc">Submit action: fold / call / check / raise / allin</span></div>
+            <div class="event-item"><span class="event-name">undo_action</span><span class="event-desc">Revert last action (coach only)</span></div>
+            <div class="event-item"><span class="event-name">award_pot</span><span class="event-desc">Manually award pot to a player</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Coach Controls</div>
+            <div class="event-item"><span class="event-name">manual_deal_card</span><span class="event-desc">Override deal with specific card to a position</span></div>
+            <div class="event-item"><span class="event-name">rollback_street</span><span class="event-desc">Undo the last dealt community street</span></div>
+            <div class="event-item"><span class="event-name">force_next_street</span><span class="event-desc">Skip directly to next street</span></div>
+            <div class="event-item"><span class="event-name">adjust_stack</span><span class="event-desc">Modify a specific player's chip stack</span></div>
+            <div class="event-item"><span class="event-name">set_player_in_hand</span><span class="event-desc">Add / remove player from current hand</span></div>
+            <div class="event-item"><span class="event-name">set_blind_levels</span><span class="event-desc">Update SB / BB / Ante live</span></div>
+            <div class="event-item"><span class="event-name">set_mode</span><span class="event-desc">Switch table mode mid-session</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Hand Config &amp; Scenarios</div>
+            <div class="event-item"><span class="event-name">set_hand_config</span><span class="event-desc">Configure next hand: cards, stacks, blinds, positions</span></div>
+            <div class="event-item"><span class="event-name">open_config_phase</span><span class="event-desc">Enter hand configuration phase before dealing</span></div>
+            <div class="event-item"><span class="event-name">start_configured_hand</span><span class="event-desc">Deal the hand using the current configuration</span></div>
+            <div class="event-item"><span class="event-name">load_scenario</span><span class="event-desc">Load a saved scenario configuration</span></div>
+            <div class="event-item"><span class="event-name">create_scenario</span><span class="event-desc">Save current hand as a new scenario</span></div>
+            <div class="event-item"><span class="event-name">run_scenario</span><span class="event-desc">Execute a scenario from the library</span></div>
+            <div class="event-item"><span class="event-name">save_scenario_to_playlist</span><span class="event-desc">Save current hand config into a playlist</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Playlists</div>
+            <div class="event-item"><span class="event-name">get_playlists</span><span class="event-desc">Fetch playlists available for this table</span></div>
+            <div class="event-item"><span class="event-name">activate_playlist</span><span class="event-desc">Load a playlist onto the table</span></div>
+            <div class="event-item"><span class="event-name">deactivate_playlist</span><span class="event-desc">Unload active playlist</span></div>
+            <div class="event-item"><span class="event-name">advance_playlist</span><span class="event-desc">Move to next hand in playlist</span></div>
+            <div class="event-item"><span class="event-name">rewind_playlist</span><span class="event-desc">Go back to previous hand in playlist</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Replay</div>
+            <div class="event-item"><span class="event-name">enter_replay_mode</span><span class="event-desc">Load a hand for step-by-step replay</span></div>
+            <div class="event-item"><span class="event-name">exit_replay_mode</span><span class="event-desc">Exit replay, return to live state</span></div>
+            <div class="event-item"><span class="event-name">step_forward</span><span class="event-desc">Advance one action in replay</span></div>
+            <div class="event-item"><span class="event-name">step_backward</span><span class="event-desc">Go back one action in replay</span></div>
+            <div class="event-item"><span class="event-name">jump_to_action</span><span class="event-desc">Jump to specific action index</span></div>
+            <div class="event-item"><span class="event-name">replay_branch</span><span class="event-desc">Branch into alternate action line</span></div>
+            <div class="event-item"><span class="event-name">replay_unbranch</span><span class="event-desc">Return from branch to original line</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Visual Tools</div>
+            <div class="event-item"><span class="event-name">toggle_equity_display</span><span class="event-desc">Show / hide equity percentages for all players</span></div>
+            <div class="event-item"><span class="event-name">toggle_range_display</span><span class="event-desc">Show / hide range matrix overlays</span></div>
+            <div class="event-item"><span class="event-name">toggle_heatmap_display</span><span class="event-desc">Show / hide player position heatmap</span></div>
+            <div class="event-item"><span class="event-name">share_range</span><span class="event-desc">Broadcast coach's range grid to all players</span></div>
+            <div class="event-item"><span class="event-name">clear_shared_range</span><span class="event-desc">Remove shared range from display</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Tournament</div>
+            <div class="event-item"><span class="event-name">join_tournament</span><span class="event-desc">Join a tournament table</span></div>
+            <div class="event-item"><span class="event-name">get_tournament_state</span><span class="event-desc">Fetch current tournament status and standings</span></div>
+            <div class="event-item"><span class="event-name">update_tournament_level</span><span class="event-desc">Advance blind level in a tournament</span></div>
+            <div class="event-item"><span class="event-name">update_standing</span><span class="event-desc">Update a player's chip count or elimination status</span></div>
+          </div>
+        </div>
+
+        <div class="socket-col">
+          <h3>Server &#8594; Client</h3>
+
+          <div class="event-group">
+            <div class="event-group-label">Connection</div>
+            <div class="event-item"><span class="event-name">room_joined</span><span class="event-desc">Confirms join, sends initial full game state</span></div>
+            <div class="event-item"><span class="event-name">sync_error</span><span class="event-desc">State sync failure — triggers client re-request</span></div>
+            <div class="event-item"><span class="event-name">coach_disconnected</span><span class="event-desc">Coach left the table</span></div>
+            <div class="event-item"><span class="event-name">error</span><span class="event-desc">Action validation error (invalid bet, wrong actor, etc.)</span></div>
+            <div class="event-item"><span class="event-name">notification</span><span class="event-desc">Info toast (undo confirmed, reload, scenario loaded)</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Game State</div>
+            <div class="event-item"><span class="event-name">game_state</span><span class="event-desc">Full table state broadcast after every action. Used by useGameState hook.</span></div>
+            <div class="event-item"><span class="event-name">hand_started</span><span class="event-desc">New hand — includes dealt hole cards per player</span></div>
+            <div class="event-item"><span class="event-name">hand_complete</span><span class="event-desc">Hand ended — winner, final pot, updated stacks</span></div>
+            <div class="event-item"><span class="event-name">showdown_result</span><span class="event-desc">Hole card reveal and hand strength comparison</span></div>
+            <div class="event-item"><span class="event-name">session_stats</span><span class="event-desc">Updated VPIP, PFR, session hand count</span></div>
+            <div class="event-item"><span class="event-name">hand_tags_saved</span><span class="event-desc">Analyzer completed — auto-tags written to DB</span></div>
+            <div class="event-item"><span class="event-name">table_config</span><span class="event-desc">Updated table configuration (blinds, mode, etc.)</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Scenarios &amp; Playlists</div>
+            <div class="event-item"><span class="event-name">scenario_configs</span><span class="event-desc">Available scenario configurations for this table</span></div>
+            <div class="event-item"><span class="event-name">scenario_saved</span><span class="event-desc">Confirm scenario was saved to playlist</span></div>
+            <div class="event-item"><span class="event-name">playlist_state</span><span class="event-desc">Active playlist info + current scenario index</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Visual Features</div>
+            <div class="event-item"><span class="event-name">equity_settings</span><span class="event-desc">Toggle state for equity display</span></div>
+            <div class="event-item"><span class="event-name">equity_update</span><span class="event-desc">Live equity percentages for current board state</span></div>
+            <div class="event-item"><span class="event-name">range_shared</span><span class="event-desc">Coach's range grid broadcast to all players</span></div>
+          </div>
+
+          <div class="event-group">
+            <div class="event-group-label">Replay</div>
+            <div class="event-item"><span class="event-name">replay_loaded</span><span class="event-desc">Replay ready — full hand + ordered action list</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── AUTH SYSTEM ─────────────────────────────────────────── -->
+<div id="page-auth" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Backend</div>
+    <h1>Auth System</h1>
+    <p>Closed system — no external OAuth. Players are defined in <code>players.csv</code> or the DB. RBAC permissions are fetched from Supabase and cached in-memory.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <h2>Login Flow</h2>
+      <div class="step-list">
+        <div class="step"><div class="step-num">1</div><div class="step-body">
+          <strong>POST /api/auth/login</strong>
+          <p>Checks display_name + password against <code>players.csv</code> (primary) or the DB (fallback). Bcrypt comparison with 12 rounds.</p>
+        </div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-body">
+          <strong>JwtService.sign()</strong>
+          <p>Issues 7-day JWT containing <code>stableId</code>, <code>name</code>, and <code>role</code>. Signed with <code>SESSION_SECRET</code>. Server exits at startup if key is missing.</p>
+        </div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-body">
+          <strong>Client storage</strong>
+          <p>JWT stored as <code>poker_trainer_jwt</code> in localStorage. Injected by <code>apiFetch()</code> as <code>Authorization: Bearer</code>. stableId stored as <code>poker_trainer_player_id</code>.</p>
+        </div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-body">
+          <strong>Middleware enforcement</strong>
+          <p>REST: <code>requireAuth</code> verifies JWT → <code>requirePermission('key')</code> checks DB cache. Socket: <code>socketAuthMiddleware</code> (io.use()) + <code>requireCoach(socket)</code> per-event guards.</p>
+        </div></div>
+      </div>
+      <div class="notice"><strong>No Supabase in the browser.</strong> <code>client/src/lib/supabase.js</code> is a Proxy stub that throws on access. All DB reads go through authenticated Express routes.</div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Dual Auth Paths</h2>
+      <div class="notice blue"><strong>ISS-99:</strong> Two auth paths currently run simultaneously. <code>players.csv</code> is primary (bcrypt lookup). The DB-backed migration exists but is not fully cut over. Both work in parallel.</div>
+      <div class="two-col">
+        <div>
+          <h3>players.csv (primary)</h3>
+          <div class="code-wrap"><div class="code-head"><span>Format</span></div><div class="code-body">name,bcrypt_hash,role
+alice,$2b$12$...,coach
+bob,$2b$12$...,player</div></div>
+          <p style="font-size:13px;color:var(--text-sub);">After editing, run: <code>node scripts/hash-passwords.js</code></p>
+        </div>
+        <div>
+          <h3>DB-backed (secondary)</h3>
+          <p style="font-size:13px;color:var(--text-sub);">Self-registered users (via /register) only exist in the DB. coaches registered via /register-coach also land in the DB. CSV users do not have DB rows unless manually added.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Permission Cache</h2>
+      <p>On first authed request, <code>getPlayerPermissions(playerId, roleHint)</code> fetches from <code>player_roles → roles → role_permissions → permissions</code> and caches the result in a server-side <code>Map</code>. Subsequent requests hit the cache.</p>
+      <p>Cache is invalidated via <code>invalidatePermissionCache(playerId)</code> — called automatically after role changes via admin endpoints.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── COACH SERVICES ──────────────────────────────────────── -->
+<div id="page-services" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Backend</div>
+    <h1>Coach Intelligence Services</h1>
+    <p>Five services power the coaching intelligence layer. They sit between the API routes and the DB, consuming baseline stats to generate alerts, reports, and briefs. The AI narrator is optional.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <div class="service-grid">
+
+        <div class="service-card blue">
+          <div class="service-name">BaselineService</div>
+          <div class="service-path">server/services/BaselineService.js</div>
+          <div class="service-desc">Computes and stores 30-day rolling baselines for every student. Foundation for all alert and report accuracy.</div>
+          <ul>
+            <li>Writes <code>student_baselines</code> table</li>
+            <li>Metrics: VPIP, PFR, 3-bet %, AF, mistake rates, hands/week</li>
+            <li>Required before alerts or reports yield meaningful data</li>
+          </ul>
+        </div>
+
+        <div class="service-card amber">
+          <div class="service-name">AlertService</div>
+          <div class="service-path">server/services/AlertService.js</div>
+          <div class="service-desc">Detects coaching-relevant events by comparing current metrics against baselines. Returns severity-ranked alert list.</div>
+          <ul>
+            <li><strong>InactivityDetector</strong> — No recent sessions</li>
+            <li><strong>VolumeDropDetector</strong> — Hands/week declined</li>
+            <li><strong>MistakeSpikeDetector</strong> — Mistake rate increased</li>
+            <li><strong>LosingStreakDetector</strong> — Recent sessions losing</li>
+            <li><strong>RegressionDetector</strong> — Key stat regression</li>
+            <li><strong>MilestoneDetector</strong> — Positive achievements</li>
+            <li>Ignores alerts below 0.2 severity (milestones bypass)</li>
+            <li>Deduplicates — updates existing rather than inserting</li>
+          </ul>
+        </div>
+
+        <div class="service-card green">
+          <div class="service-name">ProgressReportService</div>
+          <div class="service-path">server/services/ProgressReportService.js</div>
+          <div class="service-desc">Generates weekly, monthly, or custom date-range progress reports with 8 sections and a 0–100 grade.</div>
+          <ul>
+            <li>Core stats: VPIP, PFR, 3-bet %, WTSD, W$SD, aggression</li>
+            <li>Mistake rates: open limp %, cold call 3-bet %, equity fold %</li>
+            <li>Leak evolution (improvement / regression delta)</li>
+            <li>Idempotent upsert into <code>progress_reports</code></li>
+            <li>Passes data to NarratorService for narrative summary</li>
+            <li>Stable overview aggregates across all students</li>
+          </ul>
+        </div>
+
+        <div class="service-card purple">
+          <div class="service-name">SessionPrepService</div>
+          <div class="service-path">server/services/SessionPrepService.js</div>
+          <div class="service-desc">Generates a pre-session brief for an upcoming coaching session. Cached and refreshable.</div>
+          <ul>
+            <li>Recent leaks (last 50 hands)</li>
+            <li>Rolling 30-day baseline stats</li>
+            <li>Active alerts for the student</li>
+            <li>Session streak (hours since last play)</li>
+            <li>Total + weekly hand counts</li>
+            <li>Passes to NarratorService for readable paragraph</li>
+          </ul>
+        </div>
+
+        <div class="service-card teal">
+          <div class="service-name">NarratorService</div>
+          <div class="service-path">server/ai/NarratorService.js</div>
+          <div class="service-desc">Turns structured coaching data into readable prose using Claude Haiku. Never in a critical path — always optional.</div>
+          <ul>
+            <li>Model: <code>claude-haiku-4-5-20251001</code></li>
+            <li><code>narrateAlerts()</code> — 3–5 sentence alert digest</li>
+            <li><code>narratePrepBrief()</code> — session overview paragraph</li>
+            <li><code>narrateProgressReport()</code> — report summary</li>
+            <li><code>narrateStableOverview()</code> — stable-wide summary</li>
+            <li>Returns <code>null</code> if API key absent or call fails</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Service Dependency Chain</h2>
+      <div class="code-wrap">
+        <div class="code-head"><span>Dependency Flow</span></div>
+        <div class="code-body"><span class="v">BaselineService</span>          <span class="c">← must run first; all others depend on student_baselines</span>
+    ↓
+<span class="v">AlertService</span>             <span class="c">← reads baselines, writes alert_instances</span>
+<span class="v">ProgressReportService</span>    <span class="c">← reads baselines + hand_tags, writes progress_reports</span>
+<span class="v">SessionPrepService</span>       <span class="c">← reads baselines + alert_instances, writes session_prep_briefs</span>
+    ↓
+<span class="v">NarratorService</span>          <span class="c">← receives structured data, returns narrative strings (optional)</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── HAND ANALYZER ───────────────────────────────────────── -->
+<div id="page-analyzer" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Data</div>
+    <h1>Hand Analyzer</h1>
+    <p>10 independent analyzers run in parallel after every hand ends. Tags are written atomically to <code>hand_tags</code>. Coach tags are never touched by the auto-analyzer.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <h2>Pipeline</h2>
+      <div class="code-wrap"><div class="code-head"><span>server/game/AnalyzerService.js</span></div><div class="code-body"><span class="c">// Fired by gameLifecycle.js after HandLogger.endHand() completes</span>
+<span class="k">analyzeAndTagHand</span>(handId)
+  ↓ <span class="v">buildAnalyzerContext</span>()   <span class="c">// 3 parallel DB fetches + enrichment</span>
+     actions enriched with sizingRatio
+     byStreet map, position map, potByStreet
+     memoized <span class="v">evaluateAt</span>(playerId, street)
+     botPlayerIds Set (excluded from player-level tags)
+  ↓ <span class="v">Promise.allSettled</span>([...10 analyzers...])
+     <span class="c">// One crashing does not block others</span>
+  ↓ validate TagResult shape
+  ↓ deduplicate hand-level and player-level tags
+  ↓ filter bot players from player-level tags
+  ↓ <span class="v">replaceAutoTags</span>(handId, tagRows)
+     DELETE auto/mistake/sizing tags → INSERT new batch
+     coach tags untouched</div></div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Scoping</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Scope</th><th>player_id</th><th>action_id</th><th>Example Tags</th></tr></thead>
+          <tbody>
+            <tr><td>Hand-level</td><td>NULL</td><td>NULL</td><td>WALK, 3BET_POT, MONOTONE_BOARD, MULTIWAY, UNDO_USED</td></tr>
+            <tr><td>Player-level</td><td>UUID</td><td>NULL</td><td>OPEN_LIMP, C_BET_IP, SLOWPLAY, 3BET_BTN, VALUE_MISSED</td></tr>
+            <tr><td>Action-level</td><td>UUID</td><td>bigint</td><td>PROBE_BET, HERO_CALL, DREW_THIN, EQUITY_FOLD, FOLD_TO_PROBE</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>All 47 Tags</h2>
+      <div class="tab-nav">
+        <button class="tab-btn active" data-tab="tags-auto">Auto (35)</button>
+        <button class="tab-btn" data-tab="tags-mistake">Mistakes (9)</button>
+        <button class="tab-btn" data-tab="tags-sizing">Sizing (6)</button>
+      </div>
+
+      <div id="tags-auto" class="tab-pane active">
+        <div class="table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Tag</th><th>Analyzer</th><th>Scope</th><th>Trigger</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">WALK</td><td>Street</td><td>hand</td><td>BB wins uncontested, no board dealt</td></tr>
+              <tr><td class="mono">SAW_FLOP / TURN / RIVER</td><td>Street</td><td>hand</td><td>Board reached that length</td></tr>
+              <tr><td class="mono">WENT_TO_SHOWDOWN</td><td>Street</td><td>hand</td><td>phase_ended === 'showdown'</td></tr>
+              <tr><td class="mono">3BET_POT</td><td>Preflop</td><td>hand</td><td>≥2 preflop raises</td></tr>
+              <tr><td class="mono">FOUR_BET_POT</td><td>Preflop</td><td>hand</td><td>≥3 preflop raises</td></tr>
+              <tr><td class="mono">SQUEEZE_POT</td><td>Preflop</td><td>hand</td><td>Raise after raise → call sequence</td></tr>
+              <tr><td class="mono">ALL_IN_PREFLOP</td><td>Preflop</td><td>hand</td><td>Any all-in preflop</td></tr>
+              <tr><td class="mono">LIMPED_POT</td><td>Preflop</td><td>hand</td><td>Voluntary calls, no raise</td></tr>
+              <tr><td class="mono">BTN_OPEN</td><td>Preflop</td><td>hand</td><td>First raise from button</td></tr>
+              <tr><td class="mono">BLIND_DEFENSE</td><td>Preflop</td><td>hand</td><td>BB called or re-raised a raise</td></tr>
+              <tr><td class="mono">C_BET</td><td>Postflop</td><td>hand</td><td>PF raiser bets first on flop</td></tr>
+              <tr><td class="mono">CHECK_RAISE</td><td>Postflop</td><td>hand</td><td>Check then raise on same street</td></tr>
+              <tr><td class="mono">BLUFF_CATCH</td><td>Postflop</td><td>hand</td><td>River caller wins at showdown</td></tr>
+              <tr><td class="mono">DONK_BET</td><td>Postflop</td><td>hand</td><td>Non-PF-raiser bets first on flop</td></tr>
+              <tr><td class="mono">RIVER_RAISE</td><td>Postflop</td><td>hand</td><td>Any raise on river</td></tr>
+              <tr><td class="mono">WHALE_POT</td><td>PotType</td><td>hand</td><td>final_pot &gt; 150× BB</td></tr>
+              <tr><td class="mono">MULTIWAY</td><td>PotType</td><td>hand</td><td>3+ players saw flop</td></tr>
+              <tr><td class="mono">SHORT_STACK / DEEP_STACK</td><td>PotType</td><td>hand</td><td>Any player &lt;20BB or &gt;100BB</td></tr>
+              <tr><td class="mono">OVERBET</td><td>PotType</td><td>hand</td><td>Any bet &gt; 2× pot (hand-level signal)</td></tr>
+              <tr><td class="mono">RAINBOW / TWO_TONE / MONOTONE_BOARD</td><td>Board</td><td>hand</td><td>Flop suit distribution</td></tr>
+              <tr><td class="mono">UNPAIRED / PAIRED / TRIPS_BOARD</td><td>Board</td><td>hand</td><td>Flop rank pairing</td></tr>
+              <tr><td class="mono">CONNECTED / ONE_GAP / DISCONNECTED_BOARD</td><td>Board</td><td>hand</td><td>Flop connectivity (unpaired only)</td></tr>
+              <tr><td class="mono">ACE_HIGH / BROADWAY / MID / LOW_BOARD</td><td>Board</td><td>hand</td><td>Flop card height</td></tr>
+              <tr><td class="mono">WET_BOARD / DRY_BOARD</td><td>Board</td><td>hand</td><td>Flush + straight draw presence</td></tr>
+              <tr><td class="mono">C_BET_IP / C_BET_OOP</td><td>Positional</td><td>player</td><td>C-bet with / without position advantage</td></tr>
+              <tr><td class="mono">DONK_BET_BB</td><td>Positional</td><td>player</td><td>Donk bet specifically from BB</td></tr>
+              <tr><td class="mono">3BET_BTN / 3BET_SB</td><td>Positional</td><td>player</td><td>3-bet from BTN or SB</td></tr>
+              <tr><td class="mono">SQUEEZE_CO</td><td>Positional</td><td>player</td><td>Squeeze play from cutoff</td></tr>
+              <tr><td class="mono">SLOWPLAY</td><td>HandStrength</td><td>player</td><td>Monster hand (≥3OAK) on flop/turn, never bet</td></tr>
+              <tr><td class="mono">HERO_CALL</td><td>HandStrength</td><td>action</td><td>Called river bet with ≤ one pair at showdown</td></tr>
+              <tr><td class="mono">VALUE_MISSED</td><td>HandStrength</td><td>player</td><td>Had ≥2-pair every street, never bet/raised</td></tr>
+              <tr><td class="mono">THIN_VALUE_RAISE</td><td>HandStrength</td><td>action</td><td>Raised river with exactly one pair</td></tr>
+              <tr><td class="mono">VALUE_BACKED</td><td>Equity</td><td>action</td><td>Bet/raised with equity &gt; 70%</td></tr>
+              <tr><td class="mono">EQUITY_BLUFF</td><td>Equity</td><td>action</td><td>Bet/raised with equity &lt; 30%, got called</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tags-mistake" class="tab-pane">
+        <div class="table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Tag</th><th>Scope</th><th>Trigger</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">UNDO_USED</td><td>hand</td><td>Any action in the hand was reverted</td></tr>
+              <tr><td class="mono">OPEN_LIMP</td><td>player</td><td>Non-BB calls before any raise</td></tr>
+              <tr><td class="mono">OVERLIMP</td><td>player</td><td>Calls preflop when ≥1 limp already in</td></tr>
+              <tr><td class="mono">LIMP_RERAISE</td><td>player</td><td>Limped, then raised after a squeeze</td></tr>
+              <tr><td class="mono">COLD_CALL_3BET</td><td>player</td><td>Called a 3-bet with no prior investment</td></tr>
+              <tr><td class="mono">FOLD_TO_PROBE</td><td>action</td><td>Folded to a bet &lt; 25% of pot</td></tr>
+              <tr><td class="mono">MIN_RAISE</td><td>action</td><td>Raised to ≤ 2× the previous bet</td></tr>
+              <tr><td class="mono">DREW_THIN</td><td>action</td><td>Called a street bet with equity &lt; 25%</td></tr>
+              <tr><td class="mono">EQUITY_FOLD</td><td>action</td><td>Folded with equity &gt; 50%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tags-sizing" class="tab-pane">
+        <p>Action-level. Postflop bet/raise actions only. Bucket is determined by <code>amount / pot_at_action</code>.</p>
+        <div class="table-wrap">
+          <table class="doc-table">
+            <thead><tr><th>Tag</th><th>Ratio Range</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">PROBE_BET</td><td>&lt; 0.25</td></tr>
+              <tr><td class="mono">THIRD_POT_BET</td><td>0.25 – 0.50</td></tr>
+              <tr><td class="mono">HALF_POT_BET</td><td>0.50 – 0.80</td></tr>
+              <tr><td class="mono">POT_BET</td><td>0.80 – 1.10</td></tr>
+              <tr><td class="mono">OVERBET</td><td>1.10 – 2.00</td></tr>
+              <tr><td class="mono">OVERBET_JAM</td><td>&gt; 2.00</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── DB SCHEMA ───────────────────────────────────────────── -->
+<div id="page-schema" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Data</div>
+    <h1>DB Schema</h1>
+    <p>PostgreSQL via Supabase. 24 migration files applied in sequence. RLS enabled on all public tables; all server access uses the service-role key.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <h2>Migration History</h2>
+      <div class="migration-item"><span class="mig-id">001</span><span class="mig-desc">Core tables: <code>player_profiles</code>, <code>sessions</code>, <code>hands</code>, <code>hand_tags</code>, <code>hand_actions</code>, <code>hand_players</code>, <code>playlists</code>, leaderboard view</span></div>
+      <div class="migration-item"><span class="mig-id">002</span><span class="mig-desc">Phase 2 schema adjustments</span></div>
+      <div class="migration-item"><span class="mig-id">003</span><span class="mig-desc">Initial RLS policies (anon read — pre-auth era)</span></div>
+      <div class="migration-item"><span class="mig-id">004</span><span class="mig-desc">Phase 6 data collection fields on hand_actions</span></div>
+      <div class="migration-item"><span class="mig-id">005</span><span class="mig-desc">Session player stats table + auth-based RLS (replaces anon)</span></div>
+      <div class="migration-item"><span class="mig-id">006</span><span class="mig-desc">Hand Analyzer v2: <code>player_id</code> + <code>action_id</code> columns on <code>hand_tags</code>, <code>sizing</code> tag type, 3 partial unique indexes, <code>position</code> on <code>hand_actions</code></span></div>
+      <div class="migration-item"><span class="mig-id">007</span><span class="mig-desc">Alpha testing metrics: <code>alpha_logs</code> table</span></div>
+      <div class="migration-item"><span class="mig-id">008</span><span class="mig-desc">Full RBAC: <code>roles</code>, <code>permissions</code>, <code>role_permissions</code>, <code>player_roles</code>. Seeds 7 roles and 12 permission keys.</span></div>
+      <div class="migration-item"><span class="mig-id">009</span><span class="mig-desc">Extend <code>player_profiles</code> with auth and display fields (email, status, trial expiry)</span></div>
+      <div class="migration-item"><span class="mig-id">010</span><span class="mig-desc">First-class <code>tables</code> registry — persistent table metadata independent of live state</span></div>
+      <div class="migration-item"><span class="mig-id">011</span><span class="mig-desc"><code>scenario_configs</code> — saved hand drill configurations (deck state, positions, stacks)</span></div>
+      <div class="migration-item"><span class="mig-id">012</span><span class="mig-desc">Player CRM: <code>player_notes</code>, <code>player_tags</code>, <code>coaching_sessions</code>, <code>player_performance_snapshots</code></span></div>
+      <div class="migration-item"><span class="mig-id">013</span><span class="mig-desc"><code>tournament_configs</code> and <code>tournament_standings</code> (table-attached tournaments)</span></div>
+      <div class="migration-item"><span class="mig-id">014</span><span class="mig-desc">Future-proofing hooks for multi-school extensibility</span></div>
+      <div class="migration-item"><span class="mig-id">014b</span><span class="mig-desc">Trial system: <code>trial_expires_at</code>, <code>trial_hands_remaining</code>. New roles: <code>coached_student</code>, <code>solo_student</code>.</span></div>
+      <div class="migration-item"><span class="mig-id">015</span><span class="mig-desc">Table privacy enum (open / school / private), <code>controller_id</code>, <code>table_presets</code>, <code>invited_players</code></span></div>
+      <div class="migration-item"><span class="mig-id">015b</span><span class="mig-desc">Chip bank: <code>player_chip_bank</code>, <code>chip_transactions</code></span></div>
+      <div class="migration-item"><span class="mig-id">016</span><span class="mig-desc">Announcements: <code>announcements</code>, <code>announcement_reads</code></span></div>
+      <div class="migration-item"><span class="mig-id">017</span><span class="mig-desc">School management: <code>schools</code> table, student capacity, school assignments</span></div>
+      <div class="migration-item"><span class="mig-id">018</span><span class="mig-desc">Coach Intelligence: <code>student_baselines</code>, <code>alert_instances</code>, <code>alert_config</code>, <code>session_prep_briefs</code>, <code>progress_reports</code></span></div>
+      <div class="migration-item"><span class="mig-id">019</span><span class="mig-desc">Bot tables: <code>bot_tables</code> (separate from regular tables, shown in /bot-lobby)</span></div>
+      <div class="migration-item"><span class="mig-id">020</span><span class="mig-desc">Standalone tournaments: <code>tournaments</code>, <code>tournament_players</code> (independent of table sessions — POK-95)</span></div>
+      <div class="migration-item"><span class="mig-id">020b</span><span class="mig-desc"><code>coach_id</code> foreign key on <code>player_profiles</code> for explicit coach assignment</span></div>
+      <div class="migration-item"><span class="mig-id">021</span><span class="mig-desc"><code>hand_annotations</code> — action-level coach notes on hands <span class="mig-badge">pending production</span></span></div>
+      <div class="migration-item"><span class="mig-id">022</span><span class="mig-desc">Fix: announcement author NOT NULL constraint <span class="mig-badge">pending production</span></span></div>
+      <div class="migration-item"><span class="mig-id">023</span><span class="mig-desc">Schema fixes: position CHECK constraint, RLS policy corrections, leaderboard view updates <span class="mig-badge">pending production</span></span></div>
+      <div class="migration-item"><span class="mig-id">024</span><span class="mig-desc"><code>groups</code>, <code>player_groups</code> — stable / group management for targeted announcements and reporting</span></div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Key Tables by Domain</h2>
+      <div class="two-col">
+        <div>
+          <h3>Core Game</h3>
+          <div class="feature-item"><code>player_profiles</code><span> All user accounts</span></div>
+          <div class="feature-item"><code>sessions</code><span> Table sessions</span></div>
+          <div class="feature-item"><code>hands</code><span> Individual hands</span></div>
+          <div class="feature-item"><code>hand_actions</code><span> Every action with position + sizingRatio</span></div>
+          <div class="feature-item"><code>hand_players</code><span> Who was seated for each hand</span></div>
+          <div class="feature-item"><code>hand_tags</code><span> Auto + coach tags (3-level scoping)</span></div>
+          <div class="feature-item"><code>hand_annotations</code><span> Action-level notes (mig 021)</span></div>
+          <div class="feature-item"><code>leaderboard</code><span> Materialized chip ranking view</span></div>
+          <h3 style="margin-top:16px;">Tables &amp; Tournaments</h3>
+          <div class="feature-item"><code>tables</code><span> Table registry with privacy + controller</span></div>
+          <div class="feature-item"><code>table_presets</code><span> Saved table configurations</span></div>
+          <div class="feature-item"><code>invited_players</code><span> Per-table invitation list</span></div>
+          <div class="feature-item"><code>bot_tables</code><span> Bot-play tables (separate lobby)</span></div>
+          <div class="feature-item"><code>tournaments</code><span> Standalone tournaments (mig 020)</span></div>
+          <div class="feature-item"><code>tournament_players</code><span> Registration + standings</span></div>
+          <div class="feature-item"><code>scenario_configs</code><span> Saved drill configurations</span></div>
+        </div>
+        <div>
+          <h3>RBAC</h3>
+          <div class="feature-item"><code>roles</code><span> 7 role definitions</span></div>
+          <div class="feature-item"><code>permissions</code><span> 12 permission keys</span></div>
+          <div class="feature-item"><code>role_permissions</code><span> Role ↔ permission mapping</span></div>
+          <div class="feature-item"><code>player_roles</code><span> Player ↔ role assignment</span></div>
+          <h3 style="margin-top:16px;">Coaching</h3>
+          <div class="feature-item"><code>player_notes</code><span> CRM notes per student</span></div>
+          <div class="feature-item"><code>player_tags</code><span> CRM labels per student</span></div>
+          <div class="feature-item"><code>coaching_sessions</code><span> Session log per student</span></div>
+          <div class="feature-item"><code>player_performance_snapshots</code><span> Point-in-time stat snapshots</span></div>
+          <div class="feature-item"><code>student_baselines</code><span> 30-day rolling stat windows</span></div>
+          <div class="feature-item"><code>alert_instances</code><span> Active coaching alerts</span></div>
+          <div class="feature-item"><code>alert_config</code><span> Per-type alert thresholds</span></div>
+          <div class="feature-item"><code>session_prep_briefs</code><span> Cached pre-session overviews</span></div>
+          <div class="feature-item"><code>progress_reports</code><span> Periodic student reports</span></div>
+          <h3 style="margin-top:16px;">Platform</h3>
+          <div class="feature-item"><code>schools</code><span> School capacity + membership</span></div>
+          <div class="feature-item"><code>groups</code> / <code>player_groups</code><span> Named groups for targeting</span></div>
+          <div class="feature-item"><code>announcements</code> / <code>announcement_reads</code><span> Broadcast + read tracking</span></div>
+          <div class="feature-item"><code>player_chip_bank</code> / <code>chip_transactions</code><span> Persistent chip economy</span></div>
+          <div class="feature-item"><code>playlists</code><span> Hand collections for teaching</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── DEPLOYMENT ──────────────────────────────────────────── -->
+<div id="page-deploy" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Operations</div>
+    <h1>Deployment</h1>
+    <p>Hosted on Fly.io. Express serves the built React client statically. Scale-to-zero with ~1s cold-start.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <h2>Fly.io Config</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>App name</td><td>poker-trainer-ysav55</td></tr>
+            <tr><td>Region</td><td>iad (US East)</td></tr>
+            <tr><td>Memory</td><td>512 MB shared CPU</td></tr>
+            <tr><td>Scale-to-zero</td><td>Enabled — wakes in ~1s on first request</td></tr>
+            <tr><td>Idle timer</td><td><code>IDLE_TIMEOUT_MINUTES=20</code> in fly.toml</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Deploy Commands</h2>
+      <div class="code-wrap"><div class="code-head"><span>bash</span></div><div class="code-body"><span class="k">npm run build</span>                    <span class="c"># build React client</span>
+<span class="k">fly deploy</span>                        <span class="c"># deploy to Fly.io</span>
+<span class="k">fly secrets set</span> SESSION_SECRET=<span class="s">&lt;val&gt;</span> <span class="c"># set secrets</span>
+<span class="k">fly logs</span> --app poker-trainer-ysav55  <span class="c"># live logs</span>
+<span class="k">fly ssh console</span> --app poker-trainer-ysav55</div></div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Production Checklist</h2>
+      <div class="step-list">
+        <div class="step"><div class="step-num">&#10003;</div><div class="step-body"><strong>All 4 required secrets set on Fly.io</strong><p>SESSION_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DATABASE_URL</p></div></div>
+        <div class="step"><div class="step-num">&#10003;</div><div class="step-body"><strong>NODE_ENV=production</strong><p>Enables strict CORS enforcement</p></div></div>
+        <div class="step"><div class="step-num">&#10003;</div><div class="step-body"><strong>CORS_ORIGIN set to deployed client URL</strong><p>Must match the exact deployed frontend domain</p></div></div>
+        <div class="step"><div class="step-num">&#10003;</div><div class="step-body"><strong>players.csv uploaded to instance</strong><p>Gitignored — upload via <code>fly sftp</code> or embed in Dockerfile</p></div></div>
+        <div class="step"><div class="step-num">&#10003;</div><div class="step-body"><strong>Migrations 021–023 applied</strong><p>These are in the repo but pending production deployment. Required before annotations feature works.</p></div></div>
+        <div class="step"><div class="step-num">&#10003;</div><div class="step-body"><strong>epoker-logo.png in client/public/</strong><p>Gitignored (ISS-100) — must be placed manually after each fresh clone</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── KNOWN ISSUES ────────────────────────────────────────── -->
+<div id="page-issues" class="page">
+  <div class="page-header">
+    <div class="page-eyebrow">Operations</div>
+    <h1>Known Issues</h1>
+    <p>As of 2026-04-03. Full history in <strong>ISSUES_REGISTRY.md</strong>.</p>
+  </div>
+  <div class="page-body">
+    <div class="doc-section">
+      <h2>Open Issues</h2>
+      <div class="table-wrap">
+        <table class="doc-table">
+          <thead><tr><th>ID</th><th>Severity</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="mono">ISS-99</td>
+              <td><span style="color:var(--amber);font-size:12px;font-weight:700;">MEDIUM</span></td>
+              <td><strong>Dual auth paths</strong> — <code>players.csv</code> is primary; DB-backed auth migration exists but not fully cut over. Both work in parallel. Risk: drift between CSV and DB user lists.</td>
+            </tr>
+            <tr>
+              <td class="mono">ISS-100</td>
+              <td><span style="color:var(--amber);font-size:12px;font-weight:700;">MEDIUM</span></td>
+              <td><strong>Missing logo</strong> — <code>client/public/epoker-logo.png</code> is gitignored and must be manually placed after every fresh clone/deploy.</td>
+            </tr>
+            <tr>
+              <td class="mono">ISS-104</td>
+              <td><span style="color:var(--amber);font-size:12px;font-weight:700;">MEDIUM</span></td>
+              <td><strong>ESM equity calculator in tests</strong> — <code>poker-odds-calculator</code> is ESM-only. Jest uses a deterministic stub (equal-split equity) instead of the real calculator. Real equity only works at runtime, not in tests.</td>
+            </tr>
+            <tr>
+              <td class="mono">ISS-105</td>
+              <td><span style="color:var(--green);font-size:12px;font-weight:700;">LOW</span></td>
+              <td><strong>MistakeMatrixPanel tooltip</strong> — hover detection is wired but unused. Minor UX gap, no functional impact.</td>
+            </tr>
+            <tr>
+              <td class="mono">ISS-73</td>
+              <td><span style="color:var(--amber);font-size:12px;font-weight:700;">MEDIUM</span></td>
+              <td><strong>Old replay hole cards</strong> — Hands played before the 2026-03-16 stableId fix may not display hole cards correctly in the replay viewer.</td>
+            </tr>
+            <tr>
+              <td class="mono">ISS-77</td>
+              <td><span style="color:var(--amber);font-size:12px;font-weight:700;">MEDIUM</span></td>
+              <td><strong>Legacy hand_tags constraint</strong> — Migration 006 replaced the old unique constraint with 3 partial indexes. Monitor first production run against legacy rows to ensure no constraint violations.</td>
+            </tr>
+            <tr>
+              <td class="mono">ISS-140</td>
+              <td><span style="color:var(--green);font-size:12px;font-weight:700;">LOW</span></td>
+              <td><strong>Bot hands bypass SessionManager</strong> — <code>BotTableController</code> doesn't call <code>SessionManager.startGame()</code>. VPIP/PFR stats are not incremented for bot session hands.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h2>Pending Migrations</h2>
+      <div class="notice"><strong>Migrations 021, 022, 023</strong> are in <code>supabase/migrations/</code> but not yet applied to production. Migration 021 creates <code>hand_annotations</code> — required for the annotation API to function. Apply all three before deploying annotation features.</div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+(function(){
+  // ── Tab logic ─────────────────────────────────────────────
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-tab]');
+    if(!btn) return;
+    const id = btn.dataset.tab;
+    const parent = btn.closest('.doc-section') || btn.closest('.page-body');
+    if(!parent) return;
+    parent.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    parent.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    const pane = document.getElementById(id);
+    if(pane) pane.classList.add('active');
+  });
+
+  // ── API inline sub-nav ────────────────────────────────────
+  document.addEventListener('click', function(e){
+    const item = e.target.closest('.api-subnav-item');
+    if(!item) return;
+    const sub = item.dataset.sub;
+    document.querySelectorAll('.api-subnav-item').forEach(i=>i.classList.remove('active'));
+    document.querySelectorAll('.api-pane').forEach(p=>p.classList.remove('active'));
+    item.classList.add('active');
+    const pane = document.getElementById(sub);
+    if(pane) pane.classList.add('active');
+  });
+
+  // ── Page navigation ───────────────────────────────────────
+  function goTo(pageId, subId){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    const page = document.getElementById('page-'+pageId);
+    if(page) page.classList.add('active');
+
+    document.querySelectorAll('[data-page="'+pageId+'"]').forEach(n=>{
+      if(n.classList.contains('nav-item')) n.classList.add('active');
+    });
+
+    // API sub-pane
+    if(subId){
+      document.querySelectorAll('.api-pane').forEach(p=>p.classList.remove('active'));
+      document.querySelectorAll('.api-subnav-item').forEach(i=>i.classList.remove('active'));
+      const pane = document.getElementById(subId);
+      if(pane) pane.classList.add('active');
+      document.querySelectorAll('[data-sub="'+subId+'"]').forEach(i=>i.classList.add('active'));
+      // Activate sidebar sub-item
+      document.querySelectorAll('.nav-sub-item[data-sub="'+subId+'"]').forEach(i=>{
+        document.querySelectorAll('.nav-sub-item').forEach(j=>j.classList.remove('active'));
+        i.classList.add('active');
+      });
+    }
+
+    // Expand API subnav when on that page
+    const apiSubnav = document.getElementById('subnav-api');
+    const apiBtn = document.querySelector('.nav-item[data-page="api"]');
+    if(pageId === 'api'){
+      apiSubnav.classList.add('open');
+      if(apiBtn) apiBtn.classList.add('open');
+    } else {
+      // keep it open if user expanded it
+    }
+
+    window.scrollTo(0,0);
+    history.replaceState(null,'','#'+pageId+(subId?'/'+subId:''));
+  }
+
+  // ── Nav item click ────────────────────────────────────────
+  document.querySelectorAll('.nav-item').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      const pageId = item.dataset.page;
+      const isExpandable = item.classList.contains('expandable');
+      if(isExpandable){
+        const subnav = document.getElementById('subnav-api');
+        const wasOpen = subnav.classList.contains('open');
+        subnav.classList.toggle('open');
+        item.classList.toggle('open');
+        if(!wasOpen){
+          const firstSub = item.dataset.firstSub;
+          goTo(pageId, firstSub||null);
+          if(firstSub){
+            document.querySelectorAll('.nav-sub-item').forEach(i=>i.classList.remove('active'));
+            const first = document.querySelector('.nav-sub-item[data-sub="'+firstSub+'"]');
+            if(first) first.classList.add('active');
+          }
+        } else {
+          goTo(pageId, null);
+        }
+      } else {
+        goTo(pageId, null);
+      }
+    });
+  });
+
+  // ── Sidebar sub-item click ────────────────────────────────
+  document.querySelectorAll('.nav-sub-item').forEach(item=>{
+    item.addEventListener('click', ()=>{
+      const pageId = item.dataset.page;
+      const subId = item.dataset.sub;
+      document.querySelectorAll('.nav-sub-item').forEach(i=>i.classList.remove('active'));
+      item.classList.add('active');
+      goTo(pageId, subId);
+    });
+  });
+
+  // ── Hash routing on load ──────────────────────────────────
+  function fromHash(){
+    const h = location.hash.replace('#','');
+    if(!h) return;
+    const parts = h.split('/');
+    goTo(parts[0], parts[1]||null);
+  }
+  window.addEventListener('hashchange', fromHash);
+  fromHash();
+})();
+</script>
+</body>
+</html>

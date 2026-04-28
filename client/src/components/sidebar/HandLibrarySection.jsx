@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import CollapsibleSection from '../CollapsibleSection';
+import { RangeMatrix } from '../RangeMatrix';
+import { comboToHandGroup } from '../../utils/comboUtils';
 
 function formatPot(n) {
   if (!n) return '0';
@@ -10,6 +12,27 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
   const [scenarioSearch, setScenarioSearch] = useState('');
   const [selectedPlaylistForAdd, setSelectedPlaylistForAdd] = useState('');
   const [scenarioStackMode, setScenarioStackMode] = useState('keep');
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [rangeFilter, setRangeFilter] = useState(new Set());
+
+  const filteredHands = useMemo(() => {
+    const textFiltered = hands.filter(h => {
+      if (!scenarioSearch.trim()) return true;
+      const q = scenarioSearch.toLowerCase();
+      return (
+        (h.winner_name ?? '').toLowerCase().includes(q) ||
+        (h.phase_ended ?? '').toLowerCase().includes(q) ||
+        (h.hand_id ?? '').toLowerCase().includes(q) ||
+        (h.auto_tags ? JSON.stringify(h.auto_tags).toLowerCase().includes(q) : false)
+      );
+    });
+    if (!rangeFilter.size) return textFiltered;
+    return textFiltered.filter(h => {
+      const hc = h.hero_hole_cards ?? h.hole_cards;
+      if (!Array.isArray(hc) || hc.length < 2) return false;
+      return rangeFilter.has(comboToHandGroup(hc));
+    });
+  }, [hands, scenarioSearch, rangeFilter]);
 
   return (
     <CollapsibleSection title="HAND LIBRARY" defaultOpen={false}>
@@ -50,24 +73,61 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
           onBlur={(e) => { e.target.style.borderColor = '#30363d'; }}
         />
 
+        {/* Range filter toggle */}
+        <div className="flex gap-1">
+          <button
+            onClick={() => setRangeOpen(o => !o)}
+            style={{
+              flex: 1, padding: '3px 8px', borderRadius: 4, cursor: 'pointer',
+              background: rangeFilter.size ? 'rgba(212,175,55,0.12)' : 'transparent',
+              border: `1px solid ${rangeFilter.size ? 'rgba(212,175,55,0.4)' : '#30363d'}`,
+              color: rangeFilter.size ? '#d4af37' : '#6e7681',
+              fontSize: '9px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
+              textAlign: 'left',
+            }}
+          >
+            ⬡ Filter by Range {rangeFilter.size > 0 ? `(${rangeFilter.size})` : ''}
+          </button>
+          {rangeFilter.size > 0 && (
+            <button
+              onClick={() => { setRangeFilter(new Set()); setRangeOpen(false); }}
+              style={{
+                padding: '3px 6px', borderRadius: 4, cursor: 'pointer',
+                background: 'transparent', border: '1px solid #30363d',
+                color: '#6e7681', fontSize: '9px',
+              }}
+            >
+              Clear filter
+            </button>
+          )}
+        </div>
+        {rangeOpen && (
+          <RangeMatrix
+            selected={rangeFilter}
+            onToggle={(group) => setRangeFilter(prev => {
+              const next = new Set(prev);
+              if (next.has(group)) next.delete(group); else next.add(group);
+              return next;
+            })}
+            colorMode="filter"
+          />
+        )}
+
         {/* Hand list */}
         <div style={{ maxHeight: '14rem', overflowY: 'auto' }} className="space-y-1">
-          {hands.length === 0 ? (
-            <p style={{ fontSize: '10px', color: '#444', fontStyle: 'italic' }}>No completed hands yet</p>
+          {filteredHands.length === 0 ? (
+            <p style={{ fontSize: '10px', color: '#444', fontStyle: 'italic' }}>
+              {hands.length === 0 ? 'No completed hands yet' : 'No hands match the current filter'}
+            </p>
           ) : (
-            hands
-              .filter(h => {
-                if (!scenarioSearch.trim()) return true;
-                const q = scenarioSearch.toLowerCase();
-                return (
-                  (h.winner_name ?? '').toLowerCase().includes(q) ||
-                  (h.phase_ended ?? '').toLowerCase().includes(q) ||
-                  (h.hand_id ?? '').toLowerCase().includes(q) ||
-                  (h.auto_tags ? JSON.stringify(h.auto_tags).toLowerCase().includes(q) : false)
-                );
-              })
+            filteredHands
               .slice(0, 10)
-              .map(h => (
+              .map(h => {
+                const heroHoleCards = h.hero_hole_cards ?? h.hole_cards;
+                const heroHandGroup = Array.isArray(heroHoleCards) && heroHoleCards.length >= 2
+                  ? comboToHandGroup(heroHoleCards)
+                  : null;
+                return (
                 <div
                   key={h.hand_id}
                   className="flex items-center justify-between"
@@ -83,6 +143,16 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
                 >
                   <div className="flex flex-col min-w-0">
                     <div className="flex items-center gap-1">
+                      {heroHandGroup && (
+                        <span style={{
+                          fontSize: '9px', fontWeight: 700, fontFamily: 'monospace',
+                          padding: '0px 5px', borderRadius: 3,
+                          background: 'rgba(59,130,246,0.15)', color: '#60a5fa',
+                          border: '1px solid rgba(59,130,246,0.25)', flexShrink: 0,
+                        }}>
+                          {heroHandGroup}
+                        </span>
+                      )}
                       <span style={{ fontSize: '10px', fontWeight: 500, color: '#c9c3b8' }} className="truncate">
                         {h.winner_name ?? 'No winner'} — ${formatPot(h.final_pot)}
                       </span>
@@ -139,14 +209,6 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
                       Load
                     </button>
                     <button
-                      onClick={() => emit.loadReplay?.(h.hand_id)}
-                      title="Load this hand in guided replay mode"
-                      className="px-2 py-1 text-xs rounded bg-purple-600 hover:bg-purple-500 text-white font-medium"
-                      style={{ whiteSpace: 'nowrap' }}
-                    >
-                      Replay
-                    </button>
-                    <button
                       onClick={() => emit.addToPlaylist?.(selectedPlaylistForAdd, h.hand_id)}
                       disabled={!selectedPlaylistForAdd}
                       title={selectedPlaylistForAdd ? 'Add to selected playlist' : 'Select a playlist first'}
@@ -168,7 +230,8 @@ export default function HandLibrarySection({ hands, emit, playlists }) {
                     </button>
                   </div>
                 </div>
-              ))
+                );
+              })
           )}
         </div>
 
