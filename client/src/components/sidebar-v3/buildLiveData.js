@@ -61,6 +61,7 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
     stableId: p.stableId ?? p.id,
     name: p.name ?? 'Player',
     stack: p.stack ?? 0,
+    seat: typeof p.seat === 'number' ? p.seat : 0,
     total_bet_this_round: p.current_bet ?? p.total_bet_this_round ?? 0,
     hole_cards: Array.isArray(p.hole_cards) && p.hole_cards.length
       ? p.hole_cards
@@ -70,23 +71,34 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
     is_big_blind: !!p.is_big_blind,
     in_hand: p.in_hand !== false,
     is_bot: p.is_bot === true,
+    is_coach: p.is_coach === true,
     action: p.action ?? null,
   }));
 
-  const liveSeats = livePlayers.map((p, i) => ({
-    seat: i,
-    seatIndex: i,
-    playerId: p.id,
-    stableId: p.stableId,
-    player: p.name,
-    isHero: p.stableId === myStableId,
-    isBot: p.is_bot,
-    stack: p.stack,
-    status: p.in_hand ? 'active' : 'sitout',
-  }));
-
-  while (liveSeats.length < 9) {
-    liveSeats.push({ seat: liveSeats.length, player: null });
+  // Seat indices match the server's table seat (0-8), not array position. The
+  // adapter previously renumbered to array index — that produced labels like
+  // "Seat 4" for a coach actually at seat 8. Now we keep the server seat so
+  // the v3 sidebar's seat numbers match PokerTable's seat layout.
+  const occupiedBySeat = new Map();
+  livePlayers.forEach((p) => { occupiedBySeat.set(p.seat, p); });
+  const liveSeats = [];
+  const maxSeats = 9;
+  for (let i = 0; i < maxSeats; i++) {
+    const p = occupiedBySeat.get(i);
+    if (p) {
+      liveSeats.push({
+        seat: i,
+        playerId: p.id,
+        stableId: p.stableId,
+        player: p.name,
+        isHero: p.stableId === myStableId,
+        isBot: p.is_bot,
+        stack: p.stack,
+        status: p.in_hand ? 'active' : 'sitout',
+      });
+    } else {
+      liveSeats.push({ seat: i, player: null });
+    }
   }
 
   return {
@@ -119,8 +131,10 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
     seatConfig: { maxSeats: 9, seats: liveSeats.slice(0, 9) },
     players: livePlayers
       .filter((p) => p.name)
-      .map((p, i) => ({
-        seat: i,
+      .map((p) => ({
+        seat: p.seat,
+        playerId: p.id,
+        stableId: p.stableId,
         name: p.name,
         stack: p.stack,
         isHero: p.stableId === myStableId,

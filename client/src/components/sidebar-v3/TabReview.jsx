@@ -160,14 +160,19 @@ export default function TabReview({ data, emit, replay, selectedHandId, onBack }
   // Total non-reverted actions; cursor = current index. Highlight actions
   // up to cursor (inclusive) as "played"; the rest are dim.
   const totalActions = r.totalActions ?? streets.reduce((acc, s) => acc + s.actions.length, 0);
-  // The hand has multiple players' hole cards; we don't know which one the
-  // coach considers "the student" without extra wiring (Phase 5: pass
-  // selected stableId through from History → Review). Show all known hole
-  // cards in a compact grid instead of guessing "winner=hero".
   const playersWithCards = (handDetail?.players ?? [])
     .filter((p) => Array.isArray(p.hole_cards) && p.hole_cards.length === 2);
   const board = Array.isArray(r.board) ? r.board : [];
   const playlists = data.playlists ?? [];
+
+  // Coach-selected "perspective player" — the student whose decisions are
+  // being reviewed. Defaults to the winner (better than nothing) but the
+  // coach can swap via chips. When set, only their hole cards show in the
+  // compact slot at top; the others stay collapsed but accessible.
+  const winner = playersWithCards.find((p) => p.is_winner) ?? playersWithCards[0] ?? null;
+  const [perspectiveId, setPerspectiveId] = useState(null);
+  useEffect(() => { setPerspectiveId(null); }, [r.handId]);
+  const perspective = playersWithCards.find((p) => p.player_id === perspectiveId) ?? winner;
 
   return (
     <>
@@ -186,38 +191,48 @@ export default function TabReview({ data, emit, replay, selectedHandId, onBack }
           <button className="btn ghost sm" onClick={exitAndBack}>← Live</button>
         </div>
 
-        <div>
-          <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>Board</div>
-          <div style={{ display: 'flex', marginBottom: 9 }}>
-            {Array.from({ length: 5 }).map((_, i) => (
-              board[i] ? <MiniCard key={i} code={board[i]} /> : <MiniCard key={i} ghost />
-            ))}
-          </div>
-          {playersWithCards.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {perspective && (
             <>
-              <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>
-                Hole cards ({playersWithCards.length})
+              <div>
+                <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>
+                  {perspective.player_name?.split(' ')[0] ?? 'Player'}
+                </div>
+                <div style={{ display: 'flex' }}>
+                  {perspective.hole_cards.map((c, i) => <MiniCard key={i} code={c} />)}
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {playersWithCards.map((p) => (
-                  <div key={p.player_id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      fontFamily: 'var(--mono)', fontSize: 10,
-                      color: p.is_winner ? 'var(--ok)' : 'var(--ink-dim)',
-                      minWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {p.player_name}
-                      {p.is_winner && <span style={{ marginLeft: 4 }}>★</span>}
-                    </span>
-                    <div style={{ display: 'flex' }}>
-                      {p.hole_cards.map((c, i) => <MiniCard key={i} code={c} />)}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <div style={{ width: 1, height: 30, background: 'var(--line)' }} />
             </>
           )}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'var(--ink-faint)', marginBottom: 4 }}>Board</div>
+            <div style={{ display: 'flex' }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                board[i] ? <MiniCard key={i} code={board[i]} /> : <MiniCard key={i} ghost />
+              ))}
+            </div>
+          </div>
         </div>
+
+        {playersWithCards.length > 1 && (
+          <div style={{ marginTop: 9 }}>
+            <div className="lbl" style={{ marginBottom: 4 }}>Perspective</div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {playersWithCards.map((p) => (
+                <button
+                  key={p.player_id}
+                  className={'chip' + (perspective?.player_id === p.player_id ? ' active' : '')}
+                  onClick={() => setPerspectiveId(p.player_id)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                >
+                  {p.player_name?.split(' ')[0] ?? 'P'}
+                  {p.is_winner && <span style={{ fontSize: 9 }}>★</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Replay controls */}

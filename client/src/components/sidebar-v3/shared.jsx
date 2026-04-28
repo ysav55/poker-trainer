@@ -54,6 +54,29 @@ export function Segmented({ options, value, onChange, cols }) {
   );
 }
 
+// Reusable difficulty picker for coach add-bot affordances. Mirrors the
+// segmented style but compact (chips). Currently easy/medium/hard — these
+// are the levels BotDecisionService supports server-side.
+export function DifficultyPicker({ value, onChange }) {
+  const opts = [
+    { v: 'easy',   label: 'Easy' },
+    { v: 'medium', label: 'Medium' },
+    { v: 'hard',   label: 'Hard' },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {opts.map((o) => (
+        <button
+          key={o.v}
+          className={'chip' + (value === o.v ? ' active' : '')}
+          onClick={() => onChange(o.v)}
+          style={{ flex: 1, justifyContent: 'center' }}
+        >{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
 export function Head({ status, subtitle }) {
   return (
     <div className="sb-head">

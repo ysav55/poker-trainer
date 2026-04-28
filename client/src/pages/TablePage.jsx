@@ -45,7 +45,7 @@ function TableTopBar({ tableName, tableMode, isSpectator, onBack, isCoach, canRe
         >
           ← Lobby
         </button>
-        <span className="text-sm font-bold tracking-wide" style={{ color: '#d4af37' }}>
+        <span className="text-sm font-bold tracking-wide" style={{ color: '#d4af37' }} data-sb-v3-logo>
           ♠ POKER TRAINER
         </span>
         {tableName && (
@@ -59,6 +59,7 @@ function TableTopBar({ tableName, tableMode, isSpectator, onBack, isCoach, canRe
         <span
           className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest"
           style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}
+          data-sb-v3-mode-badge
         >
           {badge.label}
         </span>
@@ -374,6 +375,10 @@ function FullTableView() {
 
   return (
     <div
+      // sb-v3-active: scoped class for v3 chrome accents (serif logo, gold
+      // mode-badge tint). Only present when the coach has enabled v3, so
+      // student/spectator/tournament views never inherit the chrome.
+      className={actingAsCoach && useSidebarV3 ? 'sb-v3-active' : ''}
       style={{
         display: 'flex',
         flexDirection: 'column',

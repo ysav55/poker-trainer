@@ -375,3 +375,28 @@
   background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
   margin: 6px 0 2px;
 }
+
+/* ── Chrome extension hook (Phase 5) ────────────────────────────────────────
+   The table-page wrapper carries `.sb-v3-active` only when the coach has v3
+   enabled. Targeted rules attach by data-attribute (`data-sb-v3-logo`) on
+   stable nodes — see TableTopBar.jsx where the logo opts in. PokerTable
+   internals stay untouched to preserve the existing visual language for
+   non-coach roles (who never see this class). */
+
+.sb-v3-active [data-sb-v3-logo] {
+  font-family: 'Instrument Serif', serif !important;
+  font-style: italic;
+  font-weight: 400 !important;
+  letter-spacing: -0.01em !important;
+  font-size: 18px !important;
+  /* !important required: TableTopBar sets `color: #d4af37` inline (the
+     pre-v3 badge gold), and inline beats stylesheet specificity. */
+  color: #c9a35d !important;
+  text-transform: none !important;
+}
+
+.sb-v3-active [data-sb-v3-mode-badge] {
+  background: rgba(201, 163, 93, 0.14) !important;
+  color: #c9a35d !important;
+  border-color: rgba(201, 163, 93, 0.4) !important;
+}
