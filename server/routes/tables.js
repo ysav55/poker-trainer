@@ -34,7 +34,7 @@ async function assertCanManage(req, res, tableId) {
     res.status(404).json({ error: 'Table not found' });
     return null;
   }
-  const perms = await getPlayerPermissions(req.user.id);
+  const perms = await getPlayerPermissions(req.user.id, req.user.role);
   const isOwner = table.created_by === req.user.id;
   const isAdmin = perms.has('admin:access');
   if (!isOwner && !isAdmin) {
@@ -96,7 +96,7 @@ module.exports = function registerTableRoutes(app, { requireAuth }) {
       }
 
       // Check admin status for 'open' privacy
-      const perms = await getPlayerPermissions(req.user.id);
+      const perms = await getPlayerPermissions(req.user.id, req.user.role);
       const isAdmin = perms.has('admin:access');
       if (privacy === 'open' && !isAdmin) {
         return res.status(400).json({ error: 'forbidden_privacy', message: 'Only admins can create open tables' });
