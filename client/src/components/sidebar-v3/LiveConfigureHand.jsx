@@ -210,19 +210,17 @@ export default function ConfigureHand({ data, emit }) {
 
       <div style={{ marginBottom: 10 }}>
         <Segmented
-          cols={3}
+          cols={2}
           options={[
             { value: 'rng',    label: 'RNG' },
             { value: 'manual', label: 'Manual' },
-            { value: 'hybrid', label: 'Hybrid' },
           ]}
-          value={mode}
+          value={mode === 'hybrid' ? 'rng' : mode}
           onChange={setMode}
         />
         <div style={{ fontSize: 10, color: 'var(--ink-faint)', marginTop: 5, lineHeight: 1.4 }}>
           {mode === 'rng' && 'All cards dealt randomly — overrides ignored.'}
-          {mode === 'manual' && 'Every card you set below; rest stay blank.'}
-          {mode === 'hybrid' && 'Use the cards & textures you set; RNG fills the rest.'}
+          {(mode === 'manual' || mode === 'hybrid') && 'Cards & textures you set are honored; rest stay random.'}
         </div>
       </div>
 
