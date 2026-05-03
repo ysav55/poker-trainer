@@ -6,6 +6,7 @@ import TabDrills from './TabDrills.jsx';
 import TabHistory from './TabHistory.jsx';
 import TabReview from './TabReview.jsx';
 import TabSetup from './TabSetup.jsx';
+import TagDialog from './TagDialog.jsx';
 import { SIDEBAR_V3_DATA } from './data.js';
 
 export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId = null, replay = null, initialTab = 'live' }) {
@@ -39,6 +40,8 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
     setAndPersist('review');
   }
 
+  const [tagDialogOpen, setTagDialogOpen] = useState(false);
+
   function Foot() {
     // Buttons without a Phase 1 wire-up are explicitly disabled with a Phase-N
     // tooltip — better than silent no-ops on gold-styled buttons that read as
@@ -55,7 +58,13 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
           >
             {paused ? '▶' : '❚❚'} {paused ? 'Resume' : 'Pause'}
           </button>
-          <button className="btn" style={{ flex: 1 }} disabled title="Tag dialog wires in Phase 2">⚑ Tag Hand</button>
+          <button
+            className="btn"
+            style={{ flex: 1 }}
+            disabled={!data.gameState?.hand_id || !emit?.updateHandTags}
+            onClick={() => setTagDialogOpen(true)}
+            title={data.gameState?.hand_id ? 'Tag this hand' : 'No active hand to tag'}
+          >⚑ Tag Hand</button>
           <button
             className="btn primary"
             style={{ flex: 1.3 }}
@@ -129,6 +138,13 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
           <Foot />
         </div>
       )}
+      <TagDialog
+        open={tagDialogOpen}
+        availableTags={data.availableHandTags || []}
+        initialTags={data.gameState?.coach_tags || []}
+        onSubmit={(tags) => emit?.updateHandTags?.(data.gameState.hand_id, tags)}
+        onClose={() => setTagDialogOpen(false)}
+      />
     </div>
   );
 }

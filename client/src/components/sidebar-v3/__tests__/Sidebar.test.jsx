@@ -86,3 +86,37 @@ describe('SidebarV3 — Drills footer removed', () => {
     expect(screen.queryByRole('button', { name: /Launch Hand →/ })).toBeNull();
   });
 });
+
+describe('SidebarV3 — Tag Hand wiring', () => {
+  it('clicking Tag Hand opens the dialog when a current hand exists', () => {
+    const data = {
+      ...SIDEBAR_V3_DATA,
+      gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: 'h-current', phase: 'flop' },
+      availableHandTags: ['BLUFF', 'VALUE'],
+    };
+    const updateHandTags = vi.fn();
+    render(<SidebarV3 data={data} emit={{ updateHandTags, togglePause: vi.fn(), startConfiguredHand: vi.fn() }} />);
+    fireEvent.click(screen.getByRole('button', { name: /Tag Hand/i }));
+    expect(screen.getByRole('dialog', { name: /Tag this hand/i })).toBeInTheDocument();
+  });
+
+  it('Tag Hand button is disabled when no current hand_id', () => {
+    const data = { ...SIDEBAR_V3_DATA, gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: null } };
+    render(<SidebarV3 data={data} emit={{ updateHandTags: vi.fn(), togglePause: vi.fn(), startConfiguredHand: vi.fn() }} />);
+    expect(screen.getByRole('button', { name: /Tag Hand/i })).toBeDisabled();
+  });
+
+  it('Save inside dialog emits updateHandTags(handId, tags)', () => {
+    const data = {
+      ...SIDEBAR_V3_DATA,
+      gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: 'h-x' },
+      availableHandTags: ['BLUFF'],
+    };
+    const updateHandTags = vi.fn();
+    render(<SidebarV3 data={data} emit={{ updateHandTags, togglePause: vi.fn(), startConfiguredHand: vi.fn() }} />);
+    fireEvent.click(screen.getByRole('button', { name: /Tag Hand/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'BLUFF' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(updateHandTags).toHaveBeenCalledWith('h-x', ['BLUFF']);
+  });
+});
