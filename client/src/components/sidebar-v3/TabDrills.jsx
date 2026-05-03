@@ -375,8 +375,8 @@ function DrillSessionCard({ data, emit }) {
         <button
           className="btn primary full"
           disabled
-          title="Auto-advance is server-driven — Phase 4 wires manual 'Next Spot' override"
-        >Next Spot →</button>
+          title="Auto-advance is server-driven — Phase 4 wires manual 'Advance Drill' override"
+        >Advance Drill →</button>
       </div>
     </>
   );

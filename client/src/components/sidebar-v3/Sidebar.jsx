@@ -62,7 +62,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
             disabled={!canStart}
             onClick={() => emit?.startConfiguredHand?.()}
             title={canStart ? 'Start the configured hand now' : 'Available between hands (phase: waiting)'}
-          >Next Hand →</button>
+          >Deal Next Hand →</button>
         </>
       );
     }
@@ -83,7 +83,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
             style={{ flex: 1.6 }}
             onClick={() => setAndPersist('review')}
             title="Open the Review tab"
-          >Review Selected →</button>
+          >Open in Review →</button>
         </>
       );
     }
@@ -98,12 +98,12 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
             style={{ flex: 1 }}
             onClick={() => { setSelectedHandId(null); replay?.replayExit?.(); setAndPersist('history'); }}
             title="Close replay and go back to History"
-          >← History</button>
+          >← Back</button>
           <button
             className="btn primary"
             style={{ flex: 1.6 }}
             onClick={() => { setSelectedHandId(null); replay?.replayExit?.(); setAndPersist('live'); }}
-          >Exit Replay → Live</button>
+          >Back to Live</button>
         </>
       );
     }

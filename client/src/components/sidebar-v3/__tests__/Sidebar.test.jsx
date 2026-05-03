@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import SidebarV3 from '../Sidebar.jsx';
 import { SIDEBAR_V3_DATA } from '../data.js';
@@ -51,5 +51,27 @@ describe('SidebarV3 — StatusPill', () => {
     const drillData = { ...SIDEBAR_V3_DATA, status: 'drill' };
     render(<SidebarV3 data={drillData} />);
     expect(screen.getByText('DRILL')).toBeInTheDocument();
+  });
+});
+
+describe('SidebarV3 — footer copy', () => {
+  it('Live footer says "Deal Next Hand →" (C1)', () => {
+    const data = { ...SIDEBAR_V3_DATA, gameState: { ...SIDEBAR_V3_DATA.gameState, phase: 'waiting' } };
+    render(<SidebarV3 data={data} emit={{ togglePause: vi.fn(), startConfiguredHand: vi.fn() }} />);
+    expect(screen.getByRole('button', { name: /Deal Next Hand →/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Next Hand →$/ })).toBeNull();
+  });
+
+  it('History footer says "Open in Review →" (C5)', () => {
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} initialTab="history" />);
+    expect(screen.getByRole('button', { name: /Open in Review →/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Review Selected →/ })).toBeNull();
+  });
+
+  it('Review footer shows "← Back" and "Back to Live" (C6, C7)', () => {
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} initialTab="review" />);
+    expect(screen.getByRole('button', { name: /← Back$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Back to Live/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Exit Replay → Live/ })).toBeNull();
   });
 });

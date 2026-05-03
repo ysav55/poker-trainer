@@ -367,7 +367,7 @@ export default function TabReview({ data, emit, replay, selectedHandId, onBack }
             className="btn primary full"
             onClick={() => setSavePanelOpen(true)}
             disabled={!emit?.branchToDrill}
-          >Save this hand to a drill</button>
+          >Save as Drill Hand</button>
         ) : (
           <>
             {!creatingNew && playlists.length > 0 && (
