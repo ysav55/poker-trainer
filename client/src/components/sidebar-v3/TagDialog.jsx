@@ -1,8 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function TagDialog({ open, availableTags = [], initialTags = [], onSubmit, onClose }) {
   const [selected, setSelected] = useState(new Set(initialTags));
   const [custom, setCustom] = useState('');
+
+  useEffect(() => {
+    if (!open) return undefined;
+    function onKey(e) {
+      if (e.key === 'Escape') onClose?.();
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   if (!open) return null;
 

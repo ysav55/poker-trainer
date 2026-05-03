@@ -43,4 +43,30 @@ describe('TagDialog', () => {
     const { container } = render(<TagDialog open={false} availableTags={sampleTags} initialTags={[]} onSubmit={vi.fn()} onClose={vi.fn()} />);
     expect(container.firstChild).toBeNull();
   });
+
+  it('Esc key closes the dialog', () => {
+    const onClose = vi.fn();
+    render(<TagDialog open availableTags={sampleTags} initialTags={[]} onSubmit={vi.fn()} onClose={onClose} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('does not call onClose on Esc when closed', () => {
+    const onClose = vi.fn();
+    render(<TagDialog open={false} availableTags={sampleTags} initialTags={[]} onSubmit={vi.fn()} onClose={onClose} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('adding the same custom tag twice does not duplicate it', () => {
+    const onSubmit = vi.fn();
+    render(<TagDialog open availableTags={sampleTags} initialTags={[]} onSubmit={onSubmit} onClose={vi.fn()} />);
+    const input = screen.getByPlaceholderText(/custom tag/i);
+    fireEvent.change(input, { target: { value: 'BLUFF_RAISE' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.change(input, { target: { value: 'bluff_raise' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSubmit).toHaveBeenCalledWith(['BLUFF_RAISE']);
+  });
 });
