@@ -25,4 +25,10 @@ describe('LiveConfigureHand — mode segment', () => {
     expect(screen.getByRole('button', { name: 'Manual' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Hybrid' })).toBeNull();
   });
+
+  it('defaults to RNG mode on mount', () => {
+    render(<LiveConfigureHand data={liveData()} emit={{ updateHandConfig: vi.fn() }} />);
+    const rngBtn = screen.getByRole('button', { name: 'RNG' });
+    expect(rngBtn.className).toBe('active');
+  });
 });

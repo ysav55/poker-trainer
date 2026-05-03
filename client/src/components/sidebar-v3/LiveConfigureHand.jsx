@@ -70,7 +70,7 @@ export default function ConfigureHand({ data, emit }) {
   const isQueued = !!gameState.pending_hand_config;
   const [applied, setApplied] = useState(false);
 
-  const [mode, setMode] = useState('hybrid');
+  const [mode, setMode] = useState('rng');
   const [target, setTarget] = useState(null);
   const [slot, setSlot] = useState(0);
   const [inputMode, setInputMode] = useState({});
