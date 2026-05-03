@@ -56,6 +56,17 @@ describe('TabSetup — Blinds', () => {
     fireEvent.change(bbInput, { target: { value: '0' } });
     expect(screen.getByText(/BB must be a positive integer greater than 1/i)).toBeInTheDocument();
   });
+
+  it('clicking a Cash Preset row updates BB (and SB auto-derives)', () => {
+    const emit = makeEmit();
+    render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={emit} />);
+    // Data fixture has presets: [{ sb: 10, bb: 20 }, { sb: 25, bb: 50 }]
+    // The second preset (25/50) has chip "use" label; click it
+    const presetButtons = screen.getAllByText(/^use$/i);
+    fireEvent.click(presetButtons[0]); // Click the first "use" button (the non-active preset)
+    // After click, the Apply button should reflect the new BB and auto-derived SB
+    expect(screen.getByRole('button', { name: /Apply 25\/50/i })).toBeInTheDocument();
+  });
 });
 
 describe('TabSetup — Players sub-tab', () => {

@@ -92,7 +92,7 @@ function BlindsSection({ data, emit }) {
             <div
               key={i}
               className="list-row"
-              onClick={() => { setSb(p.sb); setBb(p.bb); }}
+              onClick={() => { setBb(p.bb); }}
               style={active ? { borderColor: 'var(--accent)', background: 'rgba(201,163,93,0.1)' } : null}
             >
               <div>
