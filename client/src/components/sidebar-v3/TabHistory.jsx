@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { MiniCard, Segmented } from './shared.jsx';
+import { MiniCard } from './shared.jsx';
 import { useHistory } from '../../hooks/useHistory.js';
 
 const PHASE_LABEL = { preflop: 'preflop', flop: 'flop', turn: 'turn', river: 'river', showdown: 'showdown' };
@@ -23,15 +23,7 @@ function adaptServerHand(h, idx, total) {
 }
 
 export default function TabHistory({ data, tableId, onLoadReview }) {
-  const [view, setView] = useState('table');
   const { hands: serverHands, loading, fetchHands } = useHistory();
-  // Players sub-tab depends on per-player session stats that aren't on the
-  // /api/hands list endpoint. Hidden in live mode (the only reachable mode
-  // when ?sidebarV3=1 + tableId are set) until Phase 4 wires per-player REST
-  // calls. The mock-fixture leak it would otherwise produce — Ariela / Ido /
-  // Guy / Noa stats on a real coach session — is exactly the trust-erosion
-  // failure project CLAUDE.md warns against.
-  const showPlayersTab = !tableId; // i.e., dev fixture mode only
 
   // Fetch on mount + whenever the table changes. Refetch when tab is reopened
   // is intentionally NOT wired — once fetched, the list is stable until the
@@ -56,23 +48,7 @@ export default function TabHistory({ data, tableId, onLoadReview }) {
   }, [data, liveHistory]);
 
   return (
-    <>
-      {showPlayersTab && (
-        <Segmented
-          cols={2}
-          options={[
-            { value: 'table',   label: 'Table' },
-            { value: 'players', label: 'Players' },
-          ]}
-          value={view}
-          onChange={setView}
-        />
-      )}
-      {(showPlayersTab && view === 'players')
-        ? <PlayersHistoryView data={tabData} onLoadReview={onLoadReview} />
-        : <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} />
-      }
-    </>
+    <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} />
   );
 }
 
@@ -145,89 +121,6 @@ function TableHistoryView({ data, loading, isLive, onLoadReview }) {
         </div>
       </div>
     </>
-  );
-}
-
-function PlayersHistoryView({ data, onLoadReview }) {
-  const playerList = Object.values(data.playerHistory);
-  const [selectedId, setSelectedId] = useState(playerList[0].stableId);
-  const selected = data.playerHistory[selectedId];
-
-  const playerHands = useMemo(() => {
-    const set = new Set(selected.handIds);
-    return data.history.filter((h) => set.has(h.n));
-  }, [selectedId, data.history]);
-
-  return (
-    <>
-      <div className="card" style={{ padding: '11px 12px 9px' }}>
-        <div className="card-head" style={{ marginBottom: 7 }}>
-          <div className="card-title">Player</div>
-          <div className="card-kicker">{playerList.length} at table</div>
-        </div>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {playerList.map((p) => {
-            const isOn = selectedId === p.stableId;
-            const color = data.equityData.colors[p.stableId] || 'var(--accent)';
-            return (
-              <button
-                key={p.stableId}
-                className={'chip' + (isOn ? ' active' : '')}
-                onClick={() => setSelectedId(p.stableId)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, borderColor: isOn ? color : 'rgba(201,163,93,0.2)' }}
-              >
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, boxShadow: isOn ? `0 0 6px ${color}` : 'none' }} />
-                {p.name.split(' ')[0]}
-                {p.isHero && <span style={{ fontSize: 8, opacity: 0.7 }}>· you</span>}
-                {p.isBot && <span style={{ fontSize: 8, opacity: 0.7 }}>· bot</span>}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <PlayerStatsCard player={selected} color={data.equityData.colors[selected.stableId]} />
-
-      <div className="card" style={{ padding: '12px 12px 8px' }}>
-        <div className="card-head">
-          <div className="card-title">{selected.name.split(' ')[0]}'s Hands</div>
-          <div className="card-kicker">scroll ↔ · {playerHands.length}</div>
-        </div>
-        <div className="h-scroll">
-          {playerHands.map((h) => <HandCard key={h.hand_id ?? h.n} hand={h} onClick={() => onLoadReview(h.hand_id ?? h.n)} />)}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function PlayerStatsCard({ player, color }) {
-  const s = player.stats;
-  const c = color || 'var(--accent)';
-  return (
-    <div className="card">
-      <div className="card-head">
-        <div className="card-title" style={{ color: c }}>{player.name}</div>
-        <div className="card-kicker">{s.hands} hands</div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
-        <div className="stat">
-          <div className="stat-lbl">Net</div>
-          <div className={'stat-val serif ' + (s.net >= 0 ? 'ok' : 'bad')}>{s.net >= 0 ? '+' : ''}{s.net}</div>
-        </div>
-        <div className="stat">
-          <div className="stat-lbl">bb / 100</div>
-          <div className={'stat-val ' + (s.bb100 >= 0 ? 'ok' : 'bad')}>{s.bb100 >= 0 ? '+' : ''}{s.bb100}</div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-        <MiniStat label="VPIP" value={s.vpip + '%'} />
-        <MiniStat label="PFR"  value={s.pfr + '%'} />
-        <MiniStat label="W$SD" value={s.wonAtSd + '%'} />
-      </div>
-    </div>
   );
 }
 
