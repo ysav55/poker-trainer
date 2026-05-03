@@ -356,8 +356,6 @@ function DrillSessionCard({ data, emit }) {
       </div>
     );
   }
-  const total = Math.max(1, s.handsTotal);
-  const { correct, mistake, uncertain } = s.results;
   return (
     <>
       <div className="card">
@@ -367,16 +365,6 @@ function DrillSessionCard({ data, emit }) {
         </div>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>{s.scenarioName}</div>
         <div style={{ fontSize: 11, color: 'var(--ink-dim)', marginBottom: 12 }}>{s.currentSpot}</div>
-        <div style={{ height: 6, borderRadius: 3, overflow: 'hidden', display: 'flex', background: 'rgba(201,163,93,0.08)', marginBottom: 10 }}>
-          <div style={{ width: `${(correct / total) * 100}%`, background: 'var(--ok)' }} />
-          <div style={{ width: `${(mistake / total) * 100}%`, background: 'var(--bad)' }} />
-          <div style={{ width: `${(uncertain / total) * 100}%`, background: 'var(--warn)' }} />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-          <div className="stat"><div className="stat-lbl">Correct</div><div className="stat-val ok">{correct}</div></div>
-          <div className="stat"><div className="stat-lbl">Mistake</div><div className="stat-val bad">{mistake}</div></div>
-          <div className="stat"><div className="stat-lbl">Unsure</div><div className="stat-val" style={{ color: 'var(--warn)' }}>{uncertain}</div></div>
-        </div>
       </div>
       <div className="row" style={{ gap: 6 }}>
         <button
