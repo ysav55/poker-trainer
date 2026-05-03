@@ -10,8 +10,17 @@ import { SIDEBAR_V3_DATA } from './data.js';
 
 export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId = null, replay = null, initialTab = 'live' }) {
   const [tab, setTab] = useState(() => {
-    try { return localStorage.getItem('fs.sb3.tab') || initialTab; }
-    catch { return initialTab; }
+    try {
+      const stored = localStorage.getItem('fs.sb3.tab');
+      // One-shot migration: legacy 'settings' value becomes 'setup'
+      if (stored === 'settings') {
+        try { localStorage.setItem('fs.sb3.tab', 'setup'); } catch { /* ignore */ }
+        return 'setup';
+      }
+      return stored || initialTab;
+    } catch {
+      return initialTab;
+    }
   });
   function setAndPersist(t) {
     try { localStorage.setItem('fs.sb3.tab', t); } catch { /* ignore */ }

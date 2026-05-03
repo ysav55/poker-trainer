@@ -22,4 +22,17 @@ describe('SidebarV3 — TABS', () => {
     // BlindsSection's "Current Level" card title is unique to TabSettings
     expect(screen.getByText('Current Level')).toBeInTheDocument();
   });
+
+  it('migrates legacy localStorage value "settings" to "setup" on mount', () => {
+    localStorage.setItem('fs.sb3.tab', 'settings');
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
+    expect(localStorage.getItem('fs.sb3.tab')).toBe('setup');
+  });
+
+  it('treats no localStorage value as initialTab', () => {
+    localStorage.removeItem('fs.sb3.tab');
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} initialTab="drills" />);
+    // does NOT auto-write — only on user click
+    expect(localStorage.getItem('fs.sb3.tab')).toBeNull();
+  });
 });
