@@ -69,6 +69,60 @@ describe('TabSetup — Blinds', () => {
   });
 });
 
+describe('TabSetup — Seats Edit Stack flow', () => {
+  function seatedAlice(stack = 1000) {
+    return makeData({
+      seats: [
+        { seat: 0, playerId: 'p1', player: 'Alice', stack, status: 'active', isHero: false, isBot: false },
+        ...Array.from({ length: 8 }, (_, i) => ({ seat: i + 1, player: null })),
+      ],
+    });
+  }
+
+  function openEditStack() {
+    // First, make sure we're on Seats tab
+    fireEvent.click(screen.getByRole('button', { name: /Seats/i }));
+    // Click the seat 0 button (Alice) to select it
+    fireEvent.click(screen.getByRole('button', { name: /S1/i }));
+    // Click the "Edit Stack" button
+    fireEvent.click(screen.getByRole('button', { name: /Edit Stack/i }));
+  }
+
+  it('Apply emits adjustStack(playerId, newStack)', () => {
+    const emit = makeEmit();
+    render(<TabSetup data={seatedAlice(1000)} emit={emit} />);
+    openEditStack();
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '2000' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Apply$/i }));
+    expect(emit.adjustStack).toHaveBeenCalledWith('p1', 2000);
+  });
+
+  it('Apply is disabled when value unchanged', () => {
+    render(<TabSetup data={seatedAlice(1000)} emit={makeEmit()} />);
+    openEditStack();
+    expect(screen.getByRole('button', { name: /^Apply$/i })).toBeDisabled();
+  });
+
+  it('Cancel closes editor without emitting', () => {
+    const emit = makeEmit();
+    render(<TabSetup data={seatedAlice(1000)} emit={emit} />);
+    openEditStack();
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
+    expect(emit.adjustStack).not.toHaveBeenCalled();
+    // Editor should be gone — spinbutton should not exist
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+  });
+
+  it('Shows reducing-stack warning when new stack < current', () => {
+    render(<TabSetup data={seatedAlice(1000)} emit={makeEmit()} />);
+    openEditStack();
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '500' } });
+    expect(screen.getByText(/Reducing stack mid-hand is rejected/i)).toBeInTheDocument();
+  });
+});
+
 describe('TabSetup — Seats sub-tab', () => {
   it('empty-seat Add Bot card uses honest copy + sublabel', () => {
     const emit = makeEmit();
