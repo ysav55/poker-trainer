@@ -217,3 +217,43 @@ describe('buildLiveData — status priority chain', () => {
     expect(buildLiveData(input({ replayActive: true, drillActive: true, scenario: true, paused: true })).status).toBe('review');
   });
 });
+
+describe('buildLiveData — actions_log', () => {
+  it('returns empty array when gameState has no actions', () => {
+    const out = buildLiveData({
+      hookState: {
+        gameState: { phase: 'waiting', paused: false, is_scenario: false, hand_id: null, actions: [], players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] },
+        actionTimer: {},
+        equityData: { showToPlayers: false, players: {} },
+        myId: 'me',
+        replayState: { active: false },
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [], active: null },
+    });
+    expect(out.actions_log).toEqual([]);
+  });
+
+  it('maps gameState.actions into actions_log shape (newest first)', () => {
+    const actions = [
+      { street: 'preflop', player_id: 'p1', player: 'Alice', action: 'call', amount: 20 },
+      { street: 'preflop', player_id: 'p2', player: 'Bob',   action: 'raise', amount: 60 },
+      { street: 'flop',    player_id: 'p1', player: 'Alice', action: 'check' },
+    ];
+    const out = buildLiveData({
+      hookState: {
+        gameState: { phase: 'flop', paused: false, is_scenario: false, hand_id: 'h1', actions, players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] },
+        actionTimer: {},
+        equityData: { showToPlayers: false, players: {} },
+        myId: 'me',
+        replayState: { active: false },
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [], active: null },
+    });
+    // Newest first, so flop check is index 0
+    expect(out.actions_log[0]).toMatchObject({ street: 'flop', who: 'Alice', act: 'check' });
+    expect(out.actions_log[1]).toMatchObject({ street: 'preflop', who: 'Bob', act: 'raise', amt: 60 });
+    expect(out.actions_log).toHaveLength(3);
+  });
+});

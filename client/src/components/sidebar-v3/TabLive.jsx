@@ -42,8 +42,6 @@ export default function TabLive({ data, emit }) {
     .filter(Boolean)
     .sort((a, b) => b.pct - a.pct);
 
-  const feed = [...gameState.hand_history].reverse();
-
   return (
     <>
       <div className="card" style={{ padding: '11px 12px 10px' }}>
@@ -103,22 +101,22 @@ export default function TabLive({ data, emit }) {
 
       <div className="card" style={{ flex: 1, minHeight: 180 }}>
         <div className="card-head">
-          <div className="card-title">Action Feed</div>
-          <div className="card-kicker">{feed.length ? 'this hand' : 'phase 2'}</div>
+          <div className="card-title">Action Log</div>
+          <div className="card-kicker">{(data.actions_log?.length || 0) + ' rows'}</div>
         </div>
-        {feed.length === 0 ? (
+        {(!data.actions_log || data.actions_log.length === 0) ? (
           <div style={{
             fontSize: 11, color: 'var(--ink-faint)', textAlign: 'center',
             padding: '18px 8px', lineHeight: 1.5,
           }}>
-            Live action feed wires up in Phase 2 (subscribes to <code style={{ fontFamily: 'var(--mono)', color: 'var(--ink-dim)' }}>place_bet</code> + phase transitions).
+            No actions yet — the log fills as the hand plays.
           </div>
         ) : (
           <div>
-            {feed.map((row, i) => (
+            {data.actions_log.map((row, i) => (
               <div key={i} className="feed-row">
                 <span className="feed-phase">
-                  {({ preflop: 'PRE', flop: 'FLOP', turn: 'TURN', river: 'RIV', showdown: 'SD' })[row.street] || row.street.slice(0, 3).toUpperCase()}
+                  {({ preflop: 'PRE', flop: 'FLOP', turn: 'TURN', river: 'RIV', showdown: 'SD' })[row.street] || (row.street || '').slice(0, 3).toUpperCase()}
                 </span>
                 <span className="feed-text">
                   <b>{row.who}</b> {row.act}

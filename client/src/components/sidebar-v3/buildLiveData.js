@@ -205,6 +205,18 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
       if (isPaused) return 'paused';
       return 'live';
     })(),
+    // actions_log: newest action first; powers live.action_log_card.
+    // Spec section 4.1, 7.5.
+    actions_log: (() => {
+      const rawActions = Array.isArray(gs.actions) ? gs.actions : [];
+      return [...rawActions].reverse().map((a) => ({
+        street:  a.street ?? 'preflop',
+        who:     a.player ?? a.player_name ?? (a.player_id ? String(a.player_id).slice(0, 6) : '—'),
+        act:     a.action ?? a.act ?? '—',
+        amt:     a.amount ?? null,
+        pending: !!a.pending,
+      }));
+    })(),
   };
 }
 
