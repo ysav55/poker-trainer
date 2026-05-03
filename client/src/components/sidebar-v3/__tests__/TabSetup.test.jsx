@@ -34,36 +34,27 @@ function makeEmit(overrides = {}) {
 const ALICE = { seat: 0, playerId: 'p1', stableId: 's1', name: 'Alice', stack: 1000, isHero: false, isBot: false, status: 'active', hands: 5 };
 
 describe('TabSetup — Blinds', () => {
-  it('Apply emits setBlindLevels(sb, bb) with the typed values', () => {
+  it('shows only one numeric input (BB), with SB derived as BB/2', () => {
     const emit = makeEmit();
     render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={emit} />);
     const inputs = screen.getAllByRole('spinbutton');
-    fireEvent.change(inputs[0], { target: { value: '25' } });
-    fireEvent.change(inputs[1], { target: { value: '50' } });
+    expect(inputs).toHaveLength(1);
+  });
+
+  it('Apply emits setBlindLevels(bb/2, bb) using BB only', () => {
+    const emit = makeEmit();
+    render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={emit} />);
+    const bbInput = screen.getAllByRole('spinbutton')[0];
+    fireEvent.change(bbInput, { target: { value: '50' } });
     fireEvent.click(screen.getByRole('button', { name: /Apply 25\/50/i }));
     expect(emit.setBlindLevels).toHaveBeenCalledWith(25, 50);
   });
 
-  it('Apply is disabled when not dirty', () => {
+  it('Apply is disabled when BB is invalid (non-positive integer)', () => {
     render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
-    expect(screen.getByRole('button', { name: /Already current/i })).toBeDisabled();
-  });
-
-  it('Apply is disabled when bb <= sb (invalid)', () => {
-    render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
-    const inputs = screen.getAllByRole('spinbutton');
-    fireEvent.change(inputs[0], { target: { value: '50' } });
-    fireEvent.change(inputs[1], { target: { value: '40' } });
-    expect(screen.getByText(/BB must be a positive integer greater than SB/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Apply 50\/40/i })).toBeDisabled();
-  });
-
-  it('clicking a preset row populates sb/bb', () => {
-    render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
-    fireEvent.click(screen.getByText(/Level 2/i));
-    const inputs = screen.getAllByRole('spinbutton');
-    expect(inputs[0]).toHaveValue(25);
-    expect(inputs[1]).toHaveValue(50);
+    const bbInput = screen.getAllByRole('spinbutton')[0];
+    fireEvent.change(bbInput, { target: { value: '0' } });
+    expect(screen.getByText(/BB must be a positive integer greater than 1/i)).toBeInTheDocument();
   });
 });
 

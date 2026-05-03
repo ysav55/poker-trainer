@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Segmented, DifficultyPicker } from './shared.jsx';
 
 export default function TabSetup({ data, emit }) {
@@ -26,29 +26,18 @@ export default function TabSetup({ data, emit }) {
 
 // ── Blinds ─────────────────────────────────────────────────────────────────
 function BlindsSection({ data, emit }) {
-  const liveSb = data.blindLevels.current.sb;
   const liveBb = data.blindLevels.current.bb;
-  // Note: ante was in the v0 mock but is intentionally dropped — server's
-  // set_blind_levels only takes {sb, bb} (coachControls.js:85). For tournaments
-  // ante is set via TournamentController, not this sidebar.
-  const [sb, setSb] = useState(liveSb);
   const [bb, setBb] = useState(liveBb);
   const [applied, setApplied] = useState(false);
-  const prevLiveRef = useRef({ sb: liveSb, bb: liveBb });
 
-  // Sync local form to live values ONLY when the local input still matches
-  // the previous live value (i.e., the coach hasn't started typing). Without
-  // this, a remote blind change mid-typing would silently overwrite the
-  // coach's in-progress edit.
   useEffect(() => {
-    if (sb === prevLiveRef.current.sb) setSb(liveSb);
-    if (bb === prevLiveRef.current.bb) setBb(liveBb);
-    prevLiveRef.current = { sb: liveSb, bb: liveBb };
+    setBb(liveBb);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveSb, liveBb]);
+  }, [liveBb]);
 
-  const dirty = sb !== liveSb || bb !== liveBb;
-  const valid = Number.isInteger(sb) && Number.isInteger(bb) && sb > 0 && bb > sb;
+  const sb = Math.max(1, Math.floor(bb / 2));
+  const dirty = bb !== liveBb;
+  const valid = Number.isInteger(bb) && bb > 1;
 
   function applyBlinds() {
     if (!emit?.setBlindLevels || !valid || !dirty) return;
@@ -62,15 +51,24 @@ function BlindsSection({ data, emit }) {
       <div className="card">
         <div className="card-head">
           <div className="card-title">Current Level</div>
-          <div className="card-kicker">SB / BB</div>
+          <div className="card-kicker">SB / BB (auto)</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-          <div><span className="lbl">Small Blind</span><input className="field" type="number" value={sb} onChange={(e) => setSb(parseInt(e.target.value, 10) || 0)} min={1} /></div>
-          <div><span className="lbl">Big Blind</span><input className="field" type="number" value={bb} onChange={(e) => setBb(parseInt(e.target.value, 10) || 0)} min={1} /></div>
+        <div>
+          <span className="lbl">Big Blind</span>
+          <input
+            className="field"
+            type="number"
+            value={bb}
+            onChange={(e) => setBb(parseInt(e.target.value, 10) || 0)}
+            min={2}
+          />
+          <div style={{ fontSize: 10, color: 'var(--ink-dim)', marginTop: 4 }}>
+            SB auto-set to {sb}
+          </div>
         </div>
         {dirty && !valid && (
           <div style={{ fontSize: 10, color: 'var(--bad)', marginTop: 6 }}>
-            BB must be a positive integer greater than SB.
+            BB must be a positive integer greater than 1.
           </div>
         )}
         <button
