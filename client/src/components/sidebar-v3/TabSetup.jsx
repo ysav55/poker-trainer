@@ -7,11 +7,10 @@ export default function TabSetup({ data, emit }) {
   return (
     <>
       <Segmented
-        cols={3}
+        cols={2}
         options={[
-          { value: 'blinds',  label: 'Blinds' },
-          { value: 'seats',   label: 'Seats' },
-          { value: 'players', label: 'Players' },
+          { value: 'blinds', label: 'Blinds' },
+          { value: 'seats',  label: 'Seats' },
         ]}
         value={section}
         onChange={setSection}
@@ -19,7 +18,6 @@ export default function TabSetup({ data, emit }) {
 
       {section === 'blinds'  && <BlindsSection  data={data} emit={emit} />}
       {section === 'seats'   && <SeatsSection   data={data} emit={emit} />}
-      {section === 'players' && <PlayersSection data={data} emit={emit} />}
     </>
   );
 }
@@ -244,102 +242,6 @@ function SeatDetailCard({ seat, seatIndex, emit }) {
         >Kick Player</button>
       )}
     </div>
-  );
-}
-
-// ── Players ────────────────────────────────────────────────────────────────
-function PlayersSection({ data, emit }) {
-  const [editingId, setEditingId] = useState(null);
-  const [difficulty, setDifficulty] = useState('easy');
-
-  return (
-    <>
-      <div className="card">
-        <div className="card-head">
-          <div className="card-title">Seated Players</div>
-          <div className="card-kicker">{data.players.length} at table</div>
-        </div>
-        {data.players.map((p) => {
-          const playerId = p.playerId;
-          const sitting = p.status === 'sitout';
-          const isEditing = editingId === playerId;
-          return (
-            <div
-              key={p.seat}
-              style={{
-                padding: '9px 2px',
-                borderBottom: '1px solid rgba(201,163,93,0.06)',
-                display: 'flex', flexDirection: 'column', gap: 6,
-              }}
-            >
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 6, alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)' }}>
-                    {p.name}
-                    {p.isHero && <span style={{ color: 'var(--accent-hot)', marginLeft: 6, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase' }}>you</span>}
-                    {p.isBot && <span style={{ color: 'var(--purple)', marginLeft: 6, fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase' }}>bot</span>}
-                  </div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-dim)', marginTop: 2 }}>
-                    Seat {p.seat + 1} · Stack {p.stack} · {sitting ? 'sitting out' : 'active'}
-                  </div>
-                </div>
-                <div className="row" style={{ gap: 4 }}>
-                  <button
-                    className="btn sm ghost"
-                    title="Edit stack"
-                    onClick={() => setEditingId(isEditing ? null : playerId)}
-                    disabled={!emit?.adjustStack || !playerId}
-                  >$</button>
-                  <button
-                    className="btn sm ghost"
-                    title={sitting ? 'Sit in' : 'Sit out'}
-                    onClick={() => emit?.setPlayerInHand?.(playerId, sitting)}
-                    disabled={!emit?.setPlayerInHand || !playerId}
-                  >{sitting ? '▶' : '⏸'}</button>
-                  {!p.isHero && (
-                    <button
-                      className="btn sm"
-                      style={{ color: 'var(--bad)', borderColor: 'rgba(224,104,104,0.3)' }}
-                      onClick={() => {
-                        if (typeof window !== 'undefined' &&
-                            !window.confirm(`Kick ${p.name}? Stack returns to chip bank.`)) return;
-                        emit?.coachKickPlayer?.(playerId);
-                      }}
-                      disabled={!emit?.coachKickPlayer || !playerId}
-                    >×</button>
-                  )}
-                </div>
-              </div>
-              {isEditing && (
-                <AdjustStackEditor
-                  currentStack={p.stack}
-                  onCancel={() => setEditingId(null)}
-                  onApply={(newStack) => {
-                    emit?.adjustStack?.(playerId, newStack);
-                    setEditingId(null);
-                  }}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="card">
-        <div className="card-head">
-          <div className="card-title">Add Bot</div>
-          <div className="card-kicker">{difficulty}</div>
-        </div>
-        <div className="lbl" style={{ marginBottom: 5 }}>Difficulty</div>
-        <DifficultyPicker value={difficulty} onChange={setDifficulty} />
-        <button
-          className="btn primary full"
-          style={{ marginTop: 10 }}
-          onClick={() => emit?.coachAddBot?.(difficulty)}
-          disabled={!emit?.coachAddBot}
-        >+ Add {difficulty} bot</button>
-      </div>
-    </>
   );
 }
 

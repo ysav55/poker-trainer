@@ -69,71 +69,6 @@ describe('TabSetup — Blinds', () => {
   });
 });
 
-describe('TabSetup — Players sub-tab', () => {
-  it('Sit Out toggle emits setPlayerInHand(playerId, false) for active player', () => {
-    const emit = makeEmit();
-    render(<TabSetup data={makeData({ players: [ALICE] })} emit={emit} />);
-    fireEvent.click(screen.getByRole('button', { name: /Players/i }));
-    fireEvent.click(screen.getByTitle('Sit out'));
-    expect(emit.setPlayerInHand).toHaveBeenCalledWith('p1', false);
-  });
-
-  it('Add Bot card emits coachAddBot(difficulty) — defaults to easy', () => {
-    const emit = makeEmit();
-    render(<TabSetup data={makeData({ players: [ALICE] })} emit={emit} />);
-    fireEvent.click(screen.getByRole('button', { name: /Players/i }));
-    fireEvent.click(screen.getByRole('button', { name: /\+ Add easy bot/i }));
-    expect(emit.coachAddBot).toHaveBeenCalledWith('easy');
-  });
-
-  it('changing difficulty before Add Bot emits with new difficulty', () => {
-    const emit = makeEmit();
-    render(<TabSetup data={makeData({ players: [ALICE] })} emit={emit} />);
-    fireEvent.click(screen.getByRole('button', { name: /Players/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^Hard$/ }));
-    fireEvent.click(screen.getByRole('button', { name: /\+ Add hard bot/i }));
-    expect(emit.coachAddBot).toHaveBeenCalledWith('hard');
-  });
-});
-
-describe('TabSetup — AdjustStackEditor', () => {
-  function openEditor(emit) {
-    render(<TabSetup data={makeData({ players: [ALICE] })} emit={emit} />);
-    fireEvent.click(screen.getByRole('button', { name: /Players/i }));
-    fireEvent.click(screen.getByTitle('Edit stack'));
-  }
-
-  it('Apply emits adjustStack(playerId, parsedInt) for changed value', () => {
-    const emit = makeEmit();
-    openEditor(emit);
-    const stackInput = screen.getByDisplayValue('1000');
-    fireEvent.change(stackInput, { target: { value: '1500' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Apply$/ }));
-    expect(emit.adjustStack).toHaveBeenCalledWith('p1', 1500);
-  });
-
-  it('Apply is disabled when value equals current stack', () => {
-    const emit = makeEmit();
-    openEditor(emit);
-    expect(screen.getByRole('button', { name: /^Apply$/ })).toBeDisabled();
-  });
-
-  it('Cancel closes editor without emitting', () => {
-    const emit = makeEmit();
-    openEditor(emit);
-    fireEvent.click(screen.getByRole('button', { name: /Cancel/i }));
-    expect(emit.adjustStack).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: /^Apply$/ })).not.toBeInTheDocument();
-  });
-
-  it('warning appears when reducing below current stack', () => {
-    const emit = makeEmit();
-    openEditor(emit);
-    fireEvent.change(screen.getByDisplayValue('1000'), { target: { value: '500' } });
-    expect(screen.getByText(/Reducing stack mid-hand is rejected/i)).toBeInTheDocument();
-  });
-});
-
 describe('TabSetup — Seats sub-tab', () => {
   it('empty-seat Add Bot card uses honest copy + sublabel', () => {
     const emit = makeEmit();
@@ -144,5 +79,14 @@ describe('TabSetup — Seats sub-tab', () => {
     expect(screen.getByText(/next open seat \(server-assigned\)/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /\+ Add easy bot to next open seat/i }));
     expect(emit.coachAddBot).toHaveBeenCalledWith('easy');
+  });
+});
+
+describe('TabSetup — sub-mode segment', () => {
+  it('exposes only Blinds and Seats sub-modes (Players removed)', () => {
+    render(<TabSetup data={makeData()} emit={makeEmit()} />);
+    expect(screen.getByRole('button', { name: 'Blinds' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Seats' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Players' })).toBeNull();
   });
 });
