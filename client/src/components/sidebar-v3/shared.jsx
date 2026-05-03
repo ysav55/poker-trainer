@@ -94,7 +94,7 @@ const TABS = [
   { id: 'drills',   label: 'Drills' },
   { id: 'history',  label: 'History' },
   { id: 'review',   label: 'Review' },
-  { id: 'settings', label: 'Setup' },
+  { id: 'setup',    label: 'Setup' },
 ];
 
 export function TabBar({ tab, onTabChange }) {
