@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MiniCard, DifficultyPicker } from './shared.jsx';
+import { MiniCard } from './shared.jsx';
 import ConfigureHand from './LiveConfigureHand.jsx';
 
 export default function TabLive({ data, emit }) {
@@ -139,53 +139,14 @@ function TableStrip({ data, emit }) {
     if (!emit?.setPlayerInHand || !s.playerId) return;
     emit.setPlayerInHand(s.playerId, s.status === 'sitout');
   };
-  const onKick = (s) => {
-    if (!emit?.coachKickPlayer || !s.playerId) return;
-    if (s.isHero) return; // never kick yourself
-    if (typeof window !== 'undefined' &&
-        !window.confirm(`Kick ${s.player} from the table? Their remaining stack returns to chip bank.`)) return;
-    emit.coachKickPlayer(s.playerId);
-  };
-  // Bot difficulty defaults to 'easy' here; Settings tab → Add Bot card has a
-  // full picker. The Live tab is for quick "drop in a sparring partner";
-  // coaches who want a specific difficulty navigate to Settings.
-  const [showAddBotPicker, setShowAddBotPicker] = useState(false);
-  const [addBotDifficulty, setAddBotDifficulty] = useState('easy');
-  const onAddBot = () => {
-    if (!emit?.coachAddBot) return;
-    emit.coachAddBot(addBotDifficulty);
-    setShowAddBotPicker(false);
-  };
   return (
     <div className="card">
       <div className="card-head">
         <div className="card-title">Table</div>
         <div className="card-kicker">
           {filled.length}/{data.seatConfig.maxSeats} seats
-          <span style={{ marginLeft: 8 }}>
-            <button
-              className="btn ghost sm"
-              style={{ padding: '4px 8px' }}
-              onClick={() => setShowAddBotPicker((v) => !v)}
-              disabled={!emit?.coachAddBot}
-              title="Add a bot to the next open seat"
-            >+ Bot</button>
-          </span>
         </div>
       </div>
-      {showAddBotPicker && (
-        <div style={{
-          background: 'var(--bg-3)', border: '1px solid var(--line)', borderRadius: 6,
-          padding: '8px 9px', marginBottom: 7,
-        }}>
-          <div className="lbl" style={{ marginBottom: 5 }}>Difficulty</div>
-          <DifficultyPicker value={addBotDifficulty} onChange={setAddBotDifficulty} />
-          <div className="row" style={{ gap: 5, marginTop: 8 }}>
-            <button className="btn primary full sm" onClick={onAddBot}>+ Add {addBotDifficulty}</button>
-            <button className="btn ghost sm" onClick={() => setShowAddBotPicker(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {filled.map((s) => {
           const isHero = s.isHero;
@@ -214,13 +175,6 @@ function TableStrip({ data, emit }) {
                 <SeatBtn title={sitting ? 'Sit in' : 'Sit out'} onClick={() => onToggleSitout(s)}>
                   {sitting ? '▶' : '❚❚'}
                 </SeatBtn>
-                <SeatBtn title="Adjust stack (Phase 5)" disabled>±</SeatBtn>
-                <SeatBtn
-                  title={s.isHero ? 'Cannot kick yourself' : 'Kick player'}
-                  danger
-                  disabled={s.isHero || !emit?.coachKickPlayer}
-                  onClick={() => onKick(s)}
-                >×</SeatBtn>
               </div>
             </div>
           );

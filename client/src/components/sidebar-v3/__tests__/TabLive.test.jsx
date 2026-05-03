@@ -57,3 +57,41 @@ describe('TabLive — Action Log', () => {
     expect(screen.queryByText(/Live action feed wires up in Phase 2/i)).toBeNull();
   });
 });
+
+describe('TabLive — seat-card buttons (Setup-only verbs removed)', () => {
+  function withSeat(overrides = {}) {
+    return liveData({
+      seatConfig: {
+        maxSeats: 9,
+        seats: [
+          { seat: 0, playerId: 'p1', player: 'Alice', stack: 1000, status: 'active', isHero: false, isBot: false },
+          ...Array.from({ length: 8 }, (_, i) => ({ seat: i + 1, player: null })),
+        ],
+      },
+      ...overrides,
+    });
+  }
+
+  it('does NOT render the +Bot button on Live tab', () => {
+    render(<TabLive data={withSeat()} emit={noopEmit} />);
+    // The +Bot button's name is " Bot" after "+" is parsed
+    expect(screen.queryByTitle(/Add a bot/i)).toBeNull();
+  });
+
+  it('does NOT render the per-seat Adjust (±) button', () => {
+    render(<TabLive data={withSeat()} emit={noopEmit} />);
+    expect(screen.queryByTitle(/Adjust stack/i)).toBeNull();
+  });
+
+  it('does NOT render the per-seat Kick (×) button', () => {
+    render(<TabLive data={withSeat()} emit={noopEmit} />);
+    expect(screen.queryByTitle(/Kick player/i)).toBeNull();
+  });
+
+  it('still renders the Sit-out / Sit-in toggle', () => {
+    render(<TabLive data={withSeat()} emit={noopEmit} />);
+    // The sit-out button uses glyph text (❚❚ or ▶), not readable name
+    const sitoutBtn = screen.getByTitle(/Sit (in|out)/i);
+    expect(sitoutBtn).toBeInTheDocument();
+  });
+});
