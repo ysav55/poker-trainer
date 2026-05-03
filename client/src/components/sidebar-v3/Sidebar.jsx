@@ -132,9 +132,11 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
                                 />}
         {tab === 'setup' && <TabSetup data={data} emit={emit} />}
       </div>
-      <div className="sb-foot">
-        <Foot />
-      </div>
+      {tab !== 'drills' && (
+        <div className="sb-foot">
+          <Foot />
+        </div>
+      )}
     </div>
   );
 }

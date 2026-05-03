@@ -75,3 +75,14 @@ describe('SidebarV3 — footer copy', () => {
     expect(screen.queryByRole('button', { name: /Exit Replay → Live/ })).toBeNull();
   });
 });
+
+describe('SidebarV3 — Drills footer removed', () => {
+  it('Drills tab has no Clear button', () => {
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} initialTab="drills" />);
+    expect(screen.queryByRole('button', { name: /^Clear$/ })).toBeNull();
+  });
+  it('Drills tab has no Launch Hand button', () => {
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} initialTab="drills" />);
+    expect(screen.queryByRole('button', { name: /Launch Hand →/ })).toBeNull();
+  });
+});
