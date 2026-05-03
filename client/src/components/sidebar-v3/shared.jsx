@@ -30,6 +30,7 @@ export function StatusPill({ state }) {
     paused:   { color: '#f5b25b', label: 'PAUSED' },
     scenario: { color: '#9b7cff', label: 'SCENARIO' },
     review:   { color: '#6aa8ff', label: 'REVIEW' },
+    drill:    { color: '#e8c84a', label: 'DRILL' },
   };
   const { color, label } = map[state] || map.live;
   return (

@@ -192,6 +192,19 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
           results: { correct: 0, mistake: 0, uncertain: 0 },
         }
       : { active: false, scenarioId: null, scenarioName: '', handsDone: 0, handsTotal: 0, currentSpot: '', results: { correct: 0, mistake: 0, uncertain: 0 } },
+    // Status priority chain: review > drill > scenario > paused > live.
+    // Spec section 3.3 / 5.3.
+    status: (() => {
+      const replayActive = !!gs.replay_mode?.active;
+      const drillActive = !!gs.playlist_mode?.active;
+      const scenarioOn = !!gs.is_scenario;
+      const isPaused = !!gs.paused;
+      if (replayActive) return 'review';
+      if (drillActive) return 'drill';
+      if (scenarioOn) return 'scenario';
+      if (isPaused) return 'paused';
+      return 'live';
+    })(),
   };
 }
 

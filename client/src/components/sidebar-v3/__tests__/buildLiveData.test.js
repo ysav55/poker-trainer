@@ -177,3 +177,43 @@ describe('buildLiveData — null safety', () => {
     expect(data.equityData).toBeDefined();
   });
 });
+
+describe('buildLiveData — status priority chain', () => {
+  function input({ paused = false, replayActive = false, drillActive = false, scenario = false } = {}) {
+    return {
+      hookState: {
+        gameState: {
+          phase: 'waiting',
+          paused,
+          is_scenario: scenario,
+          hand_id: null,
+          actions: [],
+          players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }],
+          ...(drillActive ? { playlist_mode: { active: true, playlistId: 'pl1', currentIndex: 0, totalHands: 1 } } : {}),
+          ...(replayActive ? { replay_mode: { active: true, source_hand_id: 'h1', cursor: 0, total_actions: 1, branched: false } } : {}),
+        },
+        actionTimer: { secondsLeft: 0, totalSeconds: 0 },
+        equityData: { showToPlayers: false, players: {} },
+        myId: 'me',
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [] },
+    };
+  }
+
+  it('returns "live" when nothing else is true', () => {
+    expect(buildLiveData(input()).status).toBe('live');
+  });
+  it('"paused" wins over "live"', () => {
+    expect(buildLiveData(input({ paused: true })).status).toBe('paused');
+  });
+  it('"scenario" wins over "paused" and "live"', () => {
+    expect(buildLiveData(input({ paused: true, scenario: true })).status).toBe('scenario');
+  });
+  it('"drill" wins over "scenario", "paused", "live"', () => {
+    expect(buildLiveData(input({ drillActive: true, scenario: true, paused: true })).status).toBe('drill');
+  });
+  it('"review" wins over everything', () => {
+    expect(buildLiveData(input({ replayActive: true, drillActive: true, scenario: true, paused: true })).status).toBe('review');
+  });
+});

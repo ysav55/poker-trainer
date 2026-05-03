@@ -39,11 +39,6 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
     setAndPersist('review');
   }
 
-  let status = 'live';
-  if (paused) status = 'paused';
-  else if (tab === 'review') status = 'review';
-  else if (data.gameState.is_scenario) status = 'scenario';
-
   function Foot() {
     // Buttons without a Phase 1 wire-up are explicitly disabled with a Phase-N
     // tooltip — better than silent no-ops on gold-styled buttons that read as
@@ -122,7 +117,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
 
   return (
     <div className="sb-v3" style={{ width: 360, flexShrink: 0 }}>
-      <Head status={status} />
+      <Head status={data.status || 'live'} />
       <TabBar tab={tab} onTabChange={setAndPersist} />
       <div className="sb-body">
         {tab === 'live'     && <TabLive     data={data} emit={emit} />}

@@ -45,3 +45,11 @@ describe('SidebarV3 — Header', () => {
     expect(logo.querySelector('small')).toBeNull();
   });
 });
+
+describe('SidebarV3 — StatusPill', () => {
+  it('renders DRILL state with correct label', () => {
+    const drillData = { ...SIDEBAR_V3_DATA, status: 'drill' };
+    render(<SidebarV3 data={drillData} />);
+    expect(screen.getByText('DRILL')).toBeInTheDocument();
+  });
+});
