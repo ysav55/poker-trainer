@@ -139,7 +139,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
                                    selectedHandId={selectedHandId}
                                    onBack={() => { setSelectedHandId(null); setAndPersist('live'); }}
                                 />}
-        {tab === 'settings' && <TabSettings data={data} emit={emit} />}
+        {tab === 'setup' && <TabSettings data={data} emit={emit} />}
       </div>
       <div className="sb-foot">
         <Foot />

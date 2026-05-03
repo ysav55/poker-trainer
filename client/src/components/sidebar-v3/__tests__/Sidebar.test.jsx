@@ -15,4 +15,11 @@ describe('SidebarV3 — TABS', () => {
     fireEvent.click(setupTab);
     expect(localStorage.getItem('fs.sb3.tab')).toBe('setup');
   });
+
+  it('clicking Setup tab renders the Setup tab body', () => {
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
+    fireEvent.click(screen.getByText('Setup'));
+    // BlindsSection's "Current Level" card title is unique to TabSettings
+    expect(screen.getByText('Current Level')).toBeInTheDocument();
+  });
 });
