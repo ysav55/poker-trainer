@@ -5,7 +5,7 @@ import TabLive from './TabLive.jsx';
 import TabDrills from './TabDrills.jsx';
 import TabHistory from './TabHistory.jsx';
 import TabReview from './TabReview.jsx';
-import TabSettings from './TabSettings.jsx';
+import TabSetup from './TabSetup.jsx';
 import { SIDEBAR_V3_DATA } from './data.js';
 
 export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId = null, replay = null, initialTab = 'live' }) {
@@ -148,7 +148,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
                                    selectedHandId={selectedHandId}
                                    onBack={() => { setSelectedHandId(null); setAndPersist('live'); }}
                                 />}
-        {tab === 'setup' && <TabSettings data={data} emit={emit} />}
+        {tab === 'setup' && <TabSetup data={data} emit={emit} />}
       </div>
       <div className="sb-foot">
         <Foot />

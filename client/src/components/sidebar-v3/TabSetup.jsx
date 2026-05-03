@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Segmented, DifficultyPicker } from './shared.jsx';
 
-export default function TabSettings({ data, emit }) {
+export default function TabSetup({ data, emit }) {
   const [section, setSection] = useState('blinds');
 
   return (

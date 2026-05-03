@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
-import TabSettings from '../TabSettings.jsx';
+import TabSetup from '../TabSetup.jsx';
 
 function makeData({ sb = 10, bb = 20, players = [], seats } = {}) {
   return {
@@ -33,10 +33,10 @@ function makeEmit(overrides = {}) {
 
 const ALICE = { seat: 0, playerId: 'p1', stableId: 's1', name: 'Alice', stack: 1000, isHero: false, isBot: false, status: 'active', hands: 5 };
 
-describe('TabSettings — Blinds', () => {
+describe('TabSetup — Blinds', () => {
   it('Apply emits setBlindLevels(sb, bb) with the typed values', () => {
     const emit = makeEmit();
-    render(<TabSettings data={makeData({ sb: 10, bb: 20 })} emit={emit} />);
+    render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={emit} />);
     const inputs = screen.getAllByRole('spinbutton');
     fireEvent.change(inputs[0], { target: { value: '25' } });
     fireEvent.change(inputs[1], { target: { value: '50' } });
@@ -45,12 +45,12 @@ describe('TabSettings — Blinds', () => {
   });
 
   it('Apply is disabled when not dirty', () => {
-    render(<TabSettings data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
+    render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
     expect(screen.getByRole('button', { name: /Already current/i })).toBeDisabled();
   });
 
   it('Apply is disabled when bb <= sb (invalid)', () => {
-    render(<TabSettings data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
+    render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
     const inputs = screen.getAllByRole('spinbutton');
     fireEvent.change(inputs[0], { target: { value: '50' } });
     fireEvent.change(inputs[1], { target: { value: '40' } });
@@ -59,7 +59,7 @@ describe('TabSettings — Blinds', () => {
   });
 
   it('clicking a preset row populates sb/bb', () => {
-    render(<TabSettings data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
+    render(<TabSetup data={makeData({ sb: 10, bb: 20 })} emit={makeEmit()} />);
     fireEvent.click(screen.getByText(/Level 2/i));
     const inputs = screen.getAllByRole('spinbutton');
     expect(inputs[0]).toHaveValue(25);
@@ -67,10 +67,10 @@ describe('TabSettings — Blinds', () => {
   });
 });
 
-describe('TabSettings — Players sub-tab', () => {
+describe('TabSetup — Players sub-tab', () => {
   it('Sit Out toggle emits setPlayerInHand(playerId, false) for active player', () => {
     const emit = makeEmit();
-    render(<TabSettings data={makeData({ players: [ALICE] })} emit={emit} />);
+    render(<TabSetup data={makeData({ players: [ALICE] })} emit={emit} />);
     fireEvent.click(screen.getByRole('button', { name: /Players/i }));
     fireEvent.click(screen.getByTitle('Sit out'));
     expect(emit.setPlayerInHand).toHaveBeenCalledWith('p1', false);
@@ -78,7 +78,7 @@ describe('TabSettings — Players sub-tab', () => {
 
   it('Add Bot card emits coachAddBot(difficulty) — defaults to easy', () => {
     const emit = makeEmit();
-    render(<TabSettings data={makeData({ players: [ALICE] })} emit={emit} />);
+    render(<TabSetup data={makeData({ players: [ALICE] })} emit={emit} />);
     fireEvent.click(screen.getByRole('button', { name: /Players/i }));
     fireEvent.click(screen.getByRole('button', { name: /\+ Add easy bot/i }));
     expect(emit.coachAddBot).toHaveBeenCalledWith('easy');
@@ -86,7 +86,7 @@ describe('TabSettings — Players sub-tab', () => {
 
   it('changing difficulty before Add Bot emits with new difficulty', () => {
     const emit = makeEmit();
-    render(<TabSettings data={makeData({ players: [ALICE] })} emit={emit} />);
+    render(<TabSetup data={makeData({ players: [ALICE] })} emit={emit} />);
     fireEvent.click(screen.getByRole('button', { name: /Players/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Hard$/ }));
     fireEvent.click(screen.getByRole('button', { name: /\+ Add hard bot/i }));
@@ -94,9 +94,9 @@ describe('TabSettings — Players sub-tab', () => {
   });
 });
 
-describe('TabSettings — AdjustStackEditor', () => {
+describe('TabSetup — AdjustStackEditor', () => {
   function openEditor(emit) {
-    render(<TabSettings data={makeData({ players: [ALICE] })} emit={emit} />);
+    render(<TabSetup data={makeData({ players: [ALICE] })} emit={emit} />);
     fireEvent.click(screen.getByRole('button', { name: /Players/i }));
     fireEvent.click(screen.getByTitle('Edit stack'));
   }
@@ -132,10 +132,10 @@ describe('TabSettings — AdjustStackEditor', () => {
   });
 });
 
-describe('TabSettings — Seats sub-tab', () => {
+describe('TabSetup — Seats sub-tab', () => {
   it('empty-seat Add Bot card uses honest copy + sublabel', () => {
     const emit = makeEmit();
-    render(<TabSettings data={makeData()} emit={emit} />);
+    render(<TabSetup data={makeData()} emit={emit} />);
     fireEvent.click(screen.getByRole('button', { name: /Seats/i }));
     // Click the empty seat S2 to select it
     fireEvent.click(screen.getByRole('button', { name: /S2/ }));
