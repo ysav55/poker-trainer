@@ -77,12 +77,11 @@ export function DifficultyPicker({ value, onChange }) {
   );
 }
 
-export function Head({ status, subtitle }) {
+export function Head({ status }) {
   return (
     <div className="sb-head">
       <div className="sb-logo">
         FeltSide
-        <small>{subtitle || 'Coach'}</small>
       </div>
       <StatusPill state={status} />
     </div>

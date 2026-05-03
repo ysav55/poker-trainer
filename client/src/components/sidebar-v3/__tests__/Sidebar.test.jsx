@@ -19,7 +19,7 @@ describe('SidebarV3 — TABS', () => {
   it('clicking Setup tab renders the Setup tab body', () => {
     render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
     fireEvent.click(screen.getByText('Setup'));
-    // BlindsSection's "Current Level" card title is unique to TabSettings
+    // BlindsSection's "Current Level" card title is unique to TabSetup
     expect(screen.getByText('Current Level')).toBeInTheDocument();
   });
 
@@ -34,5 +34,14 @@ describe('SidebarV3 — TABS', () => {
     render(<SidebarV3 data={SIDEBAR_V3_DATA} initialTab="drills" />);
     // does NOT auto-write — only on user click
     expect(localStorage.getItem('fs.sb3.tab')).toBeNull();
+  });
+});
+
+describe('SidebarV3 — Header', () => {
+  it('does not render any subtitle text below the FeltSide logo', () => {
+    const { container } = render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
+    const logo = container.querySelector('.sb-logo');
+    expect(logo).toBeInTheDocument();
+    expect(logo.querySelector('small')).toBeNull();
   });
 });

@@ -44,19 +44,6 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
   else if (tab === 'review') status = 'review';
   else if (data.gameState.is_scenario) status = 'scenario';
 
-  // Server's getPublicState() does not emit a hand_number; use the truncated
-  // handId in the Review subtitle so it actually reflects the loaded hand.
-  const reviewSubtitle = data.review?.handId
-    ? `Hand · ${String(data.review.handId).slice(0, 8)}`
-    : 'Hand · —';
-  const subtitle = {
-    live:     'Coach',
-    drills:   'Drill Builder',
-    history:  `Session · ${data.session?.hands ?? 0} hands`,
-    review:   reviewSubtitle,
-    settings: 'Table Setup',
-  }[tab];
-
   function Foot() {
     // Buttons without a Phase 1 wire-up are explicitly disabled with a Phase-N
     // tooltip — better than silent no-ops on gold-styled buttons that read as
@@ -135,7 +122,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
 
   return (
     <div className="sb-v3" style={{ width: 360, flexShrink: 0 }}>
-      <Head status={status} subtitle={subtitle} />
+      <Head status={status} />
       <TabBar tab={tab} onTabChange={setAndPersist} />
       <div className="sb-body">
         {tab === 'live'     && <TabLive     data={data} emit={emit} />}
