@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import SidebarV3 from '../Sidebar.jsx';
 import { SIDEBAR_V3_DATA } from '../data.js';
 
@@ -8,6 +8,8 @@ describe('SidebarV3 — TABS', () => {
   beforeEach(() => {
     try { localStorage.clear(); } catch {}
   });
+
+  afterEach(() => cleanup());
 
   it('renders the Setup tab with id "setup"', () => {
     render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
@@ -88,6 +90,8 @@ describe('SidebarV3 — Drills footer removed', () => {
 });
 
 describe('SidebarV3 — Tag Hand wiring', () => {
+  beforeEach(() => cleanup());
+
   it('clicking Tag Hand opens the dialog when a current hand exists', () => {
     const data = {
       ...SIDEBAR_V3_DATA,

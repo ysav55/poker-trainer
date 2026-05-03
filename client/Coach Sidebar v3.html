@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>FeltSide · Coach Sidebar v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=General+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="src/sidebar-v3/sidebar.css" />
+<style>
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'General Sans', 'Inter', system-ui, sans-serif;
+    background: #07070a;
+    color: #ece9e3;
+    -webkit-font-smoothing: antialiased;
+    padding: 28px 24px;
+    min-height: 100vh;
+  }
+  * { box-sizing: border-box; }
+
+  .page-head {
+    max-width: 1200px;
+    margin: 0 auto 20px;
+    text-align: center;
+  }
+  .page-head h1 {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 34px;
+    color: #c9a35d;
+    margin: 0;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .page-head .sub {
+    margin-top: 8px;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: rgba(240,236,227,0.5);
+    font-weight: 600;
+  }
+
+  /* Tab picker overlay so user can scrub through tabs without rebuilding */
+  .demo-tabbar {
+    max-width: 1200px;
+    margin: 0 auto 18px;
+    display: flex; justify-content: center; gap: 6px;
+  }
+  .demo-tabbar button {
+    font-family: 'General Sans', sans-serif;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.2em; text-transform: uppercase;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: rgba(201,163,93,0.06);
+    border: 1px solid rgba(201,163,93,0.2);
+    color: #c9a35d;
+    cursor: pointer;
+  }
+  .demo-tabbar button.active {
+    background: linear-gradient(180deg, #c9a35d, #8c6a2a);
+    color: #1a1208;
+    border-color: rgba(255,220,150,0.5);
+  }
+
+  .stage {
+    display: flex; justify-content: center;
+  }
+  .sb-frame {
+    width: 360px;
+    height: 840px;
+    background: #0b0d14;
+    border: 1px solid rgba(201,163,93,0.15);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+</style>
+</head>
+<body>
+  <div class="page-head">
+    <h1>FeltSide · Coach Sidebar</h1>
+    <div class="sub">v3 · live table · drill builder · split history</div>
+  </div>
+
+  <div id="app"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="src/sidebar-v3/data.jsx"></script>
+  <script type="text/babel" src="src/sidebar-v3/shared.jsx"></script>
+  <script type="text/babel" src="src/sidebar-v3/LiveConfigureHand.jsx"></script>
+  <script type="text/babel" src="src/sidebar-v3/TabLive.jsx"></script>
+  <script type="text/babel" src="src/sidebar-v3/TabDrills.jsx"></script>
+  <script type="text/babel" src="src/sidebar-v3/TabHistory.jsx"></script>
+  <script type="text/babel" src="src/sidebar-v3/TabReview.jsx"></script>
+  <script type="text/babel" src="src/sidebar-v3/TabSettings.jsx"></script>
+  <script type="text/babel" src="src/sidebar-v3/Sidebar.jsx"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function App() {
+      // localStorage-persisted tab for easy iteration
+      const [tab, _setTab] = useState(() => localStorage.getItem('fs.sb3.tab') || 'live');
+      const setTab = (t) => { localStorage.setItem('fs.sb3.tab', t); _setTab(t); };
+
+      const TABS = [
+        { id: 'live',     label: 'Live' },
+        { id: 'drills',   label: 'Drills' },
+        { id: 'history',  label: 'History' },
+        { id: 'review',   label: 'Review' },
+        { id: 'settings', label: 'Settings' },
+      ];
+      return (
+        <>
+          <div className="demo-tabbar">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                className={tab === t.id ? 'active' : ''}
+                onClick={() => setTab(t.id)}
+              >{t.label}</button>
+            ))}
+          </div>
+          <div className="stage">
+            <div className="sb-frame">
+              <window.Sidebar tab={tab} onTabChange={setTab} />
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+  </script>
+</body>
+</html>
