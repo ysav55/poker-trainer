@@ -66,14 +66,6 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
         </>
       );
     }
-    if (tab === 'drills') {
-      return (
-        <>
-          <button className="btn ghost" style={{ flex: 1 }} disabled title="Phase 3">Clear</button>
-          <button className="btn primary" style={{ flex: 1.6 }} disabled title="Phase 3">Launch Hand →</button>
-        </>
-      );
-    }
     if (tab === 'history') {
       return (
         <>
