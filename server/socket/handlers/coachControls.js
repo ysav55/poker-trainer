@@ -24,6 +24,20 @@ async function handleApplyBlindsAtNextHand(socket, payload, ack) {
   return ack?.({ ok: true });
 }
 
+async function handleDiscardPendingBlinds(socket, payload, ack) {
+  const { requireCoach } = require('../../auth/socketGuards.js');
+
+  if (requireCoach(socket, 'discard pending blinds')) {
+    return ack?.({ error: 'coach_only' });
+  }
+  const { tableId } = payload || {};
+  if (!tableId) return ack?.({ error: 'invalid_table' });
+  SharedState.pendingBlinds.delete(tableId);
+  socket.to(tableId).emit('pending_blinds_updated', null);
+  socket.emit('pending_blinds_updated', null);
+  return ack?.({ ok: true });
+}
+
 module.exports = function registerCoachControls(socket, ctx) {
   const { tables, activeHands, stableIdMap, io,
           broadcastState, sendError, sendSyncError, startActionTimer, clearActionTimer,
@@ -347,6 +361,12 @@ module.exports = function registerCoachControls(socket, ctx) {
   socket.on('coach:apply_blinds_at_next_hand', (payload, ack) =>
     handleApplyBlindsAtNextHand(socket, payload, ack)
   );
+
+  // coach:discard_pending_blinds — cancel the queued blind delta
+  socket.on('coach:discard_pending_blinds', (payload, ack) =>
+    handleDiscardPendingBlinds(socket, payload, ack)
+  );
 };
 
 module.exports.handleApplyBlindsAtNextHand = handleApplyBlindsAtNextHand;
+module.exports.handleDiscardPendingBlinds = handleDiscardPendingBlinds;

@@ -58,3 +58,33 @@ describe('coach:apply_blinds_at_next_hand', () => {
     expect(sock.to).toHaveBeenCalledWith('t1');
   });
 });
+
+describe('coach:discard_pending_blinds', () => {
+  it('clears the pending entry', async () => {
+    SharedState.pendingBlinds.set('t1', { sb: 25, bb: 50, queuedBy: 'coach-a', queuedAt: 100 });
+    const handler = require('../handlers/coachControls.js').handleDiscardPendingBlinds;
+    const sock = makeSocket();
+    const ack = jest.fn();
+    await handler(sock, { tableId: 't1' }, ack);
+    expect(SharedState.pendingBlinds.has('t1')).toBe(false);
+    expect(ack).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it('is a no-op if nothing pending', async () => {
+    const handler = require('../handlers/coachControls.js').handleDiscardPendingBlinds;
+    const sock = makeSocket();
+    const ack = jest.fn();
+    await handler(sock, { tableId: 't1' }, ack);
+    expect(ack).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it('rejects non-coach', async () => {
+    SharedState.pendingBlinds.set('t1', { sb: 25, bb: 50, queuedBy: 'coach-a', queuedAt: 100 });
+    const handler = require('../handlers/coachControls.js').handleDiscardPendingBlinds;
+    const sock = makeSocket({ isCoach: false });
+    const ack = jest.fn();
+    await handler(sock, { tableId: 't1' }, ack);
+    expect(ack).toHaveBeenCalledWith(expect.objectContaining({ error: 'coach_only' }));
+    expect(SharedState.pendingBlinds.has('t1')).toBe(true); // unchanged
+  });
+});
