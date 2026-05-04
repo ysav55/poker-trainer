@@ -6,6 +6,24 @@ jest.mock('../db/repositories/TableRepository.js', () => ({
     closeTable: jest.fn().mockResolvedValue(undefined),
     listOrphanedTables: jest.fn().mockResolvedValue([]),
   },
+  InvitedPlayersRepository: {
+    addInvite: jest.fn(),
+    removeInvite: jest.fn(),
+    listInvited: jest.fn(),
+    isInvited: jest.fn(),
+  },
+  TablePresetsRepository: {
+    save: jest.fn(),
+    list: jest.fn(),
+    get: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    clone: jest.fn(),
+  },
+}));
+
+jest.mock('../game/BotConnection', () => ({
+  disconnectAllAtTable: jest.fn(),
 }));
 
 jest.mock('../logs/logger', () => ({ error: jest.fn() }));

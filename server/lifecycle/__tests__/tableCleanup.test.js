@@ -14,7 +14,26 @@ jest.mock('../../db/repositories/TableRepository', () => ({
   TableRepository: {
     activateScheduledTables: jest.fn(),
     closeTable: jest.fn(),
+    listOrphanedTables: jest.fn(),
   },
+  InvitedPlayersRepository: {
+    addInvite: jest.fn(),
+    removeInvite: jest.fn(),
+    listInvited: jest.fn(),
+    isInvited: jest.fn(),
+  },
+  TablePresetsRepository: {
+    save: jest.fn(),
+    list: jest.fn(),
+    get: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    clone: jest.fn(),
+  },
+}));
+
+jest.mock('../../game/BotConnection', () => ({
+  disconnectAllAtTable: jest.fn(),
 }));
 
 // ─── Module under test ────────────────────────────────────────────────────────

@@ -15,6 +15,20 @@ jest.mock('../db/repositories/TableRepository.js', () => ({
   TableRepository: {
     closeTable: jest.fn().mockResolvedValue(undefined),
   },
+  InvitedPlayersRepository: {
+    addInvite: jest.fn(),
+    removeInvite: jest.fn(),
+    listInvited: jest.fn(),
+    isInvited: jest.fn(),
+  },
+  TablePresetsRepository: {
+    save: jest.fn(),
+    list: jest.fn(),
+    get: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    clone: jest.fn(),
+  },
 }));
 
 jest.mock('../logs/logger', () => ({
@@ -25,6 +39,10 @@ jest.mock('../logs/logger', () => ({
 
 jest.mock('../db/repositories/ChipBankRepository', () => ({
   cashOut: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../game/BotConnection', () => ({
+  disconnectAllAtTable: jest.fn(),
 }));
 
 const { TableRepository } = require('../db/repositories/TableRepository.js');

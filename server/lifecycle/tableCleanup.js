@@ -5,6 +5,7 @@ const CHECK_INTERVAL_MS = 5 * 60 * 1000;  // every 5 minutes
 const lastActivityMap = new Map();
 
 const log = require('../logs/logger');
+const SharedState = require('../state/SharedState.js');
 
 function recordTableActivity(tableId) {
   lastActivityMap.set(tableId, Date.now());
@@ -50,6 +51,11 @@ function startTableCleanup(io, tables) {
 
         tables.delete(tableId);
         lastActivityMap.delete(tableId);
+
+        // Clean up coach state (active locks and pending blind updates)
+        SharedState.activeCoachLocks.delete(tableId);
+        SharedState.pendingBlinds.delete(tableId);
+
         await TableRepository.closeTable(tableId).catch(() => {});
         console.log(`[tableCleanup] Evicted idle table: ${tableId}`);
 
