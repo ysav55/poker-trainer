@@ -26,6 +26,8 @@ const { isBettingRoundOver, findNextActingPlayer } = require('./bettingRound');
 const { resolve: resolveShowdown, sortBySBProximity } = require('./ShowdownResolver');
 const ReplayEngine = require('./ReplayEngine');
 
+const PENDING_BLINDS_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 class GameManager {
   constructor(tableId, config = {}) {
     this.tableId = tableId;
@@ -971,6 +973,20 @@ class GameManager {
   }
 
   resetForNextHand() {
+    // Phase C: consume queued blind delta if present and fresh.
+    const SharedState = require('../state/SharedState.js');
+    if (SharedState && SharedState.pendingBlinds) {
+      const pending = SharedState.pendingBlinds.get(this.tableId);
+      if (pending) {
+        const age = Date.now() - pending.queuedAt;
+        if (age <= PENDING_BLINDS_TTL_MS) {
+          this.state.small_blind = pending.sb;
+          this.state.big_blind = pending.bb;
+        }
+        SharedState.pendingBlinds.delete(this.tableId);
+      }
+    }
+
     this._saveSnapshot('action');
     // Rotate dealer button by player object (not seat index) so removals don't cause jumps.
     const eligible = this.state.players
