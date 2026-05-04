@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { MiniCard } from './shared.jsx';
 import { useHistory } from '../../hooks/useHistory.js';
 import { apiFetch } from '../../lib/api.js';
+import NotesPanel from './NotesPanel.jsx';
+import useNotes from '../../hooks/useNotes.js';
 
 const PHASE_LABEL = { preflop: 'preflop', flop: 'flop', turn: 'turn', river: 'river', showdown: 'showdown' };
 
@@ -26,6 +28,8 @@ function adaptServerHand(h, idx, total) {
 export default function TabHistory({ data, tableId, onLoadReview }) {
   const { hands: serverHands, loading, fetchHands } = useHistory();
   const [notesCounts, setNotesCounts] = useState({});
+  const [previewHandId, setPreviewHandId] = useState(null);
+  const previewApi = useNotes(previewHandId);
 
   // Fetch on mount + whenever the table changes. Refetch when tab is reopened
   // is intentionally NOT wired — once fetched, the list is stable until the
@@ -68,11 +72,11 @@ export default function TabHistory({ data, tableId, onLoadReview }) {
   }, [data, liveHistory]);
 
   return (
-    <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} notesCounts={notesCounts} />
+    <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} notesCounts={notesCounts} onOpenNotes={setPreviewHandId} previewHandId={previewHandId} previewApi={previewApi} />
   );
 }
 
-function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts }) {
+function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts, onOpenNotes, previewHandId, previewApi }) {
   const [filter, setFilter] = useState('all');
 
   const sessionPnl = data.history.filter((h) => h.net != null).reduce((a, b) => a + b.net, 0);
@@ -137,9 +141,32 @@ function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts }) 
           <div className="card-kicker">scroll ↔ · {filtered.length}</div>
         </div>
         <div className="h-scroll">
-          {filtered.map((h) => <HandCard key={h.hand_id ?? h.n} hand={h} notesCount={notesCounts[h.hand_id] ?? 0} onClick={() => onLoadReview(h.hand_id ?? h.n)} />)}
+          {filtered.map((h) => <HandCard key={h.hand_id ?? h.n} hand={h} notesCount={notesCounts[h.hand_id] ?? 0} onClick={() => onLoadReview(h.hand_id ?? h.n)} onOpenNotes={onOpenNotes} />)}
         </div>
       </div>
+
+      {previewHandId && (
+        <div
+          role="dialog"
+          aria-label="Notes preview"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 900,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => onOpenNotes(null)}
+        >
+          <div
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 8, padding: 12, minWidth: 280, maxWidth: 420 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <NotesPanel mode="preview" handId={previewHandId} api={previewApi} />
+            <div className="row" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
+              <button className="btn ghost sm" onClick={() => onOpenNotes(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -153,7 +180,7 @@ function MiniStat({ label, value }) {
   );
 }
 
-function HandCard({ hand, notesCount, onClick }) {
+function HandCard({ hand, notesCount, onClick, onOpenNotes }) {
   const isLive = hand.live;
   const net = hand.net;
   const netColor = net == null ? 'var(--ink-dim)' : net >= 0 ? 'var(--ok)' : 'var(--bad)';
@@ -196,10 +223,12 @@ function HandCard({ hand, notesCount, onClick }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-dim)' }}>pot {hand.pot}</span>
           {notesCount > 0 && (
-            <span
+            <button
+              className="chip ghost"
+              style={{ padding: '2px 5px', fontSize: 10, marginLeft: 4, cursor: 'pointer' }}
+              onClick={(e) => { e.stopPropagation(); onOpenNotes(hand.hand_id); }}
               title={`${notesCount} note${notesCount === 1 ? '' : 's'}`}
-              style={{ fontSize: 10, color: 'var(--ink-dim)' }}
-            >📝{notesCount}</span>
+            >📝{notesCount}</button>
           )}
         </div>
       </div>

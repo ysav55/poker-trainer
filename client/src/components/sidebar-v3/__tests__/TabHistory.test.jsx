@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import TabHistory from '../TabHistory.jsx';
 
 vi.mock('../../../lib/api.js', () => ({
@@ -58,5 +58,22 @@ describe('TabHistory — notes_pip', () => {
     await screen.findByText(/📝3/);
     // Verify there's no "📝0"
     expect(screen.queryByText(/📝0/)).toBeNull();
+  });
+});
+
+describe('TabHistory — notes pip popover', () => {
+  it('clicking the pip opens a read-only NotesPanel popover', async () => {
+    const dataWithHistory = {
+      history: [
+        { hand_id: 'h1', n: 1, board: [], heroHand: [], pot: 100, phase: 'showdown', action: 'Alice won', live: false, net: 50 },
+        { hand_id: 'h2', n: 2, board: [], heroHand: [], pot: 80,  phase: 'fold',     action: 'Bob won',   live: false, net: -40 },
+      ],
+      session: { hands: 2 },
+    };
+    render(<TabHistory data={dataWithHistory} onLoadReview={vi.fn()} />);
+    const pip = await screen.findByText(/📝3/);
+    fireEvent.click(pip);
+    // Popover renders the Notes title (from NotesPanel preview mode)
+    expect(screen.getByText(/^Notes$/)).toBeInTheDocument();
   });
 });
