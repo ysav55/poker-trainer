@@ -1,5 +1,29 @@
 'use strict';
 
+const SharedState = require('../../state/SharedState.js');
+
+async function handleApplyBlindsAtNextHand(socket, payload, ack) {
+  const { requireCoach } = require('../../auth/socketGuards.js');
+
+  if (requireCoach(socket, 'apply blinds at next hand')) {
+    return ack?.({ error: 'coach_only' });
+  }
+  const { tableId, sb, bb } = payload || {};
+  if (!tableId) return ack?.({ error: 'invalid_table' });
+  if (!Number.isInteger(sb) || !Number.isInteger(bb) || sb <= 0 || bb <= 0 || sb >= bb) {
+    return ack?.({ error: 'invalid_blinds' });
+  }
+  SharedState.pendingBlinds.set(tableId, {
+    sb, bb,
+    queuedBy: socket.data.stableId ?? socket.data.userId,
+    queuedAt: Date.now(),
+  });
+  // Broadcast to room so other clients update their banner
+  socket.to(tableId).emit('pending_blinds_updated', { sb, bb });
+  socket.emit('pending_blinds_updated', { sb, bb });
+  return ack?.({ ok: true });
+}
+
 module.exports = function registerCoachControls(socket, ctx) {
   const { tables, activeHands, stableIdMap, io,
           broadcastState, sendError, sendSyncError, startActionTimer, clearActionTimer,
@@ -318,4 +342,11 @@ module.exports = function registerCoachControls(socket, ctx) {
     });
     log.info('game', 'controller_transfer', `controller transferred to ${toPlayerId}`, { tableId, by: socket.data.stableId });
   });
+
+  // coach:apply_blinds_at_next_hand — queue a blind delta for application at next hand
+  socket.on('coach:apply_blinds_at_next_hand', (payload, ack) =>
+    handleApplyBlindsAtNextHand(socket, payload, ack)
+  );
 };
+
+module.exports.handleApplyBlindsAtNextHand = handleApplyBlindsAtNextHand;
