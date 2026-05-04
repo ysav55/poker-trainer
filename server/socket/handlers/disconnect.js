@@ -1,6 +1,24 @@
 'use strict';
 
-module.exports = function registerDisconnect(socket, ctx) {
+const SharedState = require('../../state/SharedState.js');
+
+function releaseCoachLockIfHeld({ io, tableId, stableId }) {
+  const current = SharedState.activeCoachLocks.get(tableId);
+  if (current !== stableId) return; // not our lock
+
+  // Are there other sockets from same stableId still in the room?
+  const room = io.sockets.adapter.rooms.get(tableId);
+  if (room) {
+    for (const socketId of room) {
+      const sock = io.sockets.sockets.get(socketId);
+      if (sock?.data?.stableId === stableId) return; // another tab still in room
+    }
+  }
+  // Last socket left — release
+  SharedState.activeCoachLocks.delete(tableId);
+}
+
+function registerDisconnect(socket, ctx) {
   const { tables, stableIdMap, reconnectTimers, ghostStacks, io,
           broadcastState, clearActionTimer, log } = ctx;
 
@@ -105,5 +123,14 @@ module.exports = function registerDisconnect(socket, ctx) {
       return { config_phase: true, config: g.state.config };
     })();
     reconnectTimers.set(socket.id, { timer, tableId, name, isCoach, configSnapshot });
+
+    // Release coach lock if this was the last socket from that stableId
+    const stableId = socket.data?.stableId ?? socket.data?.userId;
+    if (tableId && stableId && isCoach) {
+      releaseCoachLockIfHeld({ io, tableId, stableId });
+    }
   });
-};
+}
+
+module.exports = registerDisconnect;
+module.exports.releaseCoachLockIfHeld = releaseCoachLockIfHeld;

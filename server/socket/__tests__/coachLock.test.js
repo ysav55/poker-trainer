@@ -65,3 +65,35 @@ describe('coach lock — claim on join_room (acting as coach)', () => {
     expect(SharedState.activeCoachLocks.has('t1')).toBe(false);
   });
 });
+
+describe('coach lock — release on disconnect', () => {
+  it('releases when the lock-holder socket disconnects and no other sockets from same stableId remain', () => {
+    SharedState.activeCoachLocks.set('t1', 'coach-a');
+    const release = require('../handlers/disconnect.js').releaseCoachLockIfHeld;
+    const io = { sockets: { adapter: { rooms: new Map() }, sockets: new Map() } };
+    // No remaining sockets in the room from coach-a
+    release({ io, tableId: 't1', stableId: 'coach-a' });
+    expect(SharedState.activeCoachLocks.has('t1')).toBe(false);
+  });
+
+  it('keeps the lock when another socket from same stableId remains', () => {
+    SharedState.activeCoachLocks.set('t1', 'coach-a');
+    const release = require('../handlers/disconnect.js').releaseCoachLockIfHeld;
+    const io = {
+      sockets: {
+        adapter: { rooms: new Map([['t1', new Set(['otherSocketId'])]]) },
+        sockets: new Map([['otherSocketId', { data: { stableId: 'coach-a' } }]]),
+      },
+    };
+    release({ io, tableId: 't1', stableId: 'coach-a' });
+    expect(SharedState.activeCoachLocks.get('t1')).toBe('coach-a');
+  });
+
+  it('does not release when current lock holder differs from disconnecting stableId', () => {
+    SharedState.activeCoachLocks.set('t1', 'coach-a');
+    const release = require('../handlers/disconnect.js').releaseCoachLockIfHeld;
+    const io = { sockets: { adapter: { rooms: new Map() }, sockets: new Map() } };
+    release({ io, tableId: 't1', stableId: 'coach-b' }); // coach-b not the holder
+    expect(SharedState.activeCoachLocks.get('t1')).toBe('coach-a'); // unchanged
+  });
+});
