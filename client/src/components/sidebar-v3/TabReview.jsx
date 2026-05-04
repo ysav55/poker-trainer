@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MiniCard } from './shared.jsx';
 import { useHistory } from '../../hooks/useHistory.js';
+import NotesPanel from './NotesPanel.jsx';
+import useNotes from '../../hooks/useNotes.js';
 
 const STREET_ORDER = ['preflop', 'flop', 'turn', 'river'];
 const STREET_LABEL = { preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River' };
@@ -24,6 +26,10 @@ export default function TabReview({ data, emit, replay, selectedHandId, onBack }
   const cursor = r?.cursor ?? -1;
   const handId = r?.handId ?? selectedHandId ?? null;
   const phaseIsWaiting = data.gameState.phase === 'waiting';
+
+  // Notes panel
+  const reviewHandId = selectedHandId ?? data.review?.handId ?? null;
+  const notesApi = useNotes(reviewHandId);
 
   // Auto-load the selected hand into replay when the user lands here.
   // Three cases:
@@ -355,6 +361,9 @@ export default function TabReview({ data, emit, replay, selectedHandId, onBack }
           </div>
         )}
       </div>
+
+      {/* Notes Panel */}
+      {reviewHandId && <NotesPanel mode="review" handId={reviewHandId} api={notesApi} />}
 
       {/* Save Branch — inline picker */}
       <div className="card">
