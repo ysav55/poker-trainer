@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { MiniCard } from './shared.jsx';
 import { useHistory } from '../../hooks/useHistory.js';
+import { apiFetch } from '../../lib/api.js';
 
 const PHASE_LABEL = { preflop: 'preflop', flop: 'flop', turn: 'turn', river: 'river', showdown: 'showdown' };
 
@@ -24,6 +25,7 @@ function adaptServerHand(h, idx, total) {
 
 export default function TabHistory({ data, tableId, onLoadReview }) {
   const { hands: serverHands, loading, fetchHands } = useHistory();
+  const [notesCounts, setNotesCounts] = useState({});
 
   // Fetch on mount + whenever the table changes. Refetch when tab is reopened
   // is intentionally NOT wired — once fetched, the list is stable until the
@@ -32,6 +34,24 @@ export default function TabHistory({ data, tableId, onLoadReview }) {
   useEffect(() => {
     if (tableId) fetchHands(tableId);
   }, [tableId, fetchHands]);
+
+  // Batch fetch notes counts for all hands in history
+  useEffect(() => {
+    const handIds = (data.history ?? []).map((h) => h.hand_id).filter(Boolean);
+    if (handIds.length === 0) {
+      setNotesCounts({});
+      return;
+    }
+    let cancelled = false;
+    apiFetch('/api/hands/notes-counts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ handIds }),
+    }).then((res) => {
+      if (!cancelled) setNotesCounts(res?.counts ?? {});
+    }).catch(() => { /* keep previous counts */ });
+    return () => { cancelled = true; };
+  }, [data.history]);
 
   const liveHistory = useMemo(() => {
     if (!serverHands || serverHands.length === 0) return null;
@@ -48,11 +68,11 @@ export default function TabHistory({ data, tableId, onLoadReview }) {
   }, [data, liveHistory]);
 
   return (
-    <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} />
+    <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} notesCounts={notesCounts} />
   );
 }
 
-function TableHistoryView({ data, loading, isLive, onLoadReview }) {
+function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts }) {
   const [filter, setFilter] = useState('all');
 
   const sessionPnl = data.history.filter((h) => h.net != null).reduce((a, b) => a + b.net, 0);
@@ -117,7 +137,7 @@ function TableHistoryView({ data, loading, isLive, onLoadReview }) {
           <div className="card-kicker">scroll ↔ · {filtered.length}</div>
         </div>
         <div className="h-scroll">
-          {filtered.map((h) => <HandCard key={h.hand_id ?? h.n} hand={h} onClick={() => onLoadReview(h.hand_id ?? h.n)} />)}
+          {filtered.map((h) => <HandCard key={h.hand_id ?? h.n} hand={h} notesCount={notesCounts[h.hand_id] ?? 0} onClick={() => onLoadReview(h.hand_id ?? h.n)} />)}
         </div>
       </div>
     </>
@@ -133,7 +153,7 @@ function MiniStat({ label, value }) {
   );
 }
 
-function HandCard({ hand, onClick }) {
+function HandCard({ hand, notesCount, onClick }) {
   const isLive = hand.live;
   const net = hand.net;
   const netColor = net == null ? 'var(--ink-dim)' : net >= 0 ? 'var(--ok)' : 'var(--bad)';
@@ -173,7 +193,15 @@ function HandCard({ hand, onClick }) {
       <div style={{ fontSize: 10, color: 'var(--ink-dim)', lineHeight: 1.35, minHeight: 26 }}>{hand.action}</div>
       <div className="row between" style={{ paddingTop: 5, borderTop: '1px solid rgba(201,163,93,0.08)' }}>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--ink-faint)' }}>{hand.phase}</span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-dim)' }}>pot {hand.pot}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-dim)' }}>pot {hand.pot}</span>
+          {notesCount > 0 && (
+            <span
+              title={`${notesCount} note${notesCount === 1 ? '' : 's'}`}
+              style={{ fontSize: 10, color: 'var(--ink-dim)' }}
+            >📝{notesCount}</span>
+          )}
+        </div>
       </div>
     </div>
   );

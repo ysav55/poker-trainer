@@ -217,6 +217,9 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
         pending: !!a.pending,
       }));
     })(),
+    // notes_counts: hand_id → count mapping, populated by TabHistory mount via
+    // batch fetch of /api/hands/notes-counts. Adapter provides empty map.
+    notes_counts: {},
   };
 }
 

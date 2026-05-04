@@ -257,3 +257,20 @@ describe('buildLiveData — actions_log', () => {
     expect(out.actions_log).toHaveLength(3);
   });
 });
+
+describe('buildLiveData — notes_counts', () => {
+  it('returns empty record by default (populated by TabHistory mount)', () => {
+    const out = buildLiveData({
+      hookState: {
+        gameState: { phase: 'waiting', paused: false, is_scenario: false, hand_id: null, actions: [], players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] },
+        actionTimer: {},
+        equityData: { showToPlayers: false, players: {} },
+        myId: 'me',
+        replayState: { active: false },
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [], active: null },
+    });
+    expect(out.notes_counts).toEqual({});
+  });
+});
