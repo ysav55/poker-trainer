@@ -25,6 +25,7 @@ const EquityService = require('./game/EquityService');
 const { registerSocketHandlers } = require('./socket/index');
 
 const registerHandRoutes        = require('./routes/hands');
+const registerNoteRoutes        = require('./routes/notes');
 const registerPlayerRoutes      = require('./routes/players');
 const registerSessionRoutes     = require('./routes/sessions');
 const registerPlaylistRoutes    = require('./routes/playlists');
@@ -114,6 +115,7 @@ registerSocketHandlers(io);
 // ─── REST routes ──────────────────────────────────────────────────────────────
 
 registerHandRoutes(app, { requireAuth, HandLogger, EquityService });
+registerNoteRoutes(app, { requireAuth });
 registerPlayerRoutes(app, { requireAuth, HandLogger });
 registerSessionRoutes(app, { requireAuth, HandLogger, tables: sharedState.tables, generateHTMLReport });
 registerPlaylistRoutes(app, { requireAuth, HandLogger });
