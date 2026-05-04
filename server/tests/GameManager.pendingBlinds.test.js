@@ -94,3 +94,20 @@ describe('GameManager — apply pending blinds on resetForNextHand', () => {
     expect(SharedState.pendingBlinds.has('t2')).toBe(true); // t2 entry still there (not for this table)
   });
 });
+
+describe('GameManager.getPublicState — pending_blinds', () => {
+  it('includes pending_blinds when queued', () => {
+    const gm = buildGame('t1', 10, 20);
+    SharedState.pendingBlinds.set('t1', { sb: 25, bb: 50, queuedBy: 'coach-a', queuedAt: 100 });
+    const state = gm.getPublicState('p1', false);
+    expect(state.pending_blinds).toMatchObject({ sb: 25, bb: 50, queuedAt: 100 });
+    // queuedBy is internal; should NOT leak to public state
+    expect(state.pending_blinds).not.toHaveProperty('queuedBy');
+  });
+
+  it('pending_blinds is null when nothing queued', () => {
+    const gm = buildGame('t1', 10, 20);
+    const state = gm.getPublicState('p1', false);
+    expect(state.pending_blinds).toBeNull();
+  });
+});

@@ -159,6 +159,14 @@ class GameManager {
       }
     }
 
+    // Surface pending_blinds for coach UI (banner, adapter, etc.)
+    // Omit internal queuedBy field; expose only sb, bb, queuedAt.
+    const SharedState = require('../state/SharedState.js');
+    const pending = SharedState.pendingBlinds.get(this.tableId);
+    const pending_blinds = pending
+      ? { sb: pending.sb, bb: pending.bb, queuedAt: pending.queuedAt }
+      : null;
+
     return {
       table_id: s.table_id,
       mode: s.mode,
@@ -180,6 +188,7 @@ class GameManager {
       config_phase: s.config_phase,
       config: sanitisedConfig,
       pending_hand_config: !!s.pendingHandConfig,
+      pending_blinds,
       showdown_result: s.showdown_result,
       side_pots: s.side_pots,
       playlist_mode: {
