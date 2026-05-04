@@ -50,4 +50,18 @@ describe('coach lock — claim on join_room (acting as coach)', () => {
     expect(result.granted).toBe(true); // observer/student joins are always allowed
     expect(SharedState.activeCoachLocks.has('t1')).toBe(false);
   });
+
+  it('returns no_stable_id when socket.data has no stableId', async () => {
+    const claim = require('../handlers/joinRoom.js').claimCoachLockIfActingAsCoach;
+    const sock = {
+      data: { isCoach: true, role: 'coach' }, // intentionally missing stableId/userId
+      join: jest.fn(),
+      emit: jest.fn(),
+      rooms: new Set(),
+    };
+    const result = await claim(sock, { tableId: 't1', actingAsCoach: true });
+    expect(result.granted).toBe(false);
+    expect(result.reason).toBe('no_stable_id');
+    expect(SharedState.activeCoachLocks.has('t1')).toBe(false);
+  });
 });
