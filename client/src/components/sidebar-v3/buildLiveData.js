@@ -220,6 +220,9 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
     // notes_counts: hand_id → count mapping, populated by TabHistory mount via
     // batch fetch of /api/hands/notes-counts. Adapter provides empty map.
     notes_counts: {},
+    // pending_blinds: surfaced when server is queuing a blind level change
+    // for the next hand (spec 7.5). Null if not pending.
+    pending_blinds: gs.pending_blinds ?? null,
   };
 }
 

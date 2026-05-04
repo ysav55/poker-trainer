@@ -274,3 +274,50 @@ describe('buildLiveData — notes_counts', () => {
     expect(out.notes_counts).toEqual({});
   });
 });
+
+describe('buildLiveData — pending_blinds', () => {
+  it('passes through gameState.pending_blinds', () => {
+    const out = buildLiveData({
+      hookState: {
+        gameState: { phase: 'flop', paused: false, is_scenario: false, hand_id: 'h1', actions: [], pending_blinds: { sb: 25, bb: 50, queuedAt: 100 }, players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] },
+        actionTimer: {},
+        equityData: { showToPlayers: false, players: {} },
+        myId: 'me',
+        replayState: { active: false },
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [], active: null },
+    });
+    expect(out.pending_blinds).toMatchObject({ sb: 25, bb: 50 });
+  });
+
+  it('returns null when no pending', () => {
+    const out = buildLiveData({
+      hookState: {
+        gameState: { phase: 'flop', paused: false, is_scenario: false, hand_id: 'h1', actions: [], pending_blinds: null, players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] },
+        actionTimer: {},
+        equityData: { showToPlayers: false, players: {} },
+        myId: 'me',
+        replayState: { active: false },
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [], active: null },
+    });
+    expect(out.pending_blinds).toBeNull();
+  });
+
+  it('returns null when gameState has no pending_blinds field', () => {
+    const out = buildLiveData({
+      hookState: {
+        gameState: { phase: 'flop', paused: false, is_scenario: false, hand_id: 'h1', actions: [], players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] },
+        actionTimer: {},
+        equityData: { showToPlayers: false, players: {} },
+        myId: 'me',
+        replayState: { active: false },
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [], active: null },
+    });
+    expect(out.pending_blinds).toBeNull();
+  });
+});
