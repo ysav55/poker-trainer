@@ -26,6 +26,7 @@ jest.mock('../../../state/SharedState', () => ({
   getController: jest.fn(),
   tables: new Map(),
   stableIdMap: new Map(),
+  activeCoachLocks: new Map(),
 }));
 
 describe('join_room handler — max_players_per_table enforcement', () => {

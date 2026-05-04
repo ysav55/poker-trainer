@@ -58,6 +58,7 @@ jest.mock('../../../game/SessionManager', () =>
 jest.mock('../../../state/SharedState', () => ({
   getOrCreateController: jest.fn(),
   getController:         jest.fn().mockReturnValue(null),
+  activeCoachLocks:      new Map(),
 }));
 
 // ChipBankRepository — stub (chip buy-in path)

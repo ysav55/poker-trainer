@@ -1,5 +1,23 @@
 'use strict';
 
+const SharedState = require('../../state/SharedState.js');
+
+function claimCoachLockIfActingAsCoach(socket, { tableId, actingAsCoach }) {
+  if (!actingAsCoach) return { granted: true };
+  const stableId = socket.data?.stableId ?? socket.data?.userId;
+  if (!stableId) return { granted: false, reason: 'no_stable_id' };
+
+  const current = SharedState.activeCoachLocks.get(tableId);
+  if (!current) {
+    SharedState.activeCoachLocks.set(tableId, stableId);
+    return { granted: true };
+  }
+  if (current === stableId) {
+    return { granted: true }; // same coach reconnecting / multi-tab
+  }
+  return { granted: false, reason: 'coach_lock_held' };
+}
+
 module.exports = function registerJoinRoom(socket, ctx) {
   const { tables, stableIdMap, reconnectTimers, ghostStacks, io,
           broadcastState, sendError,
@@ -222,6 +240,20 @@ module.exports = function registerJoinRoom(socket, ctx) {
 
     if (payloadSpectator && !isCoach) { joinAsSpectator(''); return; }
 
+    // Coach lock claim: single-coach-per-coached_cash-table enforcement
+    // In coached_cash mode, if the user intends to act as coach, claim the lock.
+    // Same coach (multi-tab) can reclaim. Different coach is downgraded to observer.
+    if (mode === 'coached_cash' && isCoach && !isReconnect) {
+      const lockResult = claimCoachLockIfActingAsCoach(socket, { tableId, actingAsCoach: true });
+      if (!lockResult.granted && lockResult.reason === 'coach_lock_held') {
+        isCoach = false;
+        socket.emit('notification', {
+          level: 'info',
+          message: 'Another coach is currently active on this table. You have joined as an observer.',
+        });
+      }
+    }
+
     // In coached_cash: if a coach already controls the table, newcomer coaches become players.
     if (mode === 'coached_cash' && isCoach && !isReconnect) {
       const existingCoach = gm.state.players.find(p => p.is_coach);
@@ -324,3 +356,5 @@ module.exports = function registerJoinRoom(socket, ctx) {
     }
   });
 };
+
+module.exports.claimCoachLockIfActingAsCoach = claimCoachLockIfActingAsCoach;
