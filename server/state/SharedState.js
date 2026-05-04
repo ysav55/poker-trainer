@@ -51,6 +51,8 @@ class SharedState {
     this.pausedTimerRemainders = new Map(); // tableId → { playerId, remainingMs }
     this.equityCache           = new Map(); // tableId → { phase, equities: [{playerId, equity, tieEquity}] }
     this.equitySettings        = new Map(); // tableId → { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false }
+    this.activeCoachLocks      = new Map(); // tableId → coachStableId (single-coach-per-table lock)
+    this.pendingBlinds         = new Map(); // tableId → { sb, bb, queuedBy, queuedAt } (Apply at Next Hand queue)
   }
 
   /** Lazy SessionManager factory — creates the table if it doesn't exist. */
