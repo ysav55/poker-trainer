@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { MiniCard } from './shared.jsx';
 import ConfigureHand from './LiveConfigureHand.jsx';
+import NotesPanel from './NotesPanel.jsx';
+import useNotes from '../../hooks/useNotes.js';
 
-export default function TabLive({ data, emit }) {
+export default function TabLive({ data, emit, notesOpen = false }) {
   const { gameState, actionTimer, equityData, myStableId } = data;
+
+  const handId = data.gameState?.hand_id ?? null;
+  const notesApi = useNotes(handId);
 
   const [remaining, setRemaining] = useState(actionTimer.remaining);
   useEffect(() => {
@@ -128,6 +133,10 @@ export default function TabLive({ data, emit }) {
           </div>
         )}
       </div>
+
+      {notesOpen && (
+        <NotesPanel mode="inline-live" handId={handId} api={notesApi} />
+      )}
     </>
   );
 }

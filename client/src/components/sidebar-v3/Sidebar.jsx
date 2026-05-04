@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../../styles/sidebar-v3.css';
 import { Head, TabBar } from './shared.jsx';
 import TabLive from './TabLive.jsx';
@@ -41,6 +41,12 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
   }
 
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+
+  // Auto-collapse notes panel on hand_id change
+  useEffect(() => {
+    setNotesOpen(false);
+  }, [data.gameState?.hand_id]);
 
   function Foot() {
     // Buttons without a Phase 1 wire-up are explicitly disabled with a Phase-N
@@ -65,6 +71,13 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
             onClick={() => setTagDialogOpen(true)}
             title={data.gameState?.hand_id ? 'Tag this hand' : 'No active hand to tag'}
           >⚑ Tag Hand</button>
+          <button
+            className="btn"
+            style={{ flex: 0.9 }}
+            onClick={() => setNotesOpen((v) => !v)}
+            disabled={!data.gameState?.hand_id}
+            title={data.gameState?.hand_id ? 'Hand notes' : 'No active hand'}
+          >📝 Notes{notesOpen ? ' ▾' : ''}</button>
           <button
             className="btn primary"
             style={{ flex: 1.3 }}
@@ -121,7 +134,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
       <Head status={data.status || 'live'} />
       <TabBar tab={tab} onTabChange={setAndPersist} />
       <div className="sb-body">
-        {tab === 'live'     && <TabLive     data={data} emit={emit} />}
+        {tab === 'live'     && <TabLive     data={data} emit={emit} notesOpen={notesOpen} />}
         {tab === 'drills'   && <TabDrills   data={data} emit={emit} />}
         {tab === 'history'  && <TabHistory  data={data} tableId={tableId} onLoadReview={loadReview} />}
         {tab === 'review'   && <TabReview

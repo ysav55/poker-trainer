@@ -124,3 +124,19 @@ describe('SidebarV3 — Tag Hand wiring', () => {
     expect(updateHandTags).toHaveBeenCalledWith('h-x', ['BLUFF']);
   });
 });
+
+describe('SidebarV3 — Notes button (Live footer)', () => {
+  it('clicking Notes toggles the panel', () => {
+    const data = { ...SIDEBAR_V3_DATA, gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: 'h-current', phase: 'flop', players: [{ id: 'p1', name: 'Alice', stableId: 'stable1' }], current_turn: 'p1', board: ['AS', 'KS', 'QS'] } };
+    render(<SidebarV3 data={data} emit={{ togglePause: vi.fn(), startConfiguredHand: vi.fn() }} />);
+    fireEvent.click(screen.getByRole('button', { name: /📝 Notes/ }));
+    // Panel renders the Notes title from NotesPanel
+    expect(screen.getByText(/^Notes$/)).toBeInTheDocument();
+  });
+
+  it('Notes button is disabled when no current hand_id', () => {
+    const data = { ...SIDEBAR_V3_DATA, gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: null } };
+    render(<SidebarV3 data={data} emit={{ togglePause: vi.fn(), startConfiguredHand: vi.fn() }} />);
+    expect(screen.getByRole('button', { name: /📝 Notes/ })).toBeDisabled();
+  });
+});

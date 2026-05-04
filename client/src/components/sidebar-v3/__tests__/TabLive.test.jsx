@@ -2,6 +2,11 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import TabLive from '../TabLive.jsx';
+import NotesPanel from '../NotesPanel.jsx';
+
+vi.mock('../../../hooks/useNotes.js', () => ({
+  default: () => ({ notes: [{ id: 'n1', body: 'hello', author_name: 'Coach' }], loading: false, error: null, refresh: vi.fn(), add: vi.fn(), edit: vi.fn(), remove: vi.fn() }),
+}));
 
 function liveData(overrides = {}) {
   return {
@@ -93,5 +98,32 @@ describe('TabLive — seat-card buttons (Setup-only verbs removed)', () => {
     // The sit-out button uses glyph text (❚❚ or ▶), not readable name
     const sitoutBtn = screen.getByTitle(/Sit (in|out)/i);
     expect(sitoutBtn).toBeInTheDocument();
+  });
+});
+
+describe('TabLive — Notes panel', () => {
+  function withHand(overrides = {}) {
+    const baseData = liveData({
+      gameState: {
+        phase: 'flop',
+        paused: false,
+        hand_id: 'h-current',
+        players: [{ id: 'p1', name: 'Alice', stableId: 'stable1', stack: 1000 }],
+        current_turn: 'p1',
+        board: ['AS', 'KS', 'QS'],
+      },
+      ...overrides,
+    });
+    return baseData;
+  }
+
+  it('does not render Notes content when notesOpen is false', () => {
+    render(<TabLive data={withHand()} emit={noopEmit} notesOpen={false} />);
+    expect(screen.queryByText('hello')).toBeNull();
+  });
+
+  it('renders NotesPanel content when notesOpen is true', () => {
+    render(<TabLive data={withHand()} emit={noopEmit} notesOpen={true} />);
+    expect(screen.getByText('hello')).toBeInTheDocument();
   });
 });
