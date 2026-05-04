@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Segmented, DifficultyPicker } from './shared.jsx';
+import PendingBlindsBanner from './PendingBlindsBanner.jsx';
 
 export default function TabSetup({ data, emit }) {
   const [section, setSection] = useState('blinds');
@@ -25,6 +26,11 @@ export default function TabSetup({ data, emit }) {
 // ── Blinds ─────────────────────────────────────────────────────────────────
 function BlindsSection({ data, emit }) {
   const liveBb = data.blindLevels.current.bb;
+  const liveSb = data.blindLevels.current.sb;
+  const phase = data.gameState?.phase;
+  const isWaiting = phase === 'waiting';
+  const pending = data.pending_blinds;
+
   const [bb, setBb] = useState(liveBb);
   const [applied, setApplied] = useState(false);
 
@@ -38,14 +44,28 @@ function BlindsSection({ data, emit }) {
   const valid = Number.isInteger(bb) && bb > 1;
 
   function applyBlinds() {
-    if (!emit?.setBlindLevels || !valid || !dirty) return;
-    emit.setBlindLevels(sb, bb);
+    if (!valid || !dirty) return;
+    if (isWaiting && emit?.setBlindLevels) {
+      emit.setBlindLevels(sb, bb);
+    } else if (!isWaiting && emit?.applyBlindsAtNextHand) {
+      emit.applyBlindsAtNextHand(sb, bb);
+    }
     setApplied(true);
     setTimeout(() => setApplied(false), 1500);
   }
 
+  function discardPending() {
+    emit?.discardPendingBlinds?.();
+  }
+
   return (
     <>
+      <PendingBlindsBanner
+        pending={pending}
+        liveBlinds={{ sb: liveSb, bb: liveBb }}
+        onDiscard={discardPending}
+      />
+
       <div className="card">
         <div className="card-head">
           <div className="card-title">Current Level</div>
@@ -73,9 +93,13 @@ function BlindsSection({ data, emit }) {
           className="btn primary full"
           style={{ marginTop: 10 }}
           onClick={applyBlinds}
-          disabled={!emit?.setBlindLevels || !dirty || !valid}
+          disabled={!dirty || !valid}
         >
-          {applied ? '✓ Applied' : dirty ? `Apply ${sb}/${bb}` : 'Already current'}
+          {applied
+            ? '✓ Applied'
+            : isWaiting
+              ? `Apply ${sb}/${bb}`
+              : `Apply at Next Hand →`}
         </button>
       </div>
 

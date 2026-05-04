@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import TabSetup from '../TabSetup.jsx';
 
-function makeData({ sb = 10, bb = 20, players = [], seats } = {}) {
+function makeData({ sb = 10, bb = 20, players = [], seats, gameState, pending_blinds } = {}) {
   return {
     blindLevels: { current: { sb, bb, ante: 0 }, presets: [
       { sb: 10, bb: 20 }, { sb: 25, bb: 50 },
@@ -17,6 +17,8 @@ function makeData({ sb = 10, bb = 20, players = [], seats } = {}) {
     },
     players,
     drillSession: { active: false },
+    gameState: gameState ?? { phase: 'waiting', paused: false, hand_id: null },
+    pending_blinds: pending_blinds ?? null,
   };
 }
 
@@ -27,6 +29,8 @@ function makeEmit(overrides = {}) {
     setPlayerInHand: vi.fn(),
     coachAddBot:    vi.fn(),
     coachKickPlayer: vi.fn(),
+    applyBlindsAtNextHand: vi.fn(),
+    discardPendingBlinds: vi.fn(),
     ...overrides,
   };
 }
@@ -142,5 +146,35 @@ describe('TabSetup — sub-mode segment', () => {
     expect(screen.getByRole('button', { name: 'Blinds' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Seats' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Players' })).toBeNull();
+  });
+});
+
+describe('TabSetup — Blinds Apply Now vs Apply at Next Hand', () => {
+  it('phase=waiting renders Apply Now and emits setBlindLevels', () => {
+    const emit = makeEmit();
+    const data = { ...makeData({ bb: 20 }), gameState: { phase: 'waiting', paused: false, hand_id: null }, pending_blinds: null };
+    render(<TabSetup data={data} emit={emit} />);
+    fireEvent.change(screen.getAllByRole('spinbutton')[0], { target: { value: '50' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply 25\/50/i }));
+    expect(emit.setBlindLevels).toHaveBeenCalledWith(25, 50);
+  });
+
+  it('phase!=waiting renders Apply at Next Hand and emits applyBlindsAtNextHand', () => {
+    const emit = makeEmit({ applyBlindsAtNextHand: vi.fn() });
+    const data = { ...makeData({ bb: 20 }), gameState: { phase: 'flop', paused: false, hand_id: 'h1' }, pending_blinds: null };
+    render(<TabSetup data={data} emit={emit} />);
+    fireEvent.change(screen.getAllByRole('spinbutton')[0], { target: { value: '50' } });
+    fireEvent.click(screen.getByRole('button', { name: /Apply at Next Hand/i }));
+    expect(emit.applyBlindsAtNextHand).toHaveBeenCalledWith(25, 50);
+  });
+
+  it('renders PendingBlindsBanner when pending_blinds present', () => {
+    const data = {
+      ...makeData({ bb: 20 }),
+      gameState: { phase: 'flop', paused: false, hand_id: 'h1' },
+      pending_blinds: { sb: 25, bb: 50, queuedAt: Date.now() },
+    };
+    render(<TabSetup data={data} emit={makeEmit()} />);
+    expect(screen.getByText(/Discard Pending/)).toBeInTheDocument();
   });
 });

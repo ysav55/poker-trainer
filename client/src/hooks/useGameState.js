@@ -147,6 +147,8 @@ export function useGameState(socket) {
   const updateHandTags      = useCallback((handId, tags) => socketRef.current?.emit('update_hand_tags', { handId, tags }), [socketRef])
   const setPlayerInHand     = useCallback((playerId, inHand) => socketRef.current?.emit('set_player_in_hand', { playerId, inHand }), [socketRef])
   const setBlindLevels          = useCallback((sb, bb) => socketRef.current?.emit('set_blind_levels', { sb, bb }), [socketRef])
+  const applyBlindsAtNextHand   = useCallback((sb, bb) => socketRef.current?.emit('coach:apply_blinds_at_next_hand', { sb, bb }), [socketRef])
+  const discardPendingBlinds    = useCallback(() => socketRef.current?.emit('coach:discard_pending_blinds'), [socketRef])
   const toggleEquityDisplay     = useCallback(() => socketRef.current?.emit('toggle_equity_display'), [socketRef])
   const toggleRangeDisplay      = useCallback(() => socketRef.current?.emit('toggle_range_display'), [socketRef])
   const toggleHeatmapDisplay    = useCallback(() => socketRef.current?.emit('toggle_heatmap_display'), [socketRef])
@@ -169,6 +171,7 @@ export function useGameState(socket) {
     togglePause, setMode, forceNextStreet, awardPot, resetHand,
     adjustStack, openConfigPhase, updateHandConfig, startConfiguredHand,
     loadHandScenario, updateHandTags, setPlayerInHand, setBlindLevels,
+    applyBlindsAtNextHand, discardPendingBlinds,
     toggleEquityDisplay, toggleRangeDisplay, toggleHeatmapDisplay,
     shareRange, clearSharedRange,
   }
