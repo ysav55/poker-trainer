@@ -7,6 +7,7 @@ import TabHistory from './TabHistory.jsx';
 import TabReview from './TabReview.jsx';
 import TabSetup from './TabSetup.jsx';
 import TagDialog from './TagDialog.jsx';
+import ShareRangeDialog from './ShareRangeDialog.jsx';
 import { SIDEBAR_V3_DATA } from './data.js';
 
 export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId = null, replay = null, initialTab = 'live' }) {
@@ -55,6 +56,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
 
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [shareRangeOpen, setShareRangeOpen] = useState(false);
 
   // Auto-collapse notes panel on hand_id change
   useEffect(() => {
@@ -154,7 +156,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
           <Head status={data.status || 'live'} />
           <TabBar tab={tab} onTabChange={setAndPersist} />
           <div className="sb-body">
-            {tab === 'live'     && <TabLive     data={data} emit={emit} notesOpen={notesOpen} />}
+            {tab === 'live'     && <TabLive     data={data} emit={emit} notesOpen={notesOpen} onShareRange={() => setShareRangeOpen(true)} />}
             {tab === 'drills'   && <TabDrills   data={data} emit={emit} />}
             {tab === 'history'  && <TabHistory  data={data} tableId={tableId} onLoadReview={loadReview} />}
             {tab === 'review'   && <TabReview
@@ -179,6 +181,11 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
         initialTags={data.gameState?.coach_tags || []}
         onSubmit={(tags) => emit?.updateHandTags?.(data.gameState.hand_id, tags)}
         onClose={() => setTagDialogOpen(false)}
+      />
+      <ShareRangeDialog
+        open={shareRangeOpen}
+        onSubmit={(groups, label) => emit?.shareRange?.({ groups, label })}
+        onClose={() => setShareRangeOpen(false)}
       />
     </div>
   );

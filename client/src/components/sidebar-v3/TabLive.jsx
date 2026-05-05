@@ -5,7 +5,7 @@ import NotesPanel from './NotesPanel.jsx';
 import EquityToggleRow from './EquityToggleRow.jsx';
 import useNotes from '../../hooks/useNotes.js';
 
-export default function TabLive({ data, emit, notesOpen = false }) {
+export default function TabLive({ data, emit, notesOpen = false, onShareRange = () => {} }) {
   const { gameState, actionTimer, equityData, myStableId } = data;
 
   const handId = data.gameState?.hand_id ?? null;
@@ -90,7 +90,7 @@ export default function TabLive({ data, emit, notesOpen = false }) {
         <EquityToggleRow
           visibility={data.equity_visibility}
           emit={emit}
-          onShareRange={() => { /* D.3 will wire this */ }}
+          onShareRange={onShareRange}
         />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {equityRows.map((r) => (
