@@ -499,8 +499,75 @@ async function searchLibrary({ schoolId, query, rangeFilter = [], limit = 20, of
   };
 }
 
+/**
+ * Fetch hands for export (no pagination limit like searchLibrary).
+ * School-scoped; optionally filtered by tableId.
+ * Used by /api/exports/hands endpoint.
+ *
+ * @param {string} schoolId - School ID (from requireSchool middleware)
+ * @param {string} [tableId] - Optional table ID filter
+ * @param {number} [limit=10000] - Upper bound on rows (no hard cap for exports)
+ * @returns {Promise<Array>} Array of hand objects with auto_tags aggregated
+ */
+async function getHandsForExport({ schoolId, tableId = null, limit = 10000 } = {}) {
+  const safeLimit = Math.max(1, Math.min(limit, 10000)); // Up to 10k per call
+  const safeOffset = 0;
+
+  let query = supabase
+    .from('hands')
+    .select('hand_id, started_at, phase_ended, winner_name, final_pot, board, completed_normally', { count: 'exact' });
+
+  // School scope
+  query = query.eq('school_id', schoolId);
+
+  // Table filter
+  if (tableId) {
+    query = query.eq('table_id', tableId);
+  }
+
+  query = query.order('started_at', { ascending: false })
+    .range(safeOffset, safeOffset + safeLimit - 1);
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`getHandsForExport failed: ${error.message}`);
+  }
+
+  // Fetch auto_tags for each hand separately (no junction table join in Supabase)
+  const hands = data ?? [];
+  const handIds = hands.map(h => h.hand_id);
+
+  let autoTagsMap = {};
+  if (handIds.length > 0) {
+    const { data: tagsData, error: tagsError } = await supabase
+      .from('hand_tags')
+      .select('hand_id, tag')
+      .in('hand_id', handIds)
+      .eq('tag_type', 'auto');
+
+    if (!tagsError && tagsData) {
+      autoTagsMap = {};
+      for (const row of tagsData) {
+        if (!autoTagsMap[row.hand_id]) autoTagsMap[row.hand_id] = [];
+        autoTagsMap[row.hand_id].push(row.tag);
+      }
+    }
+  }
+
+  return hands.map(h => ({
+    hand_id: h.hand_id,
+    started_at: h.started_at,
+    phase_ended: h.phase_ended,
+    winner_name: h.winner_name,
+    final_pot: h.final_pot,
+    board: h.board || [],
+    completed_normally: h.completed_normally,
+    auto_tags: autoTagsMap[h.hand_id] || [],
+  }));
+}
+
 module.exports = {
   startHand, recordDeal, recordAction, endHand, markIncomplete, logStackAdjustment,
   markLastActionReverted, getHands, getHandDetail,
-  getHandHistory, getDistinctHandTags, getDistinctTableIds, searchLibrary,
+  getHandHistory, getDistinctHandTags, getDistinctTableIds, searchLibrary, getHandsForExport,
 };

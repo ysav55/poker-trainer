@@ -8,6 +8,7 @@ import TabReview from './TabReview.jsx';
 import TabSetup from './TabSetup.jsx';
 import TagDialog from './TagDialog.jsx';
 import ShareRangeDialog from './ShareRangeDialog.jsx';
+import ExportDialog from './ExportDialog.jsx';
 import { SIDEBAR_V3_DATA } from './data.js';
 
 export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId = null, replay = null, initialTab = 'live' }) {
@@ -57,6 +58,7 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [shareRangeOpen, setShareRangeOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   // Auto-collapse notes panel on hand_id change
   useEffect(() => {
@@ -127,7 +129,13 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
     if (tab === 'history') {
       return (
         <>
-          <button className="btn" style={{ flex: 1 }} disabled title="Phase 3">Export CSV</button>
+          <button
+            className="btn"
+            style={{ flex: 1 }}
+            onClick={() => setExportOpen(true)}
+            disabled={!tableId}
+            title={tableId ? 'Download hands as CSV or Excel' : 'No table selected'}
+          >↓ Export</button>
           <button
             className="btn primary"
             style={{ flex: 1.6 }}
@@ -207,6 +215,11 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
         open={shareRangeOpen}
         onSubmit={(groups, label) => emit?.shareRange?.({ groups, label })}
         onClose={() => setShareRangeOpen(false)}
+      />
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        tableId={tableId}
       />
     </div>
   );
