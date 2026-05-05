@@ -302,6 +302,7 @@ function DrillLoader({ data, emit }) {
   const activeId = data.drillSession?.active ? data.drillSession.playlistId : null;
   const onLoad = (id) => emit?.activatePlaylist?.(id);
   const [menuFor, setMenuFor] = useState(null);
+  const [selectedForLaunch, setSelectedForLaunch] = useState(null);
 
   return (
     <>
@@ -342,6 +343,16 @@ function DrillLoader({ data, emit }) {
                     </button>
                     <button
                       className="btn sm ghost"
+                      onClick={() => setSelectedForLaunch(pl)}
+                      disabled={!emit?.activatePlaylist || pl.count === 0}
+                      style={{ padding: '4px 8px', fontSize: 12 }}
+                      title={pl.count === 0 ? 'Empty playlist — add hands first' : 'Configure launch settings for this playlist'}
+                      aria-label="Configure"
+                    >
+                      ⚙
+                    </button>
+                    <button
+                      className="btn sm ghost"
                       onClick={() => setMenuFor(menuOpen ? null : pl.id)}
                       style={{ padding: '4px 8px', fontSize: 12 }}
                       title="Rename or delete this playlist"
@@ -363,6 +374,18 @@ function DrillLoader({ data, emit }) {
           })
         )}
       </div>
+
+      {selectedForLaunch && (
+        <LaunchPanel
+          playlist={selectedForLaunch}
+          fitCount={selectedForLaunch.fitCount ?? selectedForLaunch.count}
+          onLaunch={(config) => {
+            emit?.activatePlaylist?.(config);
+            setSelectedForLaunch(null);
+          }}
+          onCancel={() => setSelectedForLaunch(null)}
+        />
+      )}
 
       {/* Saved scenarios are not yet a server-side entity — playlists hold hands
           directly. Hide the section in live mode (was a Phase 0 mock affordance). */}

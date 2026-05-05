@@ -58,3 +58,89 @@ describe('TabDrills — 3-segment chassis (D.8b)', () => {
     expect(screen.getByText(/hand library wires up in Phase D.9/i)).toBeInTheDocument();
   });
 });
+
+describe('TabDrills — LaunchPanel integration (D.8d)', () => {
+  it('clicking ⚙ Configure button mounts LaunchPanel below the playlist list', () => {
+    const data = {
+      playlists: [{ id: 'pl1', name: 'Test', count: 5, description: '' }],
+      drillSession: { active: false },
+    };
+    render(<TabDrills data={data} emit={makeEmit()} />);
+    // Click Configure button (⚙)
+    const configBtn = screen.getByRole('button', { name: 'Configure' });
+    fireEvent.click(configBtn);
+    // LaunchPanel renders the playlist name in its title
+    expect(screen.getByText(/Launch.*Test/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Launch →/ })).toBeInTheDocument();
+  });
+
+  it('LaunchPanel onLaunch calls activatePlaylist with full config', () => {
+    const emit = makeEmit();
+    const data = {
+      playlists: [{ id: 'pl1', name: 'Test', count: 5, description: '' }],
+      drillSession: { active: false },
+    };
+    render(<TabDrills data={data} emit={emit} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Configure' }));
+    fireEvent.click(screen.getByRole('button', { name: /Launch →/ }));
+    expect(emit.activatePlaylist).toHaveBeenCalledWith(
+      expect.objectContaining({
+        playlistId: 'pl1',
+        heroMode: expect.any(String),
+        order: expect.any(String),
+        autoAdvance: expect.any(Boolean),
+        allowZeroMatch: expect.any(Boolean),
+      })
+    );
+  });
+
+  it('LaunchPanel Cancel closes the panel', () => {
+    const data = {
+      playlists: [{ id: 'pl1', name: 'Test', count: 5, description: '' }],
+      drillSession: { active: false },
+    };
+    render(<TabDrills data={data} emit={makeEmit()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Configure' }));
+    expect(screen.getByRole('button', { name: /Launch →/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('button', { name: /Launch →/ })).toBeNull();
+  });
+
+  it('LaunchPanel clears selectedForLaunch after onLaunch fires', () => {
+    const emit = makeEmit();
+    const data = {
+      playlists: [{ id: 'pl1', name: 'Test', count: 5, description: '' }],
+      drillSession: { active: false },
+    };
+    render(<TabDrills data={data} emit={emit} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Configure' }));
+    fireEvent.click(screen.getByRole('button', { name: /Launch →/ }));
+    // Panel should be gone after launch
+    expect(screen.queryByRole('button', { name: /Launch →/ })).toBeNull();
+  });
+
+  it('Configure button is disabled for empty playlists', () => {
+    const data = {
+      playlists: [{ id: 'pl1', name: 'Empty', count: 0, description: '' }],
+      drillSession: { active: false },
+    };
+    render(<TabDrills data={data} emit={makeEmit()} />);
+    const configBtn = screen.getByRole('button', { name: 'Configure' });
+    expect(configBtn).toBeDisabled();
+  });
+
+  it('Load button (quick-launch) still works and does not require LaunchPanel', () => {
+    const emit = makeEmit();
+    const data = {
+      playlists: [{ id: 'pl1', name: 'Test', count: 5, description: '' }],
+      drillSession: { active: false },
+    };
+    render(<TabDrills data={data} emit={emit} />);
+    const loadBtn = screen.getByRole('button', { name: 'Load' });
+    fireEvent.click(loadBtn);
+    // Quick-launch should call activatePlaylist directly with just the ID
+    expect(emit.activatePlaylist).toHaveBeenCalledWith('pl1');
+    // LaunchPanel should not be mounted
+    expect(screen.queryByRole('button', { name: /Launch →/ })).toBeNull();
+  });
+});
