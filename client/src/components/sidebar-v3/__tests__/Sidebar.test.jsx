@@ -140,3 +140,31 @@ describe('SidebarV3 — Notes button (Live footer)', () => {
     expect(screen.getByRole('button', { name: /📝 Notes/ })).toBeDisabled();
   });
 });
+
+describe('SidebarV3 — collapse', () => {
+  beforeEach(() => { try { localStorage.clear(); } catch {} });
+
+  it('renders an edge collapse button', () => {
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
+    expect(screen.getByRole('button', { name: /collapse sidebar|expand sidebar/i })).toBeInTheDocument();
+  });
+
+  it('collapsing hides the body and footer', () => {
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
+    fireEvent.click(screen.getByRole('button', { name: /collapse sidebar/i }));
+    expect(screen.queryByText(/Live/)).toBeNull();  // tab bar hidden
+  });
+
+  it('collapsed state persists to localStorage', () => {
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
+    fireEvent.click(screen.getByRole('button', { name: /collapse sidebar/i }));
+    expect(localStorage.getItem('fs.sb3.collapsed')).toBe('1');
+  });
+
+  it('restores collapsed state from localStorage on mount', () => {
+    localStorage.setItem('fs.sb3.collapsed', '1');
+    render(<SidebarV3 data={SIDEBAR_V3_DATA} />);
+    expect(screen.queryByRole('tab', { name: /Live/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /expand sidebar/i })).toBeInTheDocument();
+  });
+});

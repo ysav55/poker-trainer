@@ -28,6 +28,19 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
     setTab(t);
   }
 
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('fs.sb3.collapsed') === '1'; }
+    catch { return false; }
+  });
+
+  function toggleCollapse() {
+    setCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem('fs.sb3.collapsed', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  }
+
   const paused = !!data.gameState.paused;
   const phase = data.gameState.phase;
 
@@ -130,26 +143,35 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
   }
 
   return (
-    <div className="sb-v3" style={{ width: 360, flexShrink: 0 }}>
-      <Head status={data.status || 'live'} />
-      <TabBar tab={tab} onTabChange={setAndPersist} />
-      <div className="sb-body">
-        {tab === 'live'     && <TabLive     data={data} emit={emit} notesOpen={notesOpen} />}
-        {tab === 'drills'   && <TabDrills   data={data} emit={emit} />}
-        {tab === 'history'  && <TabHistory  data={data} tableId={tableId} onLoadReview={loadReview} />}
-        {tab === 'review'   && <TabReview
-                                   data={data}
-                                   emit={emit}
-                                   replay={replay}
-                                   selectedHandId={selectedHandId}
-                                   onBack={() => { setSelectedHandId(null); setAndPersist('live'); }}
-                                />}
-        {tab === 'setup' && <TabSetup data={data} emit={emit} />}
-      </div>
-      {tab !== 'drills' && (
-        <div className="sb-foot">
-          <Foot />
-        </div>
+    <div className={`sb-v3${collapsed ? ' sb-collapsed' : ''}`} style={{ width: collapsed ? 24 : 360, flexShrink: 0 }}>
+      <button
+        className="sb-collapse-btn"
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        onClick={toggleCollapse}
+      >{collapsed ? '›' : '‹'}</button>
+      {!collapsed && (
+        <>
+          <Head status={data.status || 'live'} />
+          <TabBar tab={tab} onTabChange={setAndPersist} />
+          <div className="sb-body">
+            {tab === 'live'     && <TabLive     data={data} emit={emit} notesOpen={notesOpen} />}
+            {tab === 'drills'   && <TabDrills   data={data} emit={emit} />}
+            {tab === 'history'  && <TabHistory  data={data} tableId={tableId} onLoadReview={loadReview} />}
+            {tab === 'review'   && <TabReview
+                                       data={data}
+                                       emit={emit}
+                                       replay={replay}
+                                       selectedHandId={selectedHandId}
+                                       onBack={() => { setSelectedHandId(null); setAndPersist('live'); }}
+                                    />}
+            {tab === 'setup' && <TabSetup data={data} emit={emit} />}
+          </div>
+          {tab !== 'drills' && (
+            <div className="sb-foot">
+              <Foot />
+            </div>
+          )}
+        </>
       )}
       <TagDialog
         open={tagDialogOpen}

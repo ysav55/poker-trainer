@@ -400,3 +400,33 @@
   color: #c9a35d !important;
   border-color: rgba(201, 163, 93, 0.4) !important;
 }
+
+/* ── Phase D.1: Collapse/Expand ────────────────────────────────────────────
+   Edge button on left side; conditionally render body, footer, tabs.
+   Collapsed: 24px width. Expanded: 360px width. */
+
+.sb-v3 {
+  transition: width 200ms ease;
+}
+
+.sb-collapse-btn {
+  position: absolute;
+  left: 0; top: 0;
+  width: 24px; height: 60px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  z-index: 10;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 150ms, color 150ms;
+}
+.sb-collapse-btn:hover {
+  background: rgba(201, 163, 93, 0.08);
+  color: var(--accent-hot);
+}
