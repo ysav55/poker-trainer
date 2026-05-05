@@ -178,3 +178,78 @@ describe('TabSetup — Blinds Apply Now vs Apply at Next Hand', () => {
     expect(screen.getByText(/Discard Pending/)).toBeInTheDocument();
   });
 });
+
+describe('TabSetup — Seats grid (V12 final)', () => {
+  function makeSeats(occupiedSeatNumbers = [0]) {
+    const seats = Array.from({ length: 9 }, (_, i) => {
+      if (occupiedSeatNumbers.includes(i)) {
+        return { seat: i, playerId: `p${i}`, player: `Player${i}`, stack: 1000, status: 'active', isHero: i === 0, isBot: false };
+      }
+      return { seat: i, player: null };
+    });
+    return makeData({ seats });
+  }
+
+  it('renders 9 cells in a 3-column grid', () => {
+    render(<TabSetup data={makeSeats()} emit={makeEmit()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Seats' }));
+    // Find all seat buttons (labeled S1, S2, etc.)
+    const seatButtons = screen.getAllByText(/^S\d$/).map(el => el.closest('button'));
+    const uniqueSeats = new Set(seatButtons);
+    expect(uniqueSeats.size).toBe(9);
+  });
+
+  it('clicking an empty cell shows the bot picker + Add Bot button', () => {
+    render(<TabSetup data={makeSeats([0])} emit={makeEmit()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Seats' }));
+    // Click seat 2 (index 1, second cell)
+    const cellsText = screen.getAllByText(/^S\d$/);
+    const s2Label = cellsText.find(el => el.textContent === 'S2');
+    if (s2Label) {
+      fireEvent.click(s2Label.closest('button'));
+    }
+    // Bot picker and Add Bot button visible
+    expect(screen.getByRole('button', { name: /Add.*bot to next open seat/i })).toBeInTheDocument();
+  });
+
+  it('clicking an occupied cell shows Edit Stack / Sit In or Out / Kick', () => {
+    render(<TabSetup data={makeSeats([0])} emit={makeEmit()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Seats' }));
+    // Click seat 1 cell (Player0) — should already be selected by default
+    expect(screen.getByRole('button', { name: /Edit Stack/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sit (In|Out)/i })).toBeInTheDocument();
+  });
+
+  it('+ Add bot emits coachAddBot with difficulty', () => {
+    const emit = makeEmit();
+    render(<TabSetup data={makeSeats([0])} emit={emit} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Seats' }));
+    // Click an empty seat (S2)
+    const cellsText = screen.getAllByText(/^S\d$/);
+    const s2Label = cellsText.find(el => el.textContent === 'S2');
+    if (s2Label) {
+      fireEvent.click(s2Label.closest('button'));
+    }
+    fireEvent.click(screen.getByRole('button', { name: /Add.*bot to next open seat/i }));
+    expect(emit.coachAddBot).toHaveBeenCalledWith('easy');
+  });
+
+  it('Kick is hidden for the hero seat (cannot kick yourself)', () => {
+    render(<TabSetup data={makeSeats([0])} emit={makeEmit()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Seats' }));
+    // Click S1 (Player0, who is the hero)
+    expect(screen.queryByRole('button', { name: /Kick Player/i })).toBeNull();
+  });
+
+  it('Kick appears for non-hero occupied seats', () => {
+    render(<TabSetup data={makeSeats([0, 1])} emit={makeEmit()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Seats' }));
+    // Click S2 (Player1, not the hero)
+    const cellsText = screen.getAllByText(/^S\d$/);
+    const s2Label = cellsText.find(el => el.textContent === 'S2');
+    if (s2Label) {
+      fireEvent.click(s2Label.closest('button'));
+    }
+    expect(screen.getByRole('button', { name: /Kick Player/i })).toBeInTheDocument();
+  });
+});
