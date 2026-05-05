@@ -459,9 +459,14 @@ function DrillSessionCard({ data, emit }) {
         <button
           className="btn primary full"
           onClick={() => emit?.manualAdvanceSpot?.()}
-          disabled={!emit?.manualAdvanceSpot || (data.gameState?.phase ?? '') !== 'waiting'}
+          disabled={
+            !emit?.manualAdvanceSpot ||
+            (data.gameState?.phase ?? '') !== 'waiting' ||
+            !!(data.drillSession?.auto_advance ?? data.drillSession?.autoAdvance)
+          }
           title={
             !emit?.manualAdvanceSpot ? 'Manual advance not available' :
+            (data.drillSession?.auto_advance ?? data.drillSession?.autoAdvance) ? 'Auto-advance is on — disable to use manual control' :
             (data.gameState?.phase !== 'waiting') ? 'Available between hands (phase: waiting)' :
             'Advance to next drill spot'
           }

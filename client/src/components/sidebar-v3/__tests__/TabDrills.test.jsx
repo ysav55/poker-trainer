@@ -184,4 +184,23 @@ describe('TabDrills — Advance Drill wiring (D.8f)', () => {
     render(<TabDrills data={activeDrillData()} emit={emit} />);
     expect(screen.getByRole('button', { name: /Advance Drill →/ })).toBeDisabled();
   });
+
+  it('Advance Drill is disabled when auto_advance is on', () => {
+    const emit = makeEmit({ manualAdvanceSpot: vi.fn() });
+    const data = {
+      playlists: [{ id: 'pl1', name: 'Test', count: 5, description: '' }],
+      drillSession: {
+        active: true,
+        playlistId: 'pl1',
+        scenarioName: 'AKo OOP',
+        currentSpot: 'flop',
+        handsDone: 1,
+        handsTotal: 5,
+        auto_advance: true,
+      },
+      gameState: { phase: 'waiting' },
+    };
+    render(<TabDrills data={data} emit={emit} />);
+    expect(screen.getByRole('button', { name: /Advance Drill →/ })).toBeDisabled();
+  });
 });
