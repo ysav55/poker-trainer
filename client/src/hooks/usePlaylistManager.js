@@ -25,7 +25,12 @@ export function usePlaylistManager(socket) {
   const addToPlaylist       = useCallback((playlistId, handId) => socketRef.current?.emit('add_to_playlist', { playlistId, handId }), [socketRef])
   const removeFromPlaylist  = useCallback((playlistId, handId) => socketRef.current?.emit('remove_from_playlist', { playlistId, handId }), [socketRef])
   const deletePlaylist      = useCallback((playlistId) => socketRef.current?.emit('delete_playlist', { playlistId }), [socketRef])
-  const activatePlaylist    = useCallback((playlistId) => socketRef.current?.emit('activate_playlist', { playlistId }), [socketRef])
+  const activatePlaylist    = useCallback((arg) => {
+    const payload = typeof arg === 'string'
+      ? { playlistId: arg }
+      : (arg || {});
+    socketRef.current?.emit('activate_playlist', payload);
+  }, [socketRef])
   const deactivatePlaylist  = useCallback(() => socketRef.current?.emit('deactivate_playlist'), [socketRef])
 
   return {

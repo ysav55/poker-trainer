@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Segmented } from './shared.jsx';
 import PlaylistAdmin, { PlaylistRowMenu } from './PlaylistAdmin.jsx';
+import LaunchPanel from './LaunchPanel.jsx';
 
 const POSITIONS_BY_COUNT = {
   2: ['BTN','BB'],
