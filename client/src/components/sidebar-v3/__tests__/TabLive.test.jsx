@@ -127,3 +127,12 @@ describe('TabLive — Notes panel', () => {
     expect(screen.getByText('hello')).toBeInTheDocument();
   });
 });
+
+describe('TabLive — Equity toggles', () => {
+  it('renders the EquityToggleRow inside the equity card', () => {
+    const data = liveData({ equity_visibility: { coach: true, players: false } });
+    render(<TabLive data={data} emit={noopEmit} />);
+    expect(screen.getByRole('button', { name: /Show Coach/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Show Players/ })).toBeInTheDocument();
+  });
+});

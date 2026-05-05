@@ -126,6 +126,7 @@ export function buildLiveData({ hookState, user, playlist, fallback = SIDEBAR_V3
     },
     actionTimer: liveActionTimer,
     equityData: liveEquity,
+    equity_visibility: eq?.equity_visibility ?? { coach: true, players: !!eq?.showToPlayers },
     myId: hookState?.myId ?? null,
     myStableId,
     seatConfig: { maxSeats: 9, seats: liveSeats.slice(0, 9) },

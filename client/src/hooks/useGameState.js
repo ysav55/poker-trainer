@@ -154,6 +154,8 @@ export function useGameState(socket) {
   const toggleHeatmapDisplay    = useCallback(() => socketRef.current?.emit('toggle_heatmap_display'), [socketRef])
   const shareRange              = useCallback((handGroups, label) => socketRef.current?.emit('share_range', { handGroups, label }), [socketRef])
   const clearSharedRange        = useCallback(() => socketRef.current?.emit('clear_shared_range'), [socketRef])
+  const setCoachEquityVisible   = useCallback((tableId, visible) => socketRef.current?.emit('coach:set_coach_equity_visible', { tableId, visible }), [socketRef])
+  const setPlayersEquityVisible = useCallback((tableId, visible) => socketRef.current?.emit('coach:set_players_equity_visible', { tableId, visible }), [socketRef])
 
   const myPlayer = gameState?.players?.find((p) => p.id === myId) ?? null
 
@@ -173,6 +175,7 @@ export function useGameState(socket) {
     loadHandScenario, updateHandTags, setPlayerInHand, setBlindLevels,
     applyBlindsAtNextHand, discardPendingBlinds,
     toggleEquityDisplay, toggleRangeDisplay, toggleHeatmapDisplay,
+    setCoachEquityVisible, setPlayersEquityVisible,
     shareRange, clearSharedRange,
   }
 }

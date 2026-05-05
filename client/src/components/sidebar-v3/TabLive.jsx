@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MiniCard } from './shared.jsx';
 import ConfigureHand from './LiveConfigureHand.jsx';
 import NotesPanel from './NotesPanel.jsx';
+import EquityToggleRow from './EquityToggleRow.jsx';
 import useNotes from '../../hooks/useNotes.js';
 
 export default function TabLive({ data, emit, notesOpen = false }) {
@@ -85,8 +86,12 @@ export default function TabLive({ data, emit, notesOpen = false }) {
       <div className="card">
         <div className="card-head">
           <div className="card-title">Live Equity</div>
-          <div className="card-kicker">{equityData.showToPlayers ? 'visible to players' : 'coach only'}</div>
         </div>
+        <EquityToggleRow
+          visibility={data.equity_visibility}
+          emit={emit}
+          onShareRange={() => { /* D.3 will wire this */ }}
+        />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {equityRows.map((r) => (
             <div key={r.key}>

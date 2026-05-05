@@ -321,3 +321,35 @@ describe('buildLiveData — pending_blinds', () => {
     expect(out.pending_blinds).toBeNull();
   });
 });
+
+describe('buildLiveData — equity_visibility', () => {
+  it('passes through equityData.equity_visibility', () => {
+    const out = buildLiveData({
+      hookState: {
+        gameState: { phase: 'flop', paused: false, is_scenario: false, hand_id: 'h1', actions: [], players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] },
+        actionTimer: {},
+        equityData: { showToPlayers: true, players: {}, equity_visibility: { coach: true, players: true } },
+        myId: 'me',
+        replayState: { active: false },
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [], active: null },
+    });
+    expect(out.equity_visibility).toMatchObject({ coach: true, players: true });
+  });
+
+  it('falls back to {coach:true, players:false} when missing', () => {
+    const out = buildLiveData({
+      hookState: {
+        gameState: { phase: 'flop', paused: false, is_scenario: false, hand_id: 'h1', actions: [], players: [{ id: 'p1', stableId: 'u1', name: 'A', stack: 1000 }] },
+        actionTimer: {},
+        equityData: { showToPlayers: false, players: {} },
+        myId: 'me',
+        replayState: { active: false },
+      },
+      user: { stable_id: 'me' },
+      playlist: { playlists: [], active: null },
+    });
+    expect(out.equity_visibility).toEqual({ coach: true, players: false });
+  });
+});

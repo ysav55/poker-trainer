@@ -346,7 +346,9 @@ function FullTableView() {
     toggleHeatmapDisplay,
     shareRange,
     clearSharedRange,
-  }), [socket, toggleEquityDisplay, toggleRangeDisplay, toggleHeatmapDisplay, shareRange, clearSharedRange]);
+    setCoachEquityVisible:   (visible) => socket.emit('coach:set_coach_equity_visible', { tableId, visible }),
+    setPlayersEquityVisible: (visible) => socket.emit('coach:set_players_equity_visible', { tableId, visible }),
+  }), [socket, tableId, toggleEquityDisplay, toggleRangeDisplay, toggleHeatmapDisplay, shareRange, clearSharedRange]);
 
   // Don't render PokerTable with null gameState — it will crash.
   // game_state arrives shortly after socket joins; show a connecting/error screen.
