@@ -366,6 +366,42 @@ module.exports = function registerCoachControls(socket, ctx) {
   socket.on('coach:discard_pending_blinds', (payload, ack) =>
     handleDiscardPendingBlinds(socket, payload, ack)
   );
+
+  // ── Equity visibility per-audience ────────────────────────────────────────
+
+  socket.on('coach:set_coach_equity_visible', (payload, ack) => {
+    if (requireCoach(socket, 'set coach equity visibility')) {
+      return ack?.({ error: 'coach_only' });
+    }
+    const { tableId, visible } = payload || {};
+    if (!tableId || typeof visible !== 'boolean') {
+      return ack?.({ error: 'invalid_payload' });
+    }
+    const tableIdStr = String(tableId);
+    const current = equitySettings.get(tableIdStr) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, coach: visible };
+    equitySettings.set(tableIdStr, updated);
+    // Broadcast equity update so clients see new coach visibility state
+    emitEquityUpdate(tableIdStr);
+    return ack?.({ ok: true });
+  });
+
+  socket.on('coach:set_players_equity_visible', (payload, ack) => {
+    if (requireCoach(socket, 'set players equity visibility')) {
+      return ack?.({ error: 'coach_only' });
+    }
+    const { tableId, visible } = payload || {};
+    if (!tableId || typeof visible !== 'boolean') {
+      return ack?.({ error: 'invalid_payload' });
+    }
+    const tableIdStr = String(tableId);
+    const current = equitySettings.get(tableIdStr) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, coach: current.coach ?? true, players: visible, showToPlayers: visible };
+    equitySettings.set(tableIdStr, updated);
+    // Broadcast equity update so clients see new players visibility state
+    emitEquityUpdate(tableIdStr);
+    return ack?.({ ok: true });
+  });
 };
 
 module.exports.handleApplyBlindsAtNextHand = handleApplyBlindsAtNextHand;

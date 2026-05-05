@@ -53,8 +53,12 @@ function registerSocketHandlers(io) {
     const cached   = { phase, equities };
     sharedState.equityCache.set(tableId, cached);
     const settings = sharedState.equitySettings.get(tableId)
-      || { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
-    io.to(tableId).emit('equity_update', { ...cached, showToPlayers: settings.showToPlayers });
+      || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    io.to(tableId).emit('equity_update', {
+      ...cached,
+      showToPlayers: settings.players ?? settings.showToPlayers ?? false,
+      equity_visibility: { coach: settings.coach ?? true, players: settings.players ?? settings.showToPlayers ?? false },
+    });
   }
 
   const ctx = {

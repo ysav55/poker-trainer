@@ -50,7 +50,7 @@ class SharedState {
     this.actionTimers          = new Map(); // tableId → { timeout, startedAt, duration, playerId }
     this.pausedTimerRemainders = new Map(); // tableId → { playerId, remainingMs }
     this.equityCache           = new Map(); // tableId → { phase, equities: [{playerId, equity, tieEquity}] }
-    this.equitySettings        = new Map(); // tableId → { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false }
+    this.equitySettings        = new Map(); // tableId → { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false }
     this.activeCoachLocks      = new Map(); // tableId → coachStableId (single-coach-per-table lock)
     this.pendingBlinds         = new Map(); // tableId → { sb, bb, queuedBy, queuedAt } (Apply at Next Hand queue)
   }

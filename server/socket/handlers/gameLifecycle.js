@@ -160,14 +160,16 @@ module.exports = function registerGameLifecycle(socket, ctx) {
   socket.on('toggle_equity_display', () => {
     if (requireCoach(socket, 'toggle equity display')) return;
     const tableId = socket.data.tableId;
-    const current = equitySettings.get(tableId) || { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
-    const updated = { ...current, showToPlayers: !current.showToPlayers };
+    const current = equitySettings.get(tableId) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    // Toggle players flag and keep showToPlayers in sync for back-compat with old sidebar
+    const newPlayers = !(current.players ?? current.showToPlayers ?? false);
+    const updated = { ...current, coach: current.coach ?? true, players: newPlayers, showToPlayers: newPlayers };
     equitySettings.set(tableId, updated);
     io.to(tableId).emit('equity_settings', updated);
     // Re-emit cached equity so clients update immediately without waiting for next action
     const cached = equityCache.get(tableId);
     if (cached) {
-      io.to(tableId).emit('equity_update', { ...cached, showToPlayers: updated.showToPlayers });
+      io.to(tableId).emit('equity_update', { ...cached, showToPlayers: updated.showToPlayers, equity_visibility: { coach: updated.coach, players: updated.players } });
     }
   });
 };
