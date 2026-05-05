@@ -3,6 +3,7 @@ import { MiniCard } from './shared.jsx';
 import { useHistory } from '../../hooks/useHistory.js';
 import NotesPanel from './NotesPanel.jsx';
 import useNotes from '../../hooks/useNotes.js';
+import ScrubberStrip from './ScrubberStrip.jsx';
 
 const STREET_ORDER = ['preflop', 'flop', 'turn', 'river'];
 const STREET_LABEL = { preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River' };
@@ -249,6 +250,16 @@ export default function TabReview({ data, emit, replay, selectedHandId, onBack }
             {r.branched ? 'live from cursor' : 'cursor stepping'}
           </div>
         </div>
+
+        {/* Scrubber with autoplay + speed */}
+        <ScrubberStrip
+          cursor={cursor}
+          totalActions={totalActions}
+          onJumpTo={replay?.replayJumpTo}
+          onStepBack={replay?.replayStepBack}
+          onStepForward={replay?.replayStepForward}
+        />
+
         <div className="row" style={{ gap: 5 }}>
           <button
             className="btn sm"

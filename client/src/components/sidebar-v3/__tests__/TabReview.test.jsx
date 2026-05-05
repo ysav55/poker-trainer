@@ -23,3 +23,10 @@ describe('TabReview — notes panel', () => {
     expect(screen.getByText('review note')).toBeInTheDocument();
   });
 });
+
+describe('TabReview — scrubber', () => {
+  it('renders ScrubberStrip when a hand is loaded', () => {
+    render(<TabReview data={data} emit={{}} replay={{ replayJumpTo: vi.fn(), replayStepBack: vi.fn(), replayStepForward: vi.fn() }} selectedHandId="h1" onBack={vi.fn()} />);
+    expect(screen.getByTestId('scrubber-range')).toBeInTheDocument();
+  });
+});
