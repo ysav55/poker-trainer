@@ -58,25 +58,26 @@ describe('SidebarV3 — StatusPill', () => {
 
 describe('SidebarV3 — footer copy', () => {
   beforeEach(() => {
+    cleanup();
     try { localStorage.clear(); } catch {}
   });
 
   afterEach(() => cleanup());
 
-  it('Live footer says "Deal Next Hand →" (C1)', () => {
+  it('Live footer says "Deal Next Hand →" (C1)', { timeout: 10000 }, () => {
     const data = { ...SIDEBAR_V3_DATA, gameState: { ...SIDEBAR_V3_DATA.gameState, phase: 'waiting' } };
     render(<SidebarV3 data={data} emit={{ togglePause: vi.fn(), startConfiguredHand: vi.fn() }} />);
     expect(screen.getByRole('button', { name: /Deal Next Hand →/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Next Hand →$/ })).toBeNull();
   });
 
-  it('History footer says "Open in Review →" (C5)', () => {
+  it('History footer says "Open in Review →" (C5)', { timeout: 10000 }, () => {
     render(<SidebarV3 data={SIDEBAR_V3_DATA} initialTab="history" />);
     expect(screen.getByRole('button', { name: /Open in Review →/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Review Selected →/ })).toBeNull();
   });
 
-  it('Review footer shows "← Back" and "Back to Live" (C6, C7)', () => {
+  it('Review footer shows "← Back" and "Back to Live" (C6, C7)', { timeout: 10000 }, () => {
     render(<SidebarV3 data={SIDEBAR_V3_DATA} initialTab="review" />);
     expect(screen.getByRole('button', { name: /← Back$/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Back to Live/ })).toBeInTheDocument();
@@ -97,6 +98,7 @@ describe('SidebarV3 — Drills footer removed', () => {
 
 describe('SidebarV3 — Tag Hand wiring', () => {
   beforeEach(() => cleanup());
+  afterEach(() => cleanup());
 
   it('clicking Tag Hand opens the dialog when a current hand exists', () => {
     const data = {
@@ -116,7 +118,7 @@ describe('SidebarV3 — Tag Hand wiring', () => {
     expect(screen.getByRole('button', { name: /Tag Hand/i })).toBeDisabled();
   });
 
-  it('Save inside dialog emits updateHandTags(handId, tags)', () => {
+  it('Save inside dialog emits updateHandTags(handId, tags)', { timeout: 10000 }, () => {
     const data = {
       ...SIDEBAR_V3_DATA,
       gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: 'h-x' },

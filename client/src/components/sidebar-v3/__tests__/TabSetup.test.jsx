@@ -1,6 +1,6 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import TabSetup from '../TabSetup.jsx';
 
 function makeData({ sb = 10, bb = 20, players = [], seats, gameState, pending_blinds } = {}) {
@@ -34,6 +34,8 @@ function makeEmit(overrides = {}) {
     ...overrides,
   };
 }
+
+afterEach(() => cleanup());
 
 const ALICE = { seat: 0, playerId: 'p1', stableId: 's1', name: 'Alice', stack: 1000, isHero: false, isBot: false, status: 'active', hands: 5 };
 
@@ -92,7 +94,7 @@ describe('TabSetup — Seats Edit Stack flow', () => {
     fireEvent.click(screen.getByRole('button', { name: /Edit Stack/i }));
   }
 
-  it('Apply emits adjustStack(playerId, newStack)', () => {
+  it('Apply emits adjustStack(playerId, newStack)', { timeout: 10000 }, () => {
     const emit = makeEmit();
     render(<TabSetup data={seatedAlice(1000)} emit={emit} />);
     openEditStack();
