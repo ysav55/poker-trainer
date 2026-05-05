@@ -5,6 +5,7 @@ import LaunchPanel from './LaunchPanel.jsx';
 import CountdownBanner from './CountdownBanner.jsx';
 import EventLog from './EventLog.jsx';
 import CoachRoleToggle from './CoachRoleToggle.jsx';
+import HandsLibrary from './HandsLibrary.jsx';
 
 const POSITIONS_BY_COUNT = {
   2: ['BTN','BB'],
@@ -39,7 +40,7 @@ export default function TabDrills({ data, emit }) {
       />
 
       {mode === 'playlists' && <DrillLoader data={data} emit={emit} />}
-      {mode === 'hands'     && <DrillHands />}
+      {mode === 'hands'     && <DrillHands data={data} emit={emit} />}
       {mode === 'session'   && <DrillSessionCard data={data} emit={emit} />}
     </>
   );
@@ -396,18 +397,8 @@ function DrillLoader({ data, emit }) {
   );
 }
 
-function DrillHands() {
-  return (
-    <div className="card">
-      <div className="card-head">
-        <div className="card-title">Hand Library</div>
-        <div className="card-kicker">phase D.9</div>
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--ink-faint)', textAlign: 'center', padding: '18px 8px', lineHeight: 1.5 }}>
-        Hand library wires up in Phase D.9 — search past hands and load them as scenarios.
-      </div>
-    </div>
-  );
+function DrillHands({ data, emit }) {
+  return <HandsLibrary emit={emit} playlists={data.playlists ?? []} />;
 }
 
 function DrillSessionCard({ data, emit }) {

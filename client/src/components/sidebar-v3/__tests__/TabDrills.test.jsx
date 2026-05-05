@@ -52,11 +52,13 @@ describe('TabDrills — 3-segment chassis (D.8b)', () => {
     expect(screen.getByText('Test')).toBeInTheDocument();
   });
 
-  it('clicking Hands switches to Hands mode and renders the placeholder', () => {
+  it('clicking Hands switches to Hands mode and renders HandsLibrary search', () => {
     render(<TabDrills data={{ playlists: [], drillSession: { active: false } }} emit={makeEmit()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Hands' }));
-    // Hands placeholder text
-    expect(screen.getByText(/hand library wires up in Phase D.9/i)).toBeInTheDocument();
+    // HandsLibrary should render the search input
+    expect(screen.getByPlaceholderText(/Search by winner/)).toBeInTheDocument();
+    // And stack mode toggles
+    expect(screen.getByRole('button', { name: /Keep Stacks/ })).toBeInTheDocument();
   });
 });
 
