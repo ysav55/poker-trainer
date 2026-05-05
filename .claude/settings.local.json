@@ -20,7 +20,28 @@
       "Bash(echo $PATH)",
       "mcp__jcodemunch__get_repo_outline",
       "mcp__jcodemunch__get_file_tree",
-      "mcp__jcodemunch__get_file_outline"
+      "mcp__jcodemunch__get_file_outline",
+      "Bash(git commit:*)",
+      "Bash(ls docs/superpowers/plans/*v2*)",
+      "Bash(ls docs/superpowers/plans/*redesign*)",
+      "Bash(grep -l \"lucide-react\" client/src/components/*.jsx client/src/pages/*.jsx client/src/pages/settings/*.jsx)",
+      "Bash(grep:*)",
+      "Bash(gh run:*)",
+      "Bash(SUPABASE_URL=https://placeholder.supabase.co SUPABASE_SERVICE_ROLE_KEY=placeholder SESSION_SECRET=test timeout 5 node index.js)",
+      "Bash(echo \"EXIT=$?\")",
+      "mcp__claude_ai_Supabase__list_migrations",
+      "Bash(npm list:*)",
+      "Bash(npm test:*)",
+      "Bash(ls .env*)",
+      "Bash(ls fly*.toml)",
+      "mcp__jcodemunch__get_dead_code_v2",
+      "mcp__jcodemunch__get_hotspots",
+      "mcp__jcodemunch__get_extraction_candidates",
+      "mcp__jcodemunch__get_blast_radius",
+      "Bash(ls -1 C:/Users/user/poker-trainer/supabase/migrations/*.sql)",
+      "Bash(pkill -f \"npm run dev\")",
+      "Bash(ls supabase/migrations/*.sql)",
+      "Bash(xargs -I {} basename {})"
     ]
   }
 }

@@ -1,24 +1,38 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { io } from 'socket.io-client'
+import { useAuth } from '../contexts/AuthContext.jsx'
 
 // In production (unified server), connect to the same host the page was served from.
 // In development, connect to the Vite dev server's proxy target (localhost:3001).
 const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:3001' : ''
 
+// Roles that carry coach-level privileges at the table.
+const COACH_ROLES = ['coach', 'admin', 'superadmin']
+
 export function useConnectionManager() {
+  const { user } = useAuth() ?? {}
   const socketRef = useRef(null)
   // Stores last join params so the socket can auto-rejoin after a disconnect/reconnect
   const joinParamsRef = useRef(null)
   const [connected, setConnected] = useState(false)
+  // Reactive socket state — downstream hooks declare this as a dep so their
+  // effects re-run when the socket instance changes (fixes C-8 stale ref capture).
+  const [socket, setSocket] = useState(null)
+
+  // Keep a ref to the latest token so the socket auth callback always sends fresh
+  // credentials without needing to recreate the socket when the user changes.
+  const tokenRef = useRef(null)
+  tokenRef.current = user?.token || sessionStorage.getItem('poker_trainer_jwt') || ''
 
   useEffect(() => {
     const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
-      auth: (cb) => cb({ token: localStorage.getItem('poker_trainer_jwt') || '' }),
+      auth: (cb) => cb({ token: tokenRef.current }),
     })
     socketRef.current = socket
+    setSocket(socket)
 
     // ── Global error capture for alpha testing ─────────────────────────────
     // Ship uncaught JS errors + unhandled promise rejections back to the server
@@ -45,8 +59,8 @@ export function useConnectionManager() {
       // If the server rejects the socket due to an expired or invalid JWT, clear
       // stale credentials so the user is prompted to log in again.
       if (err.message?.toLowerCase().includes('auth') || err.message?.toLowerCase().includes('token') || err.message?.toLowerCase().includes('unauthorized')) {
-        localStorage.removeItem('poker_trainer_jwt')
-        localStorage.removeItem('poker_trainer_player_id')
+        sessionStorage.removeItem('poker_trainer_jwt')
+        sessionStorage.removeItem('poker_trainer_player_id')
         joinParamsRef.current = null
       }
       console.error('[socket] connect_error', err.message)
@@ -59,7 +73,7 @@ export function useConnectionManager() {
         const { name, role, stableId } = joinParamsRef.current
         socket.emit('join_room', {
           name,
-          isCoach: role === 'coach',
+          isCoach: COACH_ROLES.includes(role),
           isSpectator: role === 'spectator',
           stableId,
         })
@@ -73,6 +87,7 @@ export function useConnectionManager() {
       window.removeEventListener('unhandledrejection', handleUnhandledRejection)
       socket.disconnect()
       socketRef.current = null
+      setSocket(null)
     }
   }, [])
 
@@ -81,7 +96,7 @@ export function useConnectionManager() {
     joinParamsRef.current = { name, role, stableId }
     socketRef.current?.emit('join_room', {
       name,
-      isCoach: role === 'coach',
+      isCoach: COACH_ROLES.includes(role),
       isSpectator: role === 'spectator',
       stableId,
     })
@@ -92,5 +107,5 @@ export function useConnectionManager() {
     joinParamsRef.current = null
   }, [])
 
-  return { socketRef, connected, joinRoom, clearJoinParams }
+  return { socketRef, socket, connected, joinRoom, clearJoinParams }
 }

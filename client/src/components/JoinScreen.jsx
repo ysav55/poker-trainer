@@ -71,8 +71,8 @@ function JoinScreen({ joinRoom, connected }) {
         return;
       }
       // Store JWT and stableId for reconnects
-      localStorage.setItem('poker_trainer_jwt', data.token);
-      localStorage.setItem('poker_trainer_player_id', data.stableId);
+      sessionStorage.setItem('poker_trainer_jwt', data.token);
+      sessionStorage.setItem('poker_trainer_player_id', data.stableId);
       joinRoom(data.name, data.role === 'coach' ? 'coach' : 'player');
     } catch {
       setError('Network error — is the server running?');

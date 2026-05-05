@@ -17,7 +17,7 @@ function makeGameState(overrides = {}) {
     current_bet: 20,
     min_raise: 20,
     pot: 200,
-    is_replay_branch: false,
+
     players: [
       {
         id: 'player-1',
@@ -217,7 +217,7 @@ describe('BettingControls — action buttons', () => {
     expect(emit.placeBet).toHaveBeenCalledWith('call')
   })
 
-  it('shows "YOUR TURN" label when not in branched replay', async () => {
+  it('shows "YOUR TURN" label on active turn', async () => {
     const { default: BettingControls } = await import('../components/BettingControls.jsx')
     render(
       <BettingControls

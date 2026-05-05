@@ -1,0 +1,101 @@
+<h2>V2 UI Redesign — Proposed Scope</h2>
+<p class="subtitle">4 groups, light UX refresh: tokens + icons + decomposition + polish</p>
+
+<div class="section">
+  <h3>Group 1: SettingsPage (8 files)</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Shell</div>
+      <div style="color: #e6edf3; font-size: 14px; margin-top: 4px;">SettingsPage.jsx <span style="color: #6e7681;">(70L)</span></div>
+      <div style="color: #d4af37; font-size: 12px; margin-top: 4px;">→ Token migration + lucide tabs</div>
+    </div>
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">7 Tab Components</div>
+      <div style="color: #e6edf3; font-size: 12px; margin-top: 4px;">
+        TableDefaults <span style="color: #6e7681;">323L</span> · School <span style="color: #6e7681;">623L</span> · Alerts <span style="color: #6e7681;">182L</span><br>
+        Org <span style="color: #6e7681;">442L</span> · Platform <span style="color: #6e7681;">210L</span> · Profile <span style="color: #6e7681;">212L</span> · DangerZone <span style="color: #6e7681;">170L</span>
+      </div>
+      <div style="color: #d4af37; font-size: 12px; margin-top: 4px;">→ Token-only migration, no splits</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Group 2: Admin Pages (2 files → 6+ files)</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px;">UserManagement.jsx <span style="color: #f85149;">655L</span></div>
+      <div style="color: #d4af37; font-size: 12px; margin-top: 8px;">
+        Extract to components/admin/:<br>
+        <span style="color: #e6edf3;">• ResetPasswordModal</span><br>
+        <span style="color: #e6edf3;">• DeleteConfirmModal</span><br>
+        <span style="color: #e6edf3;">• UserTableRow (StatusBadge + RolePill + ActionsMenu)</span><br>
+        <span style="color: #e6edf3;">• UserFilters (search + role + status)</span><br>
+        Page → ~250L
+      </div>
+    </div>
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px;">RefereeDashboard.jsx <span style="color: #d29922;">367L</span></div>
+      <div style="color: #d4af37; font-size: 12px; margin-top: 8px;">
+        Extract to components/admin/:<br>
+        <span style="color: #e6edf3;">• MovePlayerModal</span><br>
+        <span style="color: #e6edf3;">• TournamentTableCard</span><br>
+        Page → ~180L
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Group 3: HandBuilder / ScenarioBuilder (1 file → 4+ files)</h3>
+  <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+    <div style="color: #e6edf3; font-size: 14px;">HandBuilder.jsx <span style="color: #f85149;">635L</span></div>
+    <div style="color: #d4af37; font-size: 12px; margin-top: 8px;">
+      Keep split-pane layout. Extract:<br>
+      <span style="color: #e6edf3;">• ScenarioLibrary (left panel — tabs, search, cards)</span><br>
+      <span style="color: #e6edf3;">• ScenarioCard + PlaylistCard</span><br>
+      <span style="color: #e6edf3;">• QuickSavePanel</span><br>
+      Page → ~200L (layout shell + state)
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Group 4: Tournament Pages (3 files — polish only)</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px;">ListPage <span style="color: #6e7681;">179L</span></div>
+      <div style="color: #d4af37; font-size: 12px; margin-top: 4px;">Tokens + icons + consistent header</div>
+    </div>
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px;">DetailPage <span style="color: #6e7681;">272L</span></div>
+      <div style="color: #d4af37; font-size: 12px; margin-top: 4px;">Tokens + icons + CollapsibleSections</div>
+    </div>
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px;">ControlPage <span style="color: #6e7681;">173L</span></div>
+      <div style="color: #d4af37; font-size: 12px; margin-top: 4px;">Tokens + icons + status badges</div>
+    </div>
+  </div>
+</div>
+
+<div style="background: #0d1117; border: 2px solid #d4af37; border-radius: 8px; padding: 20px; margin-top: 24px;">
+  <div style="color: #d4af37; font-size: 14px; font-weight: 700; margin-bottom: 8px;">Totals</div>
+  <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; text-align: center;">
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">14</div>
+      <div style="color: #8b949e; font-size: 11px;">Files touched</div>
+    </div>
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">~10</div>
+      <div style="color: #8b949e; font-size: 11px;">New components</div>
+    </div>
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">0</div>
+      <div style="color: #8b949e; font-size: 11px;">New routes</div>
+    </div>
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">0</div>
+      <div style="color: #8b949e; font-size: 11px;">New APIs</div>
+    </div>
+  </div>
+</div>

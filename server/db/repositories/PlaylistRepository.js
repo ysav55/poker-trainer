@@ -2,7 +2,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const supabase = require('../supabase');
-const { q } = require('../utils');
+const { q, parseTags } = require('../utils');
 
 // ─── Playlist API ─────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ async function getPlaylistHands(playlistId) {
     final_pot:     row.hands?.final_pot,
     winner_name:   row.hands?.winner_name,
     phase_ended:   row.hands?.phase_ended,
-    auto_tags:     (row.hands?.hand_tags || []).filter(t => t.tag_type === 'auto').map(t => t.tag),
+    ...parseTags(row.hands?.hand_tags ?? []),
   }));
 }
 
@@ -95,7 +95,31 @@ async function deletePlaylist(playlistId) {
   await q(supabase.from('playlists').delete().eq('playlist_id', playlistId));
 }
 
+async function renamePlaylist(playlistId, name) {
+  if (!playlistId || !name || typeof name !== 'string') {
+    throw new Error('playlistId and name are required');
+  }
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('name cannot be empty or whitespace only');
+  await q(supabase.from('playlists').update({ name: trimmed }).eq('playlist_id', playlistId));
+  return { playlist_id: playlistId, name: trimmed };
+}
+
+// Fetch a single playlist by id. Returns null if not found. Used by
+// authorization guards (e.g. branch_to_drill verifies the playlist belongs
+// to the coach's table before adding hands to it).
+async function getPlaylist(playlistId) {
+  if (!playlistId) return null;
+  const data = await q(
+    supabase.from('playlists')
+      .select('playlist_id, name, description, table_id, created_at')
+      .eq('playlist_id', playlistId)
+      .maybeSingle()
+  );
+  return data || null;
+}
+
 module.exports = {
-  createPlaylist, getPlaylists, getPlaylistHands,
-  addHandToPlaylist, removeHandFromPlaylist, deletePlaylist,
+  createPlaylist, getPlaylists, getPlaylist, getPlaylistHands,
+  addHandToPlaylist, removeHandFromPlaylist, deletePlaylist, renamePlaylist,
 };

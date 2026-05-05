@@ -38,6 +38,7 @@ jest.mock('../utils', () => ({
   parseTags: jest.fn((tags) => ({
     auto_tags:    (tags || []).filter(t => t.tag_type === 'auto').map(t => t.tag),
     mistake_tags: (tags || []).filter(t => t.tag_type === 'mistake').map(t => t.tag),
+    sizing_tags:  (tags || []).filter(t => t.tag_type === 'sizing').map(t => t.tag),
     coach_tags:   (tags || []).filter(t => t.tag_type === 'coach').map(t => t.tag),
   })),
 }));
@@ -195,6 +196,32 @@ describe('getPlaylistHands', () => {
     expect(result[0].final_pot).toBe(200);
     expect(result[0].auto_tags).toEqual(['C_BET']); // only auto tags
     expect(result[0].auto_tags).not.toContain('OPEN_LIMP');
+  });
+
+  test('returns mistake_tags and sizing_tags, not just auto_tags', async () => {
+    q.mockResolvedValueOnce([
+      {
+        playlist_id:   'pl-001',
+        hand_id:       'h-99',
+        display_order: 0,
+        hands: {
+          board:       [],
+          final_pot:   200,
+          winner_name: 'Alice',
+          phase_ended: 'showdown',
+          hand_tags:   [
+            { tag: 'C_BET',     tag_type: 'auto'    },
+            { tag: 'OPEN_LIMP', tag_type: 'mistake' },
+            { tag: 'POT_BET',   tag_type: 'sizing'  },
+          ],
+        },
+      },
+    ]);
+
+    const result = await getPlaylistHands('pl-001');
+    expect(result[0].auto_tags).toEqual(['C_BET']);
+    expect(result[0].mistake_tags).toEqual(['OPEN_LIMP']);
+    expect(result[0].sizing_tags).toEqual(['POT_BET']);
   });
 });
 

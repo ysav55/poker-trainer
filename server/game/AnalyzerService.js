@@ -43,6 +43,19 @@ async function buildAnalyzerContext(handId) {
   const actions = (allActions || []).filter(a => !a.is_reverted);
   const seated  = (handPlayers || []).filter(p => p.seat >= 0).sort((a, b) => a.seat - b.seat);
 
+  // Identify bot players so their actions are excluded from coaching tags.
+  // Bot stableIds are server-assigned UUIDs marked is_bot=true in player_profiles.
+  const allPlayerIds = (handPlayers || []).map(p => p.player_id).filter(Boolean);
+  const botPlayerIds = new Set();
+  if (allPlayerIds.length > 0) {
+    const { data: botRows } = await supabase
+      .from('player_profiles')
+      .select('id')
+      .in('id', allPlayerIds)
+      .eq('is_bot', true);
+    for (const r of botRows ?? []) botPlayerIds.add(r.id);
+  }
+
   // Attach sizingRatio to each action (null when pot is 0 or unknown)
   const enrichedActions = actions.map(a => ({
     ...a,
@@ -124,6 +137,7 @@ async function buildAnalyzerContext(handId) {
     potByStreet,
     evaluateAt,
     holeCardsByPlayer,
+    botPlayerIds,
   };
 }
 
@@ -189,8 +203,14 @@ async function analyzeAndTagHand(handId) {
     });
   }
 
-  await replaceAutoTags(handId, tagRows);
-  return tagRows;
+  // Strip player-specific tags for bot players — bots don't need coaching feedback.
+  // Hand-level tags (no player_id) are preserved; they describe the pot type, not a player mistake.
+  const finalRows = ctx.botPlayerIds.size > 0
+    ? tagRows.filter(r => !r.player_id || !ctx.botPlayerIds.has(r.player_id))
+    : tagRows;
+
+  await replaceAutoTags(handId, finalRows);
+  return finalRows;
 }
 
 module.exports = { buildAnalyzerContext, analyzeAndTagHand };

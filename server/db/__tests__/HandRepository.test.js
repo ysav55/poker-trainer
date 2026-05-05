@@ -44,6 +44,7 @@ jest.mock('../utils', () => ({
   parseTags: jest.fn((tags) => ({
     auto_tags:    (tags || []).filter(t => t.tag_type === 'auto').map(t => t.tag),
     mistake_tags: (tags || []).filter(t => t.tag_type === 'mistake').map(t => t.tag),
+    sizing_tags:  (tags || []).filter(t => t.tag_type === 'sizing').map(t => t.tag),
     coach_tags:   (tags || []).filter(t => t.tag_type === 'coach').map(t => t.tag),
   })),
 }));
@@ -136,6 +137,20 @@ describe('startHand', () => {
   test('uses default dealerSeat=0 when not provided', async () => {
     const { dealerSeat: _omit, ...paramsWithoutDealer } = baseParams;
     await expect(startHand(paramsWithoutDealer)).resolves.not.toThrow();
+  });
+
+  test('accepts tableMode and resolves without throwing', async () => {
+    await expect(startHand({ ...baseParams, tableMode: 'coached_cash' })).resolves.not.toThrow();
+  });
+
+  test('accepts tableMode=null (historical hands) without throwing', async () => {
+    await expect(startHand({ ...baseParams, tableMode: null })).resolves.not.toThrow();
+  });
+
+  test('defaults tableMode to null when omitted', async () => {
+    // q is mocked — just ensure no error thrown and ensureSession is called
+    await expect(startHand(baseParams)).resolves.not.toThrow();
+    expect(ensureSession).toHaveBeenCalledWith('session-001', 'table-001');
   });
 });
 

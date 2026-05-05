@@ -1,8 +1,113 @@
 'use strict';
 
+const SharedState = require('../../state/SharedState.js');
+
+async function handleApplyBlindsAtNextHand(socket, payload, ack) {
+  const { requireCoach } = require('../../auth/socketGuards.js');
+
+  if (requireCoach(socket, 'apply blinds at next hand')) {
+    return ack?.({ error: 'coach_only' });
+  }
+  const { tableId, sb, bb } = payload || {};
+  if (!tableId) return ack?.({ error: 'invalid_table' });
+  if (!Number.isInteger(sb) || !Number.isInteger(bb) || sb <= 0 || bb <= 0 || sb >= bb) {
+    return ack?.({ error: 'invalid_blinds' });
+  }
+  SharedState.pendingBlinds.set(tableId, {
+    sb, bb,
+    queuedBy: socket.data.stableId ?? socket.data.userId,
+    queuedAt: Date.now(),
+  });
+  // Broadcast to room so other clients update their banner
+  socket.to(tableId).emit('pending_blinds_updated', { sb, bb });
+  socket.emit('pending_blinds_updated', { sb, bb });
+  return ack?.({ ok: true });
+}
+
+async function handleDiscardPendingBlinds(socket, payload, ack) {
+  const { requireCoach } = require('../../auth/socketGuards.js');
+
+  if (requireCoach(socket, 'discard pending blinds')) {
+    return ack?.({ error: 'coach_only' });
+  }
+  const { tableId } = payload || {};
+  if (!tableId) return ack?.({ error: 'invalid_table' });
+  SharedState.pendingBlinds.delete(tableId);
+  socket.to(tableId).emit('pending_blinds_updated', null);
+  socket.emit('pending_blinds_updated', null);
+  return ack?.({ ok: true });
+}
+
+async function handleShareRange(socket, payload, ack) {
+  const { requireCoach } = require('../../auth/socketGuards.js');
+
+  if (requireCoach(socket, 'share range')) {
+    return ack?.({ error: 'coach_only' });
+  }
+  const { tableId, groups, label } = payload || {};
+  if (!tableId) return ack?.({ error: 'invalid_table' });
+  if (!Array.isArray(groups) || groups.length === 0) return ack?.({ error: 'invalid_groups' });
+  if (typeof label !== 'string') return ack?.({ error: 'invalid_label' });
+  const entry = { groups: [...groups], label, broadcastedAt: Date.now() };
+  SharedState.tableSharedRanges.set(tableId, entry);
+  // Broadcast to non-coach sockets in the room (students)
+  socket.to(tableId).emit('range_shared', entry);
+  return ack?.({ ok: true });
+}
+
+async function handleManualAdvanceSpot(socket, payload, ack) {
+  const { requireCoach } = require('../../auth/socketGuards.js');
+
+  if (requireCoach(socket, 'manual advance spot')) {
+    return ack?.({ error: 'coach_only' });
+  }
+  const { tableId } = payload || {};
+  if (!tableId) return ack?.({ error: 'invalid_table' });
+
+  // Verify table is active
+  const gm = SharedState.tables?.get?.(tableId);
+  if (!gm) return ack?.({ error: 'table_not_active' });
+
+  // Drill must be active
+  const playlistMode = gm.state?.playlist_mode;
+  if (!playlistMode?.active) return ack?.({ error: 'drill_not_active' });
+
+  // auto_advance must be OFF
+  if (playlistMode.auto_advance) return ack?.({ error: 'auto_advance_on' });
+
+  // Phase must be waiting (between hands)
+  const phase = gm.state?.phase;
+  if (phase !== 'waiting') return ack?.({ error: 'not_in_waiting_phase' });
+
+  try {
+    // GameManager.advancePlaylist() increments the drill index in GM's playlist_mode state.
+    // This is the intra-hand state machine advance; the HandLogger/drill_sessions table
+    // is managed by PlaylistExecutionService and will be updated when the next hand starts.
+    if (typeof gm.advancePlaylist === 'function') {
+      const result = gm.advancePlaylist();
+      if (result.error) return ack?.({ error: result.error });
+      // Success — broadcast state update to all sockets in the room
+      socket.to(tableId).emit('notification', {
+        type: 'drill_advanced',
+        message: 'Coach advanced to next drill spot',
+      });
+      socket.emit('notification', {
+        type: 'drill_advanced',
+        message: 'Drill advanced',
+      });
+      return ack?.({ ok: true, result });
+    } else {
+      return ack?.({ error: 'advance_not_implemented' });
+    }
+  } catch (err) {
+    return ack?.({ error: 'advance_failed', message: err.message });
+  }
+}
+
 module.exports = function registerCoachControls(socket, ctx) {
   const { tables, activeHands, stableIdMap, io,
           broadcastState, sendError, sendSyncError, startActionTimer, clearActionTimer,
+          equityCache, equitySettings, emitEquityUpdate,
           requireCoach, HandLogger, log } = ctx;
 
   socket.on('manual_deal_card', ({ targetType, targetId, position, card } = {}) => {
@@ -45,7 +150,9 @@ module.exports = function registerCoachControls(socket, ctx) {
       broadcastState(socket.data.tableId);
       return;
     }
-    broadcastState(socket.data.tableId, { type: 'rollback', message: 'Coach rolled back to the previous street' });
+    const tableId = socket.data.tableId;
+    broadcastState(tableId, { type: 'rollback', message: 'Coach rolled back to the previous street' });
+    emitEquityUpdate(tableId);
   });
 
   socket.on('set_player_in_hand', ({ playerId, inHand } = {}) => {
@@ -61,7 +168,9 @@ module.exports = function registerCoachControls(socket, ctx) {
   });
 
   socket.on('toggle_pause', () => {
-    if (requireCoach(socket, 'pause')) return;
+    if (!socket.data.isCoach) {
+      return sendSyncError(socket, 'Only the coach can pause');
+    }
     const gm = tables.get(socket.data.tableId);
     if (!gm) return sendError(socket, 'Not in a room');
     const tableId = socket.data.tableId;
@@ -108,6 +217,7 @@ module.exports = function registerCoachControls(socket, ctx) {
     if (result.error) return sendError(socket, result.error);
     const tableId = socket.data.tableId;
     broadcastState(tableId, { type: 'street_advance', message: `Coach advanced to ${gm.state.phase}` });
+    emitEquityUpdate(tableId);
     const freshState = gm.getPublicState(socket.id, socket.data.isCoach);
     if (freshState.phase === 'showdown' && freshState.showdown_result) {
       io.to(tableId).emit('showdown_result', freshState.showdown_result);
@@ -148,4 +258,229 @@ module.exports = function registerCoachControls(socket, ctx) {
     }
     broadcastState(socket.data.tableId);
   });
+
+  // ── Equity visibility toggles ────────────────────────────────────────────
+
+  socket.on('toggle_range_display', () => {
+    if (requireCoach(socket, 'toggle range display')) return;
+    const tableId = socket.data.tableId;
+    const current = equitySettings.get(tableId) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, showRangesToPlayers: !current.showRangesToPlayers };
+    equitySettings.set(tableId, updated);
+    io.to(tableId).emit('equity_settings', updated);
+  });
+
+  socket.on('toggle_heatmap_display', () => {
+    if (requireCoach(socket, 'toggle heatmap display')) return;
+    const tableId = socket.data.tableId;
+    const current = equitySettings.get(tableId) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, showHeatmapToPlayers: !current.showHeatmapToPlayers };
+    equitySettings.set(tableId, updated);
+    io.to(tableId).emit('equity_settings', updated);
+  });
+
+  // ── Range sharing ─────────────────────────────────────────────────────────
+
+  socket.on('share_range', ({ handGroups, label } = {}) => {
+    if (requireCoach(socket, 'share a range')) return;
+    if (!Array.isArray(handGroups)) return sendError(socket, 'handGroups must be an array');
+    const tableId = socket.data.tableId;
+    io.to(tableId).emit('range_shared', { handGroups, label: label || '', sharedBy: socket.data.name });
+  });
+
+  socket.on('clear_shared_range', () => {
+    if (requireCoach(socket, 'clear shared range')) return;
+    io.to(socket.data.tableId).emit('range_shared', null);
+  });
+
+  // ── Coach add-bot (works on coached_cash + uncoached_cash) ──────────────
+  socket.on('coach:add_bot', ({ difficulty = 'easy' } = {}) => {
+    if (requireCoach(socket, 'add a bot')) return;
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    if (gm.state.players.length >= gm.state.max_players) {
+      return sendSyncError(socket, 'Table is full');
+    }
+    const { spawnBot } = require('../../game/BotConnection');
+    const result = spawnBot({
+      tableId,
+      difficulty,
+      onConnectError: (err) => {
+        log.error('game', 'coach_add_bot_connect_error',
+          `Bot ${result?.name ?? '(unknown)'} failed to connect`, { err, tableId, difficulty });
+        socket.emit('notification', {
+          type: 'bot_failed',
+          message: `Bot failed to connect: ${err?.message || 'unknown error'}`,
+        });
+      },
+    });
+    if (result.error) return sendError(socket, result.error);
+    log.info('game', 'coach_add_bot', `Coach added bot ${result.name}`, { tableId, difficulty });
+    socket.emit('notification', {
+      type: 'bot_added',
+      message: `Bot ${result.name} joining…`,
+    });
+    // The bot's join_room flow will broadcast state once it's seated.
+  });
+
+  // ── Coach kick player ─────────────────────────────────────────────────
+  // Note: 'kicked' is the dedicated kick event (vs the generic 'error' used by
+  // joinRoom's duplicate-tab path). Clients can listen for 'kicked' separately
+  // to show a friendly toast + navigate to the lobby.
+  socket.on('coach:kick_player', ({ playerId } = {}) => {
+    if (requireCoach(socket, 'kick a player')) return;
+    if (!playerId || typeof playerId !== 'string' || !playerId.trim()) {
+      return sendError(socket, 'playerId is required');
+    }
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+    const player = gm.state.players.find(p => p.id === playerId);
+    if (!player) return sendSyncError(socket, 'Player not found at this table');
+    if (player.is_coach) return sendSyncError(socket, 'Cannot kick the coach');
+
+    const stack = player.stack ?? 0;
+    const stableId = stableIdMap.get(playerId) || playerId;
+    const name = player.name || playerId;
+    const isBot = player.is_bot === true;
+
+    // If the kicked player is the current actor in a betting round, fold them
+    // first so the round advances cleanly via the normal placeBet path. Without
+    // this, the action timer's auto-fold lookup fails (player no longer exists)
+    // and the round stalls until the next external trigger. See review-pass-1
+    // critical issue #1.
+    //
+    // Paused tables: placeBet refuses with "Game is paused", which would leave
+    // current_turn dangling at the removed player. Refuse the kick instead so
+    // the coach makes the call to resume first.
+    const BETTING_PHASES = new Set(['preflop', 'flop', 'turn', 'river']);
+    if (gm.state.current_turn === playerId && BETTING_PHASES.has(gm.state.phase)) {
+      if (gm.state.paused) {
+        return sendSyncError(socket, 'Resume the game before kicking the active actor');
+      }
+      clearActionTimer(tableId);
+      const foldResult = gm.placeBet(playerId, 'fold');
+      if (foldResult.error) {
+        log.error('game', 'kick_pre_fold_failed',
+          `[coachControls] pre-kick fold failed for ${name}`,
+          { err: foldResult.error, tableId, playerId });
+        // Continue with removal anyway — better stall recovery than nothing.
+      } else {
+        // Re-arm the timer for whoever is now on the clock (if any).
+        startActionTimer(tableId);
+      }
+    }
+
+    // Cash out remaining chips before removal so the coach-initiated kick
+    // mirrors the natural-disconnect flow but skips the 60s reconnect window.
+    // Bots have UUID stableIds but no chip bank — skip them explicitly.
+    if (stack > 0 && !player.is_coach && !isBot && !String(stableId).startsWith('coach_')) {
+      const ChipBankRepo = require('../../db/repositories/ChipBankRepository');
+      ChipBankRepo.cashOut(stableId, stack, tableId).catch(err =>
+        log.error('db', 'kick_cash_out_failed', `[coachControls] cashOut failed for kicked ${name}`, { err, tableId, stableId }));
+    }
+
+    gm.removePlayer(playerId);
+    stableIdMap.delete(playerId);
+
+    // Notify the kicked client and force their socket out of the room. They'll
+    // receive 'kicked' and the lobby route will clear their table state.
+    const targetSocket = io.sockets.sockets.get(playerId);
+    if (targetSocket) {
+      targetSocket.emit('kicked', { tableId, by: socket.data.name || 'Coach' });
+      try { targetSocket.disconnect(true); } catch { /* ignore */ }
+    }
+
+    io.to(tableId).emit('notification', {
+      type: 'player_kicked',
+      message: `${name} was removed from the table`,
+    });
+    broadcastState(tableId, { type: 'player_kicked', message: `${name} kicked` });
+    log.info('game', 'coach_kick_player', `Coach kicked ${name}`, { tableId, playerId, stableId, isBot });
+  });
+
+  // transfer_controller — current coach hands table control to another player
+  socket.on('transfer_controller', async ({ toPlayerId } = {}) => {
+    if (requireCoach(socket, 'transfer controller')) return;
+    if (!toPlayerId || typeof toPlayerId !== 'string') {
+      return sendError(socket, 'toPlayerId is required');
+    }
+    const tableId = socket.data.tableId;
+    const gm = tables.get(tableId);
+    if (!gm) return sendError(socket, 'Not in a room');
+
+    const { TableRepository } = require('../../db/repositories/TableRepository');
+    await TableRepository.setController(tableId, toPlayerId).catch(err =>
+      log.error('db', 'set_controller_failed', '[coachControls] setController', { err, tableId })
+    );
+
+    io.to(tableId).emit('controller_transferred', {
+      toPlayerId,
+      byPlayerId: socket.data.stableId,
+      byName:     socket.data.name,
+    });
+    log.info('game', 'controller_transfer', `controller transferred to ${toPlayerId}`, { tableId, by: socket.data.stableId });
+  });
+
+  // coach:apply_blinds_at_next_hand — queue a blind delta for application at next hand
+  socket.on('coach:apply_blinds_at_next_hand', (payload, ack) =>
+    handleApplyBlindsAtNextHand(socket, payload, ack)
+  );
+
+  // coach:discard_pending_blinds — cancel the queued blind delta
+  socket.on('coach:discard_pending_blinds', (payload, ack) =>
+    handleDiscardPendingBlinds(socket, payload, ack)
+  );
+
+  // coach:share_range — broadcast a labeled range to non-coach sockets in the room
+  socket.on('coach:share_range', (payload, ack) =>
+    handleShareRange(socket, payload, ack)
+  );
+
+  // coach:manual_advance_spot — manually advance drill to next spot when auto_advance is OFF
+  socket.on('coach:manual_advance_spot', (payload, ack) =>
+    handleManualAdvanceSpot(socket, payload, ack)
+  );
+
+  // ── Equity visibility per-audience ────────────────────────────────────────
+
+  socket.on('coach:set_coach_equity_visible', (payload, ack) => {
+    if (requireCoach(socket, 'set coach equity visibility')) {
+      return ack?.({ error: 'coach_only' });
+    }
+    const { tableId, visible } = payload || {};
+    if (!tableId || typeof visible !== 'boolean') {
+      return ack?.({ error: 'invalid_payload' });
+    }
+    const tableIdStr = String(tableId);
+    const current = equitySettings.get(tableIdStr) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, coach: visible };
+    equitySettings.set(tableIdStr, updated);
+    // Broadcast equity update so clients see new coach visibility state
+    emitEquityUpdate(tableIdStr);
+    return ack?.({ ok: true });
+  });
+
+  socket.on('coach:set_players_equity_visible', (payload, ack) => {
+    if (requireCoach(socket, 'set players equity visibility')) {
+      return ack?.({ error: 'coach_only' });
+    }
+    const { tableId, visible } = payload || {};
+    if (!tableId || typeof visible !== 'boolean') {
+      return ack?.({ error: 'invalid_payload' });
+    }
+    const tableIdStr = String(tableId);
+    const current = equitySettings.get(tableIdStr) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const updated = { ...current, coach: current.coach ?? true, players: visible, showToPlayers: visible };
+    equitySettings.set(tableIdStr, updated);
+    // Broadcast equity update so clients see new players visibility state
+    emitEquityUpdate(tableIdStr);
+    return ack?.({ ok: true });
+  });
 };
+
+module.exports.handleApplyBlindsAtNextHand = handleApplyBlindsAtNextHand;
+module.exports.handleDiscardPendingBlinds = handleDiscardPendingBlinds;
+module.exports.handleShareRange = handleShareRange;
+module.exports.handleManualAdvanceSpot = handleManualAdvanceSpot;

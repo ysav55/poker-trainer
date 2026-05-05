@@ -1,136 +1,77 @@
 'use strict';
 
 /**
- * PlayerRoster — validates player credentials against players.csv.
+ * PlayerRoster — validates player credentials against the database.
  *
- * The CSV file is the single source of truth for who can log in and
- * what role they have (coach / student).  The DB stores stableIds for
- * hand-history persistence but is NOT consulted for authentication.
+ * Replaces the CSV-based implementation. Authentication now queries
+ * player_profiles (display_name, password_hash, status) and player_roles
+ * (for the primary role) directly from Supabase.
  *
- * CSV format (one player per line):
- *   name,bcrypt_hash,role
+ * IMPORTANT: password_hash and status columns, and the player_roles table,
+ * are only present after migration 009 is applied. All players are managed
+ * exclusively through the DB (player_profiles + player_roles). players.csv
+ * has been removed — use the /admin/users API to create or modify players.
  *
- * Lines starting with # and blank lines are ignored.
- * Whitespace around each field is trimmed.
- * Duplicate names: last entry wins (a warning is printed at startup).
- * Invalid role (not 'coach' or 'student'): row skipped with a warning.
- *
- * Usage:
- *   const PlayerRoster = require('./auth/PlayerRoster');
- *   // load() is called automatically on require.
- *
+ * Public interface (unchanged from the CSV version):
  *   const entry = await PlayerRoster.authenticate('Alice', 'mypass');
- *   // → { name: 'Alice', passwordHash: '...', role: 'student' } | null
+ *   // → { id, name, role } | null
  *
- *   const role = PlayerRoster.getRole('Alice');
- *   // → 'coach' | 'student' | null
+ * load() and reload() are kept as no-ops for backward compatibility
+ * (they were called on server start; nothing calls them externally now).
  *
- *   PlayerRoster.reload();   // re-read file without restarting the server
+ * getRole() is kept as a stub; callers should use PlayerRepository.getPrimaryRole()
+ * for DB-backed role lookups.
  */
 
-const fs     = require('fs');
-const path   = require('path');
+const { findByDisplayName, getPrimaryRole } = require('../db/repositories/PlayerRepository');
 const bcrypt = require('bcrypt');
-
-const ROSTER_PATH = process.env.ROSTER_PATH
-  || path.join(__dirname, '..', '..', 'players.csv');
-
-/** @type {Map<string, { name: string, password: string, role: 'coach'|'student' }>} */
-let _roster = new Map();
-
-// ─── CSV parser ───────────────────────────────────────────────────────────────
-
-function _parse(raw) {
-  const roster = new Map();
-  const lines  = raw.split('\n');
-
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed === '' || trimmed.startsWith('#')) continue;
-
-    // Split on the first three commas only (allows future extra columns)
-    const parts = trimmed.split(',');
-    if (parts.length < 3) {
-      console.warn(`[PlayerRoster] Skipping malformed line ${i + 1}: "${trimmed}"`);
-      continue;
-    }
-
-    const name     = parts[0].trim();
-    const password = parts[1].trim();
-    const roleRaw  = parts[2].trim().toLowerCase();
-
-    if (!name) {
-      console.warn(`[PlayerRoster] Skipping line ${i + 1}: name is empty`);
-      continue;
-    }
-
-    if (roleRaw !== 'coach' && roleRaw !== 'student') {
-      console.warn(`[PlayerRoster] Skipping line ${i + 1}: invalid role "${parts[2].trim()}" (must be coach or student)`);
-      continue;
-    }
-
-    const key = name.toLowerCase();
-    if (roster.has(key)) {
-      console.warn(`[PlayerRoster] Duplicate name "${name}" at line ${i + 1} — overwriting previous entry`);
-    }
-
-    roster.set(key, { name, passwordHash: password, role: roleRaw });
-  }
-
-  return roster;
-}
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * load() — reads and parses players.csv synchronously.
- * Called automatically on module init. Process exits with error if file missing.
- */
-function load() {
-  if (!fs.existsSync(ROSTER_PATH)) {
-    console.error(`[PlayerRoster] FATAL: players.csv not found at ${ROSTER_PATH}`);
-    console.error('[PlayerRoster] Create the file with at least one coach entry before starting the server.');
-    process.exit(1);
-  }
-  const raw = fs.readFileSync(ROSTER_PATH, 'utf8');
-  _roster = _parse(raw);
-  console.log(`[PlayerRoster] Loaded ${_roster.size} player(s) from ${ROSTER_PATH}`);
-}
-
-/**
- * reload() — re-reads players.csv without restarting the server.
- * Useful after adding/removing players in production.
- */
-function reload() {
-  console.log('[PlayerRoster] Reloading roster...');
-  load();
-}
-
-/**
  * authenticate(name, password)
- * Async — returns the roster record if credentials match, or null.
- * Password is verified against a bcrypt hash; name lookup is case-insensitive.
+ * Async — returns { id, name, role } if credentials are valid, or null.
+ * Rejects suspended/archived accounts even if the password is correct.
  */
 async function authenticate(name, password) {
   if (!name || !password) return null;
-  const entry = _roster.get(name.trim().toLowerCase());
-  if (!entry) return null;
-  const match = await bcrypt.compare(password, entry.passwordHash);
-  if (!match) return null;
-  return entry;
+
+  const player = await findByDisplayName(name.trim());
+  if (!player || !player.password_hash) return null;
+
+  // Reject suspended or archived accounts
+  if (player.status === 'suspended' || player.status === 'archived') return null;
+
+  const valid = await bcrypt.compare(password, player.password_hash);
+  if (!valid) return null;
+
+  const role = await getPrimaryRole(player.id);
+  return { id: player.id, name: player.display_name, role: role ?? 'coached_student' };
 }
 
 /**
- * getRole(name)
- * Returns 'coach' | 'student' | null (null if name not in roster).
+ * load() — no-op. Previously re-read players.csv on startup.
+ * Kept for backward compatibility; the DB is the source of truth now.
  */
-function getRole(name) {
-  if (!name) return null;
-  const entry = _roster.get(name.trim().toLowerCase());
-  return entry ? entry.role : null;
+function load() {
+  // No-op: authentication is now fully DB-backed.
 }
 
-// ─── Auto-load on require ─────────────────────────────────────────────────────
-load();
+/**
+ * reload() — no-op. Previously hot-reloaded players.csv.
+ * Kept for backward compatibility.
+ */
+function reload() {
+  // No-op: use the player-management API to add/modify players instead.
+}
 
-module.exports = { load, reload, authenticate, getRole };
+/**
+ * getRole(name) — stub. Previously returned the in-memory CSV role.
+ * Use PlayerRepository.getPrimaryRole(playerId) for DB-backed role lookups.
+ * Returns null always (synchronous callers should be migrated to the async DB path).
+ */
+function getRole(_name) {
+  return null;
+}
+
+module.exports = { authenticate, load, reload, getRole };

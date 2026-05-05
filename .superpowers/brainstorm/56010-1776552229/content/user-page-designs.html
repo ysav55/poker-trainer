@@ -1,0 +1,143 @@
+<h2>User Management — 3 Design Directions</h2>
+<p class="subtitle">Platform → School → Student hierarchy baked into the page. Click to select your preferred approach.</p>
+
+<div class="options">
+
+  <!-- ═══ OPTION A ═══ -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Scoped Cascade — Platform / School Switcher</h3>
+      <p>A <strong>scope bar</strong> at the top of the page with three tiers: <code>All Platform</code> → <code>School X</code> → optionally a student drill-in. The user list below always reflects the selected scope.</p>
+      <ul style="margin:8px 0;color:#8b949e;font-size:13px;">
+        <li><strong>Platform scope:</strong> see all users, bulk-assign to schools, create admins/coaches</li>
+        <li><strong>School scope:</strong> see that school's members, assign/remove students, manage coaches</li>
+        <li>School selector = dropdown (or pill tabs if few schools)</li>
+        <li>Filters (role/status/search) persist across scope switches</li>
+        <li>Actions menu adapts — e.g. "Move to school…" only in platform scope</li>
+      </ul>
+      <div style="margin-top:12px;padding:12px;background:#0d1117;border:1px solid #30363d;border-radius:8px;font-size:12px;color:#6e7681;font-family:monospace;line-height:1.8;">
+        ┌─────────────────────────────────────────────────────┐<br>
+        │ <span style="color:#d4af37;">◉ All Platform</span> │ School A │ School B │ &nbsp;&nbsp;&nbsp; 🔍 search &nbsp; [Role ▾] [Status ▾] │<br>
+        ├─────────────────────────────────────────────────────┤<br>
+        │ # │ Name &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │ Role &nbsp;&nbsp;&nbsp; │ School &nbsp; │ Status │ Joined │ ⋯ │<br>
+        │ 1 │ <span style="color:#f0ece3;">Ariela S.</span> &nbsp; │ student &nbsp; │ <span style="color:#58a6ff;">Aces High</span> │ <span style="color:#3fb950;">active</span> │ Mar 12 │ ⋮ │<br>
+        │ 2 │ <span style="color:#f0ece3;">Guy H.</span> &nbsp;&nbsp;&nbsp; │ coach &nbsp;&nbsp; │ <span style="color:#58a6ff;">Aces High</span> │ <span style="color:#3fb950;">active</span> │ Feb 03 │ ⋮ │<br>
+        │ 3 │ <span style="color:#f0ece3;">Ido A.</span> &nbsp;&nbsp;&nbsp; │ student &nbsp; │ <span style="color:#bc8cff;">— none —</span> │ <span style="color:#e3b341;">suspended</span> │ Jan 15 │ ⋮ │<br>
+        └─────────────────────────────────────────────────────┘<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#8b949e;">[ + Add User ] &nbsp; [ ⬇ Export ]</span>
+      </div>
+      <div class="pros-cons" style="margin-top:12px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>One page, one mental model — scope narrows, list follows</li>
+          <li>School column visible in platform scope gives full picture</li>
+          <li>Familiar pattern (GitHub org/repo switcher, Stripe dashboard)</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Scope bar + filters = two filter rows — could feel cluttered</li>
+          <li>School column wasted space when scoped to a single school</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ OPTION B ═══ -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Master-Detail Panels — Schools Left, Users Right</h3>
+      <p>A <strong>two-panel layout</strong>: left panel lists schools (+ "All" at top), right panel shows the user table for the selected school. Detail view slides in as a right drawer.</p>
+      <ul style="margin:8px 0;color:#8b949e;font-size:13px;">
+        <li><strong>Left panel:</strong> school list with member count badge, search, "+ New School" (if superadmin)</li>
+        <li><strong>Right panel:</strong> user table scoped to selected school, with filters/search/actions</li>
+        <li>"All" entry at top of school list = platform-wide view</li>
+        <li>User detail = slide-in drawer (replaces current modal)</li>
+        <li>School panel collapsible on smaller screens</li>
+      </ul>
+      <div style="margin-top:12px;padding:12px;background:#0d1117;border:1px solid #30363d;border-radius:8px;font-size:12px;color:#6e7681;font-family:monospace;line-height:1.8;">
+        ┌──────────────┬──────────────────────────────────────┐<br>
+        │ <span style="color:#d4af37;">SCHOOLS</span> &nbsp;&nbsp;&nbsp;&nbsp; │ <span style="color:#f0ece3;">Users in: Aces High</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 🔍 [Role▾] │<br>
+        │──────────────│──────────────────────────────────────│<br>
+        │ <span style="color:#8b949e;">◉ All (47)</span> &nbsp;&nbsp; │ # │ Name &nbsp;&nbsp;&nbsp;&nbsp; │ Role &nbsp;&nbsp; │ Status │ ⋯ │<br>
+        │ <span style="color:#58a6ff;">● Aces High</span> <span style="color:#3fb950;">12</span>│ 1 │ <span style="color:#f0ece3;">Ariela S.</span> │ student │ <span style="color:#3fb950;">active</span> │ ⋮ │<br>
+        │ <span style="color:#8b949e;">○ Royal Flush</span> <span style="color:#6e7681;">8</span>│ 2 │ <span style="color:#f0ece3;">Guy H.</span> &nbsp;&nbsp; │ coach &nbsp; │ <span style="color:#3fb950;">active</span> │ ⋮ │<br>
+        │ <span style="color:#8b949e;">○ Unassigned</span> <span style="color:#6e7681;">5</span>│ 3 │ <span style="color:#f0ece3;">Ido A.</span> &nbsp;&nbsp; │ student │ <span style="color:#3fb950;">active</span> │ ⋮ │<br>
+        │ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │ &nbsp; │ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; │ &nbsp; │<br>
+        │ <span style="color:#6e7681;">+ New School</span> │ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#8b949e;">[ + Add User ] [ ⬇ Export ]</span> │<br>
+        └──────────────┴──────────────────────────────────────┘
+      </div>
+      <div class="pros-cons" style="margin-top:12px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>School hierarchy always visible — reinforces Platform > School > Student</li>
+          <li>Quick switching between schools without dropdown hunting</li>
+          <li>Member counts at a glance — see school health instantly</li>
+          <li>"Unassigned" bucket makes orphan users obvious</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Eats horizontal space — user table gets narrower</li>
+          <li>Two panels may feel heavy if only 1-2 schools exist</li>
+          <li>More complex responsive behavior needed</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ OPTION C ═══ -->
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Grouped Table — Users Organized Under School Headers</h3>
+      <p>A <strong>single flat table</strong> with collapsible school group headers. Each school is a section. "Unassigned" section at the bottom. No separate school panel or scope bar.</p>
+      <ul style="margin:8px 0;color:#8b949e;font-size:13px;">
+        <li>Each school = collapsible accordion row with member count + school stats</li>
+        <li>Users listed under their school header, sorted by role then name</li>
+        <li>"Unassigned" group always at bottom for unschooled users</li>
+        <li>Search/filters apply globally, collapsed groups auto-expand if they contain matches</li>
+        <li>Drag-and-drop or "Move to…" action to reassign between schools</li>
+        <li>Collapse All / Expand All toggle</li>
+      </ul>
+      <div style="margin-top:12px;padding:12px;background:#0d1117;border:1px solid #30363d;border-radius:8px;font-size:12px;color:#6e7681;font-family:monospace;line-height:1.8;">
+        ┌─────────────────────────────────────────────────────┐<br>
+        │ 🔍 search &nbsp;&nbsp;&nbsp;&nbsp; [Role ▾] &nbsp; [Status ▾] &nbsp; [▼ Collapse All] │<br>
+        ├─────────────────────────────────────────────────────┤<br>
+        │ <span style="color:#58a6ff;">▼ Aces High</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#6e7681;">12 members · 2 coaches</span> │<br>
+        │ &nbsp; 1 │ <span style="color:#f0ece3;">Guy H.</span> &nbsp;&nbsp;&nbsp; │ <span style="color:#d4af37;">coach</span> &nbsp;&nbsp; │ <span style="color:#3fb950;">active</span> │ Feb 03 │ ⋮ │<br>
+        │ &nbsp; 2 │ <span style="color:#f0ece3;">Ariela S.</span> &nbsp;│ student &nbsp;│ <span style="color:#3fb950;">active</span> │ Mar 12 │ ⋮ │<br>
+        │ &nbsp; 3 │ <span style="color:#f0ece3;">Idopeer</span> &nbsp;&nbsp;│ student &nbsp;│ <span style="color:#3fb950;">active</span> │ Jan 20 │ ⋮ │<br>
+        ├─────────────────────────────────────────────────────┤<br>
+        │ <span style="color:#58a6ff;">▶ Royal Flush</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#6e7681;">8 members · 1 coach</span> &nbsp;│<br>
+        ├─────────────────────────────────────────────────────┤<br>
+        │ <span style="color:#bc8cff;">▼ Unassigned</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#6e7681;">5 users</span> &nbsp;│<br>
+        │ &nbsp; 1 │ <span style="color:#f0ece3;">Ido A.</span> &nbsp;&nbsp;&nbsp;│ student &nbsp;│ <span style="color:#e3b341;">suspended</span> │ Jan 15 │ ⋮ │<br>
+        └─────────────────────────────────────────────────────┘<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style="color:#8b949e;">[ + Add User ] &nbsp; [ ⬇ Export ]</span>
+      </div>
+      <div class="pros-cons" style="margin-top:12px;">
+        <div class="pros"><h4>Pros</h4><ul>
+          <li>Full table width — no horizontal sacrifice</li>
+          <li>School membership is the primary organizing principle, very visible</li>
+          <li>Collapsed view = school overview; expanded = full detail</li>
+          <li>Works well for 1 school or 10 schools</li>
+        </ul></div>
+        <div class="cons"><h4>Cons</h4><ul>
+          <li>Pagination gets complex with variable-height groups</li>
+          <li>Global sorting (e.g. "all users by join date") fights the grouping</li>
+          <li>Accordion UX can feel noisy with many groups</li>
+        </ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:24px;padding:16px;background:#0d1117;border:1px solid #30363d;border-radius:8px;">
+  <h3 style="margin-top:0;">Common to All 3 Designs</h3>
+  <ul style="color:#8b949e;font-size:13px;">
+    <li><strong>School column/badge</strong> added to user data — shows school name, color-coded</li>
+    <li><strong>"Assign to School"</strong> action in user form + row actions menu</li>
+    <li><strong>Coach name resolved</strong> (fixes current UUID display bug)</li>
+    <li><strong>created_by_name populated</strong> in detail view</li>
+    <li><strong>Delete wording fixed</strong> ("Archive" not "permanently delete")</li>
+    <li><strong>Existing features preserved</strong>: search, role/status filters, CSV export, reset password, suspend, CRUD</li>
+  </ul>
+</div>

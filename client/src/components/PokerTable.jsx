@@ -1,9 +1,9 @@
 import React from 'react';
 import PlayerSeat from './PlayerSeat';
-import GhostSeat from './GhostSeat';
-import WatcherIndicator from './WatcherIndicator';
 import BoardCards from './BoardCards';
 import { fmtChips } from '../utils/chips';
+import { SharedRangeOverlay } from './SharedRangeOverlay';
+import { PlayerRangePanel } from './PlayerRangePanel';
 
 // Absolute seat positions as percentages of the OVAL (seats are now inside the oval div)
 // Seat 0 = bottom-center (hero), increasing counter-clockwise
@@ -105,6 +105,12 @@ export default function PokerTable({
   onOpenCardPicker,
   bbView = false,
   bigBlind = 10,
+  equityData = null,    // { phase, equities: [{playerId, equity}], showToPlayers }
+  equityEnabled = false, // coach's local EV overlay toggle
+  sharedRange = null,      // { handGroups, label, sharedBy } from coach broadcast
+  equitySettings = null,  // { showRangesToPlayers, showHeatmapToPlayers, showToPlayers }
+  tableMode = null,        // current table mode (e.g. 'bot_cash')
+  onBotRemove = null,      // (stableId: string) => void — called when × clicked on a bot seat
 }) {
   // ── Derived state ──────────────────────────────────────────────────────────
   const players        = gameState?.players ?? [];
@@ -145,6 +151,24 @@ export default function PokerTable({
   const myIdx = sortedBySeat.findIndex(p => p.id === myId);
   const n = sortedBySeat.length;
 
+  // ── Equity helpers ─────────────────────────────────────────────────────────
+  function getPlayerEquity(player) {
+    if (!equityData?.equities) return null;
+    const stableId = player.stableId || player.id;
+    const entry = equityData.equities.find(e => e.playerId === stableId);
+    return entry?.equity ?? null;
+  }
+
+  function isEquityVisible(player) {
+    if (!equityData) return false;
+    if (isShowdown) return true; // always show at showdown
+    const equity = getPlayerEquity(player);
+    if (equity == null) return false;
+    if (isCoach) return equityEnabled; // coach's local toggle
+    // Players: show when coach has enabled showToPlayers
+    return equityData.showToPlayers === true;
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   function getSeatStyle(player) {
     // Rotate sorted list so viewer is always at index 0 (bottom-center).
@@ -159,14 +183,6 @@ export default function PokerTable({
       top: pos.top,
       transform: 'translate(-50%, -50%)',
     };
-  }
-
-  // Ghost seat positioning — distributes recorded players around the table.
-  // No hero rotation: seats are shown from an observer's perspective.
-  function getGhostSeatStyle(seatIndex, totalGhosts) {
-    const positions = POSITIONS_BY_COUNT[totalGhosts] ?? POSITIONS_BY_COUNT[9];
-    const pos = SEAT_POSITIONS[positions[seatIndex] ?? 0] ?? SEAT_POSITIONS[0];
-    return { left: pos.left, top: pos.top, transform: 'translate(-50%, -50%)' };
   }
 
   function handleHoleCardClick(player, position) {
@@ -190,7 +206,7 @@ export default function PokerTable({
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Table container — fills available vertical space ─────────────── */}
       <div className="flex-1 relative flex items-center justify-center min-h-0">
@@ -198,8 +214,8 @@ export default function PokerTable({
         <div
           className="table-felt relative"
           style={{
-            width: 'min(75%, 900px)',
-            height: 'min(48vh, 500px)',
+            width: 'min(90%, 1000px)',
+            height: 'min(82%, 680px)',
             borderRadius: '50%',
           }}
         >
@@ -226,7 +242,7 @@ export default function PokerTable({
             <BoardCards
               board={board}
               phase={phase}
-              isCoach={isCoach && phase !== 'replay'}
+              isCoach={isCoach}
               onCardClick={null}
             />
           </div>
@@ -312,22 +328,6 @@ export default function PokerTable({
 
 
 
-          {/* ── Replay / Branched badges ─────────────────────────────── */}
-          {gameState?.replay_mode?.active && !gameState?.replay_mode?.branched && (
-            <div className="absolute bottom-[30%] left-1/2 -translate-x-1/2 pointer-events-none">
-              <span className="px-2 py-0.5 text-xs rounded bg-blue-600 text-white font-bold uppercase">
-                REPLAY
-              </span>
-            </div>
-          )}
-          {gameState?.replay_mode?.branched && (
-            <div className="absolute bottom-[30%] left-1/2 -translate-x-1/2 pointer-events-none">
-              <span className="px-2 py-0.5 text-xs rounded bg-amber-600 text-white font-bold uppercase">
-                BRANCHED
-              </span>
-            </div>
-          )}
-
           {/* ── Scenario / Drill badges ──────────────────────────────── */}
           {(isScenario || isConfigPhase) && (
             <div className="absolute bottom-[22%] left-1/2 -translate-x-1/2 flex gap-2 pointer-events-none">
@@ -399,102 +399,7 @@ export default function PokerTable({
 
           {/* ── Player seats — absolutely positioned relative to the oval ── */}
           <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 3 }}>
-          {(() => {
-            const replayMode = gameState?.replay_mode;
-            const isNonBranchedReplay = replayMode?.active && !replayMode?.branched;
-
-            if (isNonBranchedReplay) {
-              // ── REPLAY MODE: show ghost seats from recorded hand ──────────
-              const playerMeta = replayMode.player_meta ?? {};
-              const originalHoleCards = replayMode.original_hole_cards ?? {};
-              const currentAction = replayMode.current_action;
-
-              // Sort ghost players by their original seat number
-              const ghostPlayers = Object.entries(playerMeta)
-                .map(([stableId, meta]) => ({ stableId, ...meta }))
-                .sort((a, b) => (a.seat ?? 0) - (b.seat ?? 0));
-
-              const totalGhosts = ghostPlayers.length;
-
-              return (
-                <>
-                  {/* Ghost seats for each recorded player */}
-                  {ghostPlayers.map((ghost, idx) => {
-                    const isCurrentAction = currentAction?.player_id === ghost.stableId;
-                    const isCoachSlot = ghost.is_coach === true || String(ghost.stableId).startsWith('coach_');
-                    const holeCards = originalHoleCards[ghost.stableId] ?? [];
-                    return (
-                      <GhostSeat
-                        key={ghost.stableId}
-                        stableId={ghost.stableId}
-                        name={ghost.name}
-                        isCoachSlot={isCoachSlot}
-                        isCurrentAction={isCurrentAction}
-                        holeCards={holeCards}
-                        action={isCurrentAction ? currentAction.action : null}
-                        style={getGhostSeatStyle(idx, totalGhosts)}
-                        bbView={bbView}
-                        bigBlind={bigBlind}
-                      />
-                    );
-                  })}
-
-                  {/* Watcher indicators for real seated players */}
-                  {visiblePlayers.map((player) => (
-                    <WatcherIndicator
-                      key={player.id}
-                      player={player}
-                      isMe={player.id === myId}
-                      style={getSeatStyle(player)}
-                    />
-                  ))}
-                </>
-              );
-            }
-
-            // ── BRANCHED REPLAY: shadow players (is_shadow) play; real players (is_observer) watch ──
-            if (replayMode?.active && replayMode?.branched) {
-              const shadowPlayers = visiblePlayers.filter(p => p.is_shadow);
-              const observerPlayers = visiblePlayers.filter(p => p.is_observer);
-
-              return (
-                <>
-                  {shadowPlayers.map((player) => {
-                    const isCurrentTurn = player.id === currentTurnId;
-                    return (
-                      <div key={player.id} className="pointer-events-none">
-                        <PlayerSeat
-                          player={player}
-                          isCurrentTurn={isCurrentTurn}
-                          isMe={false}
-                          isCoach={false}
-                          style={getSeatStyle(player)}
-                          onHoleCardClick={() => {}}
-                          showdownResult={isShowdown ? showdownResult : null}
-                          isWinner={isShowdown && winnerIds.has(player.id)}
-                          replayMode={replayMode}
-                          bbView={bbView}
-                          bigBlind={bigBlind}
-                          sessionId={null}
-                          actionTimer={actionTimer}
-                        />
-                      </div>
-                    );
-                  })}
-                  {observerPlayers.map((player) => (
-                    <WatcherIndicator
-                      key={player.id}
-                      player={player}
-                      isMe={player.id === myId}
-                      style={getSeatStyle(player)}
-                    />
-                  ))}
-                </>
-              );
-            }
-
-            // ── NORMAL: show real player seats ────────────────────────────
-            return visiblePlayers.map((player) => {
+            {visiblePlayers.map((player) => {
               const seatStyle = getSeatStyle(player);
               const isCurrentTurn = player.id === currentTurnId;
               const isMe = player.id === myId;
@@ -511,125 +416,62 @@ export default function PokerTable({
                     onHoleCardClick={() => {}}
                     showdownResult={isShowdown ? showdownResult : null}
                     isWinner={isWinner}
-                    replayMode={replayMode}
                     bbView={bbView}
                     bigBlind={bigBlind}
                     sessionId={gameState?.session_id ?? null}
                     actionTimer={actionTimer}
+                    equity={getPlayerEquity(player)}
+                    equityVisible={isEquityVisible(player)}
+                    tableMode={tableMode}
+                    onBotRemove={onBotRemove}
                   />
                 </div>
               );
-            });
-          })()}
+            })}
           </div>{/* closes seats container */}
+
+          {/* ── E-Poker logo stamp — bottom-center of felt, behind everything ── */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '8%',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '15%',
+              opacity: 0.2,
+              pointerEvents: 'none',
+              userSelect: 'none',
+              zIndex: 1,
+            }}
+          >
+            <img src="/epoker-logo.svg" alt="" style={{ width: '100%', filter: 'grayscale(20%)' }} />
+          </div>
         </div>{/* closes oval */}
+
+        {/* Shared range overlay — shown when coach broadcasts a range */}
+        <SharedRangeOverlay sharedRange={sharedRange} gamePhase={phase} />
+
+        {/* Player range panel — shows player their assigned range in config phase */}
+        {!isCoach && (
+          <PlayerRangePanel gameState={gameState} myId={myId} equitySettings={equitySettings} />
+        )}
       </div>{/* closes table area */}
 
-      {/* ── Betting / Replay controls — in-flow below the table ─────────── */}
+      {/* ── Betting controls — in-flow below the table ──────────────────── */}
       <div className="relative z-30 flex-shrink-0">
-        {gameState?.replay_mode?.active && !gameState?.replay_mode?.branched ? (
-          /* ── Replay controls (replaces betting panel during replay) ───── */
-          <div style={{
-            background: 'rgba(10,14,20,0.97)',
-            borderTop: '1px solid rgba(212,175,55,0.18)',
-            padding: '10px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}>
-            {/* Progress label + scrubber */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '11px', color: '#8b949e', flexShrink: 0 }}>
-                {gameState.replay_mode.cursor === -1
-                  ? `Start — ${gameState.replay_mode.total_actions} actions`
-                  : `${gameState.replay_mode.cursor + 1} / ${gameState.replay_mode.total_actions}`}
-              </span>
-              {gameState.replay_mode.current_action && (
-                <span style={{ fontSize: '11px', color: '#a78bfa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {gameState.replay_mode.current_action.player_name} — {gameState.replay_mode.current_action.street}: {gameState.replay_mode.current_action.action}
-                  {gameState.replay_mode.current_action.amount > 0 && ` $${gameState.replay_mode.current_action.amount}`}
-                </span>
-              )}
-              <input
-                type="range"
-                min={-1}
-                max={gameState.replay_mode.total_actions - 1}
-                value={gameState.replay_mode.cursor}
-                onChange={(e) => emit.replayJumpTo?.(parseInt(e.target.value))}
-                style={{ flex: 1, accentColor: '#a78bfa', minWidth: 0 }}
-              />
-            </div>
-
-            {/* Action row: Back · Fwd · Branch · Exit */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => emit.replayStepBack?.()}
-                disabled={gameState.replay_mode.cursor <= -1}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
-                  background: '#161b22', border: '1px solid #30363d', color: '#a78bfa',
-                  opacity: gameState.replay_mode.cursor <= -1 ? 0.4 : 1,
-                }}
-              >
-                ◀ Back
-              </button>
-              <button
-                onClick={() => emit.replayStepFwd?.()}
-                disabled={gameState.replay_mode.cursor >= gameState.replay_mode.total_actions - 1}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
-                  background: '#161b22', border: '1px solid #30363d', color: '#a78bfa',
-                  opacity: gameState.replay_mode.cursor >= gameState.replay_mode.total_actions - 1 ? 0.4 : 1,
-                }}
-              >
-                Fwd ▶
-              </button>
-              {!gameState.replay_mode.branched ? (
-                <button
-                  onClick={() => emit.replayBranch?.()}
-                  style={{
-                    flex: 2, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
-                    background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', color: '#f59e0b',
-                  }}
-                >
-                  Branch to Live from Here
-                </button>
-              ) : (
-                <button
-                  onClick={() => emit.replayUnbranch?.()}
-                  style={{
-                    flex: 2, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
-                    background: 'rgba(245,158,11,0.25)', border: '1px solid rgba(245,158,11,0.6)', color: '#fbbf24',
-                  }}
-                >
-                  Return to Replay
-                </button>
-              )}
-              <button
-                onClick={() => emit.replayExit?.()}
-                style={{
-                  flex: 1, padding: '7px 0', fontSize: '13px', borderRadius: '6px', cursor: 'pointer',
-                  background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171',
-                }}
-              >
-                Exit Replay
-              </button>
-            </div>
-          </div>
-        ) : (
-          <React.Suspense fallback={null}>
-            {BettingControls && (
-              <BettingControls
-                gameState={gameState}
-                myId={myId}
-                isCoach={isCoach}
-                emit={emit}
-                bbView={bbView}
-                bigBlind={bigBlind}
-              />
-            )}
-          </React.Suspense>
-        )}
+        <React.Suspense fallback={null}>
+          {BettingControls && (
+            <BettingControls
+              gameState={gameState}
+              myId={myId}
+              isCoach={isCoach}
+              emit={emit}
+              bbView={bbView}
+              bigBlind={bigBlind}
+              equityData={equityData}
+            />
+          )}
+        </React.Suspense>
       </div>
     </div>
   );

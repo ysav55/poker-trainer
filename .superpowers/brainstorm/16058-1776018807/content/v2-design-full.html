@@ -1,0 +1,341 @@
+<h2>V2 UI Redesign — Full Design</h2>
+<p class="subtitle">4 groups: Settings, Admin, HandBuilder, Tournaments</p>
+
+<!-- GROUP 1: SETTINGS -->
+<div class="section">
+  <h3>Group 1: SettingsPage — Token Migration</h3>
+  <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div>
+        <div style="color: #d4af37; font-size: 12px; font-weight: 600; margin-bottom: 8px;">SCOPE</div>
+        <ul style="margin: 0; padding-left: 16px; color: #8b949e; font-size: 13px; line-height: 1.8;">
+          <li>Shell: hex → colors.js tokens, tab icons → lucide</li>
+          <li>7 tab components: token migration only</li>
+          <li>No structural changes, no splits</li>
+        </ul>
+      </div>
+      <div>
+        <div style="color: #d4af37; font-size: 12px; font-weight: 600; margin-bottom: 8px;">FILES (8)</div>
+        <div style="font-size: 12px; color: #e6edf3; line-height: 1.8; font-family: monospace;">
+          SettingsPage.jsx (70L)<br>
+          TableDefaultsTab.jsx (323L)<br>
+          SchoolTab.jsx (623L)<br>
+          AlertsTab.jsx (182L)<br>
+          OrgTab.jsx (442L)<br>
+          PlatformTab.jsx (210L)<br>
+          ProfileTab.jsx (212L)<br>
+          DangerZoneTab.jsx (170L)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GROUP 2: ADMIN -->
+<div class="section">
+  <h3>Group 2: Admin Pages — Extract + Token Migration</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px; font-weight: 600;">UserManagement <span style="color: #f85149;">655L → ~250L</span></div>
+      <div style="margin-top: 8px; font-size: 12px; color: #8b949e; line-height: 1.8;">
+        Extract to <span style="color: #58a6ff;">components/admin/</span>:<br>
+        • ResetPasswordModal<br>
+        • DeleteConfirmModal<br>
+        • UserTableRow (StatusBadge + RolePill + Actions)<br>
+        • UserFilters (search + role + status)<br>
+        + tokens, lucide icons, consistent header
+      </div>
+    </div>
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px; font-weight: 600;">RefereeDashboard <span style="color: #d29922;">367L → ~180L</span></div>
+      <div style="margin-top: 8px; font-size: 12px; color: #8b949e; line-height: 1.8;">
+        Extract to <span style="color: #58a6ff;">components/admin/</span>:<br>
+        • MovePlayerModal<br>
+        • TournamentTableCard<br>
+        + tokens, lucide icons, consistent header
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GROUP 3: HANDBUILDER -->
+<div class="section">
+  <h3>Group 3: HandBuilder — Playlist-First Redesign</h3>
+
+  <!-- Mockup -->
+  <div style="background: #060a0f; border: 1px solid #30363d; border-radius: 8px; overflow: hidden;">
+
+    <!-- Page header -->
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: #0d1117; border-bottom: 1px solid #21262d;">
+      <div>
+        <div style="font-size: 18px; color: #e6edf3; font-weight: 700;">Scenarios</div>
+        <div style="font-size: 11px; color: #6e7681;">8 playlists · 24 scenarios</div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <div style="padding: 6px 14px; border-radius: 6px; background: rgba(212,175,55,0.1); border: 1px solid rgba(212,175,55,0.3); font-size: 12px; color: #d4af37; font-weight: 600;">+ Also Add to…</div>
+        <div style="padding: 6px 14px; border-radius: 6px; background: #d4af37; color: #000; font-size: 12px; font-weight: 700;">+ New Playlist</div>
+      </div>
+    </div>
+
+    <div style="display: flex; height: 380px; font-family: 'Consolas', monospace; font-size: 11px;">
+      <!-- LEFT: Playlist tree -->
+      <div style="width: 260px; flex-shrink: 0; display: flex; flex-direction: column; border-right: 1px solid #21262d; background: #0d1117;">
+        <div style="padding: 10px 12px 6px;">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; border: 1px solid #30363d; background: #060a0f;">
+            <span style="color: #6e7681; font-size: 12px;">⌕</span>
+            <span style="color: #6e7681; font-size: 11px;">Search…</span>
+          </div>
+        </div>
+
+        <div style="flex: 1; overflow: hidden; padding: 4px 8px;">
+          <!-- Playlist: Dry Flop (expanded, orange) -->
+          <div style="margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; background: rgba(249,115,22,0.08); border-left: 3px solid #f97316; cursor: pointer;">
+              <span style="color: #6e7681; font-size: 10px;">▾</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #f97316; flex-shrink: 0;"></span>
+              <span style="font-size: 12px; color: #e6edf3; font-weight: 600; flex: 1;">Dry Flop Spots</span>
+              <span style="font-size: 10px; color: #6e7681;">5</span>
+            </div>
+            <!-- Nested scenarios (complementary teal) -->
+            <div style="padding-left: 24px;">
+              <div style="padding: 5px 10px; border-radius: 4px; margin: 2px 0; background: rgba(212,175,55,0.08); border: 1px solid rgba(212,175,55,0.3); border-left: 2px solid #2dd4bf;">
+                <span style="font-size: 11px; color: #e6edf3;">AKo on K72r</span>
+              </div>
+              <div style="padding: 5px 10px; border-radius: 4px; margin: 2px 0; border-left: 2px solid #2dd4bf;">
+                <span style="font-size: 11px; color: #8b949e;">QQ on J84r</span>
+              </div>
+              <div style="padding: 5px 10px; border-radius: 4px; margin: 2px 0; border-left: 2px solid #2dd4bf;">
+                <span style="font-size: 11px; color: #8b949e;">77 on A52r</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Playlist: Wet Flop (expanded, blue) -->
+          <div style="margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
+              <span style="color: #6e7681; font-size: 10px;">▸</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; flex-shrink: 0;"></span>
+              <span style="font-size: 12px; color: #8b949e; font-weight: 500; flex: 1;">Wet Flop Spots</span>
+              <span style="font-size: 10px; color: #6e7681;">3</span>
+            </div>
+          </div>
+
+          <!-- Playlist: Paired Board (green) -->
+          <div style="margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
+              <span style="color: #6e7681; font-size: 10px;">▸</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0;"></span>
+              <span style="font-size: 12px; color: #8b949e; font-weight: 500; flex: 1;">Paired Board</span>
+              <span style="font-size: 10px; color: #6e7681;">4</span>
+            </div>
+          </div>
+
+          <!-- Playlist: Monotone Board (purple) -->
+          <div style="margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
+              <span style="color: #6e7681; font-size: 10px;">▸</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #a855f7; flex-shrink: 0;"></span>
+              <span style="font-size: 12px; color: #8b949e; font-weight: 500; flex: 1;">Monotone Board</span>
+              <span style="font-size: 10px; color: #6e7681;">2</span>
+            </div>
+          </div>
+
+          <!-- Playlist: Big Pair Spots (red) -->
+          <div style="margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
+              <span style="color: #6e7681; font-size: 10px;">▸</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #ef4444; flex-shrink: 0;"></span>
+              <span style="font-size: 12px; color: #8b949e; font-weight: 500; flex: 1;">Big Pair Spots</span>
+              <span style="font-size: 10px; color: #6e7681;">4</span>
+            </div>
+          </div>
+
+          <!-- Playlist: Drawing Hands (cyan) -->
+          <div style="margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
+              <span style="color: #6e7681; font-size: 10px;">▸</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #06b6d4; flex-shrink: 0;"></span>
+              <span style="font-size: 12px; color: #8b949e; font-weight: 500; flex: 1;">Drawing Hands</span>
+              <span style="font-size: 10px; color: #6e7681;">3</span>
+            </div>
+          </div>
+
+          <!-- Playlist: Bluff Spots (amber) -->
+          <div style="margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
+              <span style="color: #6e7681; font-size: 10px;">▸</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; flex-shrink: 0;"></span>
+              <span style="font-size: 12px; color: #8b949e; font-weight: 500; flex: 1;">Bluff Spots</span>
+              <span style="font-size: 10px; color: #6e7681;">2</span>
+            </div>
+          </div>
+
+          <!-- Playlist: Trap Hands (pink) -->
+          <div style="margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; cursor: pointer;">
+              <span style="color: #6e7681; font-size: 10px;">▸</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: #ec4899; flex-shrink: 0;"></span>
+              <span style="font-size: 12px; color: #8b949e; font-weight: 500; flex: 1;">Trap Hands</span>
+              <span style="font-size: 10px; color: #6e7681;">1</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- New scenario button (contextual) -->
+        <div style="padding: 10px 12px; border-top: 1px solid #21262d;">
+          <div style="width: 100%; padding: 7px; border-radius: 6px; background: #d4af37; color: #000; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">+ New Scenario in Dry Flop</div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Builder -->
+      <div style="flex: 1; display: flex; flex-direction: column; background: #060a0f;">
+        <!-- Scenario toolbar -->
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #21262d; background: #0d1117;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #f97316;"></span>
+          <span style="font-size: 12px; color: #6e7681;">Dry Flop Spots ›</span>
+          <span style="font-size: 13px; color: #e6edf3; font-weight: 600;">AKo on K72r</span>
+          <span style="margin-left: auto;"></span>
+          <span style="font-size: 10px; color: #6e7681; padding: 3px 8px; border: 1px solid #30363d; border-radius: 4px;">Duplicate</span>
+          <span style="font-size: 10px; color: #f85149; padding: 3px 8px; border: 1px solid rgba(248,81,73,0.3); border-radius: 4px;">Delete</span>
+        </div>
+        <!-- Builder content -->
+        <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+          <div style="text-align: center;">
+            <div style="color: #30363d; font-size: 40px; margin-bottom: 8px;">♠</div>
+            <div style="color: #6e7681; font-size: 12px;">ScenarioBuilder component renders here</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save as Scenario modal -->
+  <div style="margin-top: 16px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px;">
+    <div style="color: #d4af37; font-size: 12px; font-weight: 600; margin-bottom: 12px;">SAVE AS SCENARIO MODAL (reusable: Hand History + Review Table)</div>
+    <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 20px; max-width: 420px;">
+      <div style="font-size: 15px; color: #e6edf3; font-weight: 700; margin-bottom: 16px;">Save as Scenario</div>
+
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">HOLE CARDS</div>
+        <div style="display: flex; gap: 6px;">
+          <div style="width: 36px; height: 48px; border-radius: 4px; background: #161b22; border: 1px solid #30363d; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #f85149; font-weight: 700;">A♥</div>
+          <div style="width: 36px; height: 48px; border-radius: 4px; background: #161b22; border: 1px solid #30363d; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #e6edf3; font-weight: 700;">K♠</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">BOARD <span style="color: #6e7681; font-size: 10px;">(editable — click to change)</span></div>
+        <div style="display: flex; gap: 6px;">
+          <div style="width: 36px; height: 48px; border-radius: 4px; background: #161b22; border: 1px solid #d4af37; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #e6edf3; font-weight: 700;">K♣</div>
+          <div style="width: 36px; height: 48px; border-radius: 4px; background: #161b22; border: 1px solid #d4af37; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #f85149; font-weight: 700;">7♦</div>
+          <div style="width: 36px; height: 48px; border-radius: 4px; background: #161b22; border: 1px solid #d4af37; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #e6edf3; font-weight: 700;">2♣</div>
+          <div style="width: 36px; height: 48px; border-radius: 4px; background: #060a0f; border: 1px dashed #30363d; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6e7681;">+</div>
+          <div style="width: 36px; height: 48px; border-radius: 4px; background: #060a0f; border: 1px dashed #30363d; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #6e7681;">+</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">NAME</div>
+        <div style="padding: 7px 10px; border-radius: 6px; border: 1px solid #30363d; background: #060a0f; color: #e6edf3; font-size: 12px;">AKo on K72r</div>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <div style="font-size: 11px; color: #8b949e; margin-bottom: 4px;">PLAYLIST</div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 6px; border: 1px solid #30363d; background: #060a0f;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #f97316;"></span>
+          <span style="font-size: 12px; color: #e6edf3;">Dry Flop Spots</span>
+          <span style="margin-left: auto; color: #6e7681; font-size: 10px;">▾</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; justify-content: flex-end;">
+        <div style="padding: 7px 16px; border-radius: 6px; border: 1px solid #30363d; font-size: 12px; color: #8b949e;">Cancel</div>
+        <div style="padding: 7px 16px; border-radius: 6px; background: #d4af37; color: #000; font-size: 12px; font-weight: 700;">Save Scenario</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key decisions -->
+  <div style="margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #d4af37; font-size: 12px; font-weight: 600; margin-bottom: 8px;">KEY DECISIONS</div>
+      <ul style="margin: 0; padding-left: 16px; color: #8b949e; font-size: 12px; line-height: 1.8;">
+        <li>Playlist-first: scenarios created <strong style="color: #e6edf3;">inside</strong> a playlist</li>
+        <li>Primary playlist = color source, cross-list via "Also Add to…"</li>
+        <li>8 pre-seeded playlists on first use</li>
+        <li>"+ New Scenario" button context-aware (shows playlist name)</li>
+        <li>Breadcrumb in toolbar: Playlist › Scenario Name</li>
+      </ul>
+    </div>
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #d4af37; font-size: 12px; font-weight: 600; margin-bottom: 8px;">DEFERRED: GHOST PLAYERS</div>
+      <ul style="margin: 0; padding-left: 16px; color: #8b949e; font-size: 12px; line-height: 1.8;">
+        <li>Separate epic: positional simulation</li>
+        <li>Ghost seats auto-fold to create BTN vs BB etc.</li>
+        <li>Touches GameManager, BettingRound, positions.js</li>
+        <li>HandBuilder architecture won't block this</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- GROUP 4: TOURNAMENTS -->
+<div class="section">
+  <h3>Group 4: Tournament Pages — Polish</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px; font-weight: 600;">ListPage <span style="color: #6e7681;">179L</span></div>
+      <div style="font-size: 12px; color: #8b949e; margin-top: 8px; line-height: 1.6;">
+        • Tokens + lucide icons<br>
+        • Consistent page header<br>
+        • StatusBadge uses tokens<br>
+        • Tournament cards get V1 card style
+      </div>
+    </div>
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px; font-weight: 600;">DetailPage <span style="color: #6e7681;">272L</span></div>
+      <div style="font-size: 12px; color: #8b949e; margin-top: 8px; line-height: 1.6;">
+        • Tokens + lucide icons<br>
+        • CollapsibleSections for info groups<br>
+        • Consistent back button<br>
+        • BlindStructure/Registrants/Payouts
+      </div>
+    </div>
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;">
+      <div style="color: #e6edf3; font-size: 14px; font-weight: 600;">ControlPage <span style="color: #6e7681;">173L</span></div>
+      <div style="font-size: 12px; color: #8b949e; margin-top: 8px; line-height: 1.6;">
+        • Tokens + lucide icons<br>
+        • Status badges use token colors<br>
+        • TableMiniCard V1 style<br>
+        • Danger buttons (finalize, cancel)
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOTALS -->
+<div style="background: #0d1117; border: 2px solid #d4af37; border-radius: 8px; padding: 20px; margin-top: 8px;">
+  <div style="color: #d4af37; font-size: 14px; font-weight: 700; margin-bottom: 12px;">Final Scope</div>
+  <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; text-align: center;">
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">~18</div>
+      <div style="color: #8b949e; font-size: 11px;">Files touched</div>
+    </div>
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">~12</div>
+      <div style="color: #8b949e; font-size: 11px;">New components</div>
+    </div>
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">1</div>
+      <div style="color: #8b949e; font-size: 11px;">New modal</div>
+    </div>
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">0</div>
+      <div style="color: #8b949e; font-size: 11px;">New routes</div>
+    </div>
+    <div>
+      <div style="color: #e6edf3; font-size: 24px; font-weight: 700;">1</div>
+      <div style="color: #8b949e; font-size: 11px;">Deferred epic</div>
+    </div>
+  </div>
+</div>

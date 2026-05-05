@@ -1,6 +1,24 @@
 'use strict';
 
-module.exports = function registerDisconnect(socket, ctx) {
+const SharedState = require('../../state/SharedState.js');
+
+function releaseCoachLockIfHeld({ io, tableId, stableId }) {
+  const current = SharedState.activeCoachLocks.get(tableId);
+  if (current !== stableId) return; // not our lock
+
+  // Are there other sockets from same stableId still in the room?
+  const room = io.sockets.adapter.rooms.get(tableId);
+  if (room) {
+    for (const socketId of room) {
+      const sock = io.sockets.sockets.get(socketId);
+      if (sock?.data?.stableId === stableId) return; // another tab still in room
+    }
+  }
+  // Last socket left — release
+  SharedState.activeCoachLocks.delete(tableId);
+}
+
+function registerDisconnect(socket, ctx) {
   const { tables, stableIdMap, reconnectTimers, ghostStacks, io,
           broadcastState, clearActionTimer, log } = ctx;
 
@@ -16,6 +34,14 @@ module.exports = function registerDisconnect(socket, ctx) {
     const isSpectator = socket.data.isSpectator;
 
     if (isSpectator) {
+      // If the spectator was the tournament manager, start the 10s grace window
+      if (socket.data.isManager) {
+        const { getController } = require('../../state/SharedState');
+        const ctrl = getController(tableId);
+        if (ctrl && ctrl.getMode?.() === 'tournament') {
+          ctrl.onManagerDisconnect(socket.data.stableId, name);
+        }
+      }
       console.log(`[disconnect] spectator ${name} left ${tableId}`);
       return;
     }
@@ -60,16 +86,34 @@ module.exports = function registerDisconnect(socket, ctx) {
       const currentGm = tables.get(tableId);
       if (!currentGm) return;
       const ghostPlayer = currentGm.state.players.find(p => p.id === socket.id);
+      const ghostStack  = ghostPlayer?.stack ?? 0;
       if (ghostPlayer && socket.data.stableId) {
-        ghostStacks.set(socket.data.stableId, ghostPlayer.stack);
+        ghostStacks.set(socket.data.stableId, ghostStack);
       }
       currentGm.removePlayer(socket.id);
       broadcastState(tableId, { type: 'leave', message: `${name} left the table (timeout)` });
       console.log(`[TTL expired] ${name} removed from ${tableId}`);
+
+      // Chip bank cash-out: return remaining stack to the player's bank (fire-and-forget)
+      if (socket.data.stableId && !isCoach && ghostStack > 0) {
+        const ChipBankRepo = require('../../db/repositories/ChipBankRepository');
+        ChipBankRepo.cashOut(socket.data.stableId, ghostStack, tableId).catch(err =>
+          log.error('db', 'chip_cash_out_failed', `chipCashOut failed for ${name}`, { err, tableId, playerId: socket.data.stableId }));
+      }
+
       const socketsInRoom = io.sockets.adapter.rooms.get(tableId);
       if (!socketsInRoom || socketsInRoom.size === 0) {
+        try {
+          const { disconnectAllAtTable } = require('../../game/BotConnection');
+          disconnectAllAtTable(tableId);
+        } catch { /* ignore */ }
         tables.delete(tableId);
         console.log(`[prune] table ${tableId} removed — no sockets remain`);
+        // Close in DB so lobby stops showing this table
+        const { TableRepository } = require('../../db/repositories/TableRepository.js');
+        TableRepository.closeTable(tableId).catch((err) =>
+          console.error(`[prune] failed to close table ${tableId} in DB:`, err.message)
+        );
       }
     }, 60_000);
 
@@ -79,5 +123,14 @@ module.exports = function registerDisconnect(socket, ctx) {
       return { config_phase: true, config: g.state.config };
     })();
     reconnectTimers.set(socket.id, { timer, tableId, name, isCoach, configSnapshot });
+
+    // Release coach lock if this was the last socket from that stableId
+    const stableId = socket.data?.stableId ?? socket.data?.userId;
+    if (tableId && stableId && isCoach) {
+      releaseCoachLockIfHeld({ io, tableId, stableId });
+    }
   });
-};
+}
+
+module.exports = registerDisconnect;
+module.exports.releaseCoachLockIfHeld = releaseCoachLockIfHeld;

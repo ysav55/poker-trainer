@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tournament Reference — Poker Trainer</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --border2: #444c56;
+      --text: #f0ece3;
+      --muted: #8b949e;
+      --faint: #6e7681;
+      --gold: #d4af37;
+      --gold-bg: rgba(212,175,55,0.1);
+      --gold-border: rgba(212,175,55,0.3);
+      --blue: #60a5fa;
+      --blue-bg: rgba(59,130,246,0.1);
+      --blue-border: rgba(59,130,246,0.3);
+      --green: #3fb950;
+      --green-bg: rgba(63,185,80,0.1);
+      --green-border: rgba(63,185,80,0.3);
+      --red: #f85149;
+      --red-bg: rgba(248,81,73,0.1);
+      --red-border: rgba(248,81,73,0.3);
+      --yellow: #e3b341;
+      --yellow-bg: rgba(227,179,65,0.1);
+      --yellow-border: rgba(227,179,65,0.3);
+      --purple: #a78bfa;
+      --purple-bg: rgba(167,139,250,0.1);
+      --purple-border: rgba(167,139,250,0.3);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .layout { display: flex; min-height: 100vh; }
+    nav {
+      width: 240px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    nav .logo {
+      padding: 0 20px 20px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.2em;
+      color: var(--gold);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    nav ul { list-style: none; }
+    nav ul li a {
+      display: block;
+      padding: 6px 20px;
+      font-size: 12px;
+      color: var(--muted);
+      border-left: 2px solid transparent;
+      transition: all 0.12s;
+    }
+    nav ul li a:hover {
+      color: var(--text);
+      background: rgba(255,255,255,0.04);
+      text-decoration: none;
+    }
+    nav ul li.section-header {
+      padding: 16px 20px 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--faint);
+      text-transform: uppercase;
+    }
+    main {
+      flex: 1;
+      max-width: 900px;
+      padding: 48px 48px 96px;
+      overflow-x: auto;
+    }
+    @media (max-width: 768px) {
+      .layout { flex-direction: column; }
+      nav { width: 100%; height: auto; position: static; }
+      main { padding: 24px 20px; }
+    }
+
+    /* Typography */
+    h1 { font-size: 28px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+    h2 { font-size: 20px; font-weight: 700; color: var(--text); margin: 48px 0 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    h3 { font-size: 15px; font-weight: 700; color: var(--text); margin: 28px 0 10px; }
+    h4 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.1em; }
+    p { margin-bottom: 12px; color: var(--muted); }
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      color: var(--text);
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 4px;
+      vertical-align: middle;
+    }
+    .badge-gold  { background: var(--gold-bg);   border: 1px solid var(--gold-border);   color: var(--gold);   }
+    .badge-blue  { background: var(--blue-bg);   border: 1px solid var(--blue-border);   color: var(--blue);   }
+    .badge-green { background: var(--green-bg);  border: 1px solid var(--green-border);  color: var(--green);  }
+    .badge-red   { background: var(--red-bg);    border: 1px solid var(--red-border);    color: var(--red);    }
+    .badge-yellow{ background: var(--yellow-bg); border: 1px solid var(--yellow-border); color: var(--yellow); }
+    .badge-purple{ background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); }
+    .badge-gray  { background: rgba(110,118,129,0.12); border: 1px solid rgba(110,118,129,0.3); color: var(--muted); }
+
+    /* Callouts */
+    .callout {
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 16px 0;
+      border-left: 3px solid;
+    }
+    .callout-info    { background: var(--blue-bg);   border-color: var(--blue);   }
+    .callout-warn    { background: var(--yellow-bg); border-color: var(--yellow); }
+    .callout-danger  { background: var(--red-bg);    border-color: var(--red);    }
+    .callout-success { background: var(--green-bg);  border-color: var(--green);  }
+    .callout-label {
+      font-size: 10px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .callout-info    .callout-label { color: var(--blue);   }
+    .callout-warn    .callout-label { color: var(--yellow); }
+    .callout-danger  .callout-label { color: var(--red);    }
+    .callout-success .callout-label { color: var(--green);  }
+    .callout p { margin: 0; font-size: 13px; }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; margin: 16px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead tr { background: var(--surface); }
+    thead th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--faint);
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr { border: 1px solid var(--border); }
+    tbody tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+    tbody td {
+      padding: 8px 12px;
+      vertical-align: top;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    tbody td:first-child { color: var(--text); font-family: monospace; font-size: 12px; }
+    td code { font-size: 11px; }
+
+    /* Permission matrix */
+    .perm-yes  { color: var(--green); font-weight: 700; text-align: center; }
+    .perm-no   { color: var(--faint); text-align: center; }
+    .perm-cond { color: var(--yellow); font-weight: 600; text-align: center; }
+
+    /* Endpoint list */
+    .endpoint {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 12px;
+      align-items: start;
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .endpoint-method {
+      font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 2px 7px; border-radius: 4px; align-self: start; margin-top: 2px; white-space: nowrap;
+    }
+    .method-get    { background: var(--blue-bg);   color: var(--blue);   border: 1px solid var(--blue-border);   }
+    .method-post   { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-border);  }
+    .method-patch  { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow-border); }
+    .method-delete { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-border);    }
+    .endpoint-path { font-family: monospace; font-size: 13px; color: var(--text); }
+    .endpoint-desc { grid-column: 2; font-size: 12px; color: var(--muted); }
+    .endpoint-auth { grid-column: 1 / -1; margin-top: 4px; font-size: 11px; color: var(--faint); }
+
+    /* Socket events */
+    .event-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .event-dir { font-size: 10px; font-weight: 700; white-space: nowrap; padding: 2px 6px; border-radius: 4px; margin-top: 2px; }
+    .dir-server { background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-border); }
+    .dir-client { background: var(--purple-bg); color: var(--purple); border: 1px solid var(--purple-border); }
+    .event-name { font-family: monospace; font-size: 13px; color: var(--text); min-width: 220px; }
+    .event-desc { font-size: 12px; color: var(--muted); flex: 1; }
+
+    /* Flow diagram */
+    .flow {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .flow-step:last-child { margin-bottom: 0; }
+    .flow-num {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--gold-bg);
+      border: 1px solid var(--gold-border);
+      color: var(--gold);
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .flow-content { flex: 1; }
+    .flow-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .flow-body  { font-size: 12px; color: var(--muted); }
+
+    /* Page list */
+    .page-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    .page-route { font-family: monospace; font-size: 13px; color: var(--gold); }
+    .page-desc  { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .page-guard { font-size: 11px; color: var(--faint); margin-top: 6px; }
+
+    /* Intro hero */
+    .hero {
+      background: var(--surface);
+      border: 1px solid var(--gold-border);
+      border-radius: 12px;
+      padding: 28px 32px;
+      margin-bottom: 32px;
+    }
+    .hero h1 { margin-bottom: 12px; }
+    .hero p  { font-size: 15px; margin: 0; }
+
+    .subtitle { font-size: 13px; color: var(--faint); margin-bottom: 24px; }
+
+    /* Gap section */
+    .gap-item {
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .gap-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .gap-desc  { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ── Navigation ─────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="logo">♠ Tournament<br>Reference</div>
+  <ul>
+    <li class="section-header">Overview</li>
+    <li><a href="#overview">Two-System Architecture</a></li>
+    <li><a href="#roles">Roles &amp; Permissions</a></li>
+
+    <li class="section-header">Database</li>
+    <li><a href="#db-table-system">Table-Based System</a></li>
+    <li><a href="#db-standalone">Standalone System</a></li>
+    <li><a href="#db-schema">Full Schema Reference</a></li>
+
+    <li class="section-header">Server</li>
+    <li><a href="#api-table">Table-Scoped API</a></li>
+    <li><a href="#api-standalone">Standalone REST API</a></li>
+    <li><a href="#socket-events">Socket Events</a></li>
+    <li><a href="#tournament-controller">TournamentController</a></li>
+
+    <li class="section-header">Client</li>
+    <li><a href="#client-pages">UI Pages</a></li>
+    <li><a href="#client-flow">End-to-End Flow</a></li>
+
+    <li class="section-header">Analysis</li>
+    <li><a href="#who-does-what">Who Does What</a></li>
+    <li><a href="#gaps">Known Gaps &amp; Issues</a></li>
+  </ul>
+</nav>
+
+<!-- ── Main ───────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Hero -->
+  <div class="hero">
+    <h1>Tournament Reference</h1>
+    <p class="subtitle">Generated 2026-04-05 · <code>feat/phase2</code> branch</p>
+    <p>
+      This document covers <strong>everything</strong> about tournaments in Poker Trainer:
+      both tournament systems, every database table, all API endpoints, socket events,
+      UI pages, role permissions, and known gaps. Use it to diagnose problems or plan new features.
+    </p>
+  </div>
+
+  <!-- ── OVERVIEW ──────────────────────────────────────────────────────────── -->
+  <h2 id="overview">Two-System Architecture</h2>
+
+  <p>
+    Poker Trainer has <strong>two distinct tournament systems</strong> that exist in parallel.
+    They were built at different times for different purposes and do <em>not</em> share data.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>System A — Table-Based</th>
+          <th>System B — Standalone</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Migration</td>
+          <td><code>013_tournament.sql</code></td>
+          <td><code>020_standalone_tournaments.sql</code></td>
+        </tr>
+        <tr>
+          <td>Primary tables</td>
+          <td><code>tournament_configs</code>, <code>tournament_standings</code></td>
+          <td><code>tournaments</code>, <code>tournament_players</code></td>
+        </tr>
+        <tr>
+          <td>Relationship</td>
+          <td>Always tied to a <code>tables</code> row</td>
+          <td>Independent entity — no table required</td>
+        </tr>
+        <tr>
+          <td>Game engine</td>
+          <td>TournamentController → AutoController → GameManager (real cards dealt)</td>
+          <td>Pure DB record-keeping only — no live game engine</td>
+        </tr>
+        <tr>
+          <td>Who creates</td>
+          <td><code>POST /api/admin/tournaments</code> → requires <code>tournament:manage</code></td>
+          <td><code>POST /api/tournaments</code> → requires <code>requireRole('coach')</code></td>
+        </tr>
+        <tr>
+          <td>Auth guard</td>
+          <td><code>requirePermission('tournament:manage')</code></td>
+          <td><code>requireRole('coach')</code></td>
+        </tr>
+        <tr>
+          <td>Socket-driven</td>
+          <td>Yes — blind timer, eliminations, blind up all via Socket.io</td>
+          <td>No — all updates are REST PATCH calls</td>
+        </tr>
+        <tr>
+          <td>Blind schedule field</td>
+          <td><code>blind_schedule</code> (JSONB on <code>tournament_configs</code>)</td>
+          <td><code>blind_structure</code> (JSONB on <code>tournaments</code>)</td>
+        </tr>
+        <tr>
+          <td>Standings storage</td>
+          <td><code>tournament_standings</code> (auto-written by TournamentController)</td>
+          <td><code>tournament_players</code> (manually patched by coach)</td>
+        </tr>
+        <tr>
+          <td>UI entry point</td>
+          <td><code>/table/:id</code> → TournamentInfoPanel in sidebar</td>
+          <td><code>/admin/tournaments</code> → TournamentSetup page</td>
+        </tr>
+        <tr>
+          <td>Player registration</td>
+          <td>Players join the table room via socket (same as cash tables)</td>
+          <td>Coach calls <code>POST /api/tournaments/:id/register</code></td>
+        </tr>
+        <tr>
+          <td>Status lifecycle</td>
+          <td>Implicit (table is open → playing → closed)</td>
+          <td>Explicit: <code>pending → running → paused → finished</code></td>
+        </tr>
+        <tr>
+          <td>Feature gate</td>
+          <td><code>requireFeature('tournaments')</code></td>
+          <td>None (no feature gate)</td>
+        </tr>
+        <tr>
+          <td>Table mode</td>
+          <td><code>table_mode = 'tournament'</code></td>
+          <td>N/A (not table-bound)</td>
+        </tr>
+        <tr>
+          <td>Player count enforced by</td>
+          <td>Seats on the game table (max 9)</td>
+          <td>Not enforced — unlimited registrations</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-warn">
+    <div class="callout-label">Design Note</div>
+    <p>
+      System A (table-based) is the <em>live game</em> system — cards are dealt, actions are taken,
+      eliminations are automatic. System B (standalone) is closer to a <em>tournament management board</em> —
+      it tracks chip counts and status without running an actual game engine. They are not connected:
+      completing a System A tournament does not update a System B record, and vice versa.
+    </p>
+  </div>
+
+
+  <!-- ── ROLES & PERMISSIONS ────────────────────────────────────────────────── -->
+  <h2 id="roles">Roles &amp; Permissions</h2>
+
+  <p>
+    The system has 9 roles. Tournament access is governed by the <code>tournament:manage</code>
+    permission key and/or the <code>requireRole('coach')</code> middleware, depending on the system.
+  </p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Role</th>
+          <th>Create Table-Based Tourn.</th>
+          <th>Start Table-Based Tourn.</th>
+          <th>Advance / End Level</th>
+          <th>Create Standalone Tourn.</th>
+          <th>Register Players (Standalone)</th>
+          <th>View Standings</th>
+          <th>Move Players (socket)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>superadmin</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+        </tr>
+        <tr>
+          <td>admin</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+        </tr>
+        <tr>
+          <td>coach</td>
+          <td class="perm-cond">⚠ see note</td>
+          <td class="perm-cond">⚠ see note</td>
+          <td class="perm-yes">✓ via <code>table:manage</code></td>
+          <td class="perm-yes">✓ <code>requireRole</code></td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-yes">✓ <code>requireCoach</code></td>
+        </tr>
+        <tr>
+          <td>referee</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-yes">✓ <code>tournament:manage</code></td>
+          <td class="perm-yes">✓ <code>tournament:manage</code></td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-no">✗</td>
+        </tr>
+        <tr>
+          <td>moderator</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-no">✗</td>
+        </tr>
+        <tr>
+          <td>player</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-no">✗</td>
+        </tr>
+        <tr>
+          <td>coached_student / solo_student</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-yes">✓</td>
+          <td class="perm-no">✗</td>
+        </tr>
+        <tr>
+          <td>trial</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-no">✗</td>
+          <td class="perm-yes">✓ (if auth)</td>
+          <td class="perm-no">✗</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-warn">
+    <div class="callout-label">Coach + tournament:manage inconsistency</div>
+    <p>
+      <code>POST /api/admin/tournaments</code> requires <code>tournament:manage</code>.
+      Whether coaches have this permission depends on the DB's <code>role_permissions</code> table.
+      Per migration <code>008_rbac.sql</code>, <code>tournament:manage</code> is granted to
+      <code>admin</code>, <code>superadmin</code>, and <code>referee</code> — <strong>not</strong> coach.
+      However, coaches do have <code>table:manage</code>, which unlocks the
+      Advance Level and End Tournament controls in <code>TournamentInfoPanel</code>.
+      This means: <em>a coach can run a live tournament but cannot create one via the admin endpoint.</em>
+      They can create standalone tournaments via <code>POST /api/tournaments</code>
+      which only requires <code>requireRole('coach')</code>.
+    </p>
+  </div>
+
+  <h3>Permission Keys Relevant to Tournaments</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Key</th><th>Roles that have it</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>tournament:manage</code></td>
+          <td>admin, superadmin, referee</td>
+          <td><code>POST /api/admin/tournaments</code>, <code>POST /api/tables/:id/tournament/start</code>, advance-level, end</td>
+        </tr>
+        <tr>
+          <td><code>table:manage</code></td>
+          <td>admin, superadmin, coach</td>
+          <td>TournamentInfoPanel "canManage" check — shows Advance Level + End Tournament buttons</td>
+        </tr>
+        <tr>
+          <td><code>table:create</code></td>
+          <td>admin, superadmin, coach</td>
+          <td>Creating any table including tournament tables (enforced in lobby)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+
+  <!-- ── DATABASE: TABLE SYSTEM ────────────────────────────────────────────── -->
+  <h2 id="db-table-system">Database — Table-Based Tournament System</h2>
+
+  <h3 id="db-schema">Table: <code>tournament_configs</code></h3>
+  <p>One row per tournament table. Created by <code>POST /api/admin/tournaments</code>.</p>
+  <pre>
+CREATE TABLE tournament_configs (
+  id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  table_id         TEXT        REFERENCES tables(id) ON DELETE CASCADE,
+  blind_schedule   JSONB       NOT NULL DEFAULT '[]',
+  -- e.g. [{"level":1,"sb":25,"bb":50,"ante":0,"duration_minutes":20}, ...]
+  starting_stack   INT         NOT NULL DEFAULT 10000,
+  rebuy_allowed    BOOLEAN     DEFAULT false,
+  rebuy_level_cap  INT         DEFAULT 0,
+  created_at       TIMESTAMPTZ DEFAULT now()
+);</pre>
+
+  <div class="callout callout-info">
+    <div class="callout-label">Blind Schedule Format</div>
+    <p>
+      Each element in <code>blind_schedule</code>: <code>{ "level": 1, "sb": 25, "bb": 50, "ante": 0, "duration_minutes": 20 }</code>.
+      The <code>level</code> field is display-only. <code>TournamentController</code> iterates the array by index.
+      <code>duration_minutes</code> is how long the level lasts before auto-advancing.
+    </p>
+  </div>
+
+  <h3>Table: <code>tournament_standings</code></h3>
+  <p>One row per (table, player). Auto-written by <code>TournamentController._eliminatePlayer()</code> and <code>._endTournament()</code>.</p>
+  <pre>
+CREATE TABLE tournament_standings (
+  id                   UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  table_id             TEXT        REFERENCES tables(id) ON DELETE CASCADE,
+  player_id            UUID        REFERENCES player_profiles(id),
+  finish_position      INT,
+  chips_at_elimination INT,
+  eliminated_at        TIMESTAMPTZ,
+  prize                NUMERIC     DEFAULT 0,  -- never written yet
+  created_at           TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (table_id, player_id)    -- idx_tournament_standings_unique
+);</pre>
+
+  <p>
+    <strong>Position logic:</strong> Position = (number of still-active players at time of elimination) + 1.
+    The last survivor gets position 1 (winner). Second-to-last gets position 2, etc.
+    <strong>Note:</strong> the <code>prize</code> column exists in the schema but is never written — prize calculation is not implemented.
+  </p>
+
+
+  <!-- ── DATABASE: STANDALONE ──────────────────────────────────────────────── -->
+  <h2 id="db-standalone">Database — Standalone Tournament System</h2>
+
+  <h3>Table: <code>tournaments</code></h3>
+  <p>One row per standalone tournament. Not connected to a game table.</p>
+  <pre>
+CREATE TABLE tournaments (
+  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                TEXT        NOT NULL,
+  status              TEXT        NOT NULL DEFAULT 'pending'
+                                  CHECK (status IN ('pending','running','paused','finished')),
+  blind_structure     JSONB       NOT NULL DEFAULT '[]',
+  -- e.g. [{"level":1,"sb":25,"bb":50,"ante":0,"duration_minutes":20}, ...]
+  current_level_index INT         NOT NULL DEFAULT 0,
+  starting_stack      INT         NOT NULL DEFAULT 10000,
+  rebuy_allowed       BOOLEAN     NOT NULL DEFAULT false,
+  addon_allowed       BOOLEAN     NOT NULL DEFAULT false,
+  created_by          UUID        REFERENCES player_profiles(id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at          TIMESTAMPTZ,
+  finished_at         TIMESTAMPTZ
+);</pre>
+
+  <h3>Table: <code>tournament_players</code></h3>
+  <p>One row per (tournament, player). Chip counts and elimination state are updated manually via PATCH.</p>
+  <pre>
+CREATE TABLE tournament_players (
+  id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  tournament_id    UUID        NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  player_id        UUID        NOT NULL REFERENCES player_profiles(id),
+  chip_count       INT         NOT NULL DEFAULT 0,
+  is_eliminated    BOOLEAN     NOT NULL DEFAULT false,
+  finish_position  INT,
+  registered_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tournament_id, player_id)   -- idx_tournament_players_unique
+);</pre>
+
+  <div class="callout callout-info">
+    <div class="callout-label">Standings Sort Order</div>
+    <p>
+      <code>getTournamentStandings()</code> orders by: <code>is_eliminated ASC</code> (active players first),
+      then <code>chip_count DESC</code> (richest first among active), then <code>finish_position ASC nullsFirst: false</code>
+      (for eliminated players, 1st place at top).
+    </p>
+  </div>
+
+
+  <!-- ── API: TABLE-BASED ──────────────────────────────────────────────────── -->
+  <h2 id="api-table">API — Table-Scoped Endpoints</h2>
+
+  <p>Mounted directly on the Express app. All require the <code>tournaments</code> feature gate.</p>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-post">POST</span>
+    <span class="endpoint-path">/api/admin/tournaments</span>
+    <span class="endpoint-desc">Create a tournament table + config in one shot. Generates a <code>tableId</code> of the form <code>tournament-{timestamp}</code>, creates the <code>tables</code> row with <code>mode='tournament'</code>, then creates the <code>tournament_configs</code> row.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requirePermission('tournament:manage') + requireFeature('tournaments')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-get">GET</span>
+    <span class="endpoint-path">/api/tables/:id/tournament</span>
+    <span class="endpoint-desc">Returns <code>{ config, standings }</code> for a tournament table. Config from <code>tournament_configs</code>, standings from <code>tournament_standings</code> joined with <code>player_profiles</code>.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requireFeature('tournaments')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-post">POST</span>
+    <span class="endpoint-path">/api/tables/:id/tournament/start</span>
+    <span class="endpoint-desc">Looks up the tournament config, gets the in-memory <code>TournamentController</code> for the table, calls <code>ctrl.start(config)</code>. This starts the blind timer and deals the first hand.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requirePermission('tournament:manage') + requireFeature('tournaments')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-post">POST</span>
+    <span class="endpoint-path">/api/tables/:id/tournament/advance-level</span>
+    <span class="endpoint-desc">Calls <code>ctrl._advanceLevel()</code> immediately, bypassing the timer. Emits <code>tournament:blind_up</code> to all clients in the table room.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requirePermission('tournament:manage') + requireFeature('tournaments')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-post">POST</span>
+    <span class="endpoint-path">/api/tables/:id/tournament/end</span>
+    <span class="endpoint-desc">Immediately ends the tournament. Finds the player with the highest stack among active players and declares them winner. Calls <code>ctrl._endTournament(winnerId)</code>.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requirePermission('tournament:manage') + requireFeature('tournaments')</span>
+  </div>
+
+
+  <!-- ── API: STANDALONE ──────────────────────────────────────────────────── -->
+  <h2 id="api-standalone">API — Standalone Tournament Endpoints</h2>
+
+  <p>All coach-mutating endpoints use <code>[requireAuth, requireRole('coach')]</code>. Standings read only needs <code>requireAuth</code>.</p>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-post">POST</span>
+    <span class="endpoint-path">/api/tournaments</span>
+    <span class="endpoint-desc">Create a standalone tournament. Required body: <code>{ name, blindStructure: [...] }</code>. Optional: <code>startingStack</code> (default 10000), <code>rebuyAllowed</code>, <code>addonAllowed</code>. Returns <code>{ id }</code>.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requireRole('coach')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-get">GET</span>
+    <span class="endpoint-path">/api/tournaments</span>
+    <span class="endpoint-desc">List all tournaments, newest first. Returns <code>{ tournaments: [...] }</code>. Used by TournamentSetup to populate the list and filter by status tab.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requireRole('coach')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-get">GET</span>
+    <span class="endpoint-path">/api/tournaments/:id</span>
+    <span class="endpoint-desc">Tournament detail + registered players + current level info. Returns the <code>tournaments</code> row, a <code>players</code> array joined with <code>player_profiles</code>, and <code>currentLevel</code> (the blind level at <code>current_level_index</code>).</span>
+    <span class="endpoint-auth">Auth: requireAuth + requireRole('coach')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-post">POST</span>
+    <span class="endpoint-path">/api/tournaments/:id/register</span>
+    <span class="endpoint-desc">Register a player. Body: <code>{ playerId }</code>. Idempotent (returns existing row if already registered). Only works when <code>status = 'pending'</code>.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requireRole('coach')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-patch">PATCH</span>
+    <span class="endpoint-path">/api/tournaments/:id/status</span>
+    <span class="endpoint-desc">Transition tournament status. Valid values: <code>pending</code>, <code>running</code>, <code>paused</code>, <code>finished</code>. Setting <code>running</code> sets <code>started_at</code>; setting <code>finished</code> sets <code>finished_at</code>.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requireRole('coach')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-get">GET</span>
+    <span class="endpoint-path">/api/tournaments/:id/standings</span>
+    <span class="endpoint-desc">Public-ish standings — any authenticated user can read. Returns <code>{ standings: [...] }</code> from <code>tournament_players</code> joined with <code>player_profiles</code>, sorted active-first then by chip count.</span>
+    <span class="endpoint-auth">Auth: requireAuth only</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-patch">PATCH</span>
+    <span class="endpoint-path">/api/tournaments/:id/standings/:playerId</span>
+    <span class="endpoint-desc">Update a player's chip count, elimination status, or finish position. At least one of <code>chipCount</code>, <code>isEliminated</code>, <code>finishPosition</code> is required.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requireRole('coach')</span>
+  </div>
+
+  <div class="endpoint">
+    <span class="endpoint-method method-patch">PATCH</span>
+    <span class="endpoint-path">/api/tournaments/:id/level</span>
+    <span class="endpoint-desc">Advance the blind level index by 1 in the standalone tournament record. No-op if already at max. Returns <code>{ current_level_index, currentLevel }</code>. Note: this only updates the DB row — it does NOT start any game timer.</span>
+    <span class="endpoint-auth">Auth: requireAuth + requireRole('coach')</span>
+  </div>
+
+
+  <!-- ── SOCKET EVENTS ──────────────────────────────────────────────────────── -->
+  <h2 id="socket-events">Socket Events</h2>
+
+  <p>All socket events are scoped to the table room (<code>io.to(tableId).emit(...)</code>).
+  Only table-based tournament events use sockets. Standalone tournaments are purely REST.</p>
+
+  <h3>Server → Client (emitted by TournamentController)</h3>
+
+  <div class="event-row">
+    <span class="event-dir dir-server">SERVER→</span>
+    <span class="event-name">tournament:time_remaining</span>
+    <span class="event-desc">
+      Emitted when a level starts. Payload: <code>{ level: number, remainingMs: number }</code>.
+      Client uses this to start the countdown timer in TournamentInfoPanel.
+    </span>
+  </div>
+
+  <div class="event-row">
+    <span class="event-dir dir-server">SERVER→</span>
+    <span class="event-name">tournament:blind_up</span>
+    <span class="event-desc">
+      Emitted when the timer expires and blinds advance. Payload: the new level object
+      <code>{ level, sb, bb, ante, duration_minutes }</code>. Client updates level display and restarts countdown.
+    </span>
+  </div>
+
+  <div class="event-row">
+    <span class="event-dir dir-server">SERVER→</span>
+    <span class="event-name">tournament:final_level</span>
+    <span class="event-desc">
+      Emitted if <code>_advanceLevel()</code> is called but blinds are already at the last level.
+      Payload: <code>{ level: currentLevelObject }</code>. Client shows "FINAL LEVEL" badge.
+    </span>
+  </div>
+
+  <div class="event-row">
+    <span class="event-dir dir-server">SERVER→</span>
+    <span class="event-name">tournament:elimination</span>
+    <span class="event-desc">
+      Emitted after each hand if a player's stack hits 0. Payload:
+      <code>{ playerId, position, playerCount, playerName? }</code>.
+      Client appends to elimination feed (max 5 shown).
+    </span>
+  </div>
+
+  <div class="event-row">
+    <span class="event-dir dir-server">SERVER→</span>
+    <span class="event-name">tournament:ended</span>
+    <span class="event-desc">
+      Emitted when ≤1 player remains OR <code>_endTournament()</code> is called manually.
+      Payload: <code>{ winnerId, standings }</code>. Client shows winner banner, then navigates
+      to <code>/tournament/:tableId/standings</code> after 3 seconds.
+    </span>
+  </div>
+
+  <h3>Client → Server (socket events sent by clients)</h3>
+
+  <div class="event-row">
+    <span class="event-dir dir-client">CLIENT→</span>
+    <span class="event-name">tournament:move_player</span>
+    <span class="event-desc">
+      Move a player between tables. Payload: <code>{ fromTableId, toTableId, playerId }</code>.
+      Requires coach role (checked via <code>requireCoach(socket)</code>).
+      Removes player from source table's game state and seats them at the target table.
+      Broadcasts updated <code>game_state</code> to both rooms.
+      <em>Note: no UI exists for this — it's a raw socket capability only.</em>
+    </span>
+  </div>
+
+  <div class="event-row">
+    <span class="event-dir dir-client">CLIENT→</span>
+    <span class="event-name">tournament:advance_level</span>
+    <span class="event-desc">
+      Fallback emit in TournamentInfoPanel if the REST advance-level call fails.
+      Payload: <code>{ tableId }</code>. <em>Note: no socket handler exists for this event on the server —
+      it is a dead emit. The correct path is the REST endpoint.</em>
+    </span>
+  </div>
+
+  <div class="event-row">
+    <span class="event-dir dir-client">CLIENT→</span>
+    <span class="event-name">tournament:end</span>
+    <span class="event-desc">
+      Fallback emit in TournamentInfoPanel if the REST end call fails.
+      <em>Note: no socket handler exists for this event on the server — also a dead emit.</em>
+    </span>
+  </div>
+
+
+  <!-- ── TOURNAMENT CONTROLLER ──────────────────────────────────────────────── -->
+  <h2 id="tournament-controller">TournamentController (Game Engine)</h2>
+
+  <p>
+    <code>server/game/controllers/TournamentController.js</code> extends <code>AutoController</code>
+    (which extends the base controller). It is created in-memory when a tournament table is initialised
+    and lives in <code>SharedState.controllers</code> (keyed by tableId).
+  </p>
+
+  <h3>Inheritance Chain</h3>
+  <pre>TournamentController
+  └─ AutoController          (auto-deals next hand after a configurable delay)
+       └─ BaseController     (handles join_room, socket events, table cleanup)</pre>
+
+  <h3>Key Methods</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Method</th><th>Trigger</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>start(config)</code></td>
+          <td>REST POST <code>/start</code></td>
+          <td>Loads blind schedule, sets first level blinds on GM, starts level timer, calls <code>gm.startGame()</code></td>
+        </tr>
+        <tr>
+          <td><code>_startLevelTimer()</code></td>
+          <td>Called by <code>start()</code> and <code>_advanceLevel()</code></td>
+          <td>Emits <code>tournament:time_remaining</code> then sets a <code>setTimeout</code> for <code>duration_minutes * 60000</code> ms to call <code>_advanceLevel()</code></td>
+        </tr>
+        <tr>
+          <td><code>_advanceLevel()</code></td>
+          <td>Timer fires or REST POST <code>/advance-level</code></td>
+          <td>Calls <code>blindSchedule.advance()</code>, applies new blinds to GM, emits <code>tournament:blind_up</code> or <code>tournament:final_level</code>, restarts timer</td>
+        </tr>
+        <tr>
+          <td><code>onHandComplete(handResult)</code></td>
+          <td>After every hand ends (called by AutoController/GM)</td>
+          <td>Scans for busted players, eliminates them, checks if ≤1 active → end tournament, otherwise calls <code>super.onHandComplete()</code> to deal next hand</td>
+        </tr>
+        <tr>
+          <td><code>_eliminatePlayer(playerId, chips)</code></td>
+          <td>Called by <code>onHandComplete()</code></td>
+          <td>Writes to <code>tournament_standings</code>, emits <code>tournament:elimination</code>, calls <code>gm.setPlayerInHand(playerId, false)</code></td>
+        </tr>
+        <tr>
+          <td><code>_endTournament(winnerId)</code></td>
+          <td>Called when ≤1 player left or REST POST <code>/end</code></td>
+          <td>Clears level timer, records winner in <code>tournament_standings</code>, calls <code>TableRepository.closeTable()</code>, fetches final standings, emits <code>tournament:ended</code></td>
+        </tr>
+        <tr>
+          <td><code>destroy()</code></td>
+          <td>Table cleanup / idle shutdown</td>
+          <td>Clears the level timer, calls <code>super.destroy()</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>BlindSchedule Helper</h3>
+  <p>
+    <code>server/game/controllers/BlindSchedule.js</code> wraps the blind schedule array.
+    It tracks the current level index and exposes <code>getCurrentLevel()</code>, <code>advance()</code>
+    (returns next level or null if at end), and <code>levelStartTime</code> for elapsed time tracking.
+  </p>
+
+
+  <!-- ── CLIENT PAGES ──────────────────────────────────────────────────────── -->
+  <h2 id="client-pages">Client Pages</h2>
+
+  <div class="page-card">
+    <div class="page-route">/table/:id</div>
+    <div class="page-desc">
+      The main game table page. When <code>table_mode === 'tournament'</code>, renders
+      <code>TournamentInfoPanel</code> in the right sidebar instead of the coach sidebar.
+      The panel shows: blind level, countdown timer (with progress bar), players remaining count,
+      elimination feed, and — for users with <code>table:manage</code> or <code>tournament:manage</code> —
+      "Advance Level" and "End Tournament" buttons.
+    </div>
+    <div class="page-guard">Guard: requires auth (via <code>AppLayout</code>). All roles can view; controls only show for <code>canManage</code> users.</div>
+  </div>
+
+  <div class="page-card">
+    <div class="page-route">/tournament/:tableId/standings</div>
+    <div class="page-desc">
+      <code>TournamentStandings.jsx</code> — fetches <code>GET /api/tables/:id/tournament</code> on mount
+      and displays final standings (finish position, player name, chips at elimination, prize if set).
+      Automatically navigated to from TournamentInfoPanel when the <code>tournament:ended</code> socket event fires.
+      Shows blind structure sheet, entrants list, and standings table.
+    </div>
+    <div class="page-guard">Guard: requireAuth only (any logged-in user can view standings).</div>
+  </div>
+
+  <div class="page-card">
+    <div class="page-route">/tournament/:id/lobby</div>
+    <div class="page-desc">
+      <code>TournamentLobby.jsx</code> — for the <em>standalone</em> system. Shows a single tournament's
+      details: status badge, starting stack, blind structure sheet, entrants list with chip counts.
+      Includes a "Start Tournament" button (PATCH status to 'running') and a countdown clock
+      for a scheduled start time. Fetches <code>GET /api/tournaments/:id</code> on mount
+      and polls <code>GET /api/tournaments/:id/standings</code> every 30 seconds when running.
+    </div>
+    <div class="page-guard">Guard: requireAuth only for viewing. Status change requires coach role (enforced server-side).</div>
+  </div>
+
+  <div class="page-card">
+    <div class="page-route">/admin/tournaments</div>
+    <div class="page-desc">
+      <code>TournamentSetup.jsx</code> — the coach/admin management page for <em>standalone</em> tournaments.
+      Shows tournament list filterable by Upcoming/Active/Completed tabs.
+      "New Tournament" drawer: add blind levels (auto-doubles from previous), set starting stack,
+      rebuy/addon toggles, schedule for future start.
+      Detail panel: player registration (manually assign by ID), status transitions, advance blind level.
+    </div>
+    <div class="page-guard">Guard: <code>SideNav</code> only shows this link to roles with <code>admin:access</code> permission (admin, superadmin, coach). Route itself has no client-side guard — server enforces auth.</div>
+  </div>
+
+  <h3>TournamentInfoPanel Component</h3>
+  <p>
+    Located at <code>client/src/components/TournamentInfoPanel.jsx</code>. Rendered inside
+    <code>TablePage</code> when <code>tableMode === 'tournament'</code>. Gets its socket reference
+    from <code>useTable()</code> context — specifically <code>tableSocket?.socketRef</code> (a <code>useRef</code>
+    pointing to the raw socket.io instance). Does NOT take a <code>socket</code> prop.
+  </p>
+  <p>Permission check used to show coach controls:</p>
+  <pre>const canManage = hasPermission('table:manage') || hasPermission('tournament:manage');</pre>
+
+
+  <!-- ── END-TO-END FLOW ──────────────────────────────────────────────────── -->
+  <h2 id="client-flow">End-to-End Flows</h2>
+
+  <h3>Flow A — Running a Live Tournament (Table-Based System)</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-content">
+        <div class="flow-title">Create the tournament table</div>
+        <div class="flow-body">
+          Admin/referee calls <code>POST /api/admin/tournaments</code> with <code>{ name, blindSchedule, startingStack }</code>.
+          Server creates a <code>tables</code> row with <code>mode='tournament'</code> and a <code>tournament_configs</code> row.
+          Returns <code>{ tableId, configId }</code>.
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-content">
+        <div class="flow-title">Players join the table</div>
+        <div class="flow-body">
+          Players navigate to <code>/table/:tableId</code>. Socket emits <code>join_room</code>.
+          Server seats them in the game state (same as cash tables). Coach sees them in the sidebar.
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-content">
+        <div class="flow-title">Start the tournament</div>
+        <div class="flow-body">
+          Coach/referee calls <code>POST /api/tables/:id/tournament/start</code>.
+          Server loads the config, sets first-level blinds on the game manager,
+          starts the level countdown timer, emits <code>tournament:time_remaining</code> to all clients,
+          then calls <code>gm.startGame()</code> to deal the first hand.
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-content">
+        <div class="flow-title">Hands play out automatically</div>
+        <div class="flow-body">
+          After each hand, <code>TournamentController.onHandComplete()</code> runs:
+          detects bust-outs, records eliminations in DB, emits <code>tournament:elimination</code>,
+          checks for tournament end condition, then auto-deals the next hand after a 2-second delay.
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">5</div>
+      <div class="flow-content">
+        <div class="flow-title">Blind levels advance</div>
+        <div class="flow-body">
+          After <code>duration_minutes</code> per level, the timer fires <code>_advanceLevel()</code>.
+          Server applies new blinds to GM, emits <code>tournament:blind_up</code>.
+          TournamentInfoPanel updates the display and restarts the countdown.
+          Coach can also manually advance via the "Advance Level" button (REST call).
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">6</div>
+      <div class="flow-content">
+        <div class="flow-title">Tournament ends</div>
+        <div class="flow-body">
+          When only 1 player remains, <code>_endTournament(winnerId)</code> is called automatically.
+          Records winner in <code>tournament_standings</code>, closes the table (<code>TableRepository.closeTable()</code>),
+          emits <code>tournament:ended</code>.
+          All clients see the winner banner and navigate to <code>/tournament/:tableId/standings</code> after 3 seconds.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Flow B — Managing a Standalone Tournament</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-num">1</div>
+      <div class="flow-content">
+        <div class="flow-title">Create the tournament</div>
+        <div class="flow-body">
+          Coach goes to <code>/admin/tournaments</code>, clicks "New Tournament", fills in name + blind levels.
+          Frontend calls <code>POST /api/tournaments</code>. Returns <code>{ id }</code>.
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">2</div>
+      <div class="flow-content">
+        <div class="flow-title">Register players</div>
+        <div class="flow-body">
+          Coach opens the tournament detail panel, enters player IDs manually,
+          calls <code>POST /api/tournaments/:id/register</code> for each.
+          Players appear in the entrants list with their starting stack.
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">3</div>
+      <div class="flow-content">
+        <div class="flow-title">Start + manage</div>
+        <div class="flow-body">
+          Coach clicks Start → <code>PATCH /api/tournaments/:id/status</code> with <code>{ status: 'running' }</code>.
+          As the tournament progresses, coach manually updates chip counts via
+          <code>PATCH /api/tournaments/:id/standings/:playerId</code>.
+          Blind levels advance via <code>PATCH /api/tournaments/:id/level</code>.
+        </div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="flow-num">4</div>
+      <div class="flow-content">
+        <div class="flow-title">Finish</div>
+        <div class="flow-body">
+          Coach PATCHes last player's <code>isEliminated = false</code> (winner stays), sets others' finish positions,
+          PATCHes status to <code>finished</code>. Players view standings at
+          <code>GET /api/tournaments/:id/standings</code>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── WHO DOES WHAT ──────────────────────────────────────────────────────── -->
+  <h2 id="who-does-what">Who Does What — Quick Reference</h2>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>Who</th>
+          <th>How</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Create a live tournament table</td>
+          <td><span class="badge badge-red">admin</span> <span class="badge badge-gray">superadmin</span> <span class="badge badge-yellow">referee</span></td>
+          <td><code>POST /api/admin/tournaments</code></td>
+        </tr>
+        <tr>
+          <td>Start a live tournament (deal cards)</td>
+          <td><span class="badge badge-red">admin</span> <span class="badge badge-gray">superadmin</span> <span class="badge badge-yellow">referee</span></td>
+          <td><code>POST /api/tables/:id/tournament/start</code></td>
+        </tr>
+        <tr>
+          <td>Advance blind level (live)</td>
+          <td><span class="badge badge-gold">coach</span> <span class="badge badge-red">admin</span> <span class="badge badge-gray">superadmin</span> <span class="badge badge-yellow">referee</span></td>
+          <td>TournamentInfoPanel button → REST POST</td>
+        </tr>
+        <tr>
+          <td>End live tournament early</td>
+          <td><span class="badge badge-gold">coach</span> <span class="badge badge-red">admin</span> <span class="badge badge-gray">superadmin</span> <span class="badge badge-yellow">referee</span></td>
+          <td>TournamentInfoPanel button → REST POST</td>
+        </tr>
+        <tr>
+          <td>Move player between tables</td>
+          <td><span class="badge badge-gold">coach</span> <span class="badge badge-red">admin</span> <span class="badge badge-gray">superadmin</span></td>
+          <td>Socket <code>tournament:move_player</code> (no UI exists)</td>
+        </tr>
+        <tr>
+          <td>View standings (live table)</td>
+          <td>All authenticated users</td>
+          <td><code>/tournament/:tableId/standings</code> page or <code>GET /api/tables/:id/tournament</code></td>
+        </tr>
+        <tr>
+          <td>Create standalone tournament</td>
+          <td><span class="badge badge-gold">coach</span> <span class="badge badge-red">admin</span> <span class="badge badge-gray">superadmin</span></td>
+          <td><code>POST /api/tournaments</code> (requireRole coach)</td>
+        </tr>
+        <tr>
+          <td>Register players (standalone)</td>
+          <td><span class="badge badge-gold">coach</span> <span class="badge badge-red">admin</span> <span class="badge badge-gray">superadmin</span></td>
+          <td><code>POST /api/tournaments/:id/register</code></td>
+        </tr>
+        <tr>
+          <td>Update chip counts / eliminations (standalone)</td>
+          <td><span class="badge badge-gold">coach</span> <span class="badge badge-red">admin</span> <span class="badge badge-gray">superadmin</span></td>
+          <td><code>PATCH /api/tournaments/:id/standings/:playerId</code></td>
+        </tr>
+        <tr>
+          <td>View standalone standings</td>
+          <td>All authenticated users</td>
+          <td><code>GET /api/tournaments/:id/standings</code> or <code>/tournament/:id/lobby</code></td>
+        </tr>
+        <tr>
+          <td>Join and play in a live tournament</td>
+          <td>All roles</td>
+          <td>Navigate to <code>/table/:id</code>, socket join_room — same as cash tables</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+
+  <!-- ── GAPS & ISSUES ──────────────────────────────────────────────────────── -->
+  <h2 id="gaps">Known Gaps &amp; Issues</h2>
+
+  <div class="gap-item" style="border-color: var(--red-border); background: var(--red-bg);">
+    <div class="gap-title" style="color: var(--red);">Coach cannot create live tournament tables</div>
+    <div class="gap-desc">
+      <code>POST /api/admin/tournaments</code> requires <code>tournament:manage</code>, which coaches don't have.
+      Yet coaches have full in-game control (<code>table:manage</code>). A coach must ask an admin/referee
+      to create the table, then the coach runs it.
+      <br><strong>Fix options:</strong> Grant <code>tournament:manage</code> to coach in migration, or add a dedicated
+      <code>requireRole('coach')</code> path for table creation.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--red-border); background: var(--red-bg);">
+    <div class="gap-title" style="color: var(--red);">Dead socket fallbacks in TournamentInfoPanel</div>
+    <div class="gap-desc">
+      When REST calls fail, the panel emits <code>tournament:advance_level</code> and <code>tournament:end</code>
+      via socket. No server-side socket handlers exist for these events — they silently do nothing.
+      <br><strong>Fix:</strong> Either add socket handlers for these events, or remove the fallback emits.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--yellow-border); background: var(--yellow-bg);">
+    <div class="gap-title" style="color: var(--yellow);">Prize pool is schema-only — never written</div>
+    <div class="gap-desc">
+      <code>tournament_standings.prize</code> exists (NUMERIC, default 0) but no code ever sets it.
+      Prize calculation, distribution logic, and display on the standings page are all missing.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--yellow-border); background: var(--yellow-bg);">
+    <div class="gap-title" style="color: var(--yellow);">Two systems are disconnected</div>
+    <div class="gap-desc">
+      A live table-based tournament writes to <code>tournament_standings</code>.
+      A standalone tournament tracks state in <code>tournament_players</code>.
+      There is no way to connect them (e.g., "this standalone tournament is being run on table X").
+      Reports, leaderboards, and analytics cannot aggregate across both systems.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--yellow-border); background: var(--yellow-bg);">
+    <div class="gap-title" style="color: var(--yellow);">No UI for multi-table balancing</div>
+    <div class="gap-desc">
+      The <code>tournament:move_player</code> socket event exists in code and can move a player between
+      tables preserving their chip stack. However, there is no UI to trigger it. A large tournament
+      requiring multiple tables cannot be balanced using the current interface.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--yellow-border); background: var(--yellow-bg);">
+    <div class="gap-title" style="color: var(--yellow);">Rebuys defined in schema but not implemented</div>
+    <div class="gap-desc">
+      Both <code>tournament_configs.rebuy_allowed</code> and <code>tournaments.rebuy_allowed</code> exist.
+      <code>tournament_configs</code> also has <code>rebuy_level_cap</code>.
+      No rebuy logic exists in <code>TournamentController</code> — when a player busts,
+      they are always eliminated. The UI shows a "Rebuys on" badge if set, but clicking it does nothing.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--yellow-border); background: var(--yellow-bg);">
+    <div class="gap-title" style="color: var(--yellow);">Feature gate only on table-based system</div>
+    <div class="gap-desc">
+      <code>requireFeature('tournaments')</code> is applied to <code>/api/admin/tournaments</code>
+      and <code>/api/tables/:id/tournament/*</code>. It is <strong>not</strong> applied to
+      <code>/api/tournaments</code> (standalone) routes. A school with tournaments disabled
+      can still have standalone tournaments created by coaches.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--blue-border); background: var(--blue-bg);">
+    <div class="gap-title" style="color: var(--blue);">Referees have tournament:manage but no UI access</div>
+    <div class="gap-desc">
+      Referees have <code>tournament:manage</code> (can hit the REST endpoints) but the
+      <code>SideNav</code> does not show the <code>/admin/tournaments</code> link to them —
+      only roles with <code>admin:access</code> see it. Referees would need to know the URL directly.
+      The <code>TournamentInfoPanel</code> correctly shows controls to referees via the <code>canManage</code> check.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--blue-border); background: var(--blue-bg);">
+    <div class="gap-title" style="color: var(--blue);">Standalone tournament blind timer is manual-only</div>
+    <div class="gap-desc">
+      In the standalone system, advancing the blind level requires a coach to manually call
+      <code>PATCH /api/tournaments/:id/level</code>. There is no automatic timer — the server does not
+      track elapsed time or auto-advance levels. For a real tournament a coach would need to watch the clock themselves.
+    </div>
+  </div>
+
+  <div class="gap-item" style="border-color: var(--blue-border); background: var(--blue-bg);">
+    <div class="gap-title" style="color: var(--blue);">winner_name not populated in TournamentInfoPanel</div>
+    <div class="gap-desc">
+      When <code>tournament:ended</code> fires, <code>winner.winnerId</code> is a UUID.
+      The panel renders: <code>Winner: {winner.winnerId}</code> — displaying a raw UUID instead of the player's name.
+      The standings fetch after the fact has the name, but the immediate banner does not.
+    </div>
+  </div>
+
+</main>
+</div>
+</body>
+</html>

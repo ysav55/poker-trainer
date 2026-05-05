@@ -31,8 +31,9 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 
-# Logs
+# Logs (runtime log files — NOT source code in server/logs/)
 logs/
+!server/logs/
 *.log
 npm-debug.log*
 
@@ -41,6 +42,12 @@ coverage/
 client/coverage/
 server/coverage/
 
+# Playwright
+e2e/.auth/
+playwright-report/
+test-results/
+blob-report/
+
 # Vite
 client/.vite/
 
@@ -48,3 +55,4 @@ client/.vite/
 *.xlsx
 *.pdf
 COACH_GUIDE.html
+e2e/screenshots/

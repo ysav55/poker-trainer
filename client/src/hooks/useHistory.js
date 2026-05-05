@@ -5,6 +5,7 @@ function parseTags(hand_tags = []) {
   return {
     auto_tags:    (hand_tags || []).filter(t => t.tag_type === 'auto').map(t => t.tag),
     mistake_tags: (hand_tags || []).filter(t => t.tag_type === 'mistake').map(t => t.tag),
+    sizing_tags:  (hand_tags || []).filter(t => t.tag_type === 'sizing').map(t => t.tag),
     coach_tags:   (hand_tags || []).filter(t => t.tag_type === 'coach').map(t => t.tag),
   };
 }

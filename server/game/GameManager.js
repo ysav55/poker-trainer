@@ -26,13 +26,23 @@ const { isBettingRoundOver, findNextActingPlayer } = require('./bettingRound');
 const { resolve: resolveShowdown, sortBySBProximity } = require('./ShowdownResolver');
 const ReplayEngine = require('./ReplayEngine');
 
+const PENDING_BLINDS_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 class GameManager {
-  constructor(tableId) {
+  constructor(tableId, config = {}) {
     this.tableId = tableId;
+    this.config = config;
     this._initState();
   }
 
   _initState() {
+    // max_players: clamp to [1, 9] range. Default to 9 if not provided or invalid.
+    let maxPlayers = this.config?.max_players ?? 9;
+    if (!Number.isInteger(maxPlayers) || maxPlayers < 1) {
+      maxPlayers = 9;
+    }
+    maxPlayers = Math.min(maxPlayers, 9);
+
     this.state = {
       table_id: this.tableId,
       mode: 'rng',
@@ -54,11 +64,18 @@ class GameManager {
       street_snapshots: [], // street-level snapshots (for rollback-street)
       config_phase: false,
       config: null,
+      // Coach can call update_hand_config mid-hand. The config is parked here and
+      // consumed by resetForNextHand(), where it becomes the active config + opens
+      // a config_phase so the next start_configured_hand picks it up. Cleared after
+      // consumption so a new mid-hand edit replaces (not stacks on top of) the prior
+      // queued one.
+      pendingHandConfig: null,
       _full_board: null,   // internal: stores all 5 resolved board cards when config is used
       showdown_result: null,
       side_pots: [],       // SidePot[] built at showdown when ≥1 player is all-in
       last_raise_was_full: true,  // false when last raise was an incomplete all-in (< min raise)
       last_aggressor: null,       // player id of the last player who raised
+      max_players: maxPlayers,    // max number of seated players allowed at this table (1-9)
       playlist_mode: {
         active: false,
         playlistId: null,
@@ -142,6 +159,14 @@ class GameManager {
       }
     }
 
+    // Surface pending_blinds for coach UI (banner, adapter, etc.)
+    // Omit internal queuedBy field; expose only sb, bb, queuedAt.
+    const SharedState = require('../state/SharedState.js');
+    const pending = SharedState.pendingBlinds.get(this.tableId);
+    const pending_blinds = pending
+      ? { sb: pending.sb, bb: pending.bb, queuedAt: pending.queuedAt }
+      : null;
+
     return {
       table_id: s.table_id,
       mode: s.mode,
@@ -162,6 +187,8 @@ class GameManager {
       can_rollback_street: s.street_snapshots.length > 0,
       config_phase: s.config_phase,
       config: sanitisedConfig,
+      pending_hand_config: !!s.pendingHandConfig,
+      pending_blinds,
       showdown_result: s.showdown_result,
       side_pots: s.side_pots,
       playlist_mode: {
@@ -219,7 +246,7 @@ class GameManager {
       is_all_in: false,
       is_coach: isCoach,
       acted_this_street: false,
-      in_hand: true,
+      in_hand: this.state.phase === 'waiting', // If hand is active, mark as spectator
       disconnected: false,
     };
 
@@ -249,7 +276,7 @@ class GameManager {
 
   _nextAvailableSeat() {
     const taken = new Set(this.state.players.filter(p => p.seat >= 0).map(p => p.seat));
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < this.state.max_players; i++) {
       if (!taken.has(i)) return i;
     }
     return null;
@@ -257,7 +284,7 @@ class GameManager {
 
   _nextAvailableSeatForCoach() {
     const taken = new Set(this.state.players.filter(p => p.seat >= 0).map(p => p.seat));
-    for (let i = 8; i >= 0; i--) {
+    for (let i = this.state.max_players - 1; i >= 0; i--) {
       if (!taken.has(i)) return i;
     }
     return null;
@@ -370,6 +397,21 @@ class GameManager {
   }
 
   /**
+   * queueHandConfig — coach updates the config mid-hand. Stored on
+   * state.pendingHandConfig and consumed by resetForNextHand() so it becomes
+   * the active config for the next deal. Replaces (not merges) any prior queued
+   * config so the most recent edit wins.
+   */
+  queueHandConfig(config) {
+    const validModes = ['rng', 'manual', 'hybrid'];
+    if (!config || !validModes.includes(config.mode)) {
+      return { error: `config.mode must be one of: ${validModes.join(', ')}` };
+    }
+    this.state.pendingHandConfig = config;
+    return { success: true };
+  }
+
+  /**
    * activatePlaylistMode({ playlistId, hands })
    * hands: array of { hand_id, display_order } from HandLogger.getPlaylistHands()
    */
@@ -442,7 +484,7 @@ class GameManager {
     const players = this._gamePlayers();
     if (players.length < 2) return { error: 'Need at least 2 seated players to start' };
 
-    const broke = players.filter(p => !p.is_coach && p.stack <= 0);
+    const broke = players.filter(p => p.stack <= 0);
     if (broke.length > 0) {
       const names = broke.map(p => p.name).join(', ');
       return { error: `Cannot start: ${names} ${broke.length === 1 ? 'has' : 'have'} 0 chips. Use Adjust Stacks to top up.` };
@@ -520,7 +562,8 @@ class GameManager {
     this.state.last_aggressor = null;
 
     // Assign positions
-    const dealerIdx = this.state.dealer_seat % players.length;
+    let dealerIdx = players.findIndex(p => p.seat === this.state.dealer_seat);
+    if (dealerIdx === -1) dealerIdx = 0; // fallback for first hand or if dealer_seat not in players
     const sbIdx = (dealerIdx + 1) % players.length;
     const bbIdx = (dealerIdx + 2) % players.length;
 
@@ -939,10 +982,29 @@ class GameManager {
   }
 
   resetForNextHand() {
+    // Phase C: consume queued blind delta if present and fresh.
+    const SharedState = require('../state/SharedState.js');
+    if (SharedState && SharedState.pendingBlinds) {
+      const pending = SharedState.pendingBlinds.get(this.tableId);
+      if (pending) {
+        const age = Date.now() - pending.queuedAt;
+        if (age <= PENDING_BLINDS_TTL_MS) {
+          this.state.small_blind = pending.sb;
+          this.state.big_blind = pending.bb;
+        }
+        SharedState.pendingBlinds.delete(this.tableId);
+      }
+    }
+
+    // Phase D.3: clear shared range on hand reset
+    if (SharedState && SharedState.tableSharedRanges) {
+      SharedState.tableSharedRanges.delete(this.tableId);
+    }
+
     this._saveSnapshot('action');
     // Rotate dealer button by player object (not seat index) so removals don't cause jumps.
     const eligible = this.state.players
-      .filter(p => !p.is_coach && !p.disconnected && p.seat >= 0)
+      .filter(p => !p.disconnected && p.seat >= 0)
       .sort((a, b) => a.seat - b.seat);
     if (eligible.length > 0) {
       const dealerIdx = eligible.findIndex(p => p.seat === this.state.dealer_seat);
@@ -971,9 +1033,34 @@ class GameManager {
     this.state.winner_name = null;
     this.state.showdown_result = null;
     this.state.side_pots = [];
+
+    // Auto-rejoin spectators for next hand (players sitting out with chips rejoin)
+    for (const player of this.state.players) {
+      if (player.seat >= 0 && !player.in_hand && player.stack > 0) {
+        player.in_hand = true;
+      }
+    }
+
     this.state.phase = 'waiting';
     this.state.current_turn = null;
     this.state.street_snapshots = [];
+
+    // Consume any queued mid-hand config: re-open config_phase + restore the
+    // override so the next start_configured_hand picks it up. Done before the
+    // generic config reset below so we don't immediately wipe the queued one.
+    if (this.state.pendingHandConfig) {
+      this.state.config_phase = true;
+      this.state.config = this.state.pendingHandConfig;
+      this.state.pendingHandConfig = null;
+      this.state.is_scenario = false;
+      this.state.replay_mode = {
+        active: false, source_hand_id: null, actions: [], cursor: -1,
+        original_hole_cards: {}, original_board: [], original_stacks: {},
+        player_meta: {}, dealer_seat: 0, branched: false, pre_branch_snapshot: null,
+        playlist_was_active: false,
+      };
+      return { success: true, consumedPendingConfig: true };
+    }
     this.state.config_phase = false;
     this.state.config = null;
     this.state.is_scenario = false;

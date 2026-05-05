@@ -1111,3 +1111,134 @@ describe('adjustStack', () => {
     expect(gm.state.players.find(p => p.id === 'p1').stack).toBe(stackBefore);
   });
 });
+
+// ─────────────────────────────────────────────
+//  Suite — max_players state and seat assignment
+// ─────────────────────────────────────────────
+describe('max_players', () => {
+  test('defaults to 9 when config is not provided', () => {
+    const gm = new GameManager('test-table');
+    expect(gm.state.max_players).toBe(9);
+  });
+
+  test('accepts max_players from config and clamps to 9', () => {
+    const gm = new GameManager('test-table', { max_players: 5 });
+    expect(gm.state.max_players).toBe(5);
+  });
+
+  test('clamps max_players > 9 down to 9', () => {
+    const gm = new GameManager('test-table', { max_players: 15 });
+    expect(gm.state.max_players).toBe(9);
+  });
+
+  test('treats max_players = 0 or negative as 9', () => {
+    const gm = new GameManager('test-table', { max_players: 0 });
+    expect(gm.state.max_players).toBe(9);
+
+    const gm2 = new GameManager('test-table2', { max_players: -5 });
+    expect(gm2.state.max_players).toBe(9);
+  });
+
+  test('_nextAvailableSeat respects max_players limit', () => {
+    const gm = new GameManager('test-table', { max_players: 3 });
+
+    // Add 3 players — should succeed
+    expect(gm.addPlayer('p1', 'P1')).toHaveProperty('success', true);
+    expect(gm.addPlayer('p2', 'P2')).toHaveProperty('success', true);
+    expect(gm.addPlayer('p3', 'P3')).toHaveProperty('success', true);
+
+    // 4th player should get error (table full)
+    const result = gm.addPlayer('p4', 'P4');
+    expect(result).toHaveProperty('error');
+    expect(result.error).toMatch(/full|max/i);
+  });
+
+  test('_nextAvailableSeatForCoach respects max_players limit', () => {
+    const gm = new GameManager('test-table', { max_players: 3 });
+
+    // Add 2 regular players
+    gm.addPlayer('p1', 'P1');
+    gm.addPlayer('p2', 'P2');
+
+    // Coach should sit in seat 2 (3 - 1)
+    const coachResult = gm.addPlayer('coach1', 'Coach', true);
+    expect(coachResult).toHaveProperty('success', true);
+    expect(coachResult.player.seat).toBe(2);
+
+    // Attempting to add a 4th player (non-coach) should fail
+    const result = gm.addPlayer('p3', 'P3');
+    expect(result).toHaveProperty('error');
+  });
+
+  test('seat numbers never exceed max_players - 1', () => {
+    const gm = new GameManager('test-table', { max_players: 5 });
+
+    // Fill all 5 seats
+    for (let i = 0; i < 5; i++) {
+      gm.addPlayer(`p${i}`, `Player ${i}`);
+    }
+
+    // All seat numbers should be < 5
+    gm.state.players.forEach(p => {
+      expect(p.seat).toBeLessThan(5);
+      expect(p.seat).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  test('seat numbers never exceed 8 (DB safety)', () => {
+    const gm = new GameManager('test-table', { max_players: 9 });
+
+    // Fill all 9 seats
+    for (let i = 0; i < 9; i++) {
+      gm.addPlayer(`p${i}`, `Player ${i}`);
+    }
+
+    // All seat numbers should be <= 8
+    gm.state.players.forEach(p => {
+      expect(p.seat).toBeLessThanOrEqual(8);
+      expect(p.seat).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  test('coach sits at highest available seat within max_players', () => {
+    const gm = new GameManager('test-table', { max_players: 6 });
+
+    // Add 3 regular players in seats 0, 1, 2
+    gm.addPlayer('p1', 'P1');
+    gm.addPlayer('p2', 'P2');
+    gm.addPlayer('p3', 'P3');
+
+    // Coach should take seat 5 (max_players - 1)
+    const coachResult = gm.addPlayer('coach', 'Coach', true);
+    expect(coachResult.player.seat).toBe(5);
+  });
+
+  test('mixed regular and coach players respects max_players', () => {
+    const gm = new GameManager('test-table', { max_players: 4 });
+
+    // Add: regular, coach, regular, regular (fills table)
+    gm.addPlayer('p1', 'P1', false);
+    gm.addPlayer('coach1', 'Coach1', true);
+    gm.addPlayer('p2', 'P2', false);
+    gm.addPlayer('p3', 'P3', false);
+
+    // 5th player should fail
+    const result = gm.addPlayer('p4', 'P4', false);
+    expect(result).toHaveProperty('error');
+  });
+
+  test('existing tests still pass with max_players=9', () => {
+    // This is a regression test — ensure default config doesn't break existing behavior
+    const gm = new GameManager('regression-test');
+
+    // Should allow up to 9 players
+    for (let i = 0; i < 9; i++) {
+      const result = gm.addPlayer(`p${i}`, `Player ${i}`);
+      expect(result).toHaveProperty('success', true);
+    }
+
+    // 10th player should fail
+    const result = gm.addPlayer('p10', 'Player 10');
+    expect(result).toHaveProperty('error');
+  });
+});

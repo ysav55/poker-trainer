@@ -16,6 +16,28 @@
  *  8. start_game / place_bet — non-coach cannot call these outside turn
  */
 
+// ── Mock supabase client — CI has no DB credentials ──────────────────────────
+// index.js requires supabase directly; without this mock it throws at load time.
+jest.mock('../../db/supabase', () => {
+  // Create a chainable query builder that supports .select().eq().eq().eq().maybeSingle()
+  const createChainableQuery = () => ({
+    eq: jest.fn(function() { return this; }),
+    maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    select: jest.fn(function() { return this; }),
+  });
+
+  return {
+    from: jest.fn().mockReturnValue({
+      select:  jest.fn(function() { return this; }),
+      insert:  jest.fn().mockResolvedValue({ data: [], error: null }),
+      update:  jest.fn(function() { return this; }),
+      delete:  jest.fn(function() { return this; }),
+      eq:      jest.fn(function() { return this; }),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+    }),
+  };
+});
+
 // ── Mock HandLoggerSupabase (replaces SQLite Database mock) ──────────────────
 // Stateful in-memory store so loginRosterPlayer → isRegisteredPlayer works.
 jest.mock('../../db/HandLoggerSupabase', () => {
@@ -138,8 +160,9 @@ beforeAll((done) => {
 afterAll((done) => {
   allClients.forEach(c => { try { c.disconnect(); } catch {} });
   // Give sockets a tick to close, then shut down the server
-  setTimeout(() => httpServer.close(done), 100);
-});
+  if (!httpServer) return done();
+  setTimeout(() => httpServer.close(done), 300);
+}, 15000);
 
 // ─────────────────────────────────────────────
 //  Helper: register a player in the DB and return their stableId
@@ -572,9 +595,11 @@ describe('set_blind_levels socket event', () => {
     await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
     await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
-    // Drain the initial game_state broadcast so subsequent waitForEvent calls don't pick up stale state
-    await waitForEvent(coach,   'game_state', 2000);
-    await waitForEvent(player1, 'game_state', 2000);
+    // Yield to the event loop twice so any in-flight game_state broadcasts from the
+    // join sequence are delivered to (no listeners) before tests register their own.
+    // setImmediate runs in the "check" phase — after pending I/O callbacks (TCP data).
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
 
     return { p1, p2 };
   }
@@ -668,16 +693,16 @@ describe('adjust_stack socket event', () => {
     player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
 
     await joinRoom(coach,   { name: 'StackCoach', tableId: TABLE + tableSuffix });
-    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
-    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
+    const j1 = await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
+    const j2 = await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE + tableSuffix });
 
-    // Drain the initial game_state broadcast; also capture player IDs for the coach
-    const state = await waitForEvent(coach, 'game_state', 2000);
-    // Drain player1's pending game_state so it doesn't pollute subsequent waitForEvent calls
-    await waitForEvent(player1, 'game_state', 2000);
+    // Flush in-flight game_state broadcasts from joins before tests register listeners.
+    // room_joined already carries the socket ID, so no game_state drain is needed.
+    await new Promise(r => setImmediate(r));
+    await new Promise(r => setImmediate(r));
 
-    const p1ServerObj = state.players.find(p => p.name === p1.name);
-    const p2ServerObj = state.players.find(p => p.name === p2.name);
+    const p1ServerObj = { id: j1.data.playerId, name: p1.name };
+    const p2ServerObj = { id: j2.data.playerId, name: p2.name };
 
     return { p1, p2, p1ServerObj, p2ServerObj };
   }
@@ -740,5 +765,50 @@ describe('adjust_stack socket event', () => {
     coach.emit('adjust_stack', { playerId: 'nonexistent-id', amount: 1000 });
     const err = await errPromise;
     expect(err.message).toMatch(/not found|player/i);
+  });
+});
+
+// ─────────────────────────────────────────────
+//  Suite — is_spectating flag for mid-hand joins
+// ─────────────────────────────────────────────
+describe('join_room — is_spectating flag for mid-hand joins', () => {
+  let coach, player1, player2, joinerClient;
+  const TABLE = 'is-spectating-table';
+
+  afterEach(() => {
+    coach?.disconnect();
+    player1?.disconnect();
+    player2?.disconnect();
+    joinerClient?.disconnect();
+  });
+
+  it('player joining during active hand gets is_spectating=true in broadcast', async () => {
+    const p1 = await registerPlayer('SpecP1');
+    const p2 = await registerPlayer('SpecP2');
+
+    coach = trackClient(createClient(serverPort, { auth: { token: 'coach-spec-token' } }));
+    player1 = trackClient(createClient(serverPort, { auth: { token: p1.token } }));
+    player2 = trackClient(createClient(serverPort, { auth: { token: p2.token } }));
+
+    // Set up: coach + 2 players join
+    await joinRoom(coach, { name: 'SpecCoach', tableId: TABLE });
+    await joinRoom(player1, { name: p1.name, isCoach: false, isSpectator: false, tableId: TABLE });
+    await joinRoom(player2, { name: p2.name, isCoach: false, isSpectator: false, tableId: TABLE });
+
+    // Start game (puts game in 'preflop' phase)
+    coach.emit('start_game', { mode: 'rng' });
+    await new Promise(r => setTimeout(r, 100)); // Let game state propagate
+
+    // New player joins WHILE HAND IS IN PROGRESS
+    joinerClient = trackClient(createClient(serverPort, { auth: { token: 'late-joiner-token' } }));
+
+    // Listen for player:joined broadcast on coach (or other clients)
+    const playerJoinedPromise = waitForEvent(coach, 'player:joined', 2000);
+    joinerClient.emit('join_room', { name: 'LateJoiner', isCoach: false, isSpectator: false, tableId: TABLE });
+
+    const playerJoinedEvent = await playerJoinedPromise;
+    expect(playerJoinedEvent).toBeDefined();
+    expect(playerJoinedEvent.name).toBe('LateJoiner');
+    expect(playerJoinedEvent.is_spectating).toBe(true); // CRITICAL: mid-hand joiner is spectator
   });
 });

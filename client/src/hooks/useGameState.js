@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 
-export function useGameState({ socketRef, addError, addNotification }) {
+export function useGameState(socket) {
+  const { socketRef, socket: socketState, addError, addNotification } = socket ?? {}
   const [gameState, setGameState] = useState(null)
   const [myId, setMyId] = useState(null)
   const [isCoach, setIsCoach] = useState(false)
@@ -11,20 +12,36 @@ export function useGameState({ socketRef, addError, addNotification }) {
   const [sessionStats, setSessionStats] = useState(null)
   const [activeHandId, setActiveHandId] = useState(null)
   const [handTagsSaved, setHandTagsSaved] = useState(null)
+  const [tableMode, setTableMode] = useState('coached_cash') // default until server sends table_config
+  const [equityData, setEquityData]       = useState(null)   // { phase, equities[], showToPlayers }
+  const [equitySettings, setEquitySettings] = useState({ showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false })
+  const [equityEnabled, setEquityEnabled] = useState(false)  // coach's local EV overlay pref
+  const [sharedRange, setSharedRange]     = useState(null)   // { handGroups, label, sharedBy } | null
 
   useEffect(() => {
-    const socket = socketRef.current
+    // Use the reactive socket state value (not socketRef.current) so this effect
+    // re-runs whenever the socket instance changes (C-8 fix).
+    const socket = socketState
     if (!socket) return
 
     socket.on('room_joined', ({ playerId, isCoach: coach, isSpectator: spectator }) => {
       setMyId(playerId)
       setIsCoach(Boolean(coach))
       setIsSpectator(Boolean(spectator))
+      // DEBUG: expose for E2E diagnostics
+      window.__DEBUG_MY_ID = playerId
+      window.__DEBUG_IS_COACH = Boolean(coach)
+      window.__DEBUG_IS_SPECTATOR = Boolean(spectator)
     })
 
     socket.on('game_state', (state) => {
       setGameState(state)
       setSyncError(null)
+      // DEBUG: expose for E2E diagnostics
+      window.__DEBUG_GAME_STATE = state
+      if (state.phase === 'showdown') window.__DEBUG_SHOWDOWN_SEEN = true
+      if (state.phase === 'waiting' && window.__DEBUG_HAND_ACTIVE) window.__DEBUG_HAND_ENDED = true
+      if (['preflop', 'flop', 'turn', 'river'].includes(state.phase)) window.__DEBUG_HAND_ACTIVE = true
       if (state.phase === 'waiting') setActiveHandId(null) // hand ended — clear tag target
       // ISS-62: clear coach-disconnected overlay only when confirmed coach is back in game_state
       const coachPresent = state.players?.some(p => p.is_coach)
@@ -64,9 +81,16 @@ export function useGameState({ socketRef, addError, addNotification }) {
       setTimeout(() => setHandTagsSaved(null), 2000)
     })
 
-    socket.on('replay_loaded', ({ handId, actionCount }) => {
-      addNotification(`Replay loaded — hand #${handId} (${actionCount} actions)`)
+    socket.on('table_config', ({ mode }) => setTableMode(mode))
+
+    socket.on('equity_update', (data) => setEquityData(data))
+
+    socket.on('equity_settings', (settings) => {
+      setEquitySettings(settings)
+      setEquityData(prev => prev ? { ...prev, showToPlayers: settings.showToPlayers } : prev)
     })
+
+    socket.on('range_shared', (data) => setSharedRange(data))
 
     return () => {
       socket.off('room_joined')
@@ -79,9 +103,12 @@ export function useGameState({ socketRef, addError, addNotification }) {
       socket.off('sync_error')
       socket.off('hand_started')
       socket.off('hand_tags_saved')
-      socket.off('replay_loaded')
+      socket.off('table_config')
+      socket.off('equity_update')
+      socket.off('equity_settings')
+      socket.off('range_shared')
     }
-  }, [socketRef, addError, addNotification])
+  }, [socketState, addError, addNotification])
 
   const reset = useCallback(() => {
     setMyId(null)
@@ -94,6 +121,10 @@ export function useGameState({ socketRef, addError, addNotification }) {
     setSyncError(null)
     setActiveHandId(null)
     setHandTagsSaved(null)
+    setTableMode('coached_cash')
+    setEquityData(null)
+    setEquitySettings({ showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false })
+    setSharedRange(null)
   }, [])
 
   // ── emit helpers ──────────────────────────────────────────────────────────
@@ -115,14 +146,24 @@ export function useGameState({ socketRef, addError, addNotification }) {
   const loadHandScenario    = useCallback((handId, stackMode = 'keep') => socketRef.current?.emit('load_hand_scenario', { handId, stackMode }), [socketRef])
   const updateHandTags      = useCallback((handId, tags) => socketRef.current?.emit('update_hand_tags', { handId, tags }), [socketRef])
   const setPlayerInHand     = useCallback((playerId, inHand) => socketRef.current?.emit('set_player_in_hand', { playerId, inHand }), [socketRef])
-  const setBlindLevels      = useCallback((sb, bb) => socketRef.current?.emit('set_blind_levels', { sb, bb }), [socketRef])
+  const setBlindLevels          = useCallback((sb, bb) => socketRef.current?.emit('set_blind_levels', { sb, bb }), [socketRef])
+  const applyBlindsAtNextHand   = useCallback((sb, bb) => socketRef.current?.emit('coach:apply_blinds_at_next_hand', { sb, bb }), [socketRef])
+  const discardPendingBlinds    = useCallback(() => socketRef.current?.emit('coach:discard_pending_blinds'), [socketRef])
+  const toggleEquityDisplay     = useCallback(() => socketRef.current?.emit('toggle_equity_display'), [socketRef])
+  const toggleRangeDisplay      = useCallback(() => socketRef.current?.emit('toggle_range_display'), [socketRef])
+  const toggleHeatmapDisplay    = useCallback(() => socketRef.current?.emit('toggle_heatmap_display'), [socketRef])
+  const shareRange              = useCallback((handGroups, label) => socketRef.current?.emit('share_range', { handGroups, label }), [socketRef])
+  const clearSharedRange        = useCallback(() => socketRef.current?.emit('clear_shared_range'), [socketRef])
+  const setCoachEquityVisible   = useCallback((tableId, visible) => socketRef.current?.emit('coach:set_coach_equity_visible', { tableId, visible }), [socketRef])
+  const setPlayersEquityVisible = useCallback((tableId, visible) => socketRef.current?.emit('coach:set_players_equity_visible', { tableId, visible }), [socketRef])
 
   const myPlayer = gameState?.players?.find((p) => p.id === myId) ?? null
 
   return {
     // state
     gameState, myId, isCoach, isSpectator, coachDisconnected,
-    actionTimer, syncError, sessionStats, activeHandId, handTagsSaved,
+    actionTimer, syncError, sessionStats, activeHandId, handTagsSaved, tableMode,
+    equityData, equitySettings, equityEnabled, setEquityEnabled, sharedRange,
     // derived
     myPlayer,
     // lifecycle
@@ -132,5 +173,9 @@ export function useGameState({ socketRef, addError, addNotification }) {
     togglePause, setMode, forceNextStreet, awardPot, resetHand,
     adjustStack, openConfigPhase, updateHandConfig, startConfiguredHand,
     loadHandScenario, updateHandTags, setPlayerInHand, setBlindLevels,
+    applyBlindsAtNextHand, discardPendingBlinds,
+    toggleEquityDisplay, toggleRangeDisplay, toggleHeatmapDisplay,
+    setCoachEquityVisible, setPlayersEquityVisible,
+    shareRange, clearSharedRange,
   }
 }
