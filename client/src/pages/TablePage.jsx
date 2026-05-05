@@ -345,6 +345,7 @@ function FullTableView() {
     cancelCountdown: () => socket.emit('coach:cancel_countdown', { tableId }),
     resumeDrill:     () => socket.emit('coach:resume_drill', { tableId }),
     setCoachDrillRole: (role) => socket.emit('coach:set_drill_role', { tableId, role }),
+    manualAdvanceSpot: () => socket.emit('coach:manual_advance_spot', { tableId }),
     // equity helpers
     toggleEquityDisplay,
     toggleRangeDisplay,

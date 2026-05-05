@@ -19,6 +19,7 @@ function makeEmit(overrides = {}) {
   return {
     activatePlaylist: vi.fn(),
     deactivatePlaylist: vi.fn(),
+    manualAdvanceSpot: vi.fn(),
     ...overrides,
   };
 }
@@ -142,5 +143,45 @@ describe('TabDrills — LaunchPanel integration (D.8d)', () => {
     expect(emit.activatePlaylist).toHaveBeenCalledWith('pl1');
     // LaunchPanel should not be mounted
     expect(screen.queryByRole('button', { name: /Launch →/ })).toBeNull();
+  });
+});
+
+describe('TabDrills — Advance Drill wiring (D.8f)', () => {
+  function activeDrillData(overrides = {}) {
+    return {
+      playlists: [{ id: 'pl1', name: 'Test', count: 5, description: '' }],
+      drillSession: {
+        active: true,
+        playlistId: 'pl1',
+        scenarioName: 'AKo OOP',
+        currentSpot: 'flop',
+        handsDone: 1,
+        handsTotal: 5,
+        ...overrides,
+      },
+      gameState: { phase: 'waiting' },
+      drill_event_log: [],
+    };
+  }
+
+  it('Advance Drill button calls manualAdvanceSpot when conditions met', () => {
+    const emit = makeEmit({ manualAdvanceSpot: vi.fn() });
+    render(<TabDrills data={activeDrillData()} emit={emit} />);
+    // Default mode is 'session' when drill is active, so no need to click
+    fireEvent.click(screen.getByRole('button', { name: /Advance Drill →/ }));
+    expect(emit.manualAdvanceSpot).toHaveBeenCalled();
+  });
+
+  it('Advance Drill is disabled when phase is not waiting', () => {
+    const emit = makeEmit({ manualAdvanceSpot: vi.fn() });
+    const data = { ...activeDrillData(), gameState: { phase: 'flop' } };
+    render(<TabDrills data={data} emit={emit} />);
+    expect(screen.getByRole('button', { name: /Advance Drill →/ })).toBeDisabled();
+  });
+
+  it('Advance Drill is disabled when manualAdvanceSpot emit not available', () => {
+    const emit = { activatePlaylist: vi.fn(), deactivatePlaylist: vi.fn() };
+    render(<TabDrills data={activeDrillData()} emit={emit} />);
+    expect(screen.getByRole('button', { name: /Advance Drill →/ })).toBeDisabled();
   });
 });

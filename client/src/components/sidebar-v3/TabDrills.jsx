@@ -458,8 +458,13 @@ function DrillSessionCard({ data, emit }) {
         >End Drill</button>
         <button
           className="btn primary full"
-          disabled
-          title="Auto-advance is server-driven — Phase 4 wires manual 'Advance Drill' override"
+          onClick={() => emit?.manualAdvanceSpot?.()}
+          disabled={!emit?.manualAdvanceSpot || (data.gameState?.phase ?? '') !== 'waiting'}
+          title={
+            !emit?.manualAdvanceSpot ? 'Manual advance not available' :
+            (data.gameState?.phase !== 'waiting') ? 'Available between hands (phase: waiting)' :
+            'Advance to next drill spot'
+          }
         >Advance Drill →</button>
       </div>
     </>
