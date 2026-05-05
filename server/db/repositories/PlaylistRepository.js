@@ -95,6 +95,16 @@ async function deletePlaylist(playlistId) {
   await q(supabase.from('playlists').delete().eq('playlist_id', playlistId));
 }
 
+async function renamePlaylist(playlistId, name) {
+  if (!playlistId || !name || typeof name !== 'string') {
+    throw new Error('playlistId and name are required');
+  }
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('name cannot be empty or whitespace only');
+  await q(supabase.from('playlists').update({ name: trimmed }).eq('playlist_id', playlistId));
+  return { playlist_id: playlistId, name: trimmed };
+}
+
 // Fetch a single playlist by id. Returns null if not found. Used by
 // authorization guards (e.g. branch_to_drill verifies the playlist belongs
 // to the coach's table before adding hands to it).
@@ -111,5 +121,5 @@ async function getPlaylist(playlistId) {
 
 module.exports = {
   createPlaylist, getPlaylists, getPlaylist, getPlaylistHands,
-  addHandToPlaylist, removeHandFromPlaylist, deletePlaylist,
+  addHandToPlaylist, removeHandFromPlaylist, deletePlaylist, renamePlaylist,
 };

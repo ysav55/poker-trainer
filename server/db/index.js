@@ -73,6 +73,7 @@ module.exports = {
   addHandToPlaylist:       PlaylistRepo.addHandToPlaylist,
   removeHandFromPlaylist:  PlaylistRepo.removeHandFromPlaylist,
   deletePlaylist:          PlaylistRepo.deletePlaylist,
+  renamePlaylist:          PlaylistRepo.renamePlaylist,
 
   // Tables
   createTable:               TableRepository.createTable,

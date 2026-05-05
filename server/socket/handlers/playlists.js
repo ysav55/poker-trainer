@@ -104,6 +104,23 @@ module.exports = function registerPlaylists(socket, ctx) {
     }
   });
 
+  socket.on('rename_playlist', async ({ playlistId, name } = {}) => {
+    if (requireCoach(socket, 'rename playlists')) return;
+    if (!playlistId || typeof name !== 'string' || !name.trim()) {
+      return sendError(socket, 'playlistId and name are required');
+    }
+    try {
+      const trimmed = name.trim();
+      if (trimmed.length > 100) return sendError(socket, 'Playlist name is too long');
+      await HandLogger.renamePlaylist(playlistId, trimmed);
+      const tableId = socket.data.tableId;
+      socket.emit('playlist_state', { playlists: await HandLogger.getPlaylists({ tableId }) });
+      socket.emit('notification', { type: 'playlist_renamed', message: `Playlist renamed to "${trimmed}"` });
+    } catch (err) {
+      sendError(socket, `Failed to rename playlist: ${err.message}`);
+    }
+  });
+
   socket.on('activate_playlist', async ({ playlistId } = {}) => {
     if (requireCoach(socket, 'activate playlists')) return;
     const tableId = socket.data.tableId;

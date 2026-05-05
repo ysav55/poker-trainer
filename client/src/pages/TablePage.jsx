@@ -329,6 +329,7 @@ function FullTableView() {
     removeFromPlaylist:  (playlistId, handId) =>
                            socket.emit('remove_from_playlist', { playlistId, handId }),
     deletePlaylist:      (playlistId) => socket.emit('delete_playlist', { playlistId }),
+    renamePlaylist:      (playlistId, name) => socket.emit('rename_playlist', { playlistId, name }),
     activatePlaylist:    (playlistId) => socket.emit('activate_playlist', { playlistId }),
     deactivatePlaylist:  () => socket.emit('deactivate_playlist'),
     getPlaylists:        () => socket.emit('get_playlists'),

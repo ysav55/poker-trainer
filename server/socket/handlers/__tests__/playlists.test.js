@@ -58,6 +58,7 @@ function makeHandLogger(overrides = {}) {
     addHandToPlaylist:     jest.fn().mockResolvedValue(undefined),
     removeHandFromPlaylist: jest.fn().mockResolvedValue(undefined),
     deletePlaylist:        jest.fn().mockResolvedValue(undefined),
+    renamePlaylist:        jest.fn().mockResolvedValue({ playlist_id: 'pl1', name: 'Renamed' }),
     getPlaylistHands:      jest.fn().mockResolvedValue([{ hand_id: 'h1' }]),
     getHandDetail:         jest.fn().mockResolvedValue(null),
     ...overrides,
@@ -346,6 +347,82 @@ describe('delete_playlist', () => {
     await socket._handlers['delete_playlist']({});
 
     expect(ctx.sendError).toHaveBeenCalled();
+  });
+});
+
+// ── rename_playlist ───────────────────────────────────────────────────────
+
+describe('rename_playlist', () => {
+  test('happy path: renames playlist and emits playlist_state + notification', async () => {
+    const hl = makeHandLogger({ renamePlaylist: jest.fn().mockResolvedValue({ playlist_id: 'pl1', name: 'Renamed' }) });
+    const { socket, ctx } = setup({}, { HandLogger: hl });
+    await socket._handlers['rename_playlist']({ playlistId: 'pl1', name: 'Renamed' });
+
+    expect(hl.renamePlaylist).toHaveBeenCalledWith('pl1', 'Renamed');
+    const state = socket._emitted.find(e => e.event === 'playlist_state');
+    const notif = socket._emitted.find(e => e.event === 'notification');
+    expect(state).toBeDefined();
+    expect(notif.payload.type).toBe('playlist_renamed');
+    expect(notif.payload.message).toContain('Renamed');
+  });
+
+  test('trims whitespace from name', async () => {
+    const hl = makeHandLogger({ renamePlaylist: jest.fn().mockResolvedValue({ playlist_id: 'pl1', name: 'Trimmed' }) });
+    const { socket, ctx } = setup({}, { HandLogger: hl });
+    await socket._handlers['rename_playlist']({ playlistId: 'pl1', name: '  Trimmed  ' });
+
+    expect(hl.renamePlaylist).toHaveBeenCalledWith('pl1', 'Trimmed');
+  });
+
+  test('non-coach is rejected', async () => {
+    const hl = makeHandLogger({ renamePlaylist: jest.fn() });
+    const { socket, ctx } = setup({ isCoach: false }, { HandLogger: hl });
+    await socket._handlers['rename_playlist']({ playlistId: 'pl1', name: 'New' });
+
+    expect(hl.renamePlaylist).not.toHaveBeenCalled();
+  });
+
+  test('sendError when playlistId missing', async () => {
+    const { socket, ctx } = setup();
+    await socket._handlers['rename_playlist']({ name: 'New' });
+
+    expect(ctx.sendError).toHaveBeenCalled();
+  });
+
+  test('sendError when name is missing', async () => {
+    const { socket, ctx } = setup();
+    await socket._handlers['rename_playlist']({ playlistId: 'pl1' });
+
+    expect(ctx.sendError).toHaveBeenCalled();
+  });
+
+  test('sendError when name is empty string', async () => {
+    const { socket, ctx } = setup();
+    await socket._handlers['rename_playlist']({ playlistId: 'pl1', name: '' });
+
+    expect(ctx.sendError).toHaveBeenCalled();
+  });
+
+  test('sendError when name is whitespace only', async () => {
+    const { socket, ctx } = setup();
+    await socket._handlers['rename_playlist']({ playlistId: 'pl1', name: '   ' });
+
+    expect(ctx.sendError).toHaveBeenCalled();
+  });
+
+  test('sendError when name is not a string', async () => {
+    const { socket, ctx } = setup();
+    await socket._handlers['rename_playlist']({ playlistId: 'pl1', name: 123 });
+
+    expect(ctx.sendError).toHaveBeenCalled();
+  });
+
+  test('sendError when name is too long', async () => {
+    const { socket, ctx } = setup();
+    const longName = 'a'.repeat(101);
+    await socket._handlers['rename_playlist']({ playlistId: 'pl1', name: longName });
+
+    expect(ctx.sendError).toHaveBeenCalledWith(socket, expect.stringContaining('too long'));
   });
 });
 

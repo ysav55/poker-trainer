@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Segmented } from './shared.jsx';
+import PlaylistAdmin, { PlaylistRowMenu } from './PlaylistAdmin.jsx';
 
 const POSITIONS_BY_COUNT = {
   2: ['BTN','BB'],
@@ -299,6 +300,7 @@ function DrillLoader({ data, emit }) {
   const playlists = data.playlists ?? [];
   const activeId = data.drillSession?.active ? data.drillSession.playlistId : null;
   const onLoad = (id) => emit?.activatePlaylist?.(id);
+  const [menuFor, setMenuFor] = useState(null);
 
   return (
     <>
@@ -307,6 +309,9 @@ function DrillLoader({ data, emit }) {
           <div className="card-title">Playlists</div>
           <div className="card-kicker">{playlists.length} saved</div>
         </div>
+
+        <PlaylistAdmin emit={emit} />
+
         {playlists.length === 0 ? (
           <div style={{ fontSize: 11, color: 'var(--ink-faint)', textAlign: 'center', padding: '14px 8px', lineHeight: 1.5 }}>
             No playlists yet. Save hands from the History tab into one to start drilling.
@@ -314,24 +319,44 @@ function DrillLoader({ data, emit }) {
         ) : (
           playlists.map((pl) => {
             const isActive = pl.id === activeId;
+            const menuOpen = menuFor === pl.id;
             return (
-              <div
-                key={pl.id}
-                className="list-row"
-                style={isActive ? { borderColor: 'var(--accent)', background: 'rgba(201,163,93,0.1)' } : null}
-              >
-                <div>
-                  <div className="title">{pl.name}</div>
-                  <div className="meta">{pl.count} hand{pl.count === 1 ? '' : 's'}{pl.description ? ` · ${pl.description}` : ''}</div>
-                </div>
-                <button
-                  className={'btn sm' + (isActive ? '' : ' primary')}
-                  onClick={() => !isActive && onLoad(pl.id)}
-                  disabled={isActive || !emit?.activatePlaylist || pl.count === 0}
-                  title={pl.count === 0 ? 'Empty playlist — add hands first' : isActive ? 'Active' : 'Load this playlist on the table'}
+              <div key={pl.id}>
+                <div
+                  className="list-row"
+                  style={isActive ? { borderColor: 'var(--accent)', background: 'rgba(201,163,93,0.1)' } : null}
                 >
-                  {isActive ? '● Running' : 'Load'}
-                </button>
+                  <div>
+                    <div className="title">{pl.name}</div>
+                    <div className="meta">{pl.count} hand{pl.count === 1 ? '' : 's'}{pl.description ? ` · ${pl.description}` : ''}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <button
+                      className={'btn sm' + (isActive ? '' : ' primary')}
+                      onClick={() => !isActive && onLoad(pl.id)}
+                      disabled={isActive || !emit?.activatePlaylist || pl.count === 0}
+                      title={pl.count === 0 ? 'Empty playlist — add hands first' : isActive ? 'Active' : 'Load this playlist on the table'}
+                    >
+                      {isActive ? '● Running' : 'Load'}
+                    </button>
+                    <button
+                      className="btn sm ghost"
+                      onClick={() => setMenuFor(menuOpen ? null : pl.id)}
+                      style={{ padding: '4px 8px', fontSize: 12 }}
+                      title="Rename or delete this playlist"
+                    >
+                      ⋯
+                    </button>
+                  </div>
+                </div>
+
+                {menuOpen && (
+                  <PlaylistRowMenu
+                    playlist={pl}
+                    emit={emit}
+                    onClose={() => setMenuFor(null)}
+                  />
+                )}
               </div>
             );
           })
