@@ -198,7 +198,7 @@ module.exports = function registerCoachControls(socket, ctx) {
   socket.on('toggle_range_display', () => {
     if (requireCoach(socket, 'toggle range display')) return;
     const tableId = socket.data.tableId;
-    const current = equitySettings.get(tableId) || { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const current = equitySettings.get(tableId) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
     const updated = { ...current, showRangesToPlayers: !current.showRangesToPlayers };
     equitySettings.set(tableId, updated);
     io.to(tableId).emit('equity_settings', updated);
@@ -207,7 +207,7 @@ module.exports = function registerCoachControls(socket, ctx) {
   socket.on('toggle_heatmap_display', () => {
     if (requireCoach(socket, 'toggle heatmap display')) return;
     const tableId = socket.data.tableId;
-    const current = equitySettings.get(tableId) || { showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
+    const current = equitySettings.get(tableId) || { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false };
     const updated = { ...current, showHeatmapToPlayers: !current.showHeatmapToPlayers };
     equitySettings.set(tableId, updated);
     io.to(tableId).emit('equity_settings', updated);
