@@ -17,6 +17,7 @@ function buildGame(tableId = 't1', sb = 10, bb = 20) {
 
 beforeEach(() => {
   SharedState.pendingBlinds.clear();
+  SharedState.tableSharedRanges.clear();
 });
 
 describe('GameManager — apply pending blinds on resetForNextHand', () => {
@@ -109,5 +110,23 @@ describe('GameManager.getPublicState — pending_blinds', () => {
     const gm = buildGame('t1', 10, 20);
     const state = gm.getPublicState('p1', false);
     expect(state.pending_blinds).toBeNull();
+  });
+});
+
+describe('GameManager — clears shared range on resetForNextHand', () => {
+  it('removes tableSharedRanges entry on reset', () => {
+    const gm = buildGame('t1', 10, 20);
+    SharedState.tableSharedRanges.set('t1', { groups: ['AKo'], label: 'x', broadcastedAt: Date.now() });
+    gm.startGame('rng');
+    gm.resetForNextHand();
+    expect(SharedState.tableSharedRanges.has('t1')).toBe(false);
+  });
+
+  it('does not error if no shared range was set', () => {
+    const gm = buildGame('t1', 10, 20);
+    gm.startGame('rng');
+    expect(() => {
+      gm.resetForNextHand();
+    }).not.toThrow();
   });
 });

@@ -996,6 +996,11 @@ class GameManager {
       }
     }
 
+    // Phase D.3: clear shared range on hand reset
+    if (SharedState && SharedState.tableSharedRanges) {
+      SharedState.tableSharedRanges.delete(this.tableId);
+    }
+
     this._saveSnapshot('action');
     // Rotate dealer button by player object (not seat index) so removals don't cause jumps.
     const eligible = this.state.players

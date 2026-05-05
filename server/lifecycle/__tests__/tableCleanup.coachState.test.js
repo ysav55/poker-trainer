@@ -65,6 +65,7 @@ beforeEach(() => {
   // Clear all shared state Maps
   SharedState.activeCoachLocks.clear();
   SharedState.pendingBlinds.clear();
+  SharedState.tableSharedRanges.clear();
   SharedState.tables.clear();
 });
 
@@ -74,6 +75,7 @@ afterEach(() => {
   jest.useRealTimers();
   SharedState.activeCoachLocks.clear();
   SharedState.pendingBlinds.clear();
+  SharedState.tableSharedRanges.clear();
   SharedState.tables.clear();
 });
 
@@ -222,6 +224,76 @@ describe('tableCleanup — coach state cleanup', () => {
     // Verify: coach state should NOT be cleared (table is still active)
     expect(SharedState.activeCoachLocks.has(tableId)).toBe(true);
     expect(SharedState.pendingBlinds.has(tableId)).toBe(true);
+    expect(TableRepository.closeTable).not.toHaveBeenCalled();
+  });
+
+  test('clears shared ranges when idle table is evicted', async () => {
+    const tableId = 'tbl-with-ranges';
+    // Set up shared ranges
+    SharedState.tableSharedRanges.set(tableId, {
+      groups: ['AKo', 'QQ'],
+      label: 'BTN open',
+      broadcastedAt: Date.now(),
+    });
+
+    // Create a minimal mock table in the passed-in tables Map
+    const tables = new Map([[tableId, { sessionId: null, state: { players: [] } }]]);
+
+    // No sockets in the room (idle)
+    const io = buildIo({ [tableId]: [] });
+
+    // Record activity now, then advance time past threshold
+    recordTableActivity(tableId);
+    startTableCleanup(io, tables);
+
+    // Let startup activation run
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Advance time past the 30-minute idle threshold
+    jest.advanceTimersByTime(THIRTY_ONE_MIN_MS);
+
+    // Wait for async interval body to complete
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Verify: shared ranges should be cleared
+    expect(SharedState.tableSharedRanges.has(tableId)).toBe(false);
+    expect(TableRepository.closeTable).toHaveBeenCalledWith(tableId);
+  });
+
+  test('preserves shared ranges for active tables', async () => {
+    const tableId = 'tbl-ranges-active';
+    // Set up shared ranges on an active table
+    SharedState.tableSharedRanges.set(tableId, {
+      groups: ['AKo', 'QQ'],
+      label: 'BTN open',
+      broadcastedAt: Date.now(),
+    });
+
+    // Create a mock table in the passed-in tables Map
+    const tables = new Map([[tableId, { sessionId: null, state: { players: [] } }]]);
+
+    // 1 active socket — table is not idle
+    const io = buildIo({ [tableId]: [{ id: 's1' }] });
+
+    startTableCleanup(io, tables);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Clear any setup mocks
+    TableRepository.activateScheduledTables.mockClear();
+
+    // Advance time past the idle threshold
+    jest.advanceTimersByTime(THIRTY_ONE_MIN_MS);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Verify: shared ranges should NOT be cleared (table is still active)
+    expect(SharedState.tableSharedRanges.has(tableId)).toBe(true);
     expect(TableRepository.closeTable).not.toHaveBeenCalled();
   });
 });

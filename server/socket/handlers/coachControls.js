@@ -38,6 +38,23 @@ async function handleDiscardPendingBlinds(socket, payload, ack) {
   return ack?.({ ok: true });
 }
 
+async function handleShareRange(socket, payload, ack) {
+  const { requireCoach } = require('../../auth/socketGuards.js');
+
+  if (requireCoach(socket, 'share range')) {
+    return ack?.({ error: 'coach_only' });
+  }
+  const { tableId, groups, label } = payload || {};
+  if (!tableId) return ack?.({ error: 'invalid_table' });
+  if (!Array.isArray(groups) || groups.length === 0) return ack?.({ error: 'invalid_groups' });
+  if (typeof label !== 'string') return ack?.({ error: 'invalid_label' });
+  const entry = { groups: [...groups], label, broadcastedAt: Date.now() };
+  SharedState.tableSharedRanges.set(tableId, entry);
+  // Broadcast to non-coach sockets in the room (students)
+  socket.to(tableId).emit('range_shared', entry);
+  return ack?.({ ok: true });
+}
+
 module.exports = function registerCoachControls(socket, ctx) {
   const { tables, activeHands, stableIdMap, io,
           broadcastState, sendError, sendSyncError, startActionTimer, clearActionTimer,
@@ -367,6 +384,11 @@ module.exports = function registerCoachControls(socket, ctx) {
     handleDiscardPendingBlinds(socket, payload, ack)
   );
 
+  // coach:share_range — broadcast a labeled range to non-coach sockets in the room
+  socket.on('coach:share_range', (payload, ack) =>
+    handleShareRange(socket, payload, ack)
+  );
+
   // ── Equity visibility per-audience ────────────────────────────────────────
 
   socket.on('coach:set_coach_equity_visible', (payload, ack) => {
@@ -406,3 +428,4 @@ module.exports = function registerCoachControls(socket, ctx) {
 
 module.exports.handleApplyBlindsAtNextHand = handleApplyBlindsAtNextHand;
 module.exports.handleDiscardPendingBlinds = handleDiscardPendingBlinds;
+module.exports.handleShareRange = handleShareRange;

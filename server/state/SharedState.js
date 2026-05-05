@@ -53,6 +53,7 @@ class SharedState {
     this.equitySettings        = new Map(); // tableId → { coach: true, players: false, showToPlayers: false, showRangesToPlayers: false, showHeatmapToPlayers: false }
     this.activeCoachLocks      = new Map(); // tableId → coachStableId (single-coach-per-table lock)
     this.pendingBlinds         = new Map(); // tableId → { sb, bb, queuedBy, queuedAt } (Apply at Next Hand queue)
+    this.tableSharedRanges     = new Map(); // tableId → { groups: string[], label: string, broadcastedAt: number }
   }
 
   /** Lazy SessionManager factory — creates the table if it doesn't exist. */

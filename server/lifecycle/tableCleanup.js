@@ -52,9 +52,10 @@ function startTableCleanup(io, tables) {
         tables.delete(tableId);
         lastActivityMap.delete(tableId);
 
-        // Clean up coach state (active locks and pending blind updates)
+        // Clean up coach state (active locks, pending blind updates, and shared ranges)
         SharedState.activeCoachLocks.delete(tableId);
         SharedState.pendingBlinds.delete(tableId);
+        SharedState.tableSharedRanges.delete(tableId);
 
         await TableRepository.closeTable(tableId).catch(() => {});
         console.log(`[tableCleanup] Evicted idle table: ${tableId}`);
