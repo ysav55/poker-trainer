@@ -1,6 +1,31 @@
 'use strict';
 
+const requireRole = require('../auth/requireRole.js');
+const requireSchool = require('../auth/requireSchool.js');
+
 module.exports = function registerHandRoutes(app, { requireAuth, HandLogger, EquityService }) {
+
+  // GET /api/hands/library — coach hand library search for scenario/drill building
+  // Query params: q (text), range (comma-sep hand groups), limit, offset
+  app.get('/api/hands/library', requireAuth, requireRole('coach'), requireSchool, async (req, res) => {
+    try {
+      const { q, range, limit, offset } = req.query;
+      const parsedLimit = limit ? parseInt(limit, 10) : 20;
+      const parsedOffset = offset ? parseInt(offset, 10) : 0;
+      const rangeFilter = range ? range.split(',').filter(Boolean) : [];
+
+      const result = await HandLogger.searchLibrary({
+        schoolId: req.user.school_id,
+        query: q ?? '',
+        rangeFilter,
+        limit: parsedLimit,
+        offset: parsedOffset,
+      });
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: 'internal_error', message: err.message });
+    }
+  });
 
   // GET /api/hands/tags — distinct tags for the history filter UI
   app.get('/api/hands/tags', requireAuth, async (req, res) => {

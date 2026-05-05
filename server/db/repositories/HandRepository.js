@@ -437,8 +437,70 @@ async function getDistinctTableIds() {
   return [...new Set((data || []).map(r => r.table_id).filter(Boolean))];
 }
 
+/**
+ * Search hand library for coach hand selection / scenario loading.
+ *
+ * Filters by:
+ * - school_id (school scoping)
+ * - text query (winner_name, hand_id substring)
+ * - range filter (accepted but unimplemented for v1)
+ *
+ * Returns paginated list with total count.
+ *
+ * @param {string}   schoolId    — school scope
+ * @param {string}   query       — text filter (winner name or hand_id)
+ * @param {string[]} rangeFilter — hand range groups (e.g. ['AKo', 'QQ']) — unimplemented for v1
+ * @param {number}   limit       — max results, default 20, capped at 100
+ * @param {number}   offset      — pagination offset
+ * @returns {Promise<{hands: Array, total: number}>}
+ */
+async function searchLibrary({ schoolId, query, rangeFilter = [], limit = 20, offset = 0 } = {}) {
+  const safeLimit = Math.max(1, Math.min(100, limit));
+  const safeOffset = Math.max(0, offset);
+
+  let q = supabase.from('hands').select(
+    'hand_id, started_at, ended_at, phase_ended, winner_name, final_pot, board, completed_normally',
+    { count: 'exact' }
+  );
+
+  // School scope
+  q = q.eq('school_id', schoolId);
+
+  // Text search: winner_name or hand_id substring match
+  if (query && query.trim()) {
+    const term = query.trim().toLowerCase();
+    // Use a filter instead of OR for better Supabase compatibility
+    q = q.or(`winner_name.ilike.%${term}%,hand_id.like.${term}%`, { foreignTable: null });
+  }
+
+  // Range filter: accepted for API compatibility but not applied in v1
+  // TODO: v2 — implement range filter as hand_players.hole_cards overlap check
+
+  q = q.order('started_at', { ascending: false })
+    .range(safeOffset, safeOffset + safeLimit - 1);
+
+  const { data, count, error } = await q;
+  if (error) {
+    throw new Error(`searchLibrary failed: ${error.message}`);
+  }
+
+  return {
+    hands: (data ?? []).map(h => ({
+      hand_id: h.hand_id,
+      started_at: h.started_at,
+      ended_at: h.ended_at,
+      phase_ended: h.phase_ended,
+      winner_name: h.winner_name,
+      final_pot: h.final_pot,
+      board: h.board || [],
+      completed_normally: h.completed_normally,
+    })),
+    total: count ?? 0,
+  };
+}
+
 module.exports = {
   startHand, recordDeal, recordAction, endHand, markIncomplete, logStackAdjustment,
   markLastActionReverted, getHands, getHandDetail,
-  getHandHistory, getDistinctHandTags, getDistinctTableIds,
+  getHandHistory, getDistinctHandTags, getDistinctTableIds, searchLibrary,
 };
