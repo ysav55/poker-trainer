@@ -341,6 +341,10 @@ function FullTableView() {
     coachKickPlayer: (playerId) => socket.emit('coach:kick_player', { playerId }),
     branchToDrill:  ({ handId, playlistId, newPlaylistName, cursor } = {}) =>
                        socket.emit('branch_to_drill', { handId, playlistId, newPlaylistName, cursor }),
+    // drill session helpers (D.8e)
+    cancelCountdown: () => socket.emit('coach:cancel_countdown', { tableId }),
+    resumeDrill:     () => socket.emit('coach:resume_drill', { tableId }),
+    setCoachDrillRole: (role) => socket.emit('coach:set_drill_role', { tableId, role }),
     // equity helpers
     toggleEquityDisplay,
     toggleRangeDisplay,

@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Segmented } from './shared.jsx';
 import PlaylistAdmin, { PlaylistRowMenu } from './PlaylistAdmin.jsx';
 import LaunchPanel from './LaunchPanel.jsx';
+import CountdownBanner from './CountdownBanner.jsx';
+import EventLog from './EventLog.jsx';
+import CoachRoleToggle from './CoachRoleToggle.jsx';
 
 const POSITIONS_BY_COUNT = {
   2: ['BTN','BB'],
@@ -424,12 +427,28 @@ function DrillSessionCard({ data, emit }) {
   return (
     <>
       <div className="card">
+        <CountdownBanner
+          active={s.countdownActive ?? false}
+          paused={s.paused ?? false}
+          onCancel={() => emit?.cancelCountdown?.()}
+          onResume={() => emit?.resumeDrill?.()}
+          onStart={() => emit?.advanceDrill?.()}
+        />
         <div className="card-head">
           <div className="card-title">Active Drill</div>
           <div className="card-kicker">{s.handsDone}/{s.handsTotal}</div>
         </div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>{s.scenarioName}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', marginBottom: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{s.scenarioName}</span>
+          <CoachRoleToggle
+            role={s.coachRole ?? 'monitor'}
+            onChange={(role) => emit?.setCoachDrillRole?.(role)}
+          />
+        </div>
         <div style={{ fontSize: 11, color: 'var(--ink-dim)', marginBottom: 12 }}>{s.currentSpot}</div>
+      </div>
+      <div className="card">
+        <EventLog events={data.drill_event_log ?? []} max={3} />
       </div>
       <div className="row" style={{ gap: 6 }}>
         <button
