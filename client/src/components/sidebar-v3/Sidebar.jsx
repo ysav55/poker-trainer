@@ -94,6 +94,27 @@ export default function SidebarV3({ data = SIDEBAR_V3_DATA, emit = null, tableId
             title={data.gameState?.hand_id ? 'Hand notes' : 'No active hand'}
           >📝 Notes{notesOpen ? ' ▾' : ''}</button>
           <button
+            className="btn"
+            style={{ flex: 0.7 }}
+            onClick={() => emit?.undoAction?.()}
+            disabled={!emit?.undoAction || !data.gameState?.hand_id || (data.gameState?.actions?.length ?? 0) === 0}
+            title="Undo last action"
+          >↶ Undo</button>
+          <button
+            className="btn"
+            style={{ flex: 0.8 }}
+            onClick={() => emit?.rollbackStreet?.()}
+            disabled={!emit?.rollbackStreet || !data.gameState?.hand_id}
+            title="Rollback street (undo all actions on current street)"
+          >↺ Rollback</button>
+          <button
+            className="btn"
+            style={{ flex: 0.7 }}
+            onClick={() => emit?.resetHand?.()}
+            disabled={!emit?.resetHand || !data.gameState?.hand_id}
+            title="Reset hand (start over)"
+          >↺ Reset</button>
+          <button
             className="btn primary"
             style={{ flex: 1.3 }}
             disabled={!canStart}

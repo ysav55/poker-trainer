@@ -57,6 +57,12 @@ describe('SidebarV3 — StatusPill', () => {
 });
 
 describe('SidebarV3 — footer copy', () => {
+  beforeEach(() => {
+    try { localStorage.clear(); } catch {}
+  });
+
+  afterEach(() => cleanup());
+
   it('Live footer says "Deal Next Hand →" (C1)', () => {
     const data = { ...SIDEBAR_V3_DATA, gameState: { ...SIDEBAR_V3_DATA.gameState, phase: 'waiting' } };
     render(<SidebarV3 data={data} emit={{ togglePause: vi.fn(), startConfiguredHand: vi.fn() }} />);
@@ -186,5 +192,117 @@ describe('SidebarV3 — Share Range (D.3)', () => {
     // emit.shareRange. If open state ever becomes true (via onShareRange
     // callback), the dialog is visible. Test the emit setup directly.
     expect(shareRange).not.toHaveBeenCalled();
+  });
+});
+
+describe('SidebarV3 — Live footer Undo / Rollback / Reset (D.4)', () => {
+  beforeEach(() => {
+    try { localStorage.clear(); } catch {}
+  });
+
+  afterEach(() => cleanup());
+
+  function dataWithHand() {
+    return {
+      ...SIDEBAR_V3_DATA,
+      gameState: {
+        ...SIDEBAR_V3_DATA.gameState,
+        hand_id: 'h-x',
+        phase: 'flop',
+        actions: [{ player_id: 'p1', action: 'bet', amount: 50 }],
+      },
+    };
+  }
+
+  it('Undo button emits undoAction when clicked', () => {
+    const undoAction = vi.fn();
+    render(
+      <SidebarV3
+        data={dataWithHand()}
+        emit={{ undoAction, togglePause: vi.fn(), startConfiguredHand: vi.fn() }}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /↶ Undo/i }));
+    expect(undoAction).toHaveBeenCalled();
+  });
+
+  it('Undo button is disabled when no actions yet', () => {
+    const data = {
+      ...SIDEBAR_V3_DATA,
+      gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: 'h-x', actions: [] },
+    };
+    render(
+      <SidebarV3
+        data={data}
+        emit={{ undoAction: vi.fn(), togglePause: vi.fn(), startConfiguredHand: vi.fn() }}
+      />
+    );
+    expect(screen.getByRole('button', { name: /↶ Undo/i })).toBeDisabled();
+  });
+
+  it('Undo button is disabled when no current hand', () => {
+    const data = {
+      ...SIDEBAR_V3_DATA,
+      gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: null, actions: [] },
+    };
+    render(
+      <SidebarV3
+        data={data}
+        emit={{ undoAction: vi.fn(), togglePause: vi.fn(), startConfiguredHand: vi.fn() }}
+      />
+    );
+    expect(screen.getByRole('button', { name: /↶ Undo/i })).toBeDisabled();
+  });
+
+  it('Reset button emits resetHand when clicked', () => {
+    const resetHand = vi.fn();
+    render(
+      <SidebarV3
+        data={dataWithHand()}
+        emit={{ resetHand, togglePause: vi.fn(), startConfiguredHand: vi.fn() }}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /↺ Reset/i }));
+    expect(resetHand).toHaveBeenCalled();
+  });
+
+  it('Reset button is disabled when no current hand_id', () => {
+    const data = {
+      ...SIDEBAR_V3_DATA,
+      gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: null },
+    };
+    render(
+      <SidebarV3
+        data={data}
+        emit={{ resetHand: vi.fn(), togglePause: vi.fn(), startConfiguredHand: vi.fn() }}
+      />
+    );
+    expect(screen.getByRole('button', { name: /↺ Reset/i })).toBeDisabled();
+  });
+
+  it('Rollback button emits rollbackStreet when clicked', () => {
+    const rollbackStreet = vi.fn();
+    render(
+      <SidebarV3
+        data={dataWithHand()}
+        emit={{ rollbackStreet, togglePause: vi.fn(), startConfiguredHand: vi.fn() }}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /↺ Rollback/i }));
+    expect(rollbackStreet).toHaveBeenCalled();
+  });
+
+  it('Rollback button is disabled when no current hand_id', () => {
+    const data = {
+      ...SIDEBAR_V3_DATA,
+      gameState: { ...SIDEBAR_V3_DATA.gameState, hand_id: null },
+    };
+    render(
+      <SidebarV3
+        data={data}
+        emit={{ rollbackStreet: vi.fn(), togglePause: vi.fn(), startConfiguredHand: vi.fn() }}
+      />
+    );
+    expect(screen.getByRole('button', { name: /↺ Rollback/i })).toBeDisabled();
   });
 });
