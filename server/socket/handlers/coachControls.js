@@ -55,6 +55,55 @@ async function handleShareRange(socket, payload, ack) {
   return ack?.({ ok: true });
 }
 
+async function handleManualAdvanceSpot(socket, payload, ack) {
+  const { requireCoach } = require('../../auth/socketGuards.js');
+
+  if (requireCoach(socket, 'manual advance spot')) {
+    return ack?.({ error: 'coach_only' });
+  }
+  const { tableId } = payload || {};
+  if (!tableId) return ack?.({ error: 'invalid_table' });
+
+  // Verify table is active
+  const gm = SharedState.tables?.get?.(tableId);
+  if (!gm) return ack?.({ error: 'table_not_active' });
+
+  // Drill must be active
+  const playlistMode = gm.state?.playlist_mode;
+  if (!playlistMode?.active) return ack?.({ error: 'drill_not_active' });
+
+  // auto_advance must be OFF
+  if (playlistMode.auto_advance) return ack?.({ error: 'auto_advance_on' });
+
+  // Phase must be waiting (between hands)
+  const phase = gm.state?.phase;
+  if (phase !== 'waiting') return ack?.({ error: 'not_in_waiting_phase' });
+
+  try {
+    // GameManager.advancePlaylist() increments the drill index in GM's playlist_mode state.
+    // This is the intra-hand state machine advance; the HandLogger/drill_sessions table
+    // is managed by PlaylistExecutionService and will be updated when the next hand starts.
+    if (typeof gm.advancePlaylist === 'function') {
+      const result = gm.advancePlaylist();
+      if (result.error) return ack?.({ error: result.error });
+      // Success — broadcast state update to all sockets in the room
+      socket.to(tableId).emit('notification', {
+        type: 'drill_advanced',
+        message: 'Coach advanced to next drill spot',
+      });
+      socket.emit('notification', {
+        type: 'drill_advanced',
+        message: 'Drill advanced',
+      });
+      return ack?.({ ok: true, result });
+    } else {
+      return ack?.({ error: 'advance_not_implemented' });
+    }
+  } catch (err) {
+    return ack?.({ error: 'advance_failed', message: err.message });
+  }
+}
+
 module.exports = function registerCoachControls(socket, ctx) {
   const { tables, activeHands, stableIdMap, io,
           broadcastState, sendError, sendSyncError, startActionTimer, clearActionTimer,
@@ -389,6 +438,11 @@ module.exports = function registerCoachControls(socket, ctx) {
     handleShareRange(socket, payload, ack)
   );
 
+  // coach:manual_advance_spot — manually advance drill to next spot when auto_advance is OFF
+  socket.on('coach:manual_advance_spot', (payload, ack) =>
+    handleManualAdvanceSpot(socket, payload, ack)
+  );
+
   // ── Equity visibility per-audience ────────────────────────────────────────
 
   socket.on('coach:set_coach_equity_visible', (payload, ack) => {
@@ -429,3 +483,4 @@ module.exports = function registerCoachControls(socket, ctx) {
 module.exports.handleApplyBlindsAtNextHand = handleApplyBlindsAtNextHand;
 module.exports.handleDiscardPendingBlinds = handleDiscardPendingBlinds;
 module.exports.handleShareRange = handleShareRange;
+module.exports.handleManualAdvanceSpot = handleManualAdvanceSpot;
