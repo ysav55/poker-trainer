@@ -30,6 +30,7 @@ export default function TabHistory({ data, tableId, onLoadReview }) {
   const [notesCounts, setNotesCounts] = useState({});
   const [previewHandId, setPreviewHandId] = useState(null);
   const previewApi = useNotes(previewHandId);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Fetch on mount + whenever the table changes. Refetch when tab is reopened
   // is intentionally NOT wired — once fetched, the list is stable until the
@@ -71,13 +72,20 @@ export default function TabHistory({ data, tableId, onLoadReview }) {
     return data;
   }, [data, liveHistory]);
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchHands(tableId);
+    setIsRefreshing(false);
+  };
+
   return (
-    <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} notesCounts={notesCounts} onOpenNotes={setPreviewHandId} previewHandId={previewHandId} previewApi={previewApi} />
+    <TableHistoryView data={tabData} loading={loading} isLive={!!liveHistory} onLoadReview={onLoadReview} notesCounts={notesCounts} onOpenNotes={setPreviewHandId} previewHandId={previewHandId} previewApi={previewApi} onRefresh={handleRefresh} isRefreshing={isRefreshing} />
   );
 }
 
-function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts, onOpenNotes, previewHandId, previewApi }) {
+function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts, onOpenNotes, previewHandId, previewApi, onRefresh, isRefreshing }) {
   const [filter, setFilter] = useState('all');
+  const [expandedHandId, setExpandedHandId] = useState(null);
 
   const sessionPnl = data.history.filter((h) => h.net != null).reduce((a, b) => a + b.net, 0);
   const handsDone = data.history.filter((h) => !h.live).length;
@@ -124,7 +132,7 @@ function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts, on
         </div>
       </div>
 
-      <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+      <div className="row" style={{ gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
         {[
           { v: 'all',      l: 'All' },
           { v: 'won',      l: 'Won' },
@@ -133,6 +141,15 @@ function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts, on
         ].map((f) => (
           <span key={f.v} className={'chip' + (filter === f.v ? ' active' : ' ghost')} onClick={() => setFilter(f.v)}>{f.l}</span>
         ))}
+        <button
+          className="btn ghost sm"
+          style={{ marginLeft: 'auto', padding: '4px 8px', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          title="Refresh history"
+        >
+          <span style={{ transform: isRefreshing ? 'rotate(180deg)' : 'none', transition: 'transform 300ms', display: 'inline-block' }}>↻</span>
+        </button>
       </div>
 
       <div className="card" style={{ padding: '12px 12px 8px' }}>
@@ -141,7 +158,14 @@ function TableHistoryView({ data, loading, isLive, onLoadReview, notesCounts, on
           <div className="card-kicker">scroll ↔ · {filtered.length}</div>
         </div>
         <div className="h-scroll">
-          {filtered.map((h) => <HandCard key={h.hand_id ?? h.n} hand={h} notesCount={notesCounts[h.hand_id] ?? 0} onClick={() => onLoadReview(h.hand_id ?? h.n)} onOpenNotes={onOpenNotes} />)}
+          {filtered.map((h) => (
+            <div key={h.hand_id ?? h.n} style={{ flex: '0 0 146px' }}>
+              <HandCard hand={h} notesCount={notesCounts[h.hand_id] ?? 0} onClick={() => onLoadReview(h.hand_id ?? h.n)} onOpenNotes={onOpenNotes} isExpanded={expandedHandId === h.hand_id} onToggleExpand={() => setExpandedHandId(expandedHandId === h.hand_id ? null : h.hand_id)} />
+              {expandedHandId === h.hand_id && (
+                <HandDetailPanel hand={h} style={{ marginTop: 8, marginBottom: 8 }} />
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -180,7 +204,7 @@ function MiniStat({ label, value }) {
   );
 }
 
-function HandCard({ hand, notesCount, onClick, onOpenNotes }) {
+function HandCard({ hand, notesCount, onClick, onOpenNotes, isExpanded, onToggleExpand }) {
   const isLive = hand.live;
   const net = hand.net;
   const netColor = net == null ? 'var(--ink-dim)' : net >= 0 ? 'var(--ok)' : 'var(--bad)';
@@ -188,7 +212,6 @@ function HandCard({ hand, notesCount, onClick, onOpenNotes }) {
     <div
       onClick={onClick}
       style={{
-        flex: '0 0 146px',
         scrollSnapAlign: 'start',
         background: isLive ? 'rgba(201,163,93,0.08)' : 'var(--bg-3)',
         border: `1px solid ${isLive ? 'rgba(201,163,93,0.4)' : 'var(--line)'}`,
@@ -222,16 +245,52 @@ function HandCard({ hand, notesCount, onClick, onOpenNotes }) {
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--ink-faint)' }}>{hand.phase}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--ink-dim)' }}>pot {hand.pot}</span>
+          <button
+            className="chip ghost"
+            style={{ padding: '2px 5px', fontSize: 10, cursor: 'pointer', transform: isExpanded ? 'scaleY(-1)' : 'none' }}
+            onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}
+            title={isExpanded ? 'Hide details' : 'Show details'}
+          >▾</button>
           {notesCount > 0 && (
             <button
               className="chip ghost"
-              style={{ padding: '2px 5px', fontSize: 10, marginLeft: 4, cursor: 'pointer' }}
+              style={{ padding: '2px 5px', fontSize: 10, cursor: 'pointer' }}
               onClick={(e) => { e.stopPropagation(); onOpenNotes(hand.hand_id); }}
               title={`${notesCount} note${notesCount === 1 ? '' : 's'}`}
             >📝{notesCount}</button>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function HandDetailPanel({ hand, style }) {
+  return (
+    <div style={{
+      ...style,
+      background: 'var(--bg-2)',
+      border: '1px solid var(--line)',
+      borderRadius: 6,
+      padding: '8px 10px',
+      fontSize: 10,
+      lineHeight: 1.5,
+      color: 'var(--ink-dim)',
+    }}>
+      {hand.board && hand.board.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Board</div>
+          <div style={{ display: 'flex', gap: 3 }}>
+            {hand.board.map((c, i) => <MiniCard key={i} code={c} />)}
+          </div>
+        </div>
+      )}
+      {hand.action && (
+        <div>
+          <div style={{ fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Result</div>
+          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{hand.action}</div>
+        </div>
+      )}
     </div>
   );
 }

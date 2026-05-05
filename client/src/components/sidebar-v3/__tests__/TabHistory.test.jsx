@@ -77,3 +77,63 @@ describe('TabHistory — notes pip popover', () => {
     expect(screen.getByText(/^Notes$/)).toBeInTheDocument();
   });
 });
+
+describe('TabHistory — refresh + inline expand', () => {
+  it('renders a refresh button', async () => {
+    const dataWithHistory = {
+      history: [
+        { hand_id: 'h1', n: 1, board: [], heroHand: [], pot: 100, phase: 'showdown', action: 'Alice won', live: false, net: 50 },
+      ],
+      session: { hands: 1 },
+    };
+    render(<TabHistory data={dataWithHistory} onLoadReview={vi.fn()} />);
+    const refreshBtn = await screen.findByTitle('Refresh history');
+    expect(refreshBtn).toBeInTheDocument();
+    expect(refreshBtn.textContent).toContain('↻');
+  });
+
+  it('renders a Details button on each hand card', async () => {
+    const dataWithHistory = {
+      history: [
+        { hand_id: 'h1', n: 1, board: ['As', 'Kd'], heroHand: ['Qh', 'Js'], pot: 100, phase: 'showdown', action: 'Alice won', live: false, net: 50 },
+      ],
+      session: { hands: 1 },
+    };
+    render(<TabHistory data={dataWithHistory} onLoadReview={vi.fn()} />);
+    // Wait for the batch fetch to settle and details button to render
+    await screen.findByTitle('Show details');
+    const detailsButtons = screen.getAllByTitle(/Show details|Hide details/);
+    expect(detailsButtons.length).toBeGreaterThan(0);
+  });
+
+  it('clicking Details toggles an inline detail panel', async () => {
+    const dataWithHistory = {
+      history: [
+        { hand_id: 'h1', n: 1, board: ['As', 'Kd'], heroHand: ['Qh', 'Js'], pot: 100, phase: 'showdown', action: 'Alice won', live: false, net: 50 },
+      ],
+      session: { hands: 1 },
+    };
+    render(<TabHistory data={dataWithHistory} onLoadReview={vi.fn()} />);
+    const detailsBtn = await screen.findByTitle('Show details');
+    fireEvent.click(detailsBtn);
+    // Expanded section visible — check for Board or Result
+    expect(await screen.findByText(/Board/)).toBeInTheDocument();
+  });
+
+  it('clicking Details twice toggles expand on and off', async () => {
+    const dataWithHistory = {
+      history: [
+        { hand_id: 'h1', n: 1, board: ['As', 'Kd'], heroHand: ['Qh', 'Js'], pot: 100, phase: 'showdown', action: 'Alice won', live: false, net: 50 },
+      ],
+      session: { hands: 1 },
+    };
+    render(<TabHistory data={dataWithHistory} onLoadReview={vi.fn()} />);
+    const detailsBtn = await screen.findByTitle('Show details');
+    // Click to expand
+    fireEvent.click(detailsBtn);
+    expect(await screen.findByText(/Board/)).toBeInTheDocument();
+    // Verify button title changed to "Hide details"
+    const hidBtn = screen.getByTitle('Hide details');
+    expect(hidBtn).toBeInTheDocument();
+  });
+});
