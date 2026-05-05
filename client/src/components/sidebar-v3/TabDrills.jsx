@@ -13,7 +13,7 @@ const POSITIONS_BY_COUNT = {
 };
 
 export default function TabDrills({ data, emit }) {
-  const [mode, setMode] = useState(() => (data.drillSession.active ? 'session' : 'loader'));
+  const [mode, setMode] = useState(() => (data.drillSession.active ? 'session' : 'playlists'));
   const hasActive = data.drillSession.active;
 
   // Build sub-tab is intentionally hidden until Phase 4 ships the
@@ -23,17 +23,19 @@ export default function TabDrills({ data, emit }) {
   return (
     <>
       <Segmented
-        cols={2}
+        cols={3}
         options={[
-          { value: 'loader',  label: 'Library' },
-          { value: 'session', label: hasActive ? '● Session' : 'Session' },
+          { value: 'playlists', label: 'Playlists' },
+          { value: 'hands',     label: 'Hands' },
+          { value: 'session',   label: hasActive ? '● Session' : 'Session' },
         ]}
         value={mode}
         onChange={setMode}
       />
 
-      {mode === 'loader'  && <DrillLoader data={data} emit={emit} />}
-      {mode === 'session' && <DrillSessionCard data={data} emit={emit} />}
+      {mode === 'playlists' && <DrillLoader data={data} emit={emit} />}
+      {mode === 'hands'     && <DrillHands />}
+      {mode === 'session'   && <DrillSessionCard data={data} emit={emit} />}
     </>
   );
 }
@@ -342,6 +344,20 @@ function DrillLoader({ data, emit }) {
   );
 }
 
+function DrillHands() {
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="card-title">Hand Library</div>
+        <div className="card-kicker">phase D.9</div>
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--ink-faint)', textAlign: 'center', padding: '18px 8px', lineHeight: 1.5 }}>
+        Hand library wires up in Phase D.9 — search past hands and load them as scenarios.
+      </div>
+    </div>
+  );
+}
+
 function DrillSessionCard({ data, emit }) {
   const s = data.drillSession;
   if (!s.active) {
@@ -351,7 +367,7 @@ function DrillSessionCard({ data, emit }) {
           No active session
         </div>
         <div style={{ color: 'var(--ink-dim)', fontSize: 12, marginBottom: 14 }}>
-          Launch a playlist from the Library tab to start drilling.
+          Launch a playlist from the Playlists tab to start drilling.
         </div>
       </div>
     );
